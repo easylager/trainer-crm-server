@@ -1394,7 +1394,37 @@
     }
   }
 
+  /* Зимой на карте — зимние точки (катки и коробки), а не закрытые арены каталога. */
+  function winterMapPending() {
+    return (
+      state.season === 'winter' &&
+      state.intent !== 'coach' &&
+      state.placeService !== 'service' &&
+      !!state.cityId &&
+      !!(state.seasonFacet && state.seasonFacet.winter_points > 0)
+    );
+  }
+
+  /** true — карту показал зимний блок (или ждём его данные), общая карта не нужна. */
+  function showWinterMap() {
+    var sec = $('iceMapSec');
+    if (!winterMapPending()) {
+      if (global.IceWinter) global.IceWinter.hideMap();
+      return false;
+    }
+    if (global.IceWinter && global.IceWinter.showMap(sec)) return true;
+    if (global.IceWinter && global.IceWinter.ready()) return false; /* точки есть, координат нет — обычная карта */
+    var emptyEl = $('iceMapEmpty');
+    if (emptyEl) {
+      emptyEl.hidden = false;
+      emptyEl.textContent = 'Загружаем зимние точки…';
+    }
+    syncWinter();
+    return true;
+  }
+
   function showMap() {
+    if (showWinterMap()) return;
     if (!global.IceMap) {
       var emptyEl = $('iceMapEmpty');
       var stageEl = $('iceMapStage');
@@ -1733,6 +1763,9 @@
       cityId: state.cityId,
       near: state.nearOn ? state.near : '',
       facet: state.seasonFacet,
+      onData: function () {
+        if (mapViewActive()) showMap();
+      },
       authHeaders: authHeaders,
       openArena: function (ref) {
         shellNav('arena?ref=' + encodeURIComponent(ref));
@@ -2960,6 +2993,8 @@
       state.seasonFacet = null;
       state.shopUiPicker = false;
       closeShopMapFiltersPanel();
+      /* Зимний блок прошлого города не должен висеть, пока грузится список нового. */
+      syncWinter();
     } else {
       /* Тот же город (или первый applyCity после boot): не сбрасываем вкладку «Магазины». */
       var nextIntent =

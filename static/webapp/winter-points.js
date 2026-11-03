@@ -13,8 +13,11 @@
   var host = null;
   var sheet = null;
   var cache = { key: '', data: null };
-  var f = { flooded: false, kind: '', district: '' };
+  var f = { flooded: false, kind: '', district: '', origin: null };
+  var districtsOpen = false;
+  var geoNote = '';
   var seq = 0;
+  var pending = '';
   var report = W.reportInit();
   var idem = W.newIdemKey();
   var current = null;
@@ -53,6 +56,13 @@
     return host;
   }
 
+  /* Каток без фото: тот же рисунок, что на сайте (слева тип, не пустая плашка). */
+  var MOTIF =
+    '<svg class="w-thumb__motif" viewBox="0 0 230 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false" ' +
+    'fill="none" stroke="rgba(255,255,255,.28)" stroke-width="2">' +
+    '<rect x="-30" y="14" width="290" height="92" rx="40"/><line x1="115" y1="14" x2="115" y2="106"/>' +
+    '<circle cx="115" cy="60" r="20"/></svg>';
+
   function pill(p) {
     var v = W.stateView(p);
     return '<span class="w-pill w-pill--' + v.tone + '">' + esc(v.label) + '</span>';
@@ -64,10 +74,12 @@
     var dispute = W.disputeNote(p);
     var dist = W.distanceLabel(p.distance_km);
     var photo = p.photos && p.photos[0] && p.photos[0].variants && (p.photos[0].variants.card || p.photos[0].variants.thumb);
-    var thumb = '<span class="w-thumb w-thumb--type"><span class="w-thumb__glyph">' + esc(W.kindLabel(p.kind, true)) + '</span></span>';
+    var thumb = '<span class="w-thumb w-thumb--type">' + MOTIF + '<span class="w-thumb__glyph">' + esc(W.kindLabel(p.kind, true)) + '</span></span>';
     if (photo && /^(https?:)?\//.test(photo)) {
       thumb = '<span class="w-thumb"><img src="' + esc(photo) + '" alt="" loading="lazy"><span class="w-thumb__label">' +
         p.photos.length + ' фото</span></span>';
+    } else if (p.static_map_url && /^(https?:)?\//.test(p.static_map_url)) {
+      thumb = '<span class="w-thumb"><img src="' + esc(p.static_map_url) + '" alt="" loading="lazy"></span>';
     }
     return '<a class="w-card" href="#" data-w-open="' + p.id + '" aria-label="' + esc(p.name + ', ' + W.stateView(p).label) + '">' + thumb +
       '<span class="w-card__body"><span class="w-card__top"><span>' + esc(W.kindLabel(p.kind, true)) + '</span><span>' + esc(dist) + '</span></span>' +
@@ -82,8 +94,9 @@
     var data = cache.data;
     if (!h || !data) return;
     var points = data.items || [];
-    var origin = ctx.origin;
-    var list = W.applyFilters(points, { flooded: f.flooded, kind: f.kind, origin: origin });
+    var origin = f.origin || ctx.origin;
+    var districts = W.districtList(points);
+    var list = W.applyFilters(points, { flooded: f.flooded, kind: f.kind, district: f.district, origin: origin });
     var head = W.headline(points.length, data.flooded || 0);
     var bell = data.bell_near_link;
     var bellHtml = bell
@@ -93,24 +106,47 @@
       : '';
     var chips =
       '<div class="w-chips" role="group" aria-label="Фильтры">' +
+      '<button type="button" class="w-chip" data-w-f="near" aria-pressed="' + !!origin + '">Ближе ко мне</button>' +
       '<button type="button" class="w-chip" data-w-f="flooded" aria-pressed="' + f.flooded + '">Залиты · ' + (data.flooded || 0) + '</button>' +
       '<button type="button" class="w-chip" data-w-f="rink" aria-pressed="' + (f.kind === 'rink') + '">Катки</button>' +
-      '<button type="button" class="w-chip" data-w-f="hockey_box" aria-pressed="' + (f.kind === 'hockey_box') + '">Коробки</button></div>';
+      '<button type="button" class="w-chip" data-w-f="hockey_box" aria-pressed="' + (f.kind === 'hockey_box') + '">Коробки</button>' +
+      (districts.length
+        ? '<button type="button" class="w-chip" data-w-f="district" aria-pressed="' + (districtsOpen || !!f.district) + '">Район</button>'
+        : '') + '</div>' +
+      (districts.length && districtsOpen
+        ? '<div class="w-chips" role="group" aria-label="Район">' + districts.map(function (d) {
+            return '<button type="button" class="w-chip w-chip--sub" data-w-d="' + esc(d.name) + '" aria-pressed="' +
+              (f.district === d.name) + '">' + esc(d.name) + ' · ' + d.count + '</button>';
+          }).join('') + '</div>'
+        : '');
     h.innerHTML =
       '<div class="w-page" style="padding:0 0 12px">' +
       '<p class="w-sub">' + esc(head.title || W.summaryLine(points.length, data.flooded || 0)) + '</p>' +
       (head.hint ? '<p class="w-sub">' + esc(head.hint) + '</p>' : '') +
       (head.bellFirst ? bellHtml : '') + chips +
-      '<p class="w-note">' + esc(W.sortNote({ flooded: f.flooded, kind: f.kind, origin: origin })) + '</p>' +
+      '<p class="w-note">' + esc(geoNote || W.sortNote({ flooded: f.flooded, kind: f.kind, district: f.district, origin: origin })) + '</p>' +
       (list.length ? '<ul class="w-list" style="padding:0;margin:0">' + list.map(function (p) { return '<li>' + card(p) + '</li>'; }).join('') + '</ul>'
         : '<p class="w-empty">' + esc(W.emptyFilterText({ flooded: f.flooded })) + '</p>') +
       (head.bellFirst ? '' : bellHtml) +
       '</div>';
+    if (ctx.onData) ctx.onData();
+  }
+
+  function status(text, retry) {
+    var h = ensureHost();
+    if (!h) return;
+    h.innerHTML = '<div class="w-page" style="padding:0 0 12px"><p class="w-empty">' + esc(text) + '</p>' +
+      (retry ? '<button type="button" class="w-btn w-btn--soft w-btn--wide" data-w-retry>Повторить</button>' : '') + '</div>';
   }
 
   function load() {
     var key = ctx.cityId + '|' + (ctx.near || '');
     if (cache.key === key && cache.data) return render();
+    if (pending === key) return;
+    pending = key;
+    /* Другой город: прошлый список не показываем, пока не пришёл новый. */
+    cache = { key: '', data: null };
+    status('Загружаем зимние точки…');
     var my = ++seq;
     var url = '/api/public/winter/cities/' + encodeURIComponent(ctx.cityId) + '/points';
     if (ctx.near) {
@@ -120,11 +156,13 @@
     fetch(url, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
-        if (my !== seq || !d) return;
+        if (my !== seq) return;
+        pending = '';
+        if (!d) return status('Не получилось загрузить зимние точки.', true);
         cache = { key: key, data: d };
         render();
       })
-      .catch(function () { /* обычная лента ниже остаётся */ });
+      .catch(function () { if (my === seq) { pending = ''; status('Не получилось загрузить зимние точки.', true); } });
   }
 
   /** ctx: {season, cityId, near, facet, authHeaders, openArena(ref)}. Возвращает true, если блок занят. */
@@ -137,11 +175,159 @@
     }
     var wp = c.facet && c.facet.winter_points;
     if (c.season !== 'winter' || !(wp > 0) || !c.cityId) {
+      seq++;
+      pending = '';
       remove();
+      hideMap();
       return false;
     }
     load();
     return true;
+  }
+
+  /* «Ближе ко мне»: геолокацию просим только по тапу; второй тап выключает. */
+  function toggleNear() {
+    if (f.origin || ctx.origin) {
+      f.origin = null;
+      ctx.origin = null;
+      geoNote = '';
+      return render();
+    }
+    if (!global.navigator || !global.navigator.geolocation) {
+      geoNote = 'Геолокация недоступна — показываем по районам.';
+      return render();
+    }
+    geoNote = 'Ищем, где вы…';
+    render();
+    global.navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        f.origin = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        geoNote = '';
+        render();
+      },
+      function () {
+        geoNote = 'Геолокация выключена — показываем по районам.';
+        render();
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+    );
+  }
+
+  /* ───── карта: те же точки и пины, что на сайте ───── */
+  var GLYPH = { ok: '✓', wait: '•', quiet: '–', dispute: '!' };
+  var mapState = { sec: null, host: null, ym: null, map: null, clusterer: null, loading: null };
+
+  function filtered() {
+    var data = cache.data;
+    if (!data) return [];
+    return W.applyFilters(data.items || [], { flooded: f.flooded, kind: f.kind, district: f.district, origin: f.origin || ctx.origin });
+  }
+
+  /** Есть ли что рисовать на карте зимой: тогда общая карта каталога (только закрытые арены) не нужна. */
+  function mapWanted() {
+    return !!(cache.data && W.mapPoints(cache.data.items || []).length);
+  }
+
+  function mapHost(sec) {
+    if (mapState.host && mapState.host.isConnected) return mapState.host;
+    var h = document.createElement('div');
+    h.id = 'iceWinterMap';
+    h.className = 'w-app w-fullmap';
+    h.innerHTML = '<div class="w-map__canvas"></div><p class="w-map__msg" hidden></p><div class="w-mapcard" hidden></div>' +
+      '<p class="w-fullmap__attrib">© Яндекс · <a href="https://yandex.ru/legal/maps_termsofuse/" target="_blank" rel="noopener">Условия</a></p>';
+    sec.appendChild(h);
+    h.addEventListener('click', function (ev) {
+      var open = ev.target.closest('[data-w-open]');
+      if (!open) return;
+      ev.preventDefault();
+      openPoint(Number(open.getAttribute('data-w-open')));
+    });
+    mapState.host = h;
+    mapState.map = null;
+    mapState.clusterer = null;
+    return h;
+  }
+
+  function mapSay(text) {
+    var m = mapState.host && mapState.host.querySelector('.w-map__msg');
+    if (!m) return;
+    m.textContent = text;
+    m.hidden = !text;
+  }
+
+  function mapCard(p) {
+    var card = mapState.host.querySelector('.w-mapcard');
+    var v = W.stateView(p);
+    var note = W.checkedLine(p, new Date());
+    card.hidden = false;
+    card.innerHTML = '<a class="w-mapcard__name" href="#" data-w-open="' + p.id + '">' + esc(W.cardTitle(p)) + '</a>' +
+      '<span class="w-card__tags"><span class="w-pill w-pill--' + v.tone + '">' + esc(v.label) + '</span></span>' +
+      (note ? '<span class="w-card__meta">' + esc(note) + '</span>' : '') +
+      '<a class="w-btn w-btn--soft" href="#" data-w-open="' + p.id + '">Открыть</a>';
+  }
+
+  function drawMap() {
+    var ym = mapState.ym;
+    if (!ym || !mapState.host) return;
+    var pts = W.mapPoints(filtered());
+    var canvas = mapState.host.querySelector('.w-map__canvas');
+    if (!mapState.map) {
+      var first = pts[0] || { lat: 53.9, lon: 27.56 };
+      mapState.map = new ym.Map(canvas, { center: [first.lat, first.lon], zoom: 11, controls: ['zoomControl'] });
+      mapState.map.events.add('click', function () { mapState.host.querySelector('.w-mapcard').hidden = true; });
+    }
+    var map = mapState.map;
+    if (mapState.clusterer) map.geoObjects.remove(mapState.clusterer);
+    var Layout = ym.templateLayoutFactory.createClass('<div class="w-pin w-pin--$[properties.pin]"><i>$[properties.glyph]</i></div>');
+    var cl = new ym.Clusterer({ preset: 'islands#invertedDarkBlueClusterIcons', groupByCoordinates: false, hasBalloon: false });
+    cl.add(pts.map(function (p) {
+      var v = W.stateView(p);
+      var pm = new ym.Placemark([p.lat, p.lon], { pin: v.pin, glyph: GLYPH[v.pin] || '', hintContent: p.name },
+        { iconLayout: Layout, iconShape: { type: 'Circle', coordinates: [0, -6], radius: 22 }, hasBalloon: false });
+      pm.events.add('click', function () { mapCard(p); });
+      return pm;
+    }));
+    map.geoObjects.add(cl);
+    mapState.clusterer = cl;
+    if (pts.length) {
+      var b = cl.getBounds();
+      if (b) map.setBounds(b, { checkZoomRange: true, zoomMargin: 40 });
+    }
+    mapSay(pts.length ? '' : 'На карте пока нечего показать: точный адрес известен не у всех точек.');
+    mapState.host.querySelector('.w-mapcard').hidden = true;
+    map.container.fitToViewport();
+  }
+
+  /** Рисует зимнюю карту в секции карты каталога. false — тогда остаётся обычная карта. */
+  function showMap(sec) {
+    if (!sec || !mapWanted()) return false;
+    sec.classList.add('ice-map-wrap--winter');
+    mapState.sec = sec;
+    mapHost(sec).hidden = false;
+    if (mapState.ym) {
+      drawMap();
+      return true;
+    }
+    mapSay('Загружаем карту…');
+    if (!mapState.loading) {
+      mapState.loading = (global.IceMap && global.IceMap.loadYmapsDefault
+        ? global.IceMap.loadYmapsDefault()
+        : Promise.reject(new Error('no-map'))
+      ).then(
+        function (y) { mapState.ym = y; mapState.loading = null; return y; },
+        function (e) { mapState.loading = null; throw e; }
+      );
+    }
+    mapState.loading.then(
+      function () { if (mapState.host && !mapState.host.hidden) drawMap(); },
+      function () { mapSay('Карта не загрузилась. Список работает как обычно.'); }
+    );
+    return true;
+  }
+
+  function hideMap() {
+    if (mapState.sec) mapState.sec.classList.remove('ice-map-wrap--winter');
+    if (mapState.host) mapState.host.hidden = true;
   }
 
   /* ───── карточка точки (шторка) ───── */
@@ -306,9 +492,26 @@
       ev.preventDefault();
       return openPoint(Number(open.getAttribute('data-w-open')));
     }
+    if (ev.target.closest('[data-w-retry]')) {
+      cache = { key: '', data: null };
+      pending = '';
+      return load();
+    }
+    var dist = ev.target.closest('[data-w-d]');
+    if (dist) {
+      var dn = dist.getAttribute('data-w-d');
+      f.district = f.district === dn ? '' : dn;
+      return render();
+    }
     var fl = ev.target.closest('[data-w-f]');
     if (fl) {
       var k = fl.getAttribute('data-w-f');
+      if (k === 'near') return toggleNear();
+      if (k === 'district') {
+        districtsOpen = !districtsOpen;
+        if (!districtsOpen) f.district = '';
+        return render();
+      }
       if (k === 'flooded') f.flooded = !f.flooded;
       else f.kind = f.kind === k ? '' : k;
       return render();
@@ -331,5 +534,5 @@
   }
 
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sheet) closeSheet(); });
-  global.IceWinter = { sync: sync };
+  global.IceWinter = { sync: sync, showMap: showMap, hideMap: hideMap, mapWanted: mapWanted, ready: function () { return !!cache.data; } };
 })(window);

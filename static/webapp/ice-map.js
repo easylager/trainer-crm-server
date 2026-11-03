@@ -1411,5 +1411,13 @@
     };
   }
 
-  global.IceMap = { mount: mount, loadYmaps: loadYmaps };
+  /** Ключ из meta/окна/конфига и скрипт Яндекса — для карт, которые рисуют не IceMap (зимние точки). */
+  function loadYmapsDefault() {
+    return Promise.resolve(defaultGetKey()).then(function (raw) {
+      var res = normalizeKeyResult(raw);
+      return loadYmaps(res && res.key);
+    });
+  }
+
+  global.IceMap = { mount: mount, loadYmaps: loadYmaps, loadYmapsDefault: loadYmapsDefault };
 })(typeof window !== 'undefined' ? window : this);

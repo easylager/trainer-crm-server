@@ -250,3 +250,11 @@ body.tg-dark {
 
 /* Атрибут hidden должен побеждать display из наших классов */
 .w-page [hidden], .w-sheet [hidden] { display: none !important; }
+
+/* Mini App: зимняя карта занимает место карты каталога; общая карта и шторка в это время скрыты. */
+.ice-map-wrap--winter > :not(.w-fullmap) { display: none !important; }
+.w-fullmap { position: fixed; inset: 0; bottom: var(--client-shell-tab-inset, 80px); background: var(--w-thumb); z-index: 1; }
+.w-fullmap[hidden] { display: none; }
+.w-fullmap .w-mapcard { bottom: 12px; }
+.w-fullmap__attrib { position: absolute; left: 12px; bottom: 4px; z-index: 2; margin: 0; font-size: 11px; color: var(--g-muted); }
+.w-fullmap__attrib a { color: inherit; text-decoration: underline; }
