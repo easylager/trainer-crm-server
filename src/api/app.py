@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.middleware.scrape_guard import ScrapeGuardMiddleware
+from src.api.asset_stamp import stamp_html
 from src.api.site_error_pages import site_http_exception_handler
 from src.api.tunnel_css import TunnelCssMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -189,9 +190,9 @@ _WEBAPP_IMMUTABLE_CACHE_HEADERS = {
 
 
 def _webapp_file_response(path: Path):
-    return FileResponse(
-        path,
-        media_type="text/html",
+    # Метку ?v= у js/css ставит сервер (asset_stamp): руками её в html больше не двигаем.
+    return HTMLResponse(
+        content=stamp_html(path.read_text(encoding="utf-8")),
         headers=_WEBAPP_NO_CACHE_HEADERS,
     )
 
@@ -245,7 +246,7 @@ def webapp_arena_page():
     path = _WEBAPP_DIR / "arena.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
     return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
@@ -268,7 +269,7 @@ def webapp_ice_tab_page():
     path = _WEBAPP_DIR / "ice.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    page_html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    page_html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
     key = (Settings().yandex_maps_js_api_key or "").strip()
     if key:
         meta = f'  <meta name="ymaps-key" content="{html.escape(key, quote=True)}">\n'
@@ -312,7 +313,7 @@ def webapp_client_bookings_page():
     path = _WEBAPP_DIR / "client-bookings.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
     return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
@@ -337,7 +338,7 @@ def webapp_client_home_page():
     path = _WEBAPP_DIR / "client-home.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
     return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
@@ -382,7 +383,7 @@ def webapp_client_match_page():
     path = _WEBAPP_DIR / "client-match.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
     return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
@@ -394,7 +395,7 @@ def webapp_client_matches_page():
     path = _WEBAPP_DIR / "client-matches.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    html = path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+    html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
     return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
@@ -955,7 +956,7 @@ def webapp_client_register_page(trainer_id: Optional[int] = Query(None)):
     path = _WEBAPP_DIR / "client-register.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    html = path.read_text(encoding="utf-8")
+    html = stamp_html(path.read_text(encoding="utf-8"))
     tid = ""
     if trainer_id is not None and trainer_id > 0:
         tid = str(int(trainer_id))

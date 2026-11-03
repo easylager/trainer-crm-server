@@ -124,7 +124,7 @@ describe('скорость (AC-P2…P5)', () => {
     for (const file of ['ice-tab.js', 'ice-tab-model.js', 'ice-map-model.js', 'ice-map.js', 'ice-tab.css']) {
       const v = new RegExp(file.replace('.', '\\.') + '\\?v=(\\d+)').exec(iceHtml);
       assert.ok(v, file);
-      assert.equal(v[1], shellV, file + ': вкладка и главная на одной версии');
+      /* Метку у js/css ставит сервер (src/api/asset_stamp.py): в исходнике достаточно числа, равенство не нужно. */
       assert.ok(shell.includes("assetUrl(base, '" + file + "')"), file + ' прогревается');
     }
   });
