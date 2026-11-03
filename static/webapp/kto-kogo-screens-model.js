@@ -20,6 +20,7 @@
   }
 
   var clubName = Base.clubName;
+  var clubGen = Base.clubGen;
 
   var SHORT = { 'Динамо-Минск': 'Динамо', 'Динамо-Молодечно': 'Молодечно', 'Металлург Жлобин': 'Металлург', 'Локомотив Орша': 'Локомотив' };
 
@@ -509,7 +510,7 @@
     m.sort(function (a, b) { return (a.club ? 0 : 1) - (b.club ? 0 : 1); });
     var x = m[0];
     var month = x.period_title;
-    var matches = x.left + NBSP + Base.plural(x.left, 'матч', 'матча', 'матчей') + (x.club ? ' команды ' + clubName(x.club) : '');
+    var matches = x.left + NBSP + Base.plural(x.left, 'матч', 'матча', 'матчей') + (x.club ? ' команды ' + clubGen(x.club) : '');
     if (x.crown && x.left > 0) return 'Корона месяца (' + month + ') твоя, если удержишь до ' + endLabel(x.ends_at) + ': впереди ещё ' + matches + '.';
     if (x.crown) return 'Это был последний матч месяца в таблице «' + sliceLabel(x.club, month) + '»: корона появится после проверки итога.';
     if (x.left > 0) return 'До короны месяца (' + month + ') ' + Base.points(x.to_crown || 0) + ': впереди ещё ' + matches + '.';
@@ -571,7 +572,7 @@
 
   function tableCaption(view, club) {
     var n = (view && view.players) || 0;
-    var what = club ? 'только матчи ' + clubName(club) : 'Динамо и вся Экстралига';
+    var what = club ? 'только матчи ' + clubGen(club) : 'Динамо и вся Экстралига';
     return spaced(n) + NBSP + Base.plural(n, 'игрок', 'игрока', 'игроков') + ' · ' + what;
   }
 
@@ -580,7 +581,7 @@
     var team = club ? ' · ' + clubName(club) : '';
     if (periodKey === 'season') {
       return club
-        ? 'В конце сезона первому — звание «Знаток ' + clubName(club) + ' ' + (seasonTitle || '').replace(/^сезон /, '') + '».'
+        ? 'В конце сезона первому — звание «Знаток ' + clubGen(club) + ' ' + (seasonTitle || '').replace(/^сезон /, '') + '».'
         : 'В конце сезона первому — звание «Знаток сезона ' + (seasonTitle || '').replace(/^сезон /, '') + '». Значок у имени — все короны игрока: месяцы, клубы, лиги.';
     }
     var title = periodLabel(periodKey).toLowerCase();
@@ -607,7 +608,7 @@
   function noMeLine(club, periodKey, nowIso) {
     var closed = periodKey !== 'season' && periodKey !== monthKey(nowIso);
     if (closed) return 'В этом периоде у тебя не было ходов — загляни в другой';
-    return 'Сделай первый ход' + (club ? ' на матч ' + clubName(club) : '') + ' — и появишься в этой таблице';
+    return 'Сделай первый ход' + (club ? ' на матч ' + clubGen(club) : '') + ' — и появишься в этой таблице';
   }
 
   function peakChip(p) {
@@ -766,18 +767,19 @@
     var month = c.period ? cap(MONTH_NOM[Number(c.period.slice(5, 7)) - 1]) : '';
     if (c.kind === 'league_term') return 'Чемпион лиги «' + (c.league_name || '') + '»';
     if (c.kind === 'league_month') return month + ' · лига «' + (c.league_name || '') + '»';
-    return month + ' · ' + (c.club ? 'болельщики ' + clubName(c.club) : 'все игроки');
+    return month + ' · ' + (c.club ? 'болельщики ' + clubGen(c.club) : 'все игроки');
   }
 
   function seasonTitleLine(p, seasonLabelText) {
     var lines = [];
     if (p.overall) lines.push({ rank: p.overall.rank, label: 'Знаток сезона · все матчи', note: p.overall.to_first ? 'до 1-го: ' + Base.points(p.overall.to_first) : 'впереди', total: p.overall.players });
-    if (p.club_place && p.club) lines.push({ rank: p.club_place.rank, label: 'Знаток ' + clubName(p.club.name) + ' ' + seasonLabelText, note: p.club_place.to_first ? 'до 1-го: ' + Base.points(p.club_place.to_first) : 'впереди', total: p.club_place.players });
+    if (p.club_place && p.club) lines.push({ rank: p.club_place.rank, label: 'Знаток ' + clubGen(p.club.name) + ' ' + seasonLabelText, note: p.club_place.to_first ? 'до 1-го: ' + Base.points(p.club_place.to_first) : 'впереди', total: p.club_place.players });
     return lines;
   }
 
   var api = {
     clubName: clubName,
+    clubGen: clubGen,
     clubShort: clubShort,
     seasonTitleFor: seasonTitleFor,
     dayKey: dayKey,

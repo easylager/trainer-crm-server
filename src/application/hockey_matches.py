@@ -200,6 +200,15 @@ _DUE = text(f"""
     ORDER BY starts_at
     """)
 
+# Матч начался, итога ещё нет: живой счёт берём из тикера hockey.by (там он появляется сразу).
+_LIVE = text(f"""
+    SELECT {_COLUMNS} FROM kk_matches
+    WHERE status IN ('scheduled', 'review')
+      AND starts_at <= :now
+      AND starts_at >= :window_start
+    ORDER BY starts_at
+    """)
+
 # Вышел за окно автоподтверждения без итога (цикл стоял или источники молчали) — только человек.
 _STALE = text(f"""
     SELECT {_COLUMNS} FROM kk_matches
@@ -474,13 +483,26 @@ async def check_due_results(
                 await session.execute(_ALERTED, {"id": stale.id, "now": _utc(now)})
         out.append((stale.id, decision.kind))
     rows = await due_for_result(session, now=now)
-    if not rows:
+    live_rows = [r for r in (await session.execute(_LIVE, {"now": _utc(now), "window_start": window_start})).all()]
+    if not rows and not live_rows:
         return out
     try:
         ticker = parse_hockey_by_ticker(await fetch(HOCKEY_BY_URL))
     except Exception:
         logger.warning("hockey results: hockey.by failed", exc_info=True)
         ticker = []
+    # Живой счёт из того же тикера: неофициальный, но клиент видит игру, а не прочерк (TASK-334).
+    for record in live_rows:
+        row = _row(record)
+        item = _find_ticker(ticker, row.starts_at)
+        if item is None or item.completed or item.points[0] is None or item.points[1] is None:
+            continue
+        idx = item.teams.index(TICKER_DINAMO)
+        dinamo_pts, other_pts = item.points[idx], item.points[1 - idx]
+        home_pts, away_pts = (dinamo_pts, other_pts) if row.home_team == DINAMO else (other_pts, dinamo_pts)
+        from src.application.hockey_game import set_live_score
+
+        await set_live_score(session, match_id=row.id, home=home_pts, away=away_pts, now=now)
     for row in rows:
         try:
             page: HcdinamoMatch | None = parse_hcdinamo_match(

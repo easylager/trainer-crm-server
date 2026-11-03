@@ -402,8 +402,13 @@
   function fetchMatch(id) {
     return api('GET', '/client/hockey/matches/' + id).then(function (m) {
       var own = findMatch(id);
-      if (own && state.matches.indexOf(own) >= 0) Object.keys(m).forEach(function (k) { own[k] = m[k]; });
-      else state.matchCache[id] = m;
+      if (own && state.matches.indexOf(own) >= 0) {
+        // Итог мог поправить админ: сменился счёт — накопленное «куда сдвинулось» переспрашиваем.
+        var r0 = own.result, r1 = m.result;
+        if (JSON.stringify(r0 || null) !== JSON.stringify(r1 || null)) delete state.movement[id];
+        Object.keys(own).forEach(function (k) { if (k !== 'pickSeq' && !(k in m)) delete own[k]; });
+        Object.keys(m).forEach(function (k) { own[k] = m[k]; });
+      } else state.matchCache[id] = m;
       return findMatch(id);
     });
   }
@@ -569,8 +574,23 @@
   function copy(url) {
     if (!url) return toast('Ссылка появится, когда бот будет настроен');
     var done = function () { toast('Ссылка скопирована'); };
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, done);
-    else done();
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { legacyCopy(url); });
+    else legacyCopy(url);
+  }
+
+  /** Старые WebView без Clipboard API: textarea + execCommand, иначе показываем ссылку — не врём про «скопировано». */
+  function legacyCopy(url) {
+    var ta = document.createElement('textarea');
+    ta.value = url;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { /* */ }
+    ta.remove();
+    if (ok) toast('Ссылка скопирована');
+    else window.prompt('Скопируй ссылку', url);
   }
 
   // ---------- сборка ----------
@@ -679,24 +699,28 @@
       .then(function () {
         state.loading = false;
         if (loadError) fail(loadError);
-        var target = pickId && findMatch(pickId);
-        // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
-        if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
-          pickSide(target, pickSideParam);
-          toast('Ход принят: за ' + S.clubName(target[pickSideParam].name));
-        }
         var openId = matchId || pickId;
-        enter();
-        if (code) go('join', { code: code });
-        else if (openId) go('match', { id: openId });
-        else if (params.get('tab') === 'table') go('table', {});
-        if (month) {
-          api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {
-            state.month = data;
-            go('month', {});
-            api('POST', '/client/hockey/races/' + month + '/seen').catch(function () {});
-          }, function () {});
-        }
+        // Ссылка «сделать ход» из бота может указать на матч вне списка — догружаем его отдельно.
+        var ensure = pickId && !findMatch(pickId) ? fetchMatch(pickId).catch(function () {}) : Promise.resolve();
+        return ensure.then(function () {
+          var target = pickId && findMatch(pickId);
+          // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
+          if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
+            pickSide(target, pickSideParam);
+            toast('Ход принят: за ' + S.clubName(target[pickSideParam].name));
+          }
+          enter();
+          if (code) go('join', { code: code });
+          else if (openId) go('match', { id: openId });
+          else if (params.get('tab') === 'table') go('table', {});
+          if (month) {
+            api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {
+              state.month = data;
+              go('month', {});
+              api('POST', '/client/hockey/races/' + month + '/seen').catch(function () {});
+            }, function () {});
+          }
+        });
       })
       .catch(function (e) {
         state.loading = false;

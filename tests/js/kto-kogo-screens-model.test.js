@@ -28,6 +28,9 @@ describe('даты и подписи', () => {
   });
   it('«Шахтер» в базе — «Шахтёр» на экране; срез — «Клуб · период»', () => {
     assert.equal(S.clubName('Шахтер'), 'Шахтёр');
+    assert.equal(S.clubGen('Юность'), 'Юности');
+    assert.equal(S.clubGen('Динамо-Минск'), 'Динамо-Минск');
+    assert.equal(S.clubGen('Новая Команда'), 'Новая Команда');
     assert.equal(S.clubShort('Динамо-Минск'), 'Динамо');
     assert.equal(S.clubShort('Могилев'), 'Могилёв');
     assert.equal(S.seasonTitleFor('2026-11-06T09:00:00Z'), 'сезон 2026/27');
@@ -220,7 +223,7 @@ describe('итог и движение', () => {
   });
   it('корона месяца: держишь, не хватает, последний матч', () => {
     const base = { kind: 'slice', club: 'Юность', period_title: 'ноябрь', ends_at: '2026-11-30T21:00:00Z', crown: true, left: 3, to_crown: 0 };
-    assert.match(S.crownLineAfter([base]), /твоя, если удержишь до 30.ноября.*ещё 3.матча команды Юность/);
+    assert.match(S.crownLineAfter([base]), /твоя, если удержишь до 30.ноября.*ещё 3.матча команды Юности/);
     assert.match(S.crownLineAfter([Object.assign({}, base, { crown: false, to_crown: 10 })]), /^До короны месяца \(ноябрь\) 10.очков/);
     assert.match(S.crownLineAfter([Object.assign({}, base, { left: 0 })]), /последний матч/);
     assert.equal(S.crownLineAfter([{ kind: 'league' }]), '');
@@ -242,7 +245,7 @@ describe('таблица', () => {
     assert.equal(S.rowSub(r(1, { played: 34, correct_percent: 64 })), '34' + NBSP + 'хода · угадано 64%');
     assert.equal(S.rowSub(r(1, { played: 1, correct_percent: null })), '1' + NBSP + 'ход');
     assert.equal(S.tableCaption({ players: 1380 }, null), '1' + NBSP + '380' + NBSP + 'игроков · Динамо и вся Экстралига');
-    assert.equal(S.tableCaption({ players: 3 }, 'Шахтер'), '3' + NBSP + 'игрока · только матчи Шахтёр');
+    assert.equal(S.tableCaption({ players: 3 }, 'Шахтер'), '3' + NBSP + 'игрока · только матчи Шахтёра');
     const periods = S.periodChoices('сезон 2026/27', '2026-12-10T09:00:00Z', [{ kind: 'month', period: '2026-11', club: null }]);
     assert.deepEqual(periods.map((p) => p.key), ['season', '2026-12', '2026-11']);
     assert.deepEqual(periods.map((p) => p.note), ['все матчи сезона', 'идёт', 'закрыт']);
@@ -259,7 +262,7 @@ describe('таблица', () => {
   });
   it('плашка новичка: сезон и текущий месяц — «первый ход», закрытый месяц — «не было ходов»', () => {
     assert.match(S.noMeLine(null, 'season', '2026-11-06T09:00:00Z'), /^Сделай первый ход/);
-    assert.match(S.noMeLine('Юность', '2026-11', '2026-11-06T09:00:00Z'), /на матч Юность/);
+    assert.match(S.noMeLine('Юность', '2026-11', '2026-11-06T09:00:00Z'), /на матч Юности/);
     assert.match(S.noMeLine(null, '2026-10', '2026-11-06T09:00:00Z'), /не было ходов/);
   });
   it('строка про корону: порог трёх, моё положение, звание сезона', () => {
@@ -268,7 +271,7 @@ describe('таблица', () => {
     assert.match(S.tableCrownLine({ players_with_points: 5, me: { rank: 1 }, to_crown: 0 }, null, '2026-11', ''), /Сейчас она твоя/);
     assert.match(S.tableCrownLine({ players_with_points: 2 }, null, '2026-11', ''), /хотя бы у троих/);
     assert.match(S.tableCrownLine(view, null, 'season', 'сезон 2026/27'), /Знаток сезона 2026\/27/);
-    assert.match(S.tableCrownLine(view, 'Юность', 'season', 'сезон 2026/27'), /Знаток Юность 2026\/27/);
+    assert.match(S.tableCrownLine(view, 'Юность', 'season', 'сезон 2026/27'), /Знаток Юности 2026\/27/);
   });
   it('вершины: чип и плитка, корона записью', () => {
     const p = { club: 'Юность', period: '2026-11', period_title: 'ноябрь', rank: 2, players: 38 };
@@ -360,13 +363,13 @@ describe('лиги', () => {
 
 describe('карточка болельщика', () => {
   it('подписи корон и званий сезона', () => {
-    assert.equal(S.crownLabel({ kind: 'month', club: 'Юность', period: '2026-10' }), 'Октябрь · болельщики Юность');
+    assert.equal(S.crownLabel({ kind: 'month', club: 'Юность', period: '2026-10' }), 'Октябрь · болельщики Юности');
     assert.equal(S.crownLabel({ kind: 'month', club: null, period: '2026-10' }), 'Октябрь · все игроки');
     assert.equal(S.crownLabel({ kind: 'league_month', league_name: 'Офис', period: '2026-11' }), 'Ноябрь · лига «Офис»');
     assert.equal(S.crownLabel({ kind: 'league_term', league_name: 'Офис' }), 'Чемпион лиги «Офис»');
     const lines = S.seasonTitleLine({ overall: { rank: 214, players: 1380, to_first: 900 }, club: { name: 'Юность' }, club_place: { rank: 3, players: 212, to_first: 40 } }, '2026/27');
     assert.equal(lines[0].label, 'Знаток сезона · все матчи');
-    assert.equal(lines[1].label, 'Знаток Юность 2026/27');
+    assert.equal(lines[1].label, 'Знаток Юности 2026/27');
     assert.equal(lines[1].note, 'до 1-го: 40\u00a0очков');
   });
 });

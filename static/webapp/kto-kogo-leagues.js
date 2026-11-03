@@ -42,18 +42,20 @@
     a.preview = null;
     clearTimeout(previewTimer);
     if (S.termsError(f)) return;
+    var seq = (a.previewSeq = (a.previewSeq || 0) + 1);
     previewTimer = setTimeout(function () {
       var body = S.termsBody(f, nowIso());
       K.api('POST', '/client/hockey/leagues/terms-preview', body)
         .then(function (p) {
-          if (a.form === f) {
+          // Ответы могут прийти не по порядку: применяем только последний запрос.
+          if (a.previewSeq === seq) {
             a.preview = p;
             a.previewError = '';
             K.render();
           }
         })
         .catch(function (e) {
-          if (a.form === f) {
+          if (a.previewSeq === seq) {
             a.preview = null;
             a.previewError = e.message;
             K.render();
@@ -257,13 +259,18 @@
   K.register('league', {
     enter: function (a) {
       a.tab = a.tab || 'all';
-      Promise.all([loadLeague(a, true), K.loadClubs().catch(function () {})]).then(K.render, function (e) { K.fail(e); K.back(); });
+      a.failed = false;
+      Promise.all([loadLeague(a, true), K.loadClubs().catch(function () {})]).then(K.render, function (e) {
+        K.fail(e);
+        a.failed = true;
+        K.render();
+      });
     },
     render: function (a) {
       a.tab = a.tab || 'all';
       var l = state.leagueTables[lkey(a)];
       var monthName = S.periodLabel(S.monthKey(nowIso()));
-      if (!l) return [h('main', { class: 'kk-main' }, [K.topbar('Лига', null), K.loading()])];
+      if (!l) return [h('main', { class: 'kk-main' }, [K.topbar('Лига', null), a.failed ? K.retryCard('Лига не загрузилась.', function () { a.failed = false; K.render(); K.replace('league', a); }) : K.loading()])];
       var items = l.items || [];
       var me = items.filter(function (r) { return r.is_me; })[0];
       var main = h('main', { class: 'kk-main' }, [
@@ -277,8 +284,9 @@
         ]),
         seg([['month', monthName], ['all', 'Вся лига']], a.tab, function (id) {
           a.tab = id;
+          a.failed = false;
           K.render();
-          loadLeague(a).then(K.render, K.fail);
+          loadLeague(a).then(K.render, function (e) { K.fail(e); a.failed = true; K.render(); });
         }, 'Период таблицы'),
         h('div', { class: 'kk-crownbar' }, [K.crownIcon(18), h('span', { text: S.leagueCrownLine(l, a.tab, me, items[0] ? items[0].points : 0) })]),
         items.length > 1 ? h('div', { class: 'kk-tbl' }, items.map(leagueRow)) : h('span', { class: 'kk-sub', text: 'Пока в лиге только ты. Позови своих — таблица оживёт после первого матча.' }),

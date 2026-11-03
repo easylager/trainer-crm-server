@@ -58,6 +58,8 @@ KIND_NOMOVE = "nomove"
 KIND_RESULT = "result"
 KIND_OVERTOOK = "overtook"
 KIND_MFINAL = "mfinal"
+KIND_MOVED = "moved"
+KIND_MOVED_FREE = "mvfree"
 KIND_BEFORE = "before"  # прежнее «за час»: больше не шлём, записи остались в таблице
 # Приоритет внутри дневного бюджета (меньше — важнее).
 PRIORITY = {KIND_MFINAL: 0, KIND_OVERTOOK: 1, KIND_NOMOVE: 2}
@@ -130,6 +132,8 @@ class Notice:
     buttons: list[list[dict]]
     # Итоги, слитые в одну сводку: остальные матчи (каждый занимается отдельной строкой).
     also: tuple[int, ...] = field(default=())
+    # Строка в hockey_notices уже есть (повод ставится событием, не сканом): claim пропускаем.
+    preclaimed: bool = False
 
     @property
     def match_ids(self) -> tuple[int, ...]:
@@ -346,7 +350,7 @@ _MFINAL_FANS = text(f"""
 
 _SENT_TODAY = text("""
     SELECT DISTINCT player_key FROM hockey_notices
-    WHERE sent_at >= :since AND sent_at < :until AND kind <> 'result'
+    WHERE sent_at >= :since AND sent_at < :until AND kind NOT IN ('result', 'moved', 'mvfree')
     """)
 
 _HAS_PICK = text("SELECT 1 FROM hockey_picks WHERE match_id = :match_id AND player_key = :player_key")
@@ -790,6 +794,8 @@ async def due_notices(session: AsyncSession, *, now: datetime, overtakes: Iterab
         return []
     cache: dict = {}
     out = await _result_notices(session, now=now, cache=cache)
+    # «Перенесли матч» — событийные, вне дневного бюджета (как итоги): об отмене хода сказать обязательно.
+    out += await _moved_notices(session, now=now)
 
     since, until = day_bounds(now)
     spent = set((await session.execute(_SENT_TODAY, {"since": since, "until": until})).scalars().all())
@@ -812,6 +818,61 @@ async def due_notices(session: AsyncSession, *, now: datetime, overtakes: Iterab
         if player_key in spent:
             continue
         out.append(min(notices, key=lambda n: PRIORITY[n.kind]))
+    return out
+
+
+# ---------- «матч перенесли» (событие, не скан) ----------
+
+# Повторный перенос того же матча — сбрасываем доставку: об этом переносе тоже надо сказать.
+_QUEUE_MOVED = text("""
+    INSERT INTO hockey_notices (player_key, match_id, kind) VALUES (:player_key, :match_id, :kind)
+    ON CONFLICT (player_key, match_id, kind) DO UPDATE SET sent_at = NULL, failed = false
+    """)
+
+# Строки уже «заняты» при вставке — достаются один раз; сбой отправки не повторяем (sent_at IS NULL + failed).
+_DUE_MOVED = text("""
+    SELECT n.player_key, n.match_id, n.kind, m.home_team, m.away_team, m.starts_at
+    FROM hockey_notices AS n
+    JOIN game_matches AS m ON m.id = n.match_id
+    LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = n.player_key
+    WHERE n.kind IN ('moved', 'mvfree') AND n.sent_at IS NULL AND NOT n.failed
+      AND COALESCE(pr.remind, true) AND pr.bot_blocked_at IS NULL
+    ORDER BY n.match_id, n.player_key
+    """)
+
+
+async def queue_moved(
+    session: AsyncSession, *, match_id: int, voided: list, released: list[int], starts_at: datetime
+) -> None:
+    """Поставить письма о переносе: ``voided`` — строки (player_key, doubled) аннулированных ходов,
+    ``released`` — кому козырь вернулся. Пишется в той же транзакции, что и сам перенос."""
+    for r in voided:
+        kind = KIND_MOVED
+        await session.execute(_QUEUE_MOVED, {"player_key": r.player_key, "match_id": match_id, "kind": kind})
+    for player_key in released:
+        await session.execute(_QUEUE_MOVED, {"player_key": player_key, "match_id": match_id, "kind": KIND_MOVED_FREE})
+
+
+async def _moved_notices(session: AsyncSession, *, now: datetime) -> list[Notice]:
+    out: list[Notice] = []
+    for r in (await session.execute(_DUE_MOVED)).all():
+        when = f"{_day_word(r.starts_at, now)} в {_hhmm(r.starts_at)}"
+        if r.kind == KIND_MOVED:
+            body = (
+                f"{html.escape(r.home_team)} — {html.escape(r.away_team)} перенесли: теперь {when}. "
+                "Твой ход был сделан уже после нового закрытия приёма ходов и не прошёл — сделай его заново. "
+                "Если на нём стоял козырь, он тоже свободен."
+            )
+        else:
+            body = (
+                f"{html.escape(r.home_team)} — {html.escape(r.away_team)} перенесли на другую неделю, "
+                f"где козырь у тебя уже занят — этот козырь вернулся. Матч теперь {when}."
+            )
+        buttons = _rows(
+            list(pick_buttons(r.match_id, r.home_team, r.away_team)),
+            [url_button("Открыть матч", f"{START_PICK}_{r.match_id}")],
+        )
+        out.append(Notice(r.kind, r.player_key, r.match_id, body, buttons, preclaimed=True))
     return out
 
 
@@ -860,10 +921,11 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
         await session.commit()
         notices = await due_notices(session, now=now, overtakes=overtakes)
     for notice in notices:
-        async with session_factory() as session:
-            if not await claim(session, notice):
-                continue
-            await session.commit()
+        if not notice.preclaimed:
+            async with session_factory() as session:
+                if not await claim(session, notice):
+                    continue
+                await session.commit()
         try:
             outcome = _outcome(await send(notice.player_key, notice.text, notice.buttons))
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
@@ -1068,6 +1130,8 @@ __all__ = [
     "CB_PICK",
     "ChatPick",
     "KIND_MFINAL",
+    "KIND_MOVED",
+    "KIND_MOVED_FREE",
     "KIND_NOMOVE",
     "KIND_OVERTOOK",
     "KIND_RESULT",
@@ -1091,6 +1155,7 @@ __all__ = [
     "mark_done",
     "next_move",
     "picked_buttons",
+    "queue_moved",
     "remind_on",
     "result_text",
     "scan_league_ranks",
