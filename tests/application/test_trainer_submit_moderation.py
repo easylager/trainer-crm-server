@@ -71,18 +71,20 @@ async def test_submit_moderation_notifies_once_until_profile_changes(db_session,
     )
 
     first = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert first["ok"] is True and first.get("submitted") is True
+    assert first["ok"] is True and first.get("published") is True
+    assert first["catalog_state"] == "published"
     assert notified == [tid]
 
     second = await try_submit_trainer_for_moderation_review(db_session, tid)
     assert second["ok"] is True
     assert second["noop"] is True
-    assert second["reason"] == "already_submitted"
+    assert second["reason"] == "already_published"
     assert notified == [tid]
 
     await update_trainer_profile(db_session, tid, profile={"description": "z" * 30})
     third = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert third["ok"] is True and third.get("submitted") is True
+    assert third["ok"] is True and third.get("published") is True
+    # Карточка уже живая — но версия новая, админам об этом надо знать (пост-проверка).
     assert notified == [tid, tid]
 
 
@@ -153,7 +155,7 @@ async def test_resending_unchanged_profile_field_does_not_reset_submission(
     )
 
     first = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert first["ok"] is True and first.get("submitted") is True
+    assert first["ok"] is True and first.get("published") is True
     assert notified == [tid]
 
     # Re-save the same first_name value — a later carousel step re-saving the whole form.
@@ -161,7 +163,7 @@ async def test_resending_unchanged_profile_field_does_not_reset_submission(
     again = await try_submit_trainer_for_moderation_review(db_session, tid)
     assert again["ok"] is True
     assert again["noop"] is True
-    assert again["reason"] == "already_submitted"
+    assert again["reason"] == "already_published"
     assert notified == [tid]
 
     # A field outside the moderation criteria (arena's own schedule step) must not reset it either.
@@ -171,7 +173,7 @@ async def test_resending_unchanged_profile_field_does_not_reset_submission(
     still = await try_submit_trainer_for_moderation_review(db_session, tid)
     assert still["ok"] is True
     assert still["noop"] is True
-    assert still["reason"] == "already_submitted"
+    assert still["reason"] == "already_published"
     assert notified == [tid]
 
 
@@ -251,7 +253,7 @@ async def test_submit_moderation_refuses_until_trainer_asks_for_catalog(db_sessi
     )
     await db_session.commit()
     queued = await try_submit_trainer_for_moderation_review(db_session, tid)
-    assert queued["ok"] is True and queued.get("submitted") is True
+    assert queued["ok"] is True and queued.get("published") is True
     assert notified == [tid]
 
 
@@ -474,24 +476,26 @@ async def test_opt_out_then_opt_in_resubmits_instead_of_silent_noop(db_session, 
     # Since TASK-140 turning the switch on submits by itself: the toggle, the catalog screen and
     # the legacy REST route all reach the state machine through the same call, so the separate
     # try_submit that used to follow would now be the second request for one decision.
+    # Publish-first: включение тумблера публикует сразу, очереди перед публикацией нет.
     assert await set_trainer_catalog_visibility(db_session, tid, visible=True) is True
     assert notified == [tid]
     r_state = await db_session.execute(
         text("SELECT catalog_state FROM trainers WHERE id = :tid"), {"tid": tid}
     )
-    assert r_state.scalar() == "pending_review"
+    assert r_state.scalar() == "published"
 
-    # Opts out before admin gets to it: the request is withdrawn, stamp and all.
+    # Opts out: опубликованная карточка уходит в hidden — её уже проверяли, возвращать
+    # в draft и снимать штамп не нужно.
     assert await set_trainer_catalog_visibility(db_session, tid, visible=False) is True
     r_after_out = await db_session.execute(
-        text("SELECT moderation_submitted_at, catalog_state FROM trainers WHERE id = :tid"),
-        {"tid": tid},
+        text("SELECT catalog_state FROM trainers WHERE id = :tid"), {"tid": tid}
     )
-    assert tuple(r_after_out.fetchone()) == (None, "draft")
+    assert r_after_out.scalar() == "hidden"
 
-    # Opts back in — a genuine fresh request, not a silent "already_submitted" noop.
+    # Opts back in — карточка уже проходила проверку, вернуть в каталог можно без
+    # повторного пинга админам (restore идёт напрямую, а не через очередь).
     assert await set_trainer_catalog_visibility(db_session, tid, visible=True) is True
-    assert notified == [tid, tid]
+    assert notified == [tid]
 
 
 async def _card_ready_trainer(db_session, *, status: str, catalog_state: str) -> int:
@@ -636,9 +640,9 @@ async def test_resubmitting_clears_the_comment_that_was_already_acted_on(
     result = await try_submit_trainer_for_moderation_review(
         db_session, tid, requested_by_trainer=True
     )
-    assert result.get("submitted") is True
+    assert result.get("published") is True
 
     after = await get_trainer_onboarding_checklist(db_session, tid)
-    assert after["catalog_state"] == "pending_review"
+    assert after["catalog_state"] == "published"
     assert after["moderation_feedback"] in (None, "")
     assert after["catalog_needs_revision"] is False

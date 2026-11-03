@@ -120,7 +120,10 @@ class CatalogStateTransitionError(CatalogStateError):
 # Two rules live outside the table: any state may go to ``draft`` (account deactivation), and
 # a transition to the current state is a no-op rather than an error.
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    CATALOG_STATE_DRAFT: frozenset({CATALOG_STATE_PENDING_REVIEW}),
+    # `draft → published` — one-tap publish: модерация больше не стоит между тренером и
+    # каталогом (publish-first), карточка уходит админу на пост-проверку уже опубликованной.
+    # `pending_review` остаётся для переходов, которые подразумевают ревью до показа.
+    CATALOG_STATE_DRAFT: frozenset({CATALOG_STATE_PENDING_REVIEW, CATALOG_STATE_PUBLISHED}),
     # `pending_review → paused` — анкета сломалась, пока карточка стояла в очереди. Ребра тут не
     # было, хотя ``reconcile_catalog_state_for_card`` именно этот переход и делает: тренер,
     # который стёр телефон, ожидая модератора, получал CatalogStateTransitionError прямо из
@@ -130,17 +133,29 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
         {CATALOG_STATE_PUBLISHED, CATALOG_STATE_NEEDS_REVISION, CATALOG_STATE_PAUSED}
     ),
     # A moderator asking an *active* trainer for edits does not unpublish the card — it only
-    # discards the pending revision. So `published → needs_revision` is intentionally absent.
+    # discards the pending revision. `published → needs_revision` exists for the other case:
+    # a published card whose account never reached ``active`` (publish-first trainer still in
+    # ``pending_profile``) — post-moderation's «Нужны правки» would otherwise have only
+    # «Отклонить» = account deactivation as its teeth (see ``apply_moderator_revision_request``).
     #
     # `published → pending_review` is for the account losing its approval: an admin moving the
     # status out of `active` takes the card back to the queue, where its content is intact and
     # only the approval is missing (see ``update_trainer_status``).
     CATALOG_STATE_PUBLISHED: frozenset(
-        {CATALOG_STATE_HIDDEN, CATALOG_STATE_PAUSED, CATALOG_STATE_PENDING_REVIEW}
+        {
+            CATALOG_STATE_HIDDEN,
+            CATALOG_STATE_PAUSED,
+            CATALOG_STATE_PENDING_REVIEW,
+            CATALOG_STATE_NEEDS_REVISION,
+        }
     ),
     CATALOG_STATE_HIDDEN: frozenset({CATALOG_STATE_PUBLISHED}),
     CATALOG_STATE_PAUSED: frozenset({CATALOG_STATE_PUBLISHED, CATALOG_STATE_PENDING_REVIEW}),
-    CATALOG_STATE_NEEDS_REVISION: frozenset({CATALOG_STATE_PENDING_REVIEW}),
+    # `needs_revision → published` — publish-first: тренер исправил и жмёт «Отправить себя
+    # в каталог»; карточка возвращается сразу, без повторного ожидания модератора.
+    CATALOG_STATE_NEEDS_REVISION: frozenset(
+        {CATALOG_STATE_PENDING_REVIEW, CATALOG_STATE_PUBLISHED}
+    ),
 }
 
 

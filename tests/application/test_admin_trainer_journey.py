@@ -39,15 +39,26 @@ def test_stops_at_first_gap_even_if_later_steps_done():
 
 
 def test_link_copied_but_no_client():
-    r = build_journey_row(_row(link_copied_at=NOW), NOW)
-    assert r["reached"] == 5
+    r = build_journey_row(
+        _row(link_copied_at=NOW, catalog_state="published", catalog_at=NOW), NOW)
+    assert r["reached"] == 6
     assert r["stall"] == "Ссылка есть, клиентов нет"
-    assert [s["done"] for s in r["steps"]] == [True] * 5 + [False] * 2
+    assert [s["done"] for s in r["steps"]] == [True] * 6 + [False] * 2
+
+
+def test_link_copied_but_not_in_catalog_stalls_on_publish():
+    # Копирование ссылки — шаг продвижения, не ворота каталога: тренер, который скопировал
+    # ссылку, но не отправил себя в каталог, стоит на шаге «Отправил себя в каталог».
+    r = build_journey_row(_row(link_copied_at=NOW, catalog_state="draft"), NOW)
+    assert r["reached"] == 4
+    assert r["stall"] == "Не отправил себя в каталог"
+    assert r["steps"][5]["done"] is True  # «Скопировал ссылку» отмечен, но воронку не двигает
 
 
 def test_working_trainer_and_plan():
     r = build_journey_row(
-        _row(link_copied_at=NOW, clients_count=3, bookings_count=4,
+        _row(link_copied_at=NOW, catalog_state="published", catalog_at=NOW,
+             clients_count=3, bookings_count=4,
              sub_raw="trial|" + (NOW + timedelta(days=5)).isoformat()), NOW)
     assert r["reached"] == STEP_COUNT and r["working"] is True
     assert r["plan"]["status"] == "trial"

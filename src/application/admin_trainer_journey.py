@@ -1,15 +1,19 @@
 """Admin «Путь тренеров»: how far each trainer got, newest first, so an admin knows who to message.
 
-Seven milestones, computed from real rows (never from ``trainers.status`` — ``active`` means
+Eight milestones, computed from real rows (never from ``trainers.status`` — ``active`` means
 catalog-published, not working):
 
 1. entered the bot (``telegram_id`` linked)
 2. profile: first name + city
 3. services + a place to work (arena, or a declared online/outdoor format)
 4. schedule: a weekly template or at least one slot
-5. copied the client invite link
-6. first client (roster entry or non-sandbox booking)
-7. first real booking
+5. asked to be in the catalog (``catalog_state`` opted in — publish-first, один тап)
+6. copied the client invite link
+7. first client (roster entry or non-sandbox booking)
+8. first real booking
+
+Шаг 5 — каталог, а не копирование ссылки: publish-first сделал попадание в каталог частью
+основного пути, а «скопировал ссылку клиентам» — шаг продвижения после него, а не стоп перед ним.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ STEP_LABELS: tuple[str, ...] = (
     "Профиль: имя и город",
     "Услуги и место работы",
     "Расписание и слоты",
+    "Отправил себя в каталог",
     "Скопировал ссылку клиентам",
     "Добавил клиента",
     "Первая запись",
@@ -72,6 +77,7 @@ _STALL_AFTER: tuple[str, ...] = (
     "Не начал профиль",
     "Не добавил услуги и место",
     "Не собрал расписание",
+    "Не отправил себя в каталог",
     "Не скопировал ссылку клиентам",
     "Ссылка есть, клиентов нет",
     "Клиент есть, записей нет",
@@ -87,6 +93,7 @@ _JOURNEY_SQL = text(
         t.created_at AS joined_at,
         t.catalog_state,
         t.catalog_state_reason,
+        t.catalog_state_changed_at AS catalog_at,
         NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '') AS display_name,
         (p.first_name IS NOT NULL AND TRIM(p.first_name) <> '' AND p.city_id IS NOT NULL) AS has_profile,
         (
@@ -198,11 +205,18 @@ def build_catalog_info(state: str | None, reason: str | None, missing: list[str]
 
 def build_journey_row(row: Any, now: datetime, missing: list[str] | None = None) -> dict[str, Any]:
     """Pure transform of one SQL row into the API item (unit-tested without a database)."""
+    catalog_opted_in = trainer_opted_into_catalog(
+        {
+            "catalog_state": getattr(row, "catalog_state", None),
+            "catalog_state_reason": getattr(row, "catalog_state_reason", None),
+        }
+    )
     done_flags = [
         True,
         bool(row.has_profile),
         bool(row.has_services),
         bool(row.has_schedule),
+        catalog_opted_in,
         row.link_copied_at is not None,
         bool(row.clients_count),
         bool(row.bookings_count),
@@ -219,6 +233,7 @@ def build_journey_row(row: Any, now: datetime, missing: list[str] | None = None)
         None,
         None,
         _iso(row.schedule_at),
+        _iso(getattr(row, "catalog_at", None)),
         _iso(row.link_copied_at),
         _iso(row.first_client_at),
         _iso(row.first_booking_at),

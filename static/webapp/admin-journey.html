@@ -70,7 +70,7 @@
       var FILTERS = [
         { id: 'all', label: 'Все', test: function () { return true; } },
         { id: 'stuck', label: 'Застряли', test: function (t) { return !t.working; } },
-        { id: 'noclient', label: 'Нет клиента', test: function (t) { return t.reached >= 4 && t.reached <= 5; } },
+        { id: 'noclient', label: 'Нет клиента', test: function (t) { return t.reached >= 4 && t.reached <= 6; } },
         { id: 'nocat', label: 'Не в каталоге', test: function (t) { return !t.catalog.listed; } },
         { id: 'fresh', label: 'Мы не писали', test: function (t) { return !t.contacted_at; } }
       ];

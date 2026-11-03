@@ -1081,3 +1081,71 @@ body.tp-kb .tp-foot { padding-bottom: 8px; }
 .ta-help__done { margin: 0; font-size: 15px; line-height: 1.45; color: var(--glide-text); }
 
 .tp-note--ok { color: var(--glide-ink-teal, var(--glide-brand)); }
+
+/* ─── Каталог: статус + контекстные подсказки (publish-first) ──────────── */
+
+.ta-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ta-catalog__status {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 17px;
+  border: 1px solid var(--glide-line);
+  background: var(--glide-surface);
+  color: var(--glide-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ta-catalog__status:active { opacity: 0.7; }
+.ta-catalog__status--on { border-color: var(--glide-ink-teal); color: var(--glide-ink-teal); }
+
+.ta-catalog__tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--glide-surface);
+  border: 1px solid var(--glide-line);
+}
+
+.ta-catalog__tip-text {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--glide-text);
+}
+
+.ta-catalog__tip-action {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glide-line-strong);
+  background: transparent;
+  color: var(--glide-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ta-catalog__tip-action:active { opacity: 0.7; }
+
+.ta-catalog__tip-close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--glide-hint);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}

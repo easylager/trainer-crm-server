@@ -382,6 +382,28 @@
       min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1.5px solid var(--ob-line);
       background: var(--ob-paper); font-size: 15px; font-weight: 600; cursor: pointer;
     }
+    /* ── «Отправить себя в каталог» — publish-first, один тап ── */
+    .ob-done-catalog {
+      margin: 22px 0 0; padding: 16px; border-radius: 16px; background: var(--ob-paper);
+      border: 1.5px solid var(--ob-line); text-align: left;
+    }
+    .ob-done-catalog__title { font-size: 17px; font-weight: 700; margin: 0; }
+    .ob-done-catalog__lead { font-size: 14px; line-height: 1.45; color: var(--ob-muted); margin: 6px 0 0; }
+    .ob-done-catalog__card {
+      margin: 12px 0 0; padding: 12px; border-radius: 12px; border: 1px solid var(--ob-line);
+      display: flex; gap: 12px; align-items: center; background: var(--ob-bg, transparent);
+    }
+    .ob-done-catalog__ava {
+      width: 48px; height: 48px; border-radius: 50%; flex: none; background: var(--ob-ink);
+      color: var(--ob-paper); display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; overflow: hidden;
+    }
+    .ob-done-catalog__ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ob-done-catalog__name { font-size: 15px; font-weight: 700; }
+    .ob-done-catalog__line { font-size: 13px; color: var(--ob-muted); margin-top: 2px; }
+    .ob-done-catalog__btn { width: 100%; margin-top: 12px; }
+    .ob-done-catalog__note { font-size: 13px; color: var(--ob-muted); margin: 8px 0 0; text-align: center; }
+    .ob-done-catalog__ok { font-size: 15px; font-weight: 700; margin: 10px 0 0; }
   </style>
 </head>
 <body>
@@ -583,6 +605,13 @@
       Начните с&nbsp;<strong>тех, кто уже ходит к&nbsp;вам</strong>: имя и&nbsp;время&nbsp;— и&nbsp;тренировки встанут в&nbsp;расписание. Ученику ничего устанавливать не&nbsp;нужно.
     </div>
     <a href="#" class="ob-done-schedule-link" id="obDoneScheduleLink" hidden>Своё время начала? Настройте в&nbsp;«Расписании» →</a>
+    <div class="ob-done-catalog" id="obDoneCatalog" hidden>
+      <h2 class="ob-done-catalog__title">Покажите себя в каталоге</h2>
+      <p class="ob-done-catalog__lead">Каталог glideclub.by — витрина, где клиенты сами находят тренера на катке или в городе и записываются в свободные окна.</p>
+      <div class="ob-done-catalog__card" id="obDoneCatalogCard"></div>
+      <button type="button" class="ob-cta ob-done-catalog__btn" id="obDoneCatalogBtn">Отправить себя в каталог</button>
+      <p class="ob-done-catalog__note" id="obDoneCatalogNote"></p>
+    </div>
     <p class="ob-done-prices" id="obDonePrices">Пока ученик видит «цена по&nbsp;запросу». Можно указать тариф сейчас — или пропустить.</p>
     <button type="button" class="ob-done-prices-btn" id="obDonePricesBtn">Указать цены</button>
   </div>

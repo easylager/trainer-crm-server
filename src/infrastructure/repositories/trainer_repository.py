@@ -435,7 +435,8 @@ class TrainerRepository:
                 "push_notification_start_hour, push_notification_end_hour, "
                 "digest_enabled, digest_send_time, telegram_username, "
                 "arena_work_format, arena_request_text, arena_request_at, "
-                "catalog_state, catalog_state_reason, catalog_state_changed_at "
+                "catalog_state, catalog_state_reason, catalog_state_changed_at, "
+                "client_invite_link_first_copied_at "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -503,6 +504,11 @@ class TrainerRepository:
             "catalog_state_changed_at": (
                 row[21].isoformat()
                 if len(row) > 21 and row[21] is not None and hasattr(row[21], "isoformat")
+                else None
+            ),
+            "client_invite_link_first_copied_at": (
+                row[22].isoformat()
+                if len(row) > 22 and row[22] is not None and hasattr(row[22], "isoformat")
                 else None
             ),
         }
