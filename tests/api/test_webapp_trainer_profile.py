@@ -962,3 +962,17 @@ async def test_webapp_trainer_custom_service_from_profile(
     assert pub_resp.status_code == 200
     pub_ids = [int(s["id"]) for s in pub_resp.json()["items"]]
     assert service_id in pub_ids
+
+
+def test_client_slots_arena_counts_ignores_online_and_counts_per_arena() -> None:
+    from src.api.routes.webapp import _client_slots_arena_counts
+
+    rows = [
+        {"arena_id": 5},
+        {"arena_id": 5},
+        {"arena_id": 7},
+        {"arena_id": None},
+        {"arena_id": "x"},
+    ]
+    assert _client_slots_arena_counts(rows) == {"5": 2, "7": 1}
+    assert _client_slots_arena_counts([]) == {}

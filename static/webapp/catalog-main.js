@@ -6358,6 +6358,7 @@
           return r.json().then(function(data) {
             if (!r.ok) throw new Error(data.detail || r.statusText);
             state.slotsEmptyOnFilterHint = data && data.empty_on_filter ? (data.empty_on_filter_hint || '') : '';
+            state.trainerArenaSlotCounts = data && data.arena_slot_counts ? data.arena_slot_counts : null;
             return data;
           });
         });
@@ -6484,8 +6485,15 @@
           return;
         }
         el.style.display = 'block';
+        var chipsApi = window.TrainerArenaChips;
+        var useModel = chipsApi && typeof chipsApi.buildArenaSlotFilter === 'function';
         var allMode = !state.trainerSlotsArenaIds || state.trainerSlotsArenaIds.length === 0;
         var html = '';
+        if (useModel) {
+          html = chipsApi.renderArenaSlotFilterHtml(
+            chipsApi.buildArenaSlotFilter(t, state.trainerArenaSlotCounts, state.trainerSlotsArenaIds)
+          );
+        } else {
         html += '<div class="trainer-detail-arena-filter">';
         html += '<div class="trainer-detail-arena-filter-title">Показать слоты</div>';
         html += '<div class="trainer-detail-arena-filter-chips" role="group" aria-label="Площадки">';
@@ -6508,7 +6516,9 @@
             '</button>';
         }
         html += '</div></div>';
+        }
         el.innerHTML = html;
+        wireTrainerArenaChips(el);
         el.querySelectorAll('[data-catalog-arena-filter]').forEach(function(btn) {
           btn.onclick = function() {
             state.trainerSlotsArenaFilterExplicit = true;
@@ -6645,7 +6655,7 @@
 
       function wireTrainerArenaChips(root) {
         if (!root) return;
-        root.querySelectorAll('a.trainer-arena-chip[href]').forEach(function (link) {
+        root.querySelectorAll('a.trainer-arena-chip[href], a.trainer-detail-arena-link[href]').forEach(function (link) {
           link.addEventListener('click', function (ev) {
             var href = link.getAttribute('href');
             if (!href) return;
@@ -6838,7 +6848,12 @@
             '</div>'
           );
         }
-        statsParts.push(
+        // «Показать слоты» ниже уже перечисляет арены (с метками и ссылкой на страницу арены),
+        // так что у записываемого тренера с несколькими аренами верхний блок только дублирует его.
+        var arenasInSlotFilter = arenaIds.length > 1 && t.can_book === true &&
+          !catalogServiceIsOnline(t, state.serviceId) &&
+          !!(window.TrainerArenaChips && window.TrainerArenaChips.buildArenaSlotFilter);
+        if (!arenasInSlotFilter) statsParts.push(
           '<div class="' + arenaStatClass + '">' +
             (chipsHtml ? '' : '<div class="trainer-detail-stat-label">Арены</div>') +
             arenaInnerHtml +

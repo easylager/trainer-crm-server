@@ -142,3 +142,55 @@ describe('formatSlotPlaceCaption (TASK-056 place)', () => {
     assert.equal(formatSlotPlaceCaption(null), '');
   });
 });
+
+describe('buildArenaSlotFilter / renderArenaSlotFilterHtml (единый блок «Показать слоты»)', () => {
+  const many = () =>
+    trainer({
+      arena_ids: [1, 2, 3, 4],
+      arena_names: ['Пустая А', 'Замок', 'Минск Арена', 'Пустая Б'],
+      primary_arena_id: 1,
+    });
+
+  it('puts arenas with slots first (more slots first), empty ones last in original order', () => {
+    const { buildArenaSlotFilter } = loadModel();
+    const view = buildArenaSlotFilter(many(), { 2: 6, 3: 12 }, []);
+    assert.deepEqual(view.items.map((i) => i.id), [3, 2, 1, 4]);
+    assert.equal(view.total, 18);
+    assert.equal(view.allActive, true);
+    assert.equal(view.items[0].hasSlots, true);
+    assert.equal(view.items[2].hasSlots, false);
+  });
+
+  it('without counts keeps the order and shows no marks', () => {
+    const { buildArenaSlotFilter, renderArenaSlotFilterHtml } = loadModel();
+    const view = buildArenaSlotFilter(many(), null, []);
+    assert.deepEqual(view.items.map((i) => i.id), [1, 2, 3, 4]);
+    assert.equal(view.marked, false);
+    const html = renderArenaSlotFilterHtml(view);
+    assert.ok(!html.includes('trainer-detail-arena-dot'));
+    assert.ok(!html.includes('trainer-detail-arena-legend'));
+  });
+
+  it('marks the selected arena and offers a link to its page', () => {
+    const { buildArenaSlotFilter, renderArenaSlotFilterHtml } = loadModel();
+    const view = buildArenaSlotFilter(many(), { 2: 6 }, [2]);
+    assert.equal(view.allActive, false);
+    assert.equal(view.selectedArena.id, 2);
+    const html = renderArenaSlotFilterHtml(view);
+    assert.ok(html.includes('href="arena?ref=2"'));
+    assert.ok(html.includes('Страница арены Замок'));
+    assert.ok(html.includes('trainer-detail-arena-chip--none'));
+  });
+
+  it('no link when all venues are shown; names are escaped', () => {
+    const { buildArenaSlotFilter, renderArenaSlotFilterHtml } = loadModel();
+    const view = buildArenaSlotFilter(
+      trainer({ arena_names: ['<b>x</b>', 'Y'] }),
+      { 10: 1 },
+      []
+    );
+    const html = renderArenaSlotFilterHtml(view);
+    assert.ok(!html.includes('trainer-detail-arena-link'));
+    assert.ok(!html.includes('<b>x</b>'));
+  });
+});
