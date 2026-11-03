@@ -21,6 +21,7 @@ live signal that would catch drift automatically.
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -34,6 +35,8 @@ from src.ingestion.normalize import parse_price_to_minor
 from src.ingestion.parsers import IceParser
 from src.ingestion.source_io import fetch_http_bytes, load_source_text
 from src.ingestion.types import ExtractedSlot, Extraction, ParserJob
+
+_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Shared tiny helpers
@@ -81,7 +84,8 @@ class BrestLdsParser(IceParser):
 
     The grid is published only as a picture (``/7x1350.png``, a white ``dd.mm`` over ``HH:MM`` per
     session day), so the picture is read (``brest_poster``) and every date on it becomes a session.
-    If it cannot be read the run fails loudly: the previous behaviour — the same 21:15 slot repeated
+    Columns that cannot be read are skipped with a warning and the readable days are published;
+    if the poster cannot be read at all (or mostly not) the run fails loudly: the previous behaviour — the same 21:15 slot repeated
     daily for ``horizon_days`` — invented sessions on days the poster does not list, so it is kept
     only for fixtures without a poster file and for jobs that set ``poster: false``. Prices are
     parsed live from the page's HTML every run.
@@ -119,9 +123,16 @@ class BrestLdsParser(IceParser):
             image_bytes = await fetch_http_bytes(url)
         reference = parser_reference_date(job.config)
         try:
-            return await run_cpu_bound(brest_poster.read_poster, image_bytes, reference)
+            read = await run_cpu_bound(brest_poster.read_poster_detailed, image_bytes, reference)
         except brest_poster.PosterError as exc:
             raise RuntimeError(f"афиша Бреста не прочиталась: {exc}") from exc
+        if read.unreadable:
+            # Publish the days that were read; the skipped ones stay absent rather than wrong.
+            _log.warning(
+                "brest poster: %s column(s) unreadable, publishing %s readable session(s) (arena %s)",
+                read.unreadable, len(read.sessions), job.arena_id,
+            )
+        return read.sessions
 
     def _extraction(
         self, job: ParserJob, snapshot: str, adult, child, sessions: list[tuple[date, str]], *, projected: bool

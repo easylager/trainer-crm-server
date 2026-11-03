@@ -81,3 +81,62 @@ async def test_unreadable_poster_fails_the_run(tmp_path):
     Image.new("RGB", (1080, 1350), (10, 30, 90)).save(tmp_path / "poster.jpg")
     with pytest.raises(RuntimeError, match="афиша Бреста"):
         await BrestLdsParser().extract(_job(fixture_dir=str(tmp_path)))
+
+
+# --- partial read (2026-11-03): one unreadable column no longer hides the whole week ---------------
+
+_LIVE_NOV = _FIX / "poster-2026-11-03.jpg"  # brest.hockey.by poster for 03–08.11.2026
+
+
+def test_read_poster_nov_week_all_columns():
+    # «07.11» used to be read only by --psm 7 (3 of 6 readings): one more misread failed the poster.
+    read = brest_poster.read_poster_detailed(_LIVE_NOV.read_bytes(), date(2026, 11, 3))
+    assert read.unreadable == 0
+    assert read.sessions == [
+        (date(2026, 11, d), "21:15") for d in (3, 5, 6, 7, 8)
+    ]
+
+
+def _skip_columns(monkeypatch, skip: set[int]):
+    real = brest_poster._read_column
+    seen = {"n": 0}
+
+    def fake(img, box):
+        result = real(img, box)
+        if result is not None:
+            seen["n"] += 1
+            if seen["n"] in skip:
+                return None
+        return result
+
+    monkeypatch.setattr(brest_poster, "_read_column", fake)
+
+
+def test_one_unreadable_column_publishes_the_rest(monkeypatch):
+    _skip_columns(monkeypatch, {4})  # the 4th readable column (07.11) fails
+    read = brest_poster.read_poster_detailed(_LIVE_NOV.read_bytes(), date(2026, 11, 3))
+    assert read.unreadable == 1
+    assert [d.day for d, _ in read.sessions] == [3, 5, 6, 8]  # 07.11 absent, never a wrong day/time
+    assert all(t == "21:15" for _, t in read.sessions)
+
+
+def test_mostly_unreadable_poster_is_refused(monkeypatch):
+    _skip_columns(monkeypatch, {1, 2, 3})
+    with pytest.raises(brest_poster.PosterError, match="неполное"):
+        brest_poster.read_poster_detailed(_LIVE_NOV.read_bytes(), date(2026, 11, 3))
+
+
+def test_date_far_from_run_date_is_refused():
+    with pytest.raises(brest_poster.PosterError, match="далеко"):
+        brest_poster.read_poster((_FIX / "poster.jpg").read_bytes(), date(2026, 10, 1))
+
+
+@pytest.mark.asyncio
+async def test_parser_publishes_readable_days_and_warns(monkeypatch, tmp_path, caplog):
+    (tmp_path / "prices.html").write_text((_FIX / "prices.html").read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "poster.jpg").write_bytes(_LIVE_NOV.read_bytes())
+    _skip_columns(monkeypatch, {2})
+    with caplog.at_level("WARNING"):
+        extraction = await BrestLdsParser().extract(_job(fixture_dir=str(tmp_path), run_date="2026-11-03"))
+    assert [s.local_date for s in extraction.slots] == ["2026-11-03", "2026-11-06", "2026-11-07", "2026-11-08"]
+    assert "unreadable" in caplog.text

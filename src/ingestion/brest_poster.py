@@ -3,12 +3,18 @@
 The page ``brest.hockey.by/raspisanie-svobodnogo-kataniya/`` shows the grid only as an image:
 big white ``dd.mm`` over ``HH:MM`` in one column per session day. Reading the whole poster at once
 loses digits («26.10» → «6.10»), so each column is cut out, thresholded and read on its own at
-three contrast levels; a value counts only when at least two levels agree. If any column cannot be
-read, the whole poster is refused: a missing day must be a loud failure, never a quiet gap.
+several contrast levels; a value counts only when enough readings agree.
+
+A column that cannot be read with confidence is skipped and reported (``PosterRead.unreadable``):
+the readable days are still published. That is safe for visitors — a skipped day is simply absent,
+never shown at a wrong time — while refusing the whole poster hid every correct day too. Garbage is
+still refused: fewer readable columns than unreadable ones, a date far from the run date, or dates
+out of order fail the poster.
 """
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from collections import Counter
 from datetime import date
 from urllib.parse import urljoin
@@ -16,10 +22,10 @@ from urllib.parse import urljoin
 from src.ingestion.dates import infer_date_from_day_month
 from src.ingestion.image_io import open_image_bytes
 
-THRESHOLDS = (170, 190, 210)  # date line: three contrast levels x two tesseract modes
+THRESHOLDS = (150, 170, 190, 210, 230)  # date line: five contrast levels x two tesseract modes
 TIME_THRESHOLDS = (150, 165, 180, 195)  # thin clock digits stay clean at lower levels, one mode
 PSM_MODES = (7, 13)  # single line / raw line: they err differently, which is what the vote needs
-MIN_VOTES = 3  # of 6 (date) / 4 (time) readings per line, and more than half of the readable ones
+MIN_VOTES = 3  # of 10 (date) / 4 (time) readings per line, and more than half of the readable ones
 COLUMN_GAP_PX = 30
 MIN_COLUMN_PX = 25  # a thinner cluster is a glow at the picture edge, not a column
 LINE_GAP_PX = 40
@@ -31,8 +37,17 @@ _POSTER_IMG = re.compile(r"""<img[^>]+width=["']?1080["']?[^>]*>""", re.I)
 _SRC = re.compile(r"""src=["']([^"']+)["']""", re.I)
 
 
+MAX_DAYS_FROM_REFERENCE = 14  # a weekly poster: a date further away is a misread, not a session
+
+
 class PosterError(ValueError):
     """The poster is missing, unreadable or inconsistent."""
+
+
+@dataclass(frozen=True)
+class PosterRead:
+    sessions: list[tuple[date, str]]
+    unreadable: int  # columns skipped because a line could not be read with confidence
 
 
 def find_poster_url(page_html: str, page_url: str) -> str:
@@ -118,7 +133,7 @@ def _valid_time(text: str):
 
 def _read_column(img, col_box: tuple[int, int, int, int]):
     """((day, month), (hour, minute)) for one column, or None when a line cannot be read with confidence."""
-    column_mask = _white_mask(img.crop(col_box), THRESHOLDS[1])
+    column_mask = _white_mask(img.crop(col_box), 190)
     lines = [(a, b) for a, b in _runs(_profile(column_mask, "rows"), INNER_LINE_GAP_PX) if b - a >= MIN_LINE_PX]
     if len(lines) != 2:
         return None
@@ -134,9 +149,14 @@ def _read_column(img, col_box: tuple[int, int, int, int]):
 
 def read_poster(image_bytes: bytes, reference: date) -> list[tuple[date, str]]:
     """Session dates and start times (``HH:MM``) found on the poster, in date order."""
+    return read_poster_detailed(image_bytes, reference).sessions
+
+
+def read_poster_detailed(image_bytes: bytes, reference: date) -> PosterRead:
+    """Readable sessions plus the number of columns that had to be skipped."""
     img = open_image_bytes(image_bytes).convert("RGB")
     offset_y = int(img.height * 0.5)
-    mask = _white_mask(img.crop((0, offset_y, img.width, img.height)), THRESHOLDS[1])
+    mask = _white_mask(img.crop((0, offset_y, img.width, img.height)), 190)
 
     best: list[tuple[date, str]] = []
     best_bad = 0
@@ -157,9 +177,13 @@ def read_poster(image_bytes: bytes, reference: date) -> list[tuple[date, str]]:
             best, best_bad = found, bad
     if not best:
         raise PosterError("на афише не нашлось ни одной даты со временем")
-    if best_bad:
-        raise PosterError(f"не удалось прочитать {best_bad} колонок афиши, расписание неполное")
+    if best_bad >= len(best):
+        raise PosterError(
+            f"не удалось прочитать {best_bad} колонок афиши из {best_bad + len(best)}, расписание неполное"
+        )
     dates = [d for d, _ in best]
     if dates != sorted(set(dates)):
         raise PosterError("даты на афише идут не по порядку или повторяются")
-    return best
+    if any(abs((d - reference).days) > MAX_DAYS_FROM_REFERENCE for d in dates):
+        raise PosterError("дата на афише слишком далеко от сегодняшней — похоже на ошибку чтения")
+    return PosterRead(sessions=best, unreadable=best_bad)
