@@ -343,6 +343,36 @@ def build_terms(
     return Terms(scope=scope, clubs=names, term_kind=term, starts_at=start, ends_at=end)
 
 
+# Сроки, где корона идёт каждый месяц: ``hockey_races._close_leagues`` награждает по месяцам только сезонную лигу;
+# у остальных одна корона в конце срока.
+MONTHLY_CROWN_TERMS = frozenset({"season"})
+
+
+def term_options(*, now: datetime) -> dict:
+    """Окна всех сроков для экрана «Новая лига»: даты и правило корон берём у сервера, не у клиента.
+
+    Срок, который сейчас создать нельзя (плей-офф уже прошёл), в список не попадает.
+    """
+    now = _utc(now)
+    items = []
+    for term in TERM_KINDS:
+        if term == "dates":
+            continue
+        try:
+            terms = build_terms(scope="all", term=term, now=now)
+        except InvalidTerms:
+            continue
+        items.append(
+            {
+                "term": term,
+                "starts_at": terms.starts_at.isoformat(),
+                "ends_at": terms.ends_at.isoformat(),
+                "monthly_crowns": term in MONTHLY_CROWN_TERMS,
+            }
+        )
+    return {"items": items, "season_ends_at": season_period(now).until.isoformat(), "max_clubs": MAX_CLUBS}
+
+
 def _parse_month(raw: str) -> Period:
     try:
         year, mon = (int(x) for x in raw.split("-"))
@@ -798,6 +828,8 @@ async def friends_moves(
 
 __all__ = [
     "InvalidTerms",
+    "MONTHLY_CROWN_TERMS",
+    "term_options",
     "FEW_MATCHES",
     "Terms",
     "build_terms",

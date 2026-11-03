@@ -15,8 +15,12 @@
   var icon = K.icon;
 
   var IDEAS = ['Раздевалка', 'Офис', 'Двор', 'Семья'];
-  var SCOPES = [['all', 'Всё'], ['extraliga', 'Экстралига'], ['dinamo', 'Динамо'], ['pick', 'Выбрать']];
-  var TERMS = [['season', 'До конца сезона'], ['month', null], ['weeks4', '4 недели'], ['playoff', 'Плей-офф'], ['dates', 'Свои даты']];
+  var SCOPES = [
+    ['dinamo', 'Динамо-Минск', 'КХЛ, дома и на выезде'],
+    ['extraliga', 'Вся Экстралига', 'Все клубы Беларуси, без Динамо'],
+    ['all', 'Всё сразу', 'Динамо и вся Экстралига'],
+    ['pick', 'Свои команды', 'Одна или несколько — например, Юность и Динамо'],
+  ];
 
   function nowIso() {
     return new Date().toISOString();
@@ -37,7 +41,7 @@
     var f = newForm(a);
     a.preview = null;
     clearTimeout(previewTimer);
-    if (S.formError(f)) return;
+    if (S.termsError(f)) return;
     previewTimer = setTimeout(function () {
       var body = S.termsBody(f, nowIso());
       K.api('POST', '/client/hockey/leagues/terms-preview', body)
@@ -69,7 +73,6 @@
     var f = newForm(a);
     var err = S.formError(f);
     if (err) return K.toast(err);
-    if (!f.name.trim()) return K.toast('Назови лигу');
     state.busy = true;
     K.render();
     K.api('POST', '/client/hockey/leagues', { name: f.name.trim(), terms: S.termsBody(f, nowIso()) })
@@ -93,64 +96,98 @@
     }));
   }
 
+  /** Строка-вариант: иконка, название, подстрока, кружок выбора справа. */
+  function opt(icon_, label, sub, on, onclick) {
+    return h('button', { type: 'button', class: 'kk-opt' + (on ? ' is-on' : ''), 'aria-pressed': on ? 'true' : 'false', onclick: onclick }, [
+      icon_,
+      h('span', { class: 'kk-opt__t' }, [h('b', { class: 'kk-opt__n', text: label }), sub ? h('span', { class: 'kk-opt__s', text: sub }) : null]),
+      h('span', { class: 'kk-opt__ck' + (on ? ' is-on' : ''), 'aria-hidden': 'true' }, on ? [icon(I.check, 14)] : null),
+    ]);
+  }
+
+  /** Иконка набора команд: Динамо — одна шайба клуба, Экстралига и «всё» — веер логотипов, свои — квадрат из четырёх. */
+  function scopeFace(scope, clubs) {
+    var dinamo = clubs.filter(function (c) { return c.league === 'khl'; });
+    var extra = clubs.filter(function (c) { return c.league === 'extraliga'; });
+    if (scope === 'dinamo') return h('span', { class: 'kk-logos', 'aria-hidden': 'true' }, dinamo[0] ? [K.logoDisc(dinamo[0], 40)] : [K.worldDisc(40)]);
+    if (scope === 'extraliga') return h('span', { class: 'kk-logos', 'aria-hidden': 'true' }, extra.slice(0, 3).map(function (c) { return K.logoDisc(c, 40); }));
+    if (scope === 'all') return h('span', { class: 'kk-logos', 'aria-hidden': 'true' }, dinamo.slice(0, 1).concat(extra.slice(0, 3)).map(function (c) { return K.logoDisc(c, 40); }));
+    return h('span', { class: 'kk-pick4', 'aria-hidden': 'true' }, clubs.slice(0, 4).map(function (c) { return K.logoDisc(c, 18); }));
+  }
+
   K.register('leagueNew', {
     enter: function (a) {
-      K.loadClubs().then(function () { K.render(); refreshPreview(a); }, K.fail);
+      Promise.all([K.loadClubs(), K.loadTermOptions()]).then(function () { K.render(); refreshPreview(a); }, K.fail);
     },
     render: function (a) {
       var f = newForm(a);
       var clubs = state.clubs || [];
+      var maxClubs = (state.termOptions && state.termOptions.max_clubs) || state.maxClubs || null;
       var err = S.formError(f);
       var sum = S.termsSummary(f, a.preview);
-      var monthLabel = S.periodLabel(S.monthKey(nowIso()));
-      var terms = TERMS.map(function (t) { return [t[0], t[1] || monthLabel]; });
+      var choices = S.termChoices(state.termOptions);
+      // Выбранное окно ушло из списка (плей-офф прошёл): откатываемся на первый открытый.
+      if (choices.length && choices.every(function (c) { return c.term !== f.term; })) f.term = choices[0].term;
+      var today = S.dayKey(nowIso());
+      var lastDay = state.termOptions && state.termOptions.season_ends_at ? S.dayKey(new Date(new Date(state.termOptions.season_ends_at).getTime() - 1).toISOString()) : null;
+
+      function toggleClub(name) {
+        var on = f.clubs.indexOf(name) >= 0;
+        if (!on && maxClubs && f.clubs.length >= maxClubs) return K.toast('Не больше ' + maxClubs + ' команд');
+        change(a, { clubs: on ? f.clubs.filter(function (x) { return x !== name; }) : f.clubs.concat([name]) });
+      }
+
       var main = h('main', { class: 'kk-main' }, [
         K.topbar('Новая лига', null),
+        h('p', { class: 'kk-sub kk-sub--tight', text: 'Своя таблица для своих. Ходы те же, что в общей игре, — отдельно ходить не нужно.' }),
         h('div', { class: 'kk-fld' }, [
-          h('label', { for: 'kk-lname', class: 'kk-lbl', text: 'НАЗВАНИЕ' }),
+          h('label', { for: 'kk-lname', class: 'kk-lbl', text: 'КАК НАЗОВЁМ' }),
           h('input', { id: 'kk-lname', class: 'kk-input', maxlength: '28', autocomplete: 'off', value: f.name, placeholder: 'Например, Офис', oninput: function (e) { f.name = e.target.value; } }),
-          h('div', { class: 'kk-chips' }, IDEAS.map(function (n) { return h('button', { type: 'button', class: 'kk-ch kk-ch--sm', onclick: function () { f.name = n; K.render(); }, text: n }); })),
+          h('div', { class: 'kk-chips' }, IDEAS.map(function (n) { return h('button', { type: 'button', class: 'kk-ch kk-ch--sm', onclick: function () { f.name = n; K.render(); refreshPreview(a); }, text: n }); })),
         ]),
         h('div', { class: 'kk-sec' }, [
-          h('span', { class: 'kk-lbl', text: 'ЧЬИ МАТЧИ СЧИТАЕМ' }),
-          seg(SCOPES, f.scope, function (id) { change(a, { scope: id }); }, 'Матчи'),
+          h('span', { class: 'kk-lbl', text: 'КАКИЕ МАТЧИ' }),
+          h('div', { class: 'kk-opts', role: 'group', 'aria-label': 'Матчи' }, SCOPES.map(function (it) {
+            return opt(scopeFace(it[0], clubs), it[1], it[2], f.scope === it[0], function () { change(a, { scope: it[0] }); });
+          })),
           f.scope === 'pick'
-            ? h('div', { class: 'kk-grid5' }, clubs.map(function (c) {
+            ? h('div', { class: 'kk-clubgrid' }, clubs.map(function (c) {
                 var on = f.clubs.indexOf(c.name) >= 0;
                 return h('button', {
                   type: 'button',
-                  class: 'kk-tm kk-tm--sq' + (on ? ' is-on' : ''),
+                  class: 'kk-club' + (on ? ' is-on' : ''),
                   'aria-pressed': on ? 'true' : 'false',
-                  'aria-label': S.clubName(c.name),
-                  onclick: function () { change(a, { clubs: on ? f.clubs.filter(function (x) { return x !== c.name; }) : f.clubs.concat([c.name]) }); },
-                }, [K.logoDisc(c, 38), on ? h('span', { class: 'kk-ok', 'aria-hidden': 'true' }, [icon(I.check, 12)]) : null]);
+                  onclick: function () { toggleClub(c.name); },
+                }, [K.logoDisc(c, 34), h('span', { class: 'kk-club__n', text: S.clubShort(c.name) }), on ? h('span', { class: 'kk-ok', 'aria-hidden': 'true' }, [icon(I.check, 12)]) : null]);
               }))
             : null,
         ]),
         h('div', { class: 'kk-sec' }, [
-          h('span', { class: 'kk-lbl', text: 'СКОЛЬКО ИДЁТ' }),
-          h('div', { class: 'kk-chips' }, terms.map(function (t) {
-            var on = f.term === t[0];
-            return h('button', { type: 'button', class: 'kk-ch' + (on ? ' is-on' : ''), 'aria-pressed': on ? 'true' : 'false', onclick: function () { change(a, { term: t[0] }); }, text: t[1] });
+          h('span', { class: 'kk-lbl', text: 'КАК ДОЛГО' }),
+          h('div', { class: 'kk-opts', role: 'group', 'aria-label': 'Время лиги' }, choices.map(function (c) {
+            return opt(null, c.label, c.sub, f.term === c.term, function () { change(a, { term: c.term }); });
           })),
           f.term === 'dates'
             ? h('div', { class: 'kk-two' }, [
-                h('div', { class: 'kk-fld' }, [h('label', { for: 'kk-d1', class: 'kk-lbl', text: 'С' }), h('input', { id: 'kk-d1', class: 'kk-input', type: 'date', value: f.startsOn, onchange: function (e) { change(a, { startsOn: e.target.value }); } })]),
-                h('div', { class: 'kk-fld' }, [h('label', { for: 'kk-d2', class: 'kk-lbl', text: 'ПО' }), h('input', { id: 'kk-d2', class: 'kk-input', type: 'date', value: f.endsOn, onchange: function (e) { change(a, { endsOn: e.target.value }); } })]),
+                h('div', { class: 'kk-fld' }, [h('label', { for: 'kk-d1', class: 'kk-lbl', text: 'С' }), h('input', { id: 'kk-d1', class: 'kk-input', type: 'date', min: today, max: lastDay, value: f.startsOn, onchange: function (e) { change(a, { startsOn: e.target.value }); } })]),
+                h('div', { class: 'kk-fld' }, [h('label', { for: 'kk-d2', class: 'kk-lbl', text: 'ПО' }), h('input', { id: 'kk-d2', class: 'kk-input', type: 'date', min: today, max: lastDay, value: f.endsOn, onchange: function (e) { change(a, { endsOn: e.target.value }); } })]),
               ])
             : null,
         ]),
-        h('section', { class: 'kk-card kk-sum' }, [
+        h('section', { class: 'kk-card kk-sum kk-sum--future' }, [
           h('span', { class: 'kk-lbl kk-lbl--gold', text: 'КАК БУДЕТ' }),
-          h('b', { class: 'kk-hd', text: sum.what }),
+          sum.title ? h('b', { class: 'kk-hd', text: sum.title }) : null,
+          h('span', { class: 'kk-tx', text: sum.what }),
           sum.when ? h('span', { class: 'kk-tx', text: sum.when }) : null,
+          sum.crowns ? h('span', { class: 'kk-tx', text: sum.crowns }) : null,
           a.previewError ? h('span', { class: 'kk-tx kk-tx--err', text: a.previewError }) : null,
           sum.few ? h('span', { class: 'kk-tx kk-tx--warn', text: sum.few }) : null,
-          h('span', { class: 'kk-sub', text: 'Ходить отдельно не нужно: твои ходы на эти матчи сами идут в лигу. Новичкам считаем матчи с момента вступления.' }),
+          h('span', { class: 'kk-sub', text: sum.note }),
         ]),
-        h('button', { type: 'button', class: 'kk-btn kk-btn--gold', disabled: err || state.busy ? 'true' : null, 'aria-disabled': err ? 'true' : 'false', onclick: function () { createLeague(a); }, text: err || 'Создать и позвать своих' }),
       ]);
-      return [main];
+      return [main, h('div', { class: 'kk-cta' }, [
+        h('button', { type: 'button', class: 'kk-btn kk-btn--gold kk-btn--lg', disabled: err || state.busy ? 'true' : null, 'aria-disabled': err ? 'true' : 'false', onclick: function () { createLeague(a); }, text: err || 'Создать и позвать своих' }),
+      ])];
     },
   });
 

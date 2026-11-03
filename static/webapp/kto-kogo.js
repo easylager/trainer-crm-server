@@ -429,7 +429,15 @@
 
   function loadClubs() {
     if (state.clubs) return Promise.resolve();
-    return api('GET', '/client/hockey/clubs').then(function (d) { state.clubs = (d && d.items) || []; });
+    return api('GET', '/client/hockey/clubs').then(function (d) {
+      state.clubs = (d && d.items) || [];
+      state.maxClubs = (d && d.max_clubs) || null;
+    });
+  }
+
+  function loadTermOptions() {
+    if (state.termOptions) return Promise.resolve();
+    return api('GET', '/client/hockey/leagues/term-options').then(function (d) { state.termOptions = d || { items: [] }; });
   }
 
   function loadLeagues(force) {
@@ -703,7 +711,7 @@
     sheet: sheet, closeSheet: closeSheet, api: api, toast: toast, fail: fail, haptic: haptic, render: render, register: register,
     go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
     loadMatches: loadMatches, loadClubMatches: loadClubMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,
-    loadProfile: loadProfile, loadClubs: loadClubs, loadLeagues: loadLeagues, loadRemind: loadRemind,
+    loadProfile: loadProfile, loadClubs: loadClubs, loadLeagues: loadLeagues, loadRemind: loadRemind, loadTermOptions: loadTermOptions,
     openMatchPage: openMatchPage, sendPick: sendPick, pickSide: pickSide, saveScore: saveScore, toggleTrump: toggleTrump,
     share: share, shareCard: shareCard, copy: copy, boot: boot,
   };

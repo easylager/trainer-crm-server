@@ -273,7 +273,9 @@
     var d = (doubles || []).filter(function (x) { return x.week_start === wk; })[0];
     var other = (matches || []).filter(function (x) { return x.id === d.match_id; })[0];
     var where = other ? ' на матче ' + clubShort(other.home.name) + ' — ' + clubShort(other.away.name) : ' на другом матче';
-    return 'Козырь этой недели —' + where + '. Можно перенести до' + NBSP + 'его начала.';
+    // Перенос живёт ровно пока открыт ход на тот матч — те же 60 секунд до его старта.
+    var until = other ? ' до ' + closeTime(other.starts_at) : ' до начала его матча';
+    return 'Козырь этой недели —' + where + '. Можно перенести' + until + '.';
   }
 
   /** Подпись хода до матча — без чисел очков: «Тап за команду — и ход сделан». */
@@ -660,8 +662,9 @@
     return body;
   }
 
-  function formError(form) {
-    if (form.scope === 'pick' && !form.clubs.length) return 'Нужна команда';
+  /** Ошибки набора команд и окон — то, что мешает спросить у сервера «Как будет». */
+  function termsError(form) {
+    if (form.scope === 'pick' && !form.clubs.length) return 'Выбери команду';
     if (form.term === 'dates') {
       if (!form.startsOn || !form.endsOn) return 'Укажи даты';
       if (form.endsOn <= form.startsOn) return 'Конец раньше начала';
@@ -669,23 +672,68 @@
     return '';
   }
 
-  /** «Как будет»: что считаем, когда и сколько матчей. preview — ответ terms-preview или null. */
+  /** Текст кнопки по состоянию формы: поля экрана идут сверху вниз — название, команды, время. */
+  function formError(form) {
+    if (!(form.name || '').trim()) return 'Назови лигу';
+    return termsError(form);
+  }
+
+  /**
+   * Сроки экрана «Новая лига» по ответу term-options: даты и правило корон — с сервера,
+   * у клиента своего календаря нет. Последней строкой всегда «Свои даты» — окон у неё нет,
+   * игрок выбирает сам, не дальше конца сезона.
+   */
+  function termChoices(options) {
+    var items = (options && options.items) || [];
+    var TITLES = { season: 'До конца сезона', weeks4: '4 недели', playoff: 'Плей-офф' };
+    var out = items.map(function (it) {
+      var range =
+        it.term === 'season' || it.term === 'month'
+          ? 'по ' + endLabel(it.ends_at)
+          : it.term === 'weeks4'
+            ? 'с сегодня по ' + endLabel(it.ends_at)
+            : dateLabel(it.starts_at) + ' — ' + endLabel(it.ends_at);
+      return {
+        term: it.term,
+        label: TITLES[it.term] || periodLabel(monthKey(it.starts_at)),
+        sub: range + ' · ' + (it.monthly_crowns ? 'корона каждый месяц' : 'одна корона в конце'),
+      };
+    });
+    out.push({ term: 'dates', label: 'Свои даты', sub: options && options.season_ends_at ? 'не дальше ' + endLabel(options.season_ends_at) : '' });
+    return out;
+  }
+
+  /** Одна строка «что считаем» для карточки «Как будет». */
+  function scopePhrase(form) {
+    if (form.scope === 'dinamo') return 'Матчи Динамо-Минск';
+    if (form.scope === 'extraliga') return 'Матчи всей Экстралиги — все клубы Беларуси, без Динамо';
+    if (form.scope === 'all') return 'Матчи Динамо-Минск и всей Экстралиги';
+    return (form.clubs || []).length ? 'Матчи: ' + form.clubs.map(clubName).join(', ') : 'Выбери хотя бы одну команду';
+  }
+
+  /**
+   * Карточка «Как будет» на экране «Новая лига». preview — ответ terms-preview или null:
+   * окно дат, число матчей и правило корон честно приходят с сервера.
+   */
   function termsSummary(form, preview) {
-    var what;
-    if (form.scope === 'all') what = 'Все матчи: Динамо-Минск и вся Экстралига';
-    else if (form.scope === 'extraliga') what = 'Вся Экстралига, без Динамо-Минск';
-    else if (form.scope === 'dinamo') what = 'Только матчи Динамо-Минск в КХЛ';
-    else what = form.clubs.length ? 'Матчи: ' + scopeText('clubs', form.clubs).replace(/, /g, ', ') : 'Выбери хотя бы одну команду';
+    var name = (form.name || '').trim();
     var when = '';
-    var few = false;
+    var crowns = '';
+    var few = '';
     if (preview && preview.ends_at) {
       var count = preview.matches_in_term;
-      what += ' · ещё ' + count + NBSP + Base.plural(count, 'матч', 'матча', 'матчей') + ' до конца лиги';
-      var rolling = form.term === 'season' || form.term === 'dates' || form.term === 'playoff';
-      when = 'С ' + dateLabel(preview.starts_at) + ' по ' + endLabel(preview.ends_at) + (rolling ? ' · корона каждый месяц и чемпион лиги в конце' : ' · корона победителю в конце');
-      few = !!preview.few_matches;
+      when = 'С ' + dateLabel(preview.starts_at) + ' по ' + endLabel(preview.ends_at) + ' · впереди ' + count + NBSP + Base.plural(count, 'матч', 'матча', 'матчей');
+      crowns = preview.monthly_crowns ? 'Корона лидеру каждого месяца и чемпион лиги в конце.' : 'Корона чемпиону в конце.';
+      if (preview.few_matches) few = 'Матчей мало — таблица будет почти пустой. Можно взять время подлиннее.';
     }
-    return { what: what, when: when, few: few ? 'Матчей до конца лиги мало — таблица будет почти пустой. Можно взять период подлиннее.' : '' };
+    return {
+      title: name ? '«' + name + '»' : '',
+      what: scopePhrase(form),
+      when: when,
+      crowns: crowns,
+      few: few,
+      note: 'Кто вступит позже — считаем с того дня, как вступил.',
+    };
   }
 
   // ---------- лига изнутри ----------
@@ -796,7 +844,10 @@
     termText: termText,
     leagueSub: leagueSub,
     termsBody: termsBody,
+    termsError: termsError,
     formError: formError,
+    termChoices: termChoices,
+    scopePhrase: scopePhrase,
     termsSummary: termsSummary,
     leagueCrownLine: leagueCrownLine,
     leagueMeta: leagueMeta,

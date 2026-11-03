@@ -272,3 +272,26 @@ async def test_match_list_shows_league_friends_only(app_use_test_db, db_session)
         assert listed.status_code == 200, listed.text
         friends = next(item for item in listed.json()["items"] if item["id"] == match_id)["friends"]
         assert friends == {"home": [], "away": ["Катя"]}
+
+
+@pytest.mark.asyncio
+async def test_term_options_and_clubs_report_league_limits(app_use_test_db) -> None:
+    """Экран «Новая лига» берёт сроки и лимит команд у сервера, без своих дат."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            opts = await client.get("/api/webapp/client/hockey/leagues/term-options")
+            assert opts.status_code == 200, opts.text
+            body = opts.json()
+            assert body["items"], "хотя бы один срок должен быть открыт"
+            assert body["max_clubs"] > 0
+            kinds = {i["term"] for i in body["items"]}
+            assert kinds <= {"season", "month", "weeks4", "playoff"}
+            assert "dates" not in kinds  # «свои даты» выбирает игрок, окна у сервера нет
+            assert {i["term"] for i in body["items"] if i["monthly_crowns"]} == {"season"}
+            for item in body["items"]:
+                assert item["ends_at"] > item["starts_at"]
+            clubs = await client.get("/api/webapp/client/hockey/clubs")
+            assert clubs.status_code == 200, clubs.text
+            payload = clubs.json()
+            assert payload["max_clubs"] == body["max_clubs"]
+            assert payload["items"] and payload["items"][0]["name"] == "Динамо-Минск"

@@ -40,7 +40,7 @@ describe('очки — те же числа, что на сервере', () => 
     const free = [{ week_start: wk, match_id: null, locked: false }];
     assert.equal(S.trumpHint(a, free, [a, b], now), 'Один на неделю: очки за этот матч удвоятся.');
     const onB = [{ week_start: wk, match_id: 2, locked: false }];
-    assert.equal(S.trumpHint(a, onB, [a, b], now), 'Козырь этой недели — на матче Локомотив — Лида. Можно перенести до\u00a0его начала.');
+    assert.equal(S.trumpHint(a, onB, [a, b], now), 'Козырь этой недели — на матче Локомотив — Лида. Можно перенести до 19:29.');
     assert.match(S.trumpHint({ id: 3, starts_at: a.starts_at, my_pick: null }, free, [], now), /^Сначала тапни за команду\.$/);
   });
 });
