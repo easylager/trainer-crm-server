@@ -1213,7 +1213,7 @@
         var id = opt.getAttribute('data-intent-mode');
         var target = folderButtons().filter(function (b) { return b.getAttribute('data-catalog-mode') === id; })[0];
         openIntentSheet(false);
-        if (target && target.getAttribute('aria-pressed') !== 'true') target.click();
+        if (target && M.intentPickShouldApply(target.getAttribute('aria-pressed') === 'true', state.season)) target.click();
         return;
       }
       var place = ev.target.closest('[data-intent-place]');
