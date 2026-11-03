@@ -425,52 +425,9 @@ def _minsk_date(now: datetime) -> date:
     return now.astimezone(ZoneInfo(DEFAULT_TIMEZONE)).date()
 
 
-# Свежесть — по площадкам Минска и по маленькой таблице источников (строка на арену),
-# а не по MAX над всеми прогонами: другой город не должен освежать подпись главной.
-_LAST_INGEST_SQL = text(
-    """
-    SELECT MAX(j.last_ok_at)
-    FROM ice_parser_jobs j
-    JOIN arenas a ON a.id = j.arena_id AND a.is_active
-    JOIN cities c ON c.id = a.city_id
-    WHERE j.is_enabled AND j.last_ok_slot_count > 0 AND c.name = 'Минск'
-    """
-)
-
-
-async def last_successful_ingest_at(session: AsyncSession) -> datetime | None:
-    """Время последней удачной сверки парсера с площадкой Минска (нашёл сеансы). Нет данных — None."""
-    value = (await session.execute(_LAST_INGEST_SQL)).scalar()
-    return _aware_utc(value) if isinstance(value, datetime) else None
-
-
-_FRESH_MAX_AGE = timedelta(days=2)
-# Без слова «Актуальное»: когда данным больше двух суток, обещать свежесть нельзя.
-_FRESH_FALLBACK = "Расписание массового катания по всей Беларуси"
-_MONTHS_GEN = (
-    "января", "февраля", "марта", "апреля", "мая", "июня",
-    "июля", "августа", "сентября", "октября", "ноября", "декабря",
-)
-
-
-def home_freshness_text(last_ingest_at: datetime | None, now: datetime) -> str:
-    """Честный сигнал свежести: «сегодня в HH:MM» / «вчера в HH:MM»; старше 2 суток — без времени."""
-    if not isinstance(last_ingest_at, datetime):
-        return _FRESH_FALLBACK
-    tz = ZoneInfo(DEFAULT_TIMEZONE)
-    local = _aware_utc(last_ingest_at).astimezone(tz)
-    now_local = _aware_utc(now).astimezone(tz)
-    if local > now_local + timedelta(minutes=5) or now_local - local > _FRESH_MAX_AGE:
-        return _FRESH_FALLBACK
-    hhmm = local.strftime("%H:%M")
-    days = (now_local.date() - local.date()).days
-    if days == 0:
-        when = f"сегодня в {hhmm}"
-    elif days == 1:
-        when = f"вчера в {hhmm}"
-    else:
-        when = f"{local.day} {_MONTHS_GEN[local.month - 1]} в {hhmm}"
-    return f"Актуальное расписание массового катания · обновлено {when}"
+# Статичная SSR-строка под заголовком: поисковик видит «Актуальное расписание» в тексте страницы.
+# Время и свежесть не обещаем — они у каждой площадки свои (карточка арены).
+HOME_ACTUAL_LINE = "Актуальное расписание массового катания в Минске и по всей Беларуси"
 
 
 def _aware_utc(value: datetime) -> datetime:
@@ -965,9 +922,7 @@ async def load_catalog_home_view(
 
     cities = await _public_cities(session)
     day_counts = await day_session_counts(session, now=now, dates=home_picker_dates(now))
-    last_ingest_at = await last_successful_ingest_at(session)
     empty: dict[str, Any] = {
-        "last_ingest_at": last_ingest_at,
         "day_counts": day_counts,
         "cities": [],
         "city_groups": [],
@@ -1071,7 +1026,6 @@ async def load_catalog_home_view(
     from src.application.selection_page import selection_path
 
     return {
-        "last_ingest_at": last_ingest_at,
         **empty,
         "cities": catalog_cities,
         "city_groups": city_groups,
@@ -1530,7 +1484,7 @@ def render_catalog_home_page(
         # SSR, не JS: поисковик видит сигнал свежести в тексте страницы.
         extra_html=(
             '<p class="b-hero__fresh">'
-            f'{_esc(home_freshness_text(view.get("last_ingest_at"), now))}</p>'
+            f'{_esc(HOME_ACTUAL_LINE)}</p>'
         ),
     )
 

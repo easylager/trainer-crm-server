@@ -1,18 +1,14 @@
-"""Фавикон отвечает на HEAD (Яндекс), 120×120 в <head>, честный сигнал свежести на главной."""
+"""Фавикон отвечает на HEAD (Яндекс), 120×120 в <head>, статичная строка «Актуальное расписание» на главной."""
 
 from __future__ import annotations
 
 import struct
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.api.app import app
-from src.application.catalog_home_page import home_freshness_text
-
-_MINSK = ZoneInfo("Europe/Minsk")
+from src.application.catalog_home_page import HOME_ACTUAL_LINE
 
 
 def _client() -> AsyncClient:
@@ -45,56 +41,12 @@ async def test_logos_head_200() -> None:
     assert resp.status_code == 200
 
 
-def _utc(y, m, d, hh, mm) -> datetime:
-    return datetime(y, m, d, hh, mm, tzinfo=_MINSK).astimezone(timezone.utc)
-
-
-def test_freshness_today_in_minsk_time() -> None:
-    text = home_freshness_text(_utc(2026, 11, 3, 9, 5), _utc(2026, 11, 3, 13, 0))
-    assert text == "Актуальное расписание массового катания · обновлено сегодня в 09:05"
-
-
-def test_freshness_yesterday_not_today() -> None:
-    text = home_freshness_text(_utc(2026, 11, 2, 23, 40), _utc(2026, 11, 3, 0, 30))
-    assert text == "Актуальное расписание массового катания · обновлено вчера в 23:40"
-
-
-def test_freshness_stale_or_missing_falls_back() -> None:
-    fallback = "Расписание массового катания по всей Беларуси"
-    assert home_freshness_text(None, _utc(2026, 11, 3, 13, 0)) == fallback
-    assert home_freshness_text(_utc(2026, 10, 20, 9, 0), _utc(2026, 11, 3, 13, 0)) == fallback
-
-
 @pytest.mark.asyncio
-async def test_home_html_has_visible_freshness_and_icon_120(app_use_test_db) -> None:
+async def test_home_html_has_actual_line_and_icon_120(app_use_test_db) -> None:
     async with _client() as client:
         resp = await client.get("/")
     assert resp.status_code == 200
     html = resp.text
-    # В тестовой БД прогонов нет — запасная подпись, без обещания свежести.
-    assert '<p class="b-hero__fresh">Расписание массового катания по всей Беларуси</p>' in html
-    assert "Актуальное" not in html.split('<p class="b-hero__fresh">')[1].split("</p>")[0]
+    assert f'<p class="b-hero__fresh">{HOME_ACTUAL_LINE}</p>' in html
+    assert HOME_ACTUAL_LINE.startswith("Актуальное расписание")
     assert 'sizes="120x120" href="/favicon-120.png"' in html
-
-
-@pytest.mark.asyncio
-async def test_freshness_uses_minsk_sources_only(db_session) -> None:
-    from sqlalchemy import text
-
-    from src.application.catalog_home_page import last_successful_ingest_at
-    from tests.api.test_public_arenas import _insert_arena, _insert_city
-
-    minsk = await _insert_city(db_session, name="Минск")
-    grodno = await _insert_city(db_session, name="Гродно")
-    a_minsk = await _insert_arena(db_session, minsk, name="Каток М")
-    a_grodno = await _insert_arena(db_session, grodno, name="Каток Г")
-    for arena_id, ok_at, enabled in ((a_minsk, datetime(2026, 11, 1, 8, 0, tzinfo=timezone.utc), True), (a_grodno, datetime(2026, 11, 3, 8, 0, tzinfo=timezone.utc), True)):
-        await db_session.execute(
-            text(
-                "INSERT INTO ice_parser_jobs (arena_id, parser_key, is_enabled, cadence, next_run_at, last_ok_at, last_ok_slot_count)"
-                " VALUES (:a, 'k', :e, 'daily', now(), :t, 5)"
-            ),
-            {"a": arena_id, "e": enabled, "t": ok_at},
-        )
-    got = await last_successful_ingest_at(db_session)
-    assert got is not None and got.date().isoformat() == "2026-11-01", "свежий Гродно не освежает Минск"
