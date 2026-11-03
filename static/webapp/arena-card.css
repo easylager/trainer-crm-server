@@ -875,7 +875,7 @@ a.arena-row {
   gap: 8px;
 }
 .arena-show__head b { font-size: var(--app-text-body); }
-.arena-show__head span { font-size: var(--app-text-caption); color: var(--glide-hint); }
+.arena-ticket-wrap { margin-bottom: 10px; }
 .arena-show__prices {
   display: flex;
   flex-wrap: wrap;

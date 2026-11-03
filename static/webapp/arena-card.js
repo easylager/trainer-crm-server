@@ -1381,48 +1381,45 @@
    * В сетке остаётся только время с загрузкой — без ↗ у каждой плитки: купить можно из «билета»,
    * а главные кнопки «Позвать» и «Собрать компанию» — в панели внизу.
    */
-  function showGroupHtml(g, sectionTitle, dayLabel, pricesAbove) {
+  /* «Билет» выбранного сеанса — один на день, над всеми группами (а не внутри группы с этим временем). */
+  function ticketHtml(g, picked, dayLabel) {
+    var steadySid = lastTicketSid;
+    nextTicketSid = String(picked.sessionId);
+    var tag = slotTag(picked);
+    var low = picked.seats && picked.seats.low;
+    return (
+      // Въезд «билета» — на смену выбора, а не на каждую дорисовку данных (TASK-332).
+      '<div class="arena-ticket' + (String(picked.sessionId) === steadySid ? ' arena-ticket--steady' : '') + '">' +
+      '<div class="arena-ticket__top"><span class="arena-ticket__lead">' +
+      '<span class="arena-ticket__kick">' + esc([dayLabel, g.duration ? g.duration.toUpperCase() : ''].filter(Boolean).join(' · ')) + '</span>' +
+      (picked.hall ? '<span class="arena-ticket__hall">' + esc(picked.hall) + '</span>' : '') +
+      '<b class="arena-ticket__time">' + esc(picked.time) + '</b></span>' +
+      (picked.seats
+        ? ticketSeatsHtml(picked.seats)
+        : tag ? '<span class="arena-ticket__seats' + (low ? ' arena-seats--low' : '') + '">' + esc(tag) + '</span>' : loadMeterHtml(picked.load)) +
+      '</div>' +
+      ((picked.prices || g.prices).length
+        ? '<div class="arena-ticket__prices">' + (picked.prices || g.prices).map(function (p) {
+            return '<span><small>' + esc(p.label) + '</small><b>' + esc(p.value) + '</b></span>';
+          }).join('') + '</div>'
+        : '') +
+      (g.note ? '<p class="arena-ticket__note">' + esc(g.note) + '</p>' : '') +
+      '</div>'
+    );
+  }
+
+  function showGroupHtml(g, sectionTitle, dayLabel, pricesAbove, ticketNote) {
     var ownTitle = g.title && g.title !== sectionTitle ? g.title : '';
     var hasPick = g.times.some(function (t) { return t.picked; });
     var head = '';
-    // Длительность уже в «билете» — над ним её не повторяем.
-    if (ownTitle || (g.duration && !hasPick)) {
-      head =
-        '<div class="arena-show__head">' +
-        (ownTitle ? '<b>' + esc(ownTitle) + '</b>' : '') +
-        (g.duration && !hasPick ? '<span>' + esc(g.duration) + '</span>' : '') +
-        '</div>';
-    }
+    // Длительность уже в «билете» — над ним её не повторяем. Название и длительность — одной строкой.
+    var caption = [ownTitle, g.duration && !hasPick ? g.duration : ''].filter(Boolean).join(' · ');
+    if (caption) head = '<div class="arena-show__head"><b>' + esc(caption) + '</b></div>';
     var picked = g.times.filter(function (t) { return t.picked; })[0] || null;
     // Цены уже стоят плитками над расписанием — строкой под датами их не повторяем.
     var pricesLine = !picked && !pricesAbove && g.prices.length
       ? '<p class="arena-show__line">' + g.prices.map(function (p) { return esc(p.label) + ' ' + esc(p.value); }).join(' · ') + '</p>'
       : '';
-    var ticket = '';
-    if (picked) {
-      var steadySid = lastTicketSid;
-      nextTicketSid = String(picked.sessionId);
-      var tag = slotTag(picked);
-      var low = picked.seats && picked.seats.low;
-      ticket =
-        // Въезд «билета» — на смену выбора, а не на каждую дорисовку данных (TASK-332).
-        '<div class="arena-ticket' + (String(picked.sessionId) === steadySid ? ' arena-ticket--steady' : '') + '">' +
-        '<div class="arena-ticket__top"><span class="arena-ticket__lead">' +
-        '<span class="arena-ticket__kick">' + esc([dayLabel, g.duration ? g.duration.toUpperCase() : ''].filter(Boolean).join(' · ')) + '</span>' +
-        (picked.hall ? '<span class="arena-ticket__hall">' + esc(picked.hall) + '</span>' : '') +
-        '<b class="arena-ticket__time">' + esc(picked.time) + '</b></span>' +
-        (picked.seats
-          ? ticketSeatsHtml(picked.seats)
-          : tag ? '<span class="arena-ticket__seats' + (low ? ' arena-seats--low' : '') + '">' + esc(tag) + '</span>' : loadMeterHtml(picked.load)) +
-        '</div>' +
-        ((picked.prices || g.prices).length
-          ? '<div class="arena-ticket__prices">' + (picked.prices || g.prices).map(function (p) {
-              return '<span><small>' + esc(p.label) + '</small><b>' + esc(p.value) + '</b></span>';
-            }).join('') + '</div>'
-          : '') +
-        (g.note ? '<p class="arena-ticket__note">' + esc(g.note) + '</p>' : '') +
-        '</div>';
-    }
     var grid = g.times.map(function (t) {
       var slotCls = 'arena-slot arena-slot--no-buy';
       if (t.picked) slotCls += ' arena-slot--picked';
@@ -1438,10 +1435,12 @@
         '" aria-pressed="' + (t.picked ? 'true' : 'false') + '">' + body + '</button></div>'
       );
     }).join('');
+    // Заметка («детский с 3 до 14 лет») — у билета; под сеткой остаётся, только если она другая или билета нет.
+    var showNote = g.note && !picked && g.note !== ticketNote;
     return (
-      '<div class="arena-show">' + head + pricesLine + ticket +
+      '<div class="arena-show">' + head + pricesLine +
       '<div class="arena-times">' + grid + '</div>' +
-      (g.note && !picked ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
+      (showNote ? '<p class="arena-show__note">' + esc(g.note) + '</p>' : '') +
       '</div>'
     );
   }
@@ -1474,8 +1473,16 @@
     var sectionTitle = iceSectionTitle();
     var dayLabel = ticketDayLabel(strip(), iso);
     var pricesAbove = pricesAboveSchedule();
+    var pickedGroup = view.groups.filter(function (g) {
+      return g.times.some(function (t) { return t.picked; });
+    })[0] || null;
+    if (pickedGroup) {
+      var pickedTime = pickedGroup.times.filter(function (t) { return t.picked; })[0];
+      html += '<div class="arena-ticket-wrap">' + ticketHtml(pickedGroup, pickedTime, dayLabel) + '</div>';
+    }
+    var ticketNote = pickedGroup ? pickedGroup.note : '';
     view.groups.forEach(function (g) {
-      html += showGroupHtml(g, sectionTitle, dayLabel, pricesAbove);
+      html += showGroupHtml(g, sectionTitle, dayLabel, pricesAbove, ticketNote);
     });
     if (lessons.length) {
       html += '<p class="arena-h arena-h--sub">Занятия с тренером</p><div class="arena-rows">' + lessons.map(rowHtml).join('') + '</div>';

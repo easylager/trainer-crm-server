@@ -34,7 +34,7 @@ describe('arena card ice section heading', () => {
 
   it('drops the slot title when it only repeats the section name', () => {
     // TASK-306: группа сеансов рисуется общей showGroupHtml для массового катания и ОХМ.
-    assert.match(fnBody('renderShowtimes'), /showGroupHtml\(g, sectionTitle, dayLabel, pricesAbove\)/);
+    assert.match(fnBody('renderShowtimes'), /showGroupHtml\(g, sectionTitle, dayLabel, pricesAbove, ticketNote\)/);
     const body = fnBody('showGroupHtml');
     assert.ok(body.includes('g.title !== sectionTitle'));
     assert.ok(!body.includes("'<b>' + esc(g.title) + '</b>'"));
@@ -80,7 +80,20 @@ describe('arena card ice section heading', () => {
     });
     assert.equal(view.groups.length, 1);
     assert.deepEqual(view.groups[0].times.map((t) => t.hall), ['Тренировочная арена', 'Главная арена']);
-    assert.ok(fnBody('showGroupHtml').includes('arena-ticket__hall'));
+    assert.ok(fnBody('ticketHtml').includes('arena-ticket__hall'));
+  });
+
+  it('draws one ticket above all groups, and group caption is a single line', () => {
+    // Билет выбранного сеанса не вставляется в середину дня между группами.
+    const render = fnBody('renderShowtimes');
+    assert.ok(render.indexOf('ticketHtml(') > 0);
+    assert.ok(render.indexOf('ticketHtml(') < render.indexOf('showGroupHtml('), 'билет раньше групп');
+    const group = fnBody('showGroupHtml');
+    assert.ok(!group.includes('arena-ticket'), 'группа не рисует билет');
+    // «дискотека · 60 мин» одной строкой, а не название слева и длительность на другом краю.
+    assert.match(group, /\[ownTitle, g\.duration && !hasPick \? g\.duration : ''\]\.filter\(Boolean\)\.join\(' · '\)/);
+    // Заметка про возраст не повторяется под сеткой, если она уже в билете.
+    assert.ok(group.includes('g.note !== ticketNote'));
   });
 
   it('model still names plain sessions «Массовое катание» and keeps own labels', () => {
