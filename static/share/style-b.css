@@ -86,7 +86,7 @@ body.b img { max-width: 100%; }
 .b-hero--place .b-hero__title { font-size: 40px; line-height: 1; }
 .b-hero__sub { margin: 0; font-size: 17px; line-height: 1.4; }
 .b-hero__sub a { color: var(--g-on-photo); }
-.b-hero__fresh { margin: 6px 0 0; font-size: 13px; line-height: 1.35; opacity: .78; }
+.b-hero__fresh { margin: 6px 0 0; font-size: 13px; line-height: 1.35; color: #d6e4ea; text-shadow: 0 1px 3px rgba(0, 0, 0, .55); }
 .b-hero--place .b-hero__sub { font-size: 16px; color: #d6e4ea; }
 
 /* Мотив разметки катка — задуманное состояние без фото */

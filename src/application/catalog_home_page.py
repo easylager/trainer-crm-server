@@ -425,19 +425,28 @@ def _minsk_date(now: datetime) -> date:
     return now.astimezone(ZoneInfo(DEFAULT_TIMEZONE)).date()
 
 
+# Свежесть — по площадкам Минска и по маленькой таблице источников (строка на арену),
+# а не по MAX над всеми прогонами: другой город не должен освежать подпись главной.
 _LAST_INGEST_SQL = text(
-    "SELECT MAX(finished_at) FROM ice_scrape_runs WHERE status = 'ok' AND slots_found > 0"
+    """
+    SELECT MAX(j.last_ok_at)
+    FROM ice_parser_jobs j
+    JOIN arenas a ON a.id = j.arena_id AND a.is_active
+    JOIN cities c ON c.id = a.city_id
+    WHERE j.is_enabled AND j.last_ok_slot_count > 0 AND c.name = 'Минск'
+    """
 )
 
 
 async def last_successful_ingest_at(session: AsyncSession) -> datetime | None:
-    """Время последнего удачного прогона парсера (нашёл сеансы). Нет данных — None."""
+    """Время последней удачной сверки парсера с площадкой Минска (нашёл сеансы). Нет данных — None."""
     value = (await session.execute(_LAST_INGEST_SQL)).scalar()
     return _aware_utc(value) if isinstance(value, datetime) else None
 
 
 _FRESH_MAX_AGE = timedelta(days=2)
-_FRESH_FALLBACK = "Актуальное расписание массового катания по всей Беларуси"
+# Без слова «Актуальное»: когда данным больше двух суток, обещать свежесть нельзя.
+_FRESH_FALLBACK = "Расписание массового катания по всей Беларуси"
 _MONTHS_GEN = (
     "января", "февраля", "марта", "апреля", "мая", "июня",
     "июля", "августа", "сентября", "октября", "ноября", "декабря",
