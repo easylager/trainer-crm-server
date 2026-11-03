@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -98,7 +99,9 @@ class BrestLdsParser(IceParser):
         adult, child = _brest_prices(prices_html)
         poster = await self._poster_sessions(job, prices_html)
         if poster is not None:
-            return self._extraction(job, prices_html, adult, child, poster, projected=False)
+            sessions, replace_dates = poster
+            extraction = self._extraction(job, prices_html, adult, child, sessions, projected=False)
+            return replace(extraction, replace_dates=replace_dates)
         fixed_start = str(job.config.get("fixed_start") or "21:15")
         horizon = int(job.config.get("horizon_days") or 7)
         run_date = parser_reference_date(job.config)
@@ -108,8 +111,16 @@ class BrestLdsParser(IceParser):
             projected=True,
         )
 
-    async def _poster_sessions(self, job: ParserJob, page_html: str) -> list[tuple[date, str]] | None:
-        """(date, start) read from the poster; None when this job does not use the poster."""
+    async def _poster_sessions(
+        self, job: ParserJob, page_html: str
+    ) -> tuple[list[tuple[date, str]], frozenset[date]] | None:
+        """(date, start) read from the poster and the dates this run may replace.
+
+        Whole poster: every day from its first to its last date (a day dropped from the poster
+        inside that range is a cancelled session). Partial read: only the dates actually read —
+        the skipped column's day is unknown, so its published sessions stay untouched.
+        None when this job does not use the poster.
+        """
         if job.config.get("poster") is False:
             return None
         fixture_dir = job.config.get("fixture_dir")
@@ -132,7 +143,12 @@ class BrestLdsParser(IceParser):
                 "brest poster: %s column(s) unreadable, publishing %s readable session(s) (arena %s)",
                 read.unreadable, len(read.sessions), job.arena_id,
             )
-        return read.sessions
+        dates = [d for d, _ in read.sessions]
+        if read.unreadable:
+            scope = frozenset(dates)
+        else:
+            scope = frozenset(min(dates) + timedelta(days=i) for i in range((max(dates) - min(dates)).days + 1))
+        return read.sessions, scope
 
     def _extraction(
         self, job: ParserJob, snapshot: str, adult, child, sessions: list[tuple[date, str]], *, projected: bool
@@ -141,6 +157,9 @@ class BrestLdsParser(IceParser):
         legacy_end = job.config.get("fixed_end")
         session_label = str(job.config.get("session_label") or "").strip() or None
         age_note = str(job.config.get("age_note") or "детям до 12 лет")
+        # Отдельной цены проката на странице нет — берём из конфига задания, в копейках.
+        rental_raw = job.config.get("price_rental_minor")
+        rental = int(rental_raw) if rental_raw not in (None, "") else None
         slots: list[ExtractedSlot] = []
         for local_date, start in sessions:
             if projected and legacy_end:
@@ -155,7 +174,7 @@ class BrestLdsParser(IceParser):
                     kind_raw="open_ice",
                     price_adult=adult,
                     price_child=child,
-                    price_rental=None,
+                    price_rental=rental,
                     session_label=session_label,
                     age_note=age_note,
                 )

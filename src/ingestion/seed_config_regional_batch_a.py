@@ -26,6 +26,9 @@ BREST_LDS_CONFIG: dict = {
     "session_label": None,  # «СВ кат» — сокращение с фото, клиенту ничего не говорит
     "age_note": "Детский билет — до 12 лет",
     "prices_already_minor": True,
+    # Прокат коньков за сеанс, 6,80 BYN — та же цена, что в ручной загрузке 03.11.2026
+    # (data/manual-schedules/brest-lds.json). На странице расписания отдельной цены нет.
+    "price_rental_minor": 680,
     "default_duration_minutes": 45,
     "requires_by_egress": False,
 }

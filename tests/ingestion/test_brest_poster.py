@@ -140,3 +140,21 @@ async def test_parser_publishes_readable_days_and_warns(monkeypatch, tmp_path, c
         extraction = await BrestLdsParser().extract(_job(fixture_dir=str(tmp_path), run_date="2026-11-03"))
     assert [s.local_date for s in extraction.slots] == ["2026-11-03", "2026-11-06", "2026-11-07", "2026-11-08"]
     assert "unreadable" in caplog.text
+    # 05.11 was not read: its published session must survive this run.
+    assert extraction.replace_dates == frozenset(date(2026, 11, d) for d in (3, 6, 7, 8))
+
+
+@pytest.mark.asyncio
+async def test_whole_poster_replaces_its_full_date_range(tmp_path):
+    (tmp_path / "prices.html").write_text((_FIX / "prices.html").read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "poster.jpg").write_bytes(_LIVE_NOV.read_bytes())
+    extraction = await BrestLdsParser().extract(_job(fixture_dir=str(tmp_path), run_date="2026-11-03"))
+    # 04.11 has no session on the poster: a stale one there is a cancelled session and goes.
+    assert extraction.replace_dates == frozenset(date(2026, 11, d) for d in range(3, 9))
+    assert {s.price_rental for s in extraction.slots} == {680}
+
+
+@pytest.mark.asyncio
+async def test_projection_without_poster_replaces_whole_window():
+    extraction = await BrestLdsParser().extract(_job(poster=False))
+    assert extraction.replace_dates is None

@@ -101,7 +101,7 @@ async def test_brest_lds_matches_expected_photo_week() -> None:
         assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"] == "22:15"
         assert slot.price_adult_minor == gold["price_adult_minor"] == 630
         assert slot.price_child_minor == gold["price_child_minor"] == 530
-        assert slot.price_rental_minor is None
+        assert slot.price_rental_minor == 680, "прокат из конфига задания, страница его не даёт"
         assert slot.session_label is None, "«СВ кат» — сокращение с фото, клиенту его не показываем"
 
 
