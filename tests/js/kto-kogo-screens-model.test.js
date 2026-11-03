@@ -50,9 +50,9 @@ describe('«Если угадаешь»', () => {
     ]);
     assert.deepEqual(lines.map((l) => l.icon), ['crown', 'up', 'duel']);
     assert.equal(lines[0].gold, true);
-    assert.equal(lines[0].text, 'Юность · ноябрь: место 3 → ~1 · корона');
-    assert.equal(lines[1].text, 'Все · сезон: место 214 → ~190');
-    assert.equal(lines[2].text, 'Лига «Офис»: место 3 → ~2');
+    assert.equal(lines[0].text, 'Юность · ноябрь: место 3 → примерно 1 · корона');
+    assert.equal(lines[1].text, 'Все · сезон: место 214 → примерно 190');
+    assert.equal(lines[2].text, 'Лига «Офис»: место 3 → примерно 2');
   });
   it('новичок без места: «выйдешь на N»', () => {
     const [l] = S.stakeLines([{ kind: 'slice', club: 'Лида', period_title: 'ноябрь', rank_now: null, rank_if: 2, crown: false }]);
@@ -279,7 +279,7 @@ describe('таблица', () => {
     assert.deepEqual(S.peakTile(p, []), { rank: '2', label: 'Юность · ноябрь', note: 'из 38', gold: false });
     const crown = [{ kind: 'month', period: '2026-11', club: 'Юность' }];
     assert.equal(S.peakTile(Object.assign({}, p, { rank: 1 }), crown).note, 'корона твоя');
-    assert.equal(S.peakTile(Object.assign({}, p, { rank: 1 }), []).note, 'ты первый');
+    assert.equal(S.peakTile(Object.assign({}, p, { rank: 1 }), []).note, 'лидируешь');
     assert.equal(S.crownCount(2), '2' + NBSP + 'короны');
   });
 });

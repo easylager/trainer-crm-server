@@ -181,7 +181,7 @@
   function fansLine(names, mine) {
     var list = (names || []).slice();
     if (mine) {
-      if (!list.length) return 'ты первый';
+      if (!list.length) return 'пока только ты';
       if (list.length === 1) return 'ты и' + NBSP + list[0];
       return 'ты и' + NBSP + 'ещё' + NBSP + list.length;
     }

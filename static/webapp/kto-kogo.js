@@ -537,7 +537,7 @@
 
   function share(inviteUrl, text) {
     if (!inviteUrl) {
-      toast('Ссылка появится, когда бот будет настроен');
+      toast('Ссылка пока недоступна');
       return;
     }
     var url = 'https://t.me/share/url?url=' + encodeURIComponent(inviteUrl) + '&text=' + encodeURIComponent(text);
@@ -572,7 +572,7 @@
   }
 
   function copy(url) {
-    if (!url) return toast('Ссылка появится, когда бот будет настроен');
+    if (!url) return toast('Ссылка пока недоступна');
     var done = function () { toast('Ссылка скопирована'); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { legacyCopy(url); });
     else legacyCopy(url);

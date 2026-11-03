@@ -107,7 +107,11 @@
   function stakeLines(items) {
     return (items || []).map(function (s) {
       var label = s.kind === 'league' ? 'Лига «' + s.league_name + '»' : sliceLabel(s.club, s.period_title);
-      var move = s.rank_now == null ? 'выйдешь на ' + placeText(s.rank_if) : 'место ' + s.rank_now + ' → ' + (s.rank_now === s.rank_if ? '' : '~') + s.rank_if;
+      var move = s.rank_now == null
+        ? 'выйдешь на ' + placeText(s.rank_if)
+        : s.rank_now === s.rank_if
+          ? 'место ' + s.rank_now
+          : 'место ' + s.rank_now + ' → примерно ' + s.rank_if;
       return {
         icon: s.crown ? 'crown' : s.kind === 'league' ? 'duel' : 'up',
         gold: !!s.crown,
@@ -619,7 +623,7 @@
   function peakTile(p, crowns) {
     var isMonth = p.period !== 'season';
     var crowned = isMonth && (crowns || []).some(function (c) { return c.kind === 'month' && c.period === p.period && (c.club || null) === (p.club || null); });
-    var note = crowned ? 'корона твоя' : p.rank === 1 ? 'ты первый' : 'из ' + spaced(p.players);
+    var note = crowned ? 'корона твоя' : p.rank === 1 ? 'лидируешь' : 'из ' + spaced(p.players);
     return { rank: String(p.rank), label: sliceLabel(p.club, p.period_title), note: note, gold: crowned || p.rank === 1 };
   }
 
