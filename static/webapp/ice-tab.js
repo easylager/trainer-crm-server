@@ -2113,8 +2113,25 @@
     if (btn && host && btn.parentNode !== host.parentNode) host.parentNode.insertBefore(btn, host.nextSibling);
   }
 
+  var iceInterestBusy = false;
+
+  /* «Записали» — только после настоящего 2xx. Сбой сервера не должен выглядеть как успех:
+     человек решит, что его уведомят, а записи нет. */
+  function iceInterestFailed() {
+    renderEmpty(
+      listEl(),
+      {
+        title: 'Не получилось записать',
+        body: 'Не дошло до сервера. Нажмите ещё раз — запись не потеряется.',
+        action: { label: 'Повторить', kind: 'ice-interest' },
+      },
+      'retry'
+    );
+  }
+
   function recordIceInterest() {
-    if (!state.cityId) return;
+    if (!state.cityId || iceInterestBusy) return;
+    iceInterestBusy = true;
     fetch(M.buildIceInterestUrl(), {
       method: 'POST',
       cache: 'no-store',
@@ -2126,20 +2143,29 @@
       }),
     })
       .then(function (r) {
-        return r.ok ? r.json() : null;
+        if (!r.ok) throw new Error('ice-interest ' + r.status);
+        return r.json();
       })
-      .then(function () {
+      .then(function (data) {
+        iceInterestBusy = false;
+        /* identified=false: открыли не из мини-приложения — сообщить будет некому, обещать не надо. */
+        var known = !data || data.identified !== false;
         renderEmpty(
           listEl(),
           {
             title: 'Записали',
-            body: 'Когда появится расписание в этом городе — вы уже в списке желающих.',
+            body: known
+              ? 'Когда появится расписание в этом городе — вы уже в списке желающих.'
+              : 'Интерес к этому городу учли. Чтобы мы сообщили, когда появится расписание, откройте приложение в Telegram.',
             action: { label: 'Показать тренеров', kind: 'intent:coach' },
           },
           'ice'
         );
       })
-      .catch(function () {});
+      .catch(function () {
+        iceInterestBusy = false;
+        iceInterestFailed();
+      });
   }
 
   /**
@@ -2639,7 +2665,10 @@
     );
     return fetchJson(url)
       .then(function (data) {
-        if (!shopScope || !data || !data.next_cursor) return data;
+        /* fetchJson отдаёт null на не-2xx. Это сбой, а не «пустая лента»: иначе город
+           выглядит без катков, а сброс «Зимой» ниже срабатывает на ошибке сервера. */
+        if (!data) throw new Error('list-failed');
+        if (!shopScope || !data.next_cursor) return data;
         return fetchRestPages(query, data, gen);
       })
       .then(function (data) {
@@ -2688,6 +2717,7 @@
     });
     return fetchJson(url)
       .then(function (data) {
+        if (!data) throw new Error('list-failed');
         if (!isCurrentFetch(gen, 'coach')) return;
         state.loading = false;
         applyTrainerPayload(data);

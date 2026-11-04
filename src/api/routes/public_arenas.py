@@ -273,14 +273,21 @@ class IceCityInterestBody(BaseModel):
 @router.post("/ice/interest")
 async def post_ice_interest(
     body: IceCityInterestBody,
+    request: Request,
     response: Response,
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Record that a client asked for skating in a city that has trainers but no map rinks."""
     response.headers["Cache-Control"] = "no-store"
+    telegram_id, _actor = _catalog_share_actor(principal, request)
     try:
         payload = await record_ice_city_interest(
-            session, city_id=body.city_id, intent=body.intent, source=body.source
+            session,
+            city_id=body.city_id,
+            intent=body.intent,
+            source=body.source,
+            telegram_id=telegram_id,
         )
     except IcePublicQueryError as exc:
         raise _query_error(exc) from exc

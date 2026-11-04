@@ -2916,8 +2916,13 @@ async def record_ice_city_interest(
     city_id: int,
     intent: str | None = None,
     source: str | None = None,
+    telegram_id: int | None = None,
 ) -> dict[str, Any] | None:
-    """Persist a client tap that they want skating in a city without map rinks."""
+    """Persist a client tap that they want skating in a city without map rinks.
+
+    ``telegram_id`` is the client catalog key: a repeat tap by the same person in the same
+    city is one row. ``identified`` tells the client whether there is anybody to notify later.
+    """
     found = await session.execute(
         text("SELECT 1 FROM cities WHERE id = :id AND is_active"),
         {"id": int(city_id)},
@@ -2926,16 +2931,44 @@ async def record_ice_city_interest(
         return None
     intent_value = parse_intent(intent) if intent else INTENT_SKATE
     src = str(source or "coming_soon_cta").strip()[:32] or "coming_soon_cta"
-    inserted = await session.execute(
-        text(
-            """
-            INSERT INTO ice_city_interest (city_id, intent, source)
-            VALUES (:city_id, :intent, :source)
-            RETURNING id
-            """
-        ),
-        {"city_id": int(city_id), "intent": intent_value, "source": src},
-    )
+    params = {"city_id": int(city_id), "intent": intent_value, "source": src, "tg": telegram_id}
+    if telegram_id is None:
+        inserted = await session.execute(
+            text(
+                """
+                INSERT INTO ice_city_interest (city_id, intent, source)
+                VALUES (:city_id, :intent, :source)
+                RETURNING id
+                """
+            ),
+            params,
+        )
+        row_id = int(inserted.scalar_one())
+    else:
+        await session.execute(
+            text(
+                """
+                INSERT INTO ice_city_interest (city_id, intent, source, telegram_id)
+                VALUES (:city_id, :intent, :source, :tg)
+                ON CONFLICT (city_id, intent, telegram_id) WHERE telegram_id IS NOT NULL
+                DO NOTHING
+                """
+            ),
+            params,
+        )
+        row_id = int(
+            (
+                await session.execute(
+                    text(
+                        """
+                        SELECT id FROM ice_city_interest
+                        WHERE city_id = :city_id AND intent = :intent AND telegram_id = :tg
+                        """
+                    ),
+                    params,
+                )
+            ).scalar_one()
+        )
     await session.commit()
-    return {"ok": True, "id": int(inserted.scalar_one())}
+    return {"ok": True, "id": row_id, "identified": telegram_id is not None}
 

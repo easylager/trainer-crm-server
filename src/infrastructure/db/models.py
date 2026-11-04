@@ -777,7 +777,20 @@ class IceCityInterest(Base):
     city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), nullable=False, index=True)
     intent: Mapped[str] = mapped_column(String(16), nullable=False, server_default="skate")
     source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="coming_soon_cta")
+    # Client catalog key (``client_catalog_telegram_key``). NULL for anonymous taps: nobody to notify.
+    telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_ice_city_interest_person",
+            "city_id",
+            "intent",
+            "telegram_id",
+            unique=True,
+            postgresql_where=text("telegram_id IS NOT NULL"),
+        ),
+    )
 
 
 #: PDEC-028 «места от людей». Держать в синхроне с миграцией 0279.
