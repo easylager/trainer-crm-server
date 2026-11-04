@@ -1342,17 +1342,20 @@ button.arena-info__tel--copy {
 }
 .arena-seg {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--glide-line);
   border-radius: var(--app-radius-pill);
   background: var(--app-card-bg);
 }
+.arena-seg::-webkit-scrollbar { display: none; }
 .arena-seg__i {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   min-height: 40px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 0;
   border-radius: var(--app-radius-pill);
   background: transparent;

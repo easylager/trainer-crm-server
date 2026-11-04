@@ -1218,11 +1218,7 @@
         '</div>'
       );
     }
-    var html = '';
-    var title = extraTitle(cfg);
-    var dayLabel = ticketDayLabel(extraStrip(cfg), iso);
-    view.groups.forEach(function (g) { html += showGroupHtml(g, title, dayLabel); });
-    return html;
+    return kindRowsHtml(view, extraTitle(cfg), ticketDayLabel(extraStrip(cfg), iso));
   }
 
   function renderExtraSection(cfg) {
@@ -1509,6 +1505,26 @@
     );
   }
 
+  /**
+   * Сеансы одного дня для семейного, фигурного и ОХМ: выбранный сеанс раскрывается карточкой
+   * («билет» с ценами и остатком), как в массовом катании, а не остаётся голым временем.
+   */
+  function kindRowsHtml(view, sectionTitle, dayLabel) {
+    var pickedGroup = view.groups.filter(function (g) {
+      return g.times.some(function (t) { return t.picked; });
+    })[0] || null;
+    var html = '';
+    if (pickedGroup) {
+      var pickedTime = pickedGroup.times.filter(function (t) { return t.picked; })[0];
+      html += '<div class="arena-ticket-wrap">' + ticketHtml(pickedGroup, pickedTime, dayLabel) + '</div>';
+    }
+    var ticketNote = pickedGroup ? pickedGroup.note : '';
+    view.groups.forEach(function (g) {
+      html += showGroupHtml(g, sectionTitle, dayLabel, false, ticketNote);
+    });
+    return html;
+  }
+
   function pricesAboveSchedule() {
     var f = priceFloors();
     return !!(f.adult || f.child || f.rental);
@@ -1750,13 +1766,7 @@
         '</div>'
       );
     }
-    var html = '';
-    var sectionTitle = ohmChipTitle();
-    var ohmDayLabel = ticketDayLabel(ohmStrip(), iso);
-    view.groups.forEach(function (g) {
-      html += showGroupHtml(g, sectionTitle, ohmDayLabel);
-    });
-    return html;
+    return kindRowsHtml(view, ohmChipTitle(), ticketDayLabel(ohmStrip(), iso));
   }
 
   function renderOhmSection() {
