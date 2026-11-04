@@ -333,6 +333,7 @@
       '<span class="w-drawer__hint">Списком</span></button><div class="w-drawer__body"></div></div>';
     sec.appendChild(h);
     h.addEventListener('click', onClick);
+    bindDrawer(h);
     mapState.host = h;
     mapState.map = null;
     mapState.clusterer = null;
@@ -451,6 +452,64 @@
     h.querySelector('[data-w-drawer]').setAttribute('aria-expanded', String(on));
     h.querySelector('.w-drawer__hint').textContent = on ? 'К карте' : 'Списком';
     if (on) h.querySelector('.w-mapcard').hidden = true;
+  }
+
+  /* Шторку списка сворачивают тапом по карте или свайпом вниз, разворачивают свайпом вверх.
+     Одного тапа по заголовку мало: в развёрнутом виде его не видно как кнопку. */
+  function bindDrawer(h) {
+    var d = h.querySelector('.w-drawer');
+    var body = h.querySelector('.w-drawer__body');
+    if (!d || !d.addEventListener || !body) return;
+    var drag = null;
+    var swallowClick = 0;
+    function isOpen() { return d.classList.contains('w-drawer--open'); }
+    /* Захват на корне карты: тап доходит сюда раньше, чем до Яндекс-карты. */
+    h.addEventListener('pointerdown', function (e) {
+      if (!isOpen() || e.target.closest('.w-drawer, .w-fullmap__bar, .w-mapctl, .w-mapcard')) return;
+      drawerOpen(false);
+    }, true);
+    d.addEventListener('touchstart', function (e) {
+      drag = null;
+      if (e.touches.length !== 1) return;
+      var onHead = !!e.target.closest('.w-drawer__head');
+      if (!onHead && !(isOpen() && body.scrollTop <= 0)) return;
+      drag = { y0: e.touches[0].clientY, t0: Date.now(), dy: 0, on: false, head: onHead };
+    }, { passive: true });
+    d.addEventListener('touchmove', function (e) {
+      if (!drag) return;
+      var dy = e.touches[0].clientY - drag.y0;
+      if (!drag.on) {
+        if ((isOpen() && dy > 8) || (!isOpen() && drag.head && dy < -8)) drag.on = true;
+        else if (Math.abs(dy) > 8) { drag = null; return; } else return;
+      }
+      if (e.cancelable) e.preventDefault();
+      drag.dy = dy;
+      if (isOpen() && dy > 0) {
+        d.style.transition = 'none';
+        d.style.transform = 'translateY(' + dy + 'px)';
+      }
+    }, { passive: false });
+    function end() {
+      var g = drag;
+      drag = null;
+      d.style.transition = '';
+      d.style.transform = '';
+      if (!g || !g.on) return;
+      swallowClick = Date.now();
+      var fast = Math.abs(g.dy) / Math.max(1, Date.now() - g.t0) > 0.5;
+      if (isOpen() && (g.dy > 80 || (g.dy > 24 && fast))) drawerOpen(false);
+      else if (!isOpen() && (g.dy < -30 || (g.dy < -12 && fast))) drawerOpen(true);
+    }
+    d.addEventListener('touchend', end, { passive: true });
+    d.addEventListener('touchcancel', end, { passive: true });
+    /* После свайпа по заголовку браузер шлёт click — он не должен тут же перевернуть шторку. */
+    d.addEventListener('click', function (e) {
+      if (swallowClick && Date.now() - swallowClick < 400) {
+        swallowClick = 0;
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
   }
 
   function bodyClass(name, on) {

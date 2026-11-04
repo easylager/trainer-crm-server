@@ -1800,8 +1800,10 @@
         shellNav('arena?ref=' + encodeURIComponent(ref));
       },
     });
-    var list = $('iceList');
-    /* Закрытых арен нет, есть только зимние точки: пустое состояние ленты не нужно. */
+    /* Закрытых арен нет, есть только зимние точки: пустое состояние ленты не нужно.
+       Чистим только текущую ленту: #iceList держит обе (iceListSkate, iceListCoach),
+       без них смена категории не перерисовывала ленту и зимний блок оставался. */
+    var list = listEl();
     if (on && list && !state.items.length && !state.loading) list.innerHTML = '';
   }
 
