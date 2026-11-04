@@ -408,7 +408,7 @@
     mapHost(sec).hidden = false;
     /* Верх карты: «Список | Карта» и те же фильтры, что в списке. */
     mapState.host.querySelector('.w-fullmap__bar').innerHTML =
-      W.navRowHtml({ exit: !!ctx.exit, categories: !!ctx.openCategories }) +
+      W.navRowHtml({ exit: !!ctx.exit, categories: !!ctx.openCategories, categoryIcon: ctx.categoryIcon ? ctx.categoryIcon() : '' }) +
       chipsHtml(cache.data, cache.data.items || [], f.origin || ctx.origin, false);
     paintDrawer();
     if (mapState.ym) {

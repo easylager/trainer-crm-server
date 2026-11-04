@@ -703,17 +703,23 @@
 
   /**
    * Верх зимней карты: шапка каталога на ней скрыта, поэтому выход — здесь.
-   * «Назад» — из «Зимой» в категорию, где человек был; «Что ищем» — к другим категориям.
-   * Кнопки есть, только когда экран дал, что вызвать.
+   * «Назад» — из «Зимой» в категорию, где человек был; переключатель разделов — тот же чип,
+   * что в шапке каталога (значок текущего раздела и шеврон), чтобы читался как навигация,
+   * а не как ещё один фильтр. Кнопки есть, только когда экран дал, что вызвать.
    */
   function navRowHtml(can) {
     can = can || {};
     var out = '';
-    if (can.exit) out += '<button type="button" class="w-chip w-chip--nav" data-w-exit>\u2039 Назад</button>';
-    if (can.categories) {
-      out += '<button type="button" class="w-chip w-chip--nav" data-w-cats aria-haspopup="dialog">Что ищем <span aria-hidden="true">\u2304</span></button>';
+    if (can.exit) {
+      out += '<button type="button" class="w-navback ga-press" data-w-exit aria-label="Назад">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>';
     }
-    return out ? '<div class="w-chips" role="group" aria-label="Навигация">' + out + '</div>' : '';
+    if (can.categories) {
+      out += '<button type="button" class="ice-chip ice-intent-chip is-icon ga-press" data-w-cats aria-haspopup="dialog" aria-label="Что ищем">' +
+        '<svg class="ice-intent-chip__ic" viewBox="0 0 24 24" aria-hidden="true">' + (can.categoryIcon || '') + '</svg>' +
+        '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg></button>';
+    }
+    return out ? '<div class="w-navrow">' + out + '</div>' : '';
   }
 
   return {

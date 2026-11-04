@@ -1793,6 +1793,8 @@
         commitPlaceFilter('');
       },
       openCategories: function () { openIntentSheet(true); },
+      /* Значок текущего раздела — тот же, что на чипе в шапке каталога. */
+      categoryIcon: function () { var ic = $('iceIntentIcon'); return ic ? ic.innerHTML : ''; },
       authHeaders: authHeaders,
       openArena: function (ref) {
         shellNav('arena?ref=' + encodeURIComponent(ref));

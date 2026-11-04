@@ -329,7 +329,14 @@ body.ice-view-map.w-map-on { overscroll-behavior: none; }
 .w-fullmap__bar > * { pointer-events: auto; }
 .w-fullmap__bar .w-seg button { min-height: 40px; }
 .w-fullmap__bar .w-chips { margin: 0; }
-.w-chip--nav { font-weight: 700; }
+/* Навигация зимней карты: круглая «Назад» и чип разделов как в шапке каталога — не ещё два фильтра. */
+.w-navrow { display: flex; align-items: center; gap: 8px; }
+.w-navback {
+  flex: none; width: 44px; height: 44px; padding: 0; display: grid; place-items: center;
+  border-radius: 999px; border: 1px solid var(--g-line-strong); background: var(--g-surface); color: var(--g-ink); cursor: pointer;
+}
+.w-navback svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.w-navrow .ice-intent-chip { min-height: 44px; }
 /* Десктоп Telegram: панель не растягивается на всю ширину окна. */
 .w-fullmap__bar > .w-seg, .w-fullmap__bar > .w-chips { width: 100%; max-width: 480px; }
 .w-fullmap .w-mapcard { z-index: 4; }

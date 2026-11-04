@@ -339,9 +339,11 @@ describe('navRowHtml — выход с зимней карты', () => {
   const assert = require('node:assert/strict');
   const { it } = require('node:test');
   it('даёт «Назад» и «Что ищем», когда экран умеет и то и другое', () => {
-    const html = W.navRowHtml({ exit: true, categories: true });
+    const html = W.navRowHtml({ exit: true, categories: true, categoryIcon: '<path d="M1 1"/>' });
     assert.ok(html.includes('data-w-exit'));
     assert.ok(html.includes('data-w-cats'));
+    assert.ok(html.includes('<path d="M1 1"/>'), 'значок текущего раздела — как в шапке');
+    assert.ok(html.includes('ice-intent-chip'), 'тот же чип, что в шапке каталога');
   });
   it('без колбэков ряда нет вовсе', () => {
     assert.equal(W.navRowHtml({}), '');
