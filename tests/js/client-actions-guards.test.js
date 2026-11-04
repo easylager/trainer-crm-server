@@ -38,8 +38,30 @@ describe('сертификат: двойной тап «Активировать
       release();
       await tick();
       assert.equal(calls.filter((u) => u.includes('/activate')).length, 1);
-      assert.equal(page.alerts.length, 1, JSON.stringify(page.alerts));
-      assert.match(page.alerts[0], /Сертификат активирован/);
+      assert.equal(page.alerts.length, 0, 'вместо алерта — панель с кнопкой: ' + JSON.stringify(page.alerts));
+      assert.match(page.getEl('certActivatedNote').innerHTML, /Сертификат активирован/);
+    });
+
+    it(file + ': после активации есть кнопка — к тренеру или в каталог', async () => {
+      for (const [reply, path, label] of [
+        [{ city_id: 1, service_id: 2, trainer_id: 9 }, 'catalog?trainer_id=9', /Записаться к тренеру/],
+        [{ city_id: null }, 'ice?intent=coach', /Выбрать тренера/],
+      ]) {
+        const nav = [];
+        const page = runInlinePage(file, {
+          window: { ClientShell: { navigate: (p) => nav.push(p) } },
+          fetch: (url) => (String(url).includes('/certificates/activate') ? json(reply) : json({ items: [] })),
+        });
+        page.getEl('certCodeInput').value = 'ABC-123';
+        page.getEl(btn).onclick();
+        await tick();
+        const note = page.getEl('certActivatedNote');
+        assert.equal(note.hidden, false);
+        assert.match(note.innerHTML, label);
+        assert.equal(page.alerts.length, 0);
+        page.getEl('certActivatedGo').onclick();
+        assert.deepEqual(nav, [path]);
+      }
     });
   }
 });
