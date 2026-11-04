@@ -221,4 +221,6 @@ async def test_fallback_survives_capture_failure(monkeypatch):
     monkeypatch.setattr(client_handlers, "async_session_factory", MagicMock())
     m = _private_text(_tid(), "Привет")
     await client_handlers.fallback(m)
-    m.answer.assert_awaited_once_with(msg.CLIENT_FALLBACK)
+    m.answer.assert_awaited_once()
+    assert m.answer.await_args.args == (msg.CLIENT_FALLBACK,)
+    assert m.answer.await_args.kwargs["reply_markup"] is not None

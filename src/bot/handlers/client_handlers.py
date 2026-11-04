@@ -110,6 +110,7 @@ from src.application.trainer_invite_links import SHARE_REF_PREFIX, TRAINER_PREVI
 from src.shared.catalog_visibility import trainer_is_listed
 from src.shared.catalog_entry import client_discovery_webapp_url
 from src.application.support_use_cases import create_support_message
+from src.bot.rink_query import RINK_QUERY_MAX_LEN, is_rink_query, known_city_names
 from src.application.group_attendance_use_cases import (
     attendance_rsvp_verify,
     respond_attendance_rsvp,
@@ -1575,10 +1576,35 @@ async def _send_passes_certificates_webapp(message: Message, *, certificates_tab
     await message.answer(msg.CLIENT_MY_PASSES_AND_CERTIFICATES_INTRO, reply_markup=kb)
 
 
+def _home_open_markup(label: str) -> InlineKeyboardMarkup:
+    """Кнопка на главную Mini App (`/webapp/client-home`, как после /start); без HTTPS — callback."""
+    https_base, _ = mini_app_https_base(Settings())
+    if https_base and https_base.lower().startswith("https://"):
+        button = InlineKeyboardButton(
+            text=label, web_app=WebAppInfo(url=f"{https_base.rstrip('/')}/webapp/client-home")
+        )
+    else:
+        button = InlineKeyboardButton(text=label, callback_data=CLIENT_HOME_WEBAPP_CALLBACK)
+    return InlineKeyboardMarkup(inline_keyboard=[[button]])
+
+
 def _guide_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=CLIENT_SUPPORT_CALLBACK)],
-    ])
+    rows = _home_open_markup(msg.CLIENT_BUTTON_OPEN_RINKS).inline_keyboard
+    rows.append([InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=CLIENT_SUPPORT_CALLBACK)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _is_rink_search_text(text: str) -> bool:
+    """Короткий поисковый текст про катки/город. Длинное описание проблемы — не он."""
+    stripped = (text or "").strip()
+    if not stripped or len(stripped) > RINK_QUERY_MAX_LEN:
+        return False
+    try:
+        async with async_session_factory() as session:
+            cities = await known_city_names(session)
+    except Exception:  # noqa: BLE001
+        cities = ()
+    return is_rink_query(stripped, cities)
 
 
 @router.message(Command("guide"))
@@ -3654,6 +3680,12 @@ async def fallback(message: Message) -> None:
         if not text:
             await message.answer(msg.CLIENT_SUPPORT_PROMPT)
             return
+        # «Минск Массовое Катание» в режиме поддержки — поиск, а не обращение: в Mini App, админу не пишем.
+        if await _is_rink_search_text(text):
+            await message.answer(
+                msg.CLIENT_RINK_QUERY_REPLY, reply_markup=_home_open_markup(msg.CLIENT_BUTTON_OPEN_RINKS)
+            )
+            return
         async with async_session_factory() as session:
             await create_support_message(
                 session,
@@ -3664,4 +3696,9 @@ async def fallback(message: Message) -> None:
             )
         await message.answer(msg.CLIENT_SUPPORT_SENT)
         return
-    await message.answer(msg.CLIENT_FALLBACK)
+    if message.text and await _is_rink_search_text(message.text):
+        await message.answer(
+            msg.CLIENT_RINK_QUERY_REPLY, reply_markup=_home_open_markup(msg.CLIENT_BUTTON_OPEN_RINKS)
+        )
+        return
+    await message.answer(msg.CLIENT_FALLBACK, reply_markup=_home_open_markup(msg.CLIENT_BUTTON_HOME_WEBAPP))
