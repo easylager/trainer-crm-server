@@ -27,10 +27,18 @@ p.you { color: #4a5c68; font-size: .95rem; margin: .5rem 0 0; }
 <script>
 (function () {
   var params = new URLSearchParams(location.search);
-  var sessionId = params.get('s');
+  /* Без номера сеанса собирать нечего: «Number(null)» давал 0, а сервер отвечал технической ошибкой. */
+  var rawSession = String(params.get('s') || '').trim();
+  var sessionId = /^\d+$/.test(rawSession) && Number(rawSession) > 0 ? Number(rawSession) : null;
   var tg = window.Telegram && window.Telegram.WebApp;
   if (tg && tg.ready) tg.ready();
   var initData = tg && tg.initData || params.get('init_data') || '';
+  var goBtn = document.getElementById('go');
+  var errEl = document.getElementById('err');
+  var busy = false;
+  /* Компания уже создана, но в чат не ушла: повтор шлёт ту же, а не создаёт вторую. */
+  var created = null;
+
   var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
   if (u) {
     var who = [u.first_name, u.last_name].filter(Boolean).join(' ');
@@ -39,40 +47,99 @@ p.you { color: #4a5c68; font-size: .95rem; margin: .5rem 0 0; }
       document.getElementById('you').textContent = 'Вы в списке «Иду» как ' + who + '.';
     }
   }
-  document.getElementById('go').addEventListener('click', function () {
-    document.getElementById('err').textContent = '';
-    if (!initData) {
-      document.getElementById('err').textContent = 'Собрать компанию можно из Telegram.';
-      return;
+
+  function setBusy(on) {
+    busy = on;
+    goBtn.disabled = on;
+  }
+
+  function showError(text, pageUrl) {
+    errEl.textContent = text;
+    if (pageUrl) {
+      var a = document.createElement('a');
+      a.href = pageUrl;
+      a.textContent = ' Открыть страницу компании';
+      errEl.appendChild(a);
     }
-    fetch('/api/public/ice-companies', {
+  }
+
+  function detailText(j) {
+    var d = j && j.detail;
+    if (typeof d === 'string' && d.trim()) return d.trim();
+    if (Array.isArray(d) && d[0] && d[0].msg) return String(d[0].msg);
+    return 'Не получилось. Попробуйте ещё раз.';
+  }
+
+  var OFFLINE = 'Нет связи. Проверьте интернет и нажмите ещё раз.';
+
+  if (sessionId === null) {
+    goBtn.disabled = true;
+    errEl.textContent = 'Откройте эту страницу по ссылке «Собрать компанию» на нужном сеансе — без сеанса собирать нечего.';
+  }
+
+  function share() {
+    return fetch('/api/public/ice-companies/' + encodeURIComponent(created.code) + '/telegram-prepare', {
+      method: 'POST',
+      headers: { 'X-Telegram-Init-Data': initData }
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (prep) { return { ok: r.ok, prep: prep }; });
+    }).then(function (res) {
+      var prep = res.prep || {};
+      if (res.ok && prep.prepared_message_id && tg && tg.shareMessage) {
+        tg.shareMessage(prep.prepared_message_id, function (ok) {
+          if (!ok && tg.switchInlineQuery && prep.inline_query) tg.switchInlineQuery(prep.inline_query, ['users', 'groups', 'channels']);
+        });
+        return;
+      }
+      if (res.ok && tg && tg.switchInlineQuery && prep.inline_query) {
+        tg.switchInlineQuery(prep.inline_query, ['users', 'groups']);
+        return;
+      }
+      if (res.ok && !tg) {
+        location.href = created.pageUrl;
+        return;
+      }
+      goBtn.textContent = 'Отправить в чат ещё раз';
+      showError('Компания создана, но чат не открылся. Нажмите кнопку ещё раз или поделитесь ссылкой.', created.pageUrl);
+    }, function () {
+      goBtn.textContent = 'Отправить в чат ещё раз';
+      showError('Компания создана, но нет связи, чтобы отправить её в чат. Нажмите кнопку, когда сеть вернётся.', created.pageUrl);
+    });
+  }
+
+  function create() {
+    return fetch('/api/public/ice-companies', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
       body: JSON.stringify({
-        session_id: Number(sessionId),
+        session_id: sessionId,
         name: document.getElementById('title').value,
         surface: 'miniapp'
       })
-    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
-      .then(function (res) {
-        if (!res.ok) {
-          document.getElementById('err').textContent = (res.j && res.j.detail) || 'Не получилось';
-          return;
-        }
-        return fetch('/api/public/ice-companies/' + res.j.public_code + '/telegram-prepare', {
-          method: 'POST',
-          headers: { 'X-Telegram-Init-Data': initData }
-        }).then(function (r) { return r.json(); }).then(function (prep) {
-          if (prep.prepared_message_id && tg && tg.shareMessage) {
-            tg.shareMessage(prep.prepared_message_id, function (ok) {
-              if (!ok && tg.switchInlineQuery) tg.switchInlineQuery(prep.inline_query, ['users', 'groups', 'channels']);
-            });
-            return;
-          }
-          if (tg && tg.switchInlineQuery) tg.switchInlineQuery(prep.inline_query, ['users', 'groups']);
-          else location.href = res.j.page_url;
-        });
-      });
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+    }).then(function (res) {
+      if (!res.ok || !res.j || !res.j.public_code) {
+        showError(detailText(res.j));
+        return;
+      }
+      created = { code: res.j.public_code, pageUrl: res.j.page_url || '/k/' + res.j.public_code };
+      return share();
+    }, function () {
+      showError(OFFLINE);
+    });
+  }
+
+  goBtn.addEventListener('click', function () {
+    if (busy) return;
+    errEl.textContent = '';
+    if (!initData) {
+      errEl.textContent = 'Собрать компанию можно из Telegram.';
+      return;
+    }
+    if (!created && sessionId === null) return;
+    setBusy(true);
+    (created ? share() : create()).then(function () { setBusy(false); }, function () { setBusy(false); });
   });
 })();
 </script>
