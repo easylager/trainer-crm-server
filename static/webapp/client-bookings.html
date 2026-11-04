@@ -415,10 +415,16 @@
               }
             }
             if (!r.ok) {
-              var detail =
-                data && data.detail
-                  ? String(data.detail)
-                  : 'Не удалось выполнить действие (код ' + r.status + ').';
+              /* detail бывает строкой, списком ошибок валидации или объектом: String() давал «[object Object]». */
+              var detail = 'Не удалось выполнить действие (код ' + r.status + ').';
+              var rawDetail = data && data.detail;
+              if (typeof rawDetail === 'string' && rawDetail.trim()) {
+                detail = rawDetail.trim();
+              } else if (Array.isArray(rawDetail) && rawDetail[0] && typeof rawDetail[0].msg === 'string') {
+                detail = rawDetail[0].msg;
+              } else if (rawDetail && typeof rawDetail === 'object' && typeof rawDetail.message === 'string') {
+                detail = rawDetail.message;
+              }
               var err = new Error(detail);
               err.status = r.status;
               throw err;
@@ -1213,12 +1219,8 @@
                 err && err.message
                   ? err.message
                   : 'Не удалось отменить запись. Попробуйте ещё раз.';
+              /* Одно сообщение, а не тост и алерт друг за другом. */
               showAppToast(msg, true);
-              if (tg && tg.showAlert) {
-                tg.showAlert(msg);
-              } else {
-                alert(msg);
-              }
             });
           });
       };

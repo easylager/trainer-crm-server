@@ -1580,7 +1580,11 @@
           });
       }
 
+      /* Двойной тап «Активировать»: второй запрос находил код уже использованным и перебивал успех. */
+      var certActivating = false;
+
       function activateCertificate() {
+        if (certActivating) return;
         var codeInput = document.getElementById('certCodeInput');
         var code = (codeInput.value || '').trim();
         if (!code) {
@@ -1588,6 +1592,13 @@
           return;
         }
         var url = '/api/webapp/client/certificates/activate' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        certActivating = true;
+        var activateBtn = document.getElementById('cert-btnActivateCert');
+        if (activateBtn) activateBtn.disabled = true;
+        var releaseActivate = function() {
+          certActivating = false;
+          if (activateBtn) activateBtn.disabled = false;
+        };
         fetch(url, {
           method: 'POST',
           headers: headers(),
@@ -1597,6 +1608,7 @@
             return r.json().then(function(d) { return { ok: r.ok, data: d }; });
           })
           .then(function(o) {
+            releaseActivate();
             if (o.ok) {
               var d = o.data;
               var cityId = d && d.city_id;
@@ -1623,6 +1635,7 @@
             }
           })
           .catch(function() {
+            releaseActivate();
             alert('Ошибка сети. Попробуйте ещё раз.');
           });
       }

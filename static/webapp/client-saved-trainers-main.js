@@ -169,6 +169,17 @@
     toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
   }
 
+  /* Отписки в полёте: второй тап по тому же 🔕 не шлёт второй DELETE (он отвечал 404 → «не удалось»). */
+  var offBusy = {};
+
+  function askConfirm(message, onYes) {
+    if (tg && typeof tg.showConfirm === 'function') {
+      tg.showConfirm(message, function (ok) { if (ok) onYes(); });
+      return;
+    }
+    if (window.confirm(message)) onYes();
+  }
+
   /* ── confirm popover (unsave) ───────────────────────────────── */
 
   var confirmEl = document.getElementById('confirmBackdrop');
@@ -561,9 +572,20 @@
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         var tid = btn.getAttribute('data-off-trainer');
+        if (offBusy['t' + tid]) return;
+        /* Не с одного тапа: 🔕 рядом с карточкой нажимают случайно. */
+        askConfirm('Отписаться от уведомлений этого тренера?', function () {
+          unsubscribeTrainer(tid);
+        });
+      });
+    });
+    function unsubscribeTrainer(tid) {
+        if (offBusy['t' + tid]) return;
+        offBusy['t' + tid] = true;
         fetch(apiUrl('/client/watches/trainer-slots/' + tid), { method: 'DELETE', headers: headersJson() })
           .then(function (r) { if (!r.ok) throw new Error(); })
           .then(function () {
+            offBusy['t' + tid] = false;
             state.trainerNotifications = (state.trainerNotifications || []).filter(function (x) {
               return String(x.trainer_id) !== String(tid);
             });
@@ -571,16 +593,18 @@
             rerender();
             toast('Подписка отменена');
           })
-          .catch(function () { toast('Не удалось отписаться'); });
-      });
-    });
+          .catch(function () { offBusy['t' + tid] = false; toast('Не удалось отписаться'); });
+    }
     container.querySelectorAll('[data-off-ice]').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         var wid = btn.getAttribute('data-off-ice');
+        if (offBusy['i' + wid]) return;
+        offBusy['i' + wid] = true;
         fetch(apiUrl('/client/ice-watches/' + wid), { method: 'DELETE', headers: headersJson() })
           .then(function (r) { if (!r.ok) throw new Error(); })
           .then(function () {
+            offBusy['i' + wid] = false;
             state.iceWatchItems = (state.iceWatchItems || []).filter(function (x) {
               return String(x.id) !== String(wid);
             });
@@ -588,7 +612,7 @@
             rerender();
             toast('Подписка отменена');
           })
-          .catch(function () { toast('Не удалось отписаться'); });
+          .catch(function () { offBusy['i' + wid] = false; toast('Не удалось отписаться'); });
       });
     });
     container.querySelectorAll('[data-ice-watch]').forEach(function (row) {

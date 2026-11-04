@@ -16,6 +16,7 @@
   <script src="mini-app-telegram-chrome.js?v=202611048"></script>
   <script src="client-profile-switcher.js?v=202611048"></script>
   <script src="write-access.js?v=202611048"></script>
+  <script src="minsk-time.js?v=202611048"></script>
   <script src="booking-client.js?v=202611048"></script>
   <script src="booking-deeplink.js?v=202611048"></script>
   <script src="mini-app-empty-state.js?v=202611048"></script>
@@ -1523,7 +1524,13 @@
           }
         }
       }
-      const thisMonday = getMonday(new Date());
+      /* Неделя записи — по Минску, а не по часам телефона: у телефона в другом поясе «сегодня» другое. */
+      function minskTodayDate() {
+        var iso = window.MinskTime ? window.MinskTime.dateIso(new Date()) : localYmd(new Date());
+        var p = iso.split('-');
+        return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+      }
+      const thisMonday = getMonday(minskTodayDate());
       const nextMonday = new Date(thisMonday);
       nextMonday.setDate(nextMonday.getDate() + 7);
 
@@ -2401,9 +2408,12 @@
               document.getElementById('screenSlots').style.display = 'block';
               document.getElementById('prevWeek').style.display = '';
               document.getElementById('nextWeek').style.display = '';
+              /* Сообщение сверху, свободные окна недели — под ним (innerHTML затёр бы и кнопки, и их обработчики). */
               render(slotsInWeek(allSlots, currentWeekStart));
-              document.getElementById('content').innerHTML =
-                '<div class="empty">Это окно уже занято или недоступно. Выберите другое время.</div>';
+              document.getElementById('content').insertAdjacentHTML(
+                'afterbegin',
+                '<div class="empty" role="status">Это окно уже занято или недоступно. Выберите другое время.</div>'
+              );
             }
           } else {
             render(slotsInWeek(allSlots, currentWeekStart));
