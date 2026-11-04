@@ -21,3 +21,13 @@ describe('intentPickShouldApply', () => {
     assert.equal(M.intentPickShouldApply(true, 'winter'), true);
   });
 });
+
+describe('syncWinter keeps both list hosts', () => {
+  it('clears only the active list, never the #iceList wrapper', () => {
+    const fs = require('node:fs');
+    const src = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/ice-tab.js'), 'utf8');
+    const body = src.slice(src.indexOf('function syncWinter()'), src.indexOf('function commitPlaceFilter('));
+    assert.match(body, /var list = listEl\(\);/);
+    assert.doesNotMatch(body, /\$\('iceList'\)/);
+  });
+});
