@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои сертификаты</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202611048"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611048" />
-  <link rel="stylesheet" href="theme.css?v=202611048" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611048" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202611048" />
-  <script src="mini-app-empty-state.js?v=202611048"></script>
-  <script src="mini-app-telegram-chrome.js?v=202611048"></script>
-  <script src="client-profile-switcher.js?v=202611048"></script>
+  <script src="client-mini-app-theme.js?v=202611049"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611049" />
+  <link rel="stylesheet" href="theme.css?v=202611049" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611049" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202611049" />
+  <script src="mini-app-empty-state.js?v=202611049"></script>
+  <script src="mini-app-telegram-chrome.js?v=202611049"></script>
+  <script src="client-profile-switcher.js?v=202611049"></script>
   <style>
     body {
       font-family: var(--app-font-sans);
@@ -94,13 +94,16 @@
       color: var(--tg-theme-button-text-color);
       box-shadow: 0 3px 12px rgba(16, 185, 129, 0.22);
     }
+  .cert-activated { margin: 0 0 16px; padding: 14px; border-radius: 14px; background: var(--tg-theme-secondary-bg-color, rgba(127,127,127,.12)); }
+    .cert-activated__t { margin: 0 0 4px; font-weight: 600; }
+    .cert-activated__d { margin: 0 0 12px; color: var(--tg-theme-hint-color); font-size: 14px; }
   </style>
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611048" />
-  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202611048" />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611048" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611048" />
-  <link rel="stylesheet" href="/static/webapp/glide-skin.css?v=202611048" />
-  <script src="/static/webapp/ga-touch.js?v=202611048"></script>
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611049" />
+  <link rel="stylesheet" href="mini-app-arena-ribbon.css?v=202611049" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611049" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611049" />
+  <link rel="stylesheet" href="/static/webapp/glide-skin.css?v=202611049" />
+  <script src="/static/webapp/ga-touch.js?v=202611049"></script>
 </head>
 <body class="ar-pilot ar-pilot--client-certificates ga-body glide-skin">
   <div class="header">
@@ -119,6 +122,7 @@
       <button type="button" class="btn-primary" id="btnActivateCert">Активировать</button>
     </div>
   </div>
+  <div id="certActivatedNote" class="cert-activated" role="status" hidden></div>
   <div class="cert-sample-preview" id="certSamplePreview">
     <div class="cert-sample-preview__icon" aria-hidden="true">📄</div>
     <div>
@@ -220,7 +224,41 @@
           });
       }
 
+      /* После активации — сообщение с кнопкой, а не алерт «выберите тренера в каталоге» без перехода. */
+      function goCertPath(path) {
+        var shell = window.ClientShell;
+        if (shell && typeof shell.navigate === 'function') {
+          shell.navigate(path);
+          return;
+        }
+        var url = path;
+        if (shell && typeof shell.withInit === 'function') url = shell.withInit(url);
+        else if (typeof window.withInitData === 'function') url = window.withInitData(url);
+        window.location.href = url;
+      }
+
+      function showCertActivated(trainerId) {
+        var note = document.getElementById('certActivatedNote');
+        if (!note) return;
+        var book = trainerId != null;
+        note.innerHTML =
+          '<p class="cert-activated__t">Сертификат активирован.</p>' +
+          '<p class="cert-activated__d">' + (book ? 'Тренер и город подставлены — можно записаться на занятие.' : 'Выберите тренера, чтобы записаться на занятие.') + '</p>' +
+          '<button type="button" class="btn-primary" id="certActivatedGo">' + (book ? 'Записаться к тренеру' : 'Выбрать тренера') + '</button>';
+        note.hidden = false;
+        var go = document.getElementById('certActivatedGo');
+        if (go) {
+          go.onclick = function() {
+            goCertPath(book ? 'catalog?trainer_id=' + encodeURIComponent(String(trainerId)) : 'ice?intent=coach');
+          };
+        }
+      }
+
+      /* Двойной тап «Активировать»: второй запрос находил код уже использованным и перебивал успех. */
+      var certActivating = false;
+
       function activateCertificate() {
+        if (certActivating) return;
         var codeInput = document.getElementById('certCodeInput');
         var code = (codeInput.value || '').trim();
         if (!code) {
@@ -228,6 +266,13 @@
           return;
         }
         var url = '/api/webapp/client/certificates/activate' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        certActivating = true;
+        var activateBtn = document.getElementById('btnActivateCert');
+        if (activateBtn) activateBtn.disabled = true;
+        var releaseActivate = function() {
+          certActivating = false;
+          if (activateBtn) activateBtn.disabled = false;
+        };
         fetch(url, {
           method: 'POST',
           headers: headers(),
@@ -237,24 +282,21 @@
             return r.json().then(function(d) { return { ok: r.ok, data: d }; });
           })
           .then(function(o) {
+            releaseActivate();
             if (o.ok) {
               var d = o.data;
               var cityId = d && d.city_id;
               var serviceId = d && d.service_id;
               var trainerId = d && d.trainer_id;
-              if (cityId != null && serviceId != null && trainerId != null) {
+              var canBook = cityId != null && serviceId != null && trainerId != null;
+              if (canBook) {
                 fetch('/api/webapp/client/session' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : ''), {
                   method: 'POST',
                   headers: headers(),
                   body: JSON.stringify({ city_id: cityId, service_id: serviceId, arena_id: null, trainer_id: trainerId })
-                }).then(function() {
-                  alert('Сертификат активирован. Тренер и город подставлены — можете записаться на занятие.');
-                }).catch(function() {
-                  alert('Сертификат активирован. Выберите тренера в каталоге и запишитесь на занятие.');
-                });
-              } else {
-                alert('Сертификат активирован. Выберите тренера в каталоге и запишитесь на занятие.');
+                }).catch(function() {});
               }
+              showCertActivated(canBook ? trainerId : null);
               codeInput.value = '';
               loadList();
             } else {
@@ -263,6 +305,7 @@
             }
           })
           .catch(function() {
+            releaseActivate();
             alert('Ошибка сети. Попробуйте ещё раз.');
           });
       }
@@ -288,6 +331,6 @@
       loadList();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202611048"></script>
+  <script src="mini-app-client-home.js?v=202611049"></script>
 </body>
 </html>

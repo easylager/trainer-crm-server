@@ -148,7 +148,7 @@ async def post_company(
     if user_id is None:
         raise HTTPException(status_code=401, detail="Собрать компанию можно из Telegram.")
     if (body.session_id is None) == (body.match_id is None):
-        raise HTTPException(status_code=422, detail="Нужен ровно один из session_id и match_id.")
+        raise HTTPException(status_code=422, detail="Не указан сеанс. Откройте «Собрать компанию» на нужном сеансе.")
     if body.match_id is not None and not hockey_event.enabled():
         raise HTTPException(status_code=404, detail="Не найдено")
     organizer_name = (body.display_name or "").strip()

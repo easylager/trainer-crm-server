@@ -789,6 +789,49 @@ async def test_ice_cities_only_include_rink_or_trainer_cities(app_use_test_db, d
 
 
 @pytest.mark.asyncio
+async def test_ice_interest_remembers_who_asked_once_per_person(app_use_test_db, db_session) -> None:
+    from src.api.miniapp_auth.deps import get_optional_client_miniapp_principal
+    from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+
+    cid = await _insert_city(db_session, name=f"IceWant-{uuid.uuid4().hex[:6]}")
+    await db_session.commit()
+    person = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=777001)
+    app.dependency_overrides[get_optional_client_miniapp_principal] = lambda: person
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            first = await client.post("/api/public/ice/interest", json={"city_id": cid})
+            again = await client.post("/api/public/ice/interest", json={"city_id": cid})
+    finally:
+        app.dependency_overrides.pop(get_optional_client_miniapp_principal, None)
+    assert first.status_code == 200 and again.status_code == 200, (first.text, again.text)
+    assert first.json()["identified"] is True
+    assert first.json()["id"] == again.json()["id"]
+    rows = (
+        await db_session.execute(
+            text("SELECT telegram_id FROM ice_city_interest WHERE city_id = :cid"), {"cid": cid}
+        )
+    ).all()
+    assert [r[0] for r in rows] == [777001]
+
+
+@pytest.mark.asyncio
+async def test_ice_interest_anonymous_tap_is_recorded_but_not_identified(app_use_test_db, db_session) -> None:
+    cid = await _insert_city(db_session, name=f"IceWantAnon-{uuid.uuid4().hex[:6]}")
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/public/ice/interest", json={"city_id": cid})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["identified"] is False
+    n = (
+        await db_session.execute(
+            text("SELECT COUNT(*) FROM ice_city_interest WHERE city_id = :cid AND telegram_id IS NULL"),
+            {"cid": cid},
+        )
+    ).scalar_one()
+    assert int(n) == 1
+
+
+@pytest.mark.asyncio
 async def test_ice_cities_hide_bare_trainer_arenas_but_keep_imported_places(app_use_test_db, db_session) -> None:
     trainer_city = await _insert_city(db_session, name=f"IceTrainerBare-{uuid.uuid4().hex[:6]}")
     imported_city = await _insert_city(db_session, name=f"IceImportedBare-{uuid.uuid4().hex[:6]}")

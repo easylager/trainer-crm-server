@@ -6,23 +6,23 @@
   <title>Записи</title>
   <!-- TASK-306: вкладка «Записи» на языке хаба. Свои шрифты, без Google. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611048" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611048" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611049" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611049" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202611048"></script>
-  <script src="mini-app-phone-field.js?v=202611048"></script>
-  <link rel="stylesheet" href="theme.css?v=202611048" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611048" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202611048" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611048" />
-  <script src="mini-app-telegram-chrome.js?v=202611048"></script>
-  <script src="client-profile-switcher.js?v=202611048"></script>
-  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202611048" />
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611048" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611048" />
-  <script src="mini-app-empty-state.js?v=202611048"></script>
-  <script src="mini-app-more-icons.js?v=202611048"></script>
-  <script src="mini-app-client-shell.js?v=202611048"></script>
+  <script src="client-mini-app-theme.js?v=202611049"></script>
+  <script src="mini-app-phone-field.js?v=202611049"></script>
+  <link rel="stylesheet" href="theme.css?v=202611049" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611049" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202611049" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611049" />
+  <script src="mini-app-telegram-chrome.js?v=202611049"></script>
+  <script src="client-profile-switcher.js?v=202611049"></script>
+  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202611049" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611049" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611049" />
+  <script src="mini-app-empty-state.js?v=202611049"></script>
+  <script src="mini-app-more-icons.js?v=202611049"></script>
+  <script src="mini-app-client-shell.js?v=202611049"></script>
   <script>
     (function () {
       try {
@@ -415,10 +415,16 @@
               }
             }
             if (!r.ok) {
-              var detail =
-                data && data.detail
-                  ? String(data.detail)
-                  : 'Не удалось выполнить действие (код ' + r.status + ').';
+              /* detail бывает строкой, списком ошибок валидации или объектом: String() давал «[object Object]». */
+              var detail = 'Не удалось выполнить действие (код ' + r.status + ').';
+              var rawDetail = data && data.detail;
+              if (typeof rawDetail === 'string' && rawDetail.trim()) {
+                detail = rawDetail.trim();
+              } else if (Array.isArray(rawDetail) && rawDetail[0] && typeof rawDetail[0].msg === 'string') {
+                detail = rawDetail[0].msg;
+              } else if (rawDetail && typeof rawDetail === 'object' && typeof rawDetail.message === 'string') {
+                detail = rawDetail.message;
+              }
               var err = new Error(detail);
               err.status = r.status;
               throw err;
@@ -1213,12 +1219,8 @@
                 err && err.message
                   ? err.message
                   : 'Не удалось отменить запись. Попробуйте ещё раз.';
+              /* Одно сообщение, а не тост и алерт друг за другом. */
               showAppToast(msg, true);
-              if (tg && tg.showAlert) {
-                tg.showAlert(msg);
-              } else {
-                alert(msg);
-              }
             });
           });
       };
@@ -1276,7 +1278,7 @@
       loadBookings();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202611048"></script>
+  <script src="mini-app-client-home.js?v=202611049"></script>
   <script>
     /* TASK-303: серия недель — тихой строкой над записями, тап ведёт в «Вашу активность». */
     (function () {
@@ -1308,6 +1310,6 @@
         .catch(function () { /* без серии — просто без строки */ });
     })();
   </script>
-  <script src="/static/webapp/ga-touch.js?v=202611048"></script>
+  <script src="/static/webapp/ga-touch.js?v=202611049"></script>
 </body>
 </html>

@@ -162,7 +162,9 @@ async function bootArenaCard(fetchImpl) {
     sessionStorage: { getItem: () => null, setItem() {} },
     localStorage: { getItem: () => null, setItem() {} },
     addEventListener() {},
-    setTimeout: (fn) => {
+    setTimeout: (fn, ms) => {
+      /* Таймаут запроса (секунды) не гоним; короткие отложенные кадры — сразу. */
+      if (ms != null && ms >= 5000) return 0;
       fn();
       return 0;
     },

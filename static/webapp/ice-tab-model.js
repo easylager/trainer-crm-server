@@ -1383,8 +1383,10 @@
 
   function whenBootFromSearch(search) {
     var day = dayFromSearch(search);
+    var today = minskDateIso(new Date());
+    /* Прошедший день в ссылке — не выбор: сервер покажет сегодня, а чип остался бы со старой датой. */
+    if (day && day < today) day = null;
     if (day) {
-      var today = minskDateIso(new Date());
       if (day === addDaysIso(today, 1)) return { when: 'tomorrow', whenDay: '' };
       return { when: 'day', whenDay: day };
     }
@@ -1419,7 +1421,7 @@
     return whenBootFromSearch(search);
   }
 
-  function normalizeSavedWhen(saved) {
+  function normalizeSavedWhen(saved, todayIso) {
     if (!saved || typeof saved !== 'object') return null;
     var when = String(saved.when || '').trim().toLowerCase();
     var whenDay = String(saved.whenDay || '').trim();
@@ -1427,6 +1429,8 @@
     if (when === 'auto') return { when: 'any', whenDay: '' };
     if (when === 'day') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(whenDay)) return null;
+      /* «Ср 28.10» из прошлой недели: сервер ведёт на сегодня, а чип держит мёртвую дату. */
+      if (whenDay < (todayIso || minskDateIso(new Date()))) return null;
       return { when: 'day', whenDay: whenDay };
     }
     if (WHEN_KEYS.indexOf(when) >= 0) return { when: when, whenDay: '' };

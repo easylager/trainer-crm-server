@@ -378,12 +378,30 @@
     var sig = String(state.when || 'any') + '|' + String(state.whenDay || '');
     if (sig === lastServerWhenSig || sig === readServerSynced('when')) return;
     lastServerWhenSig = sig;
-    writeServerSynced('when', sig);
     global.fetch('/api/webapp/client/session/catalog-filters', {
       method: 'PATCH',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
       body: JSON.stringify({ ice_when: state.when || 'any', ice_when_day: state.whenDay || '' }),
-    }).catch(function () {});
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('catalog-filters ' + r.status);
+        /* «Записано» помечаем только по ответу сервера: без сети фильтр остаётся несохранённым. */
+        writeServerSynced('when', sig);
+      })
+      .catch(function () {
+        if (lastServerWhenSig === sig) lastServerWhenSig = '';
+        whenSyncPending = true;
+      });
+  }
+
+  /* Сеть вернулась — досылаем фильтр «когда», который не дошёл. */
+  var whenSyncPending = false;
+  if (typeof global.addEventListener === 'function') {
+    global.addEventListener('online', function () {
+      if (!whenSyncPending) return;
+      whenSyncPending = false;
+      persistIceWhenServer();
+    });
   }
 
   function applyIceWhenFromClientSession(session) {
@@ -2113,8 +2131,25 @@
     if (btn && host && btn.parentNode !== host.parentNode) host.parentNode.insertBefore(btn, host.nextSibling);
   }
 
+  var iceInterestBusy = false;
+
+  /* «Записали» — только после настоящего 2xx. Сбой сервера не должен выглядеть как успех:
+     человек решит, что его уведомят, а записи нет. */
+  function iceInterestFailed() {
+    renderEmpty(
+      listEl(),
+      {
+        title: 'Не получилось записать',
+        body: 'Не дошло до сервера. Нажмите ещё раз — запись не потеряется.',
+        action: { label: 'Повторить', kind: 'ice-interest' },
+      },
+      'retry'
+    );
+  }
+
   function recordIceInterest() {
-    if (!state.cityId) return;
+    if (!state.cityId || iceInterestBusy) return;
+    iceInterestBusy = true;
     fetch(M.buildIceInterestUrl(), {
       method: 'POST',
       cache: 'no-store',
@@ -2126,20 +2161,29 @@
       }),
     })
       .then(function (r) {
-        return r.ok ? r.json() : null;
+        if (!r.ok) throw new Error('ice-interest ' + r.status);
+        return r.json();
       })
-      .then(function () {
+      .then(function (data) {
+        iceInterestBusy = false;
+        /* identified=false: открыли не из мини-приложения — сообщить будет некому, обещать не надо. */
+        var known = !data || data.identified !== false;
         renderEmpty(
           listEl(),
           {
             title: 'Записали',
-            body: 'Когда появится расписание в этом городе — вы уже в списке желающих.',
+            body: known
+              ? 'Когда появится расписание в этом городе — вы уже в списке желающих.'
+              : 'Интерес к этому городу учли. Чтобы мы сообщили, когда появится расписание, откройте приложение в Telegram.',
             action: { label: 'Показать тренеров', kind: 'intent:coach' },
           },
           'ice'
         );
       })
-      .catch(function () {});
+      .catch(function () {
+        iceInterestBusy = false;
+        iceInterestFailed();
+      });
   }
 
   /**
@@ -2639,7 +2683,10 @@
     );
     return fetchJson(url)
       .then(function (data) {
-        if (!shopScope || !data || !data.next_cursor) return data;
+        /* fetchJson отдаёт null на не-2xx. Это сбой, а не «пустая лента»: иначе город
+           выглядит без катков, а сброс «Зимой» ниже срабатывает на ошибке сервера. */
+        if (!data) throw new Error('list-failed');
+        if (!shopScope || !data.next_cursor) return data;
         return fetchRestPages(query, data, gen);
       })
       .then(function (data) {
@@ -2688,6 +2735,7 @@
     });
     return fetchJson(url)
       .then(function (data) {
+        if (!data) throw new Error('list-failed');
         if (!isCurrentFetch(gen, 'coach')) return;
         state.loading = false;
         applyTrainerPayload(data);
@@ -3383,7 +3431,9 @@
     })
       .then(function (data) {
         if (gen !== searchGen) return;
-        var grouped = M.groupSearchResults(data || { groups: [] });
+        /* null — не-2xx от fetchJson. Это сбой поиска, а не «ничего не найдено». */
+        if (!data) throw new Error('search-failed');
+        var grouped = M.groupSearchResults(data);
         var box = $('iceSearchResults');
         if (!box) return;
         if (searchSec) searchSec.hidden = false;
@@ -3460,6 +3510,9 @@
   }
 
   function catalogTodayIso() {
+    /* Каталог живёт по Минску, а не по часовому поясу телефона: восточнее Минска вечером
+       «сегодня» на телефоне уже завтра, и расписание теряло сегодняшние сеансы. */
+    if (global.MinskTime) return global.MinskTime.dateIso(new Date());
     var ACM = global.ArenaCardModel;
     if (ACM && typeof ACM.ymd === 'function') return ACM.ymd(new Date());
     var d = new Date();
@@ -3467,6 +3520,7 @@
   }
 
   function catalogAddDaysIso(iso, n) {
+    if (global.MinskTime) return global.MinskTime.addDaysIso(iso, n);
     var ACM = global.ArenaCardModel;
     if (ACM && typeof ACM.parseLocalDate === 'function' && typeof ACM.ymd === 'function') {
       var d = ACM.parseLocalDate(iso);
