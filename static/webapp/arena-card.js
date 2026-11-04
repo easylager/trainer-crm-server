@@ -2446,6 +2446,12 @@
     } catch (e2) { /* quota */ }
   }
 
+  function notifyOutsideTelegram(text) {
+    try {
+      global.alert(text);
+    } catch (e) { /* noop */ }
+  }
+
   function submitModal(ev) {
     ev.preventDefault();
     var modal = document.getElementById('arenaModal');
@@ -2483,14 +2489,17 @@
 
     function done(ok, detail) {
       if (submitBtn) submitBtn.disabled = false;
-      closeModal();
-      if (tg && tg.showAlert) {
-        tg.showAlert(
-          ok
-            ? 'Спасибо, передали администратору.'
-            : detail || 'Не удалось отправить. Попробуйте позже или напишите в поддержку из бота.'
-        );
+      var text = ok
+        ? 'Спасибо, передали администратору.'
+        : detail || 'Не удалось отправить. Попробуйте позже или напишите в поддержку из бота.';
+      /* Вне Telegram showAlert нет: молча закрытое окно выглядело как «отправлено». */
+      if (!ok && !(tg && tg.showAlert)) {
+        notifyOutsideTelegram(text);
+        return;
       }
+      closeModal();
+      if (tg && tg.showAlert) tg.showAlert(text);
+      else notifyOutsideTelegram(text);
     }
 
     if (!cred) {

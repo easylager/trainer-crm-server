@@ -378,12 +378,30 @@
     var sig = String(state.when || 'any') + '|' + String(state.whenDay || '');
     if (sig === lastServerWhenSig || sig === readServerSynced('when')) return;
     lastServerWhenSig = sig;
-    writeServerSynced('when', sig);
     global.fetch('/api/webapp/client/session/catalog-filters', {
       method: 'PATCH',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
       body: JSON.stringify({ ice_when: state.when || 'any', ice_when_day: state.whenDay || '' }),
-    }).catch(function () {});
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('catalog-filters ' + r.status);
+        /* «Записано» помечаем только по ответу сервера: без сети фильтр остаётся несохранённым. */
+        writeServerSynced('when', sig);
+      })
+      .catch(function () {
+        if (lastServerWhenSig === sig) lastServerWhenSig = '';
+        whenSyncPending = true;
+      });
+  }
+
+  /* Сеть вернулась — досылаем фильтр «когда», который не дошёл. */
+  var whenSyncPending = false;
+  if (typeof global.addEventListener === 'function') {
+    global.addEventListener('online', function () {
+      if (!whenSyncPending) return;
+      whenSyncPending = false;
+      persistIceWhenServer();
+    });
   }
 
   function applyIceWhenFromClientSession(session) {
@@ -3492,6 +3510,9 @@
   }
 
   function catalogTodayIso() {
+    /* Каталог живёт по Минску, а не по часовому поясу телефона: восточнее Минска вечером
+       «сегодня» на телефоне уже завтра, и расписание теряло сегодняшние сеансы. */
+    if (global.MinskTime) return global.MinskTime.dateIso(new Date());
     var ACM = global.ArenaCardModel;
     if (ACM && typeof ACM.ymd === 'function') return ACM.ymd(new Date());
     var d = new Date();
@@ -3499,6 +3520,7 @@
   }
 
   function catalogAddDaysIso(iso, n) {
+    if (global.MinskTime) return global.MinskTime.addDaysIso(iso, n);
     var ACM = global.ArenaCardModel;
     if (ACM && typeof ACM.parseLocalDate === 'function' && typeof ACM.ymd === 'function') {
       var d = ACM.parseLocalDate(iso);
