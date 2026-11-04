@@ -3413,7 +3413,9 @@
     })
       .then(function (data) {
         if (gen !== searchGen) return;
-        var grouped = M.groupSearchResults(data || { groups: [] });
+        /* null — не-2xx от fetchJson. Это сбой поиска, а не «ничего не найдено». */
+        if (!data) throw new Error('search-failed');
+        var grouped = M.groupSearchResults(data);
         var box = $('iceSearchResults');
         if (!box) return;
         if (searchSec) searchSec.hidden = false;

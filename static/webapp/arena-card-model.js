@@ -1081,7 +1081,9 @@
     var rec = {
       at: nowMs,
       card: patch.card || prev.card || null,
-      sessions: patch.sessions || prev.sessions || null,
+      // 'sessions' передан явно (даже null) — это итог загрузки: сбой стирает старое расписание,
+      // иначе оно остаётся в кэше со свежим `at` и следующий вход рисует его как свежее.
+      sessions: Object.prototype.hasOwnProperty.call(patch, 'sessions') ? patch.sessions || null : prev.sessions || null,
     };
     if (!rec.card) return false;
     map[key] = rec;

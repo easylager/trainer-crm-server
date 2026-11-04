@@ -281,6 +281,9 @@
     }
   }
 
+  /* Двойной тап по 🔔: пока запрос и окно разрешения идут, второй тап ничего не делает. */
+  var watchBusy = {};
+
   function subscribeIceWatch(kind) {
     var id = initData();
     if (!id || !state.card) {
@@ -289,13 +292,17 @@
       return;
     }
     kind = kind || 'sessions';
+    if (watchBusy[kind]) return;
+    watchBusy[kind] = true;
     // Отказ и «спросить нечем» объясняет сам ensureWriteAccess (алерт или попап с кнопкой в бота).
     ensureWriteAccess(function (granted) {
       if (granted) postIceWatch(kind, id);
+      else watchBusy[kind] = false;
     });
   }
 
   function postIceWatch(kind, id) {
+    var release = function () { watchBusy[kind] = false; };
     fetch('/api/webapp/client/ice-watches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
@@ -309,6 +316,7 @@
     })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (body) {
+        release();
         var wasWaitBlock = kind === 'sessions' && !hasAnySessions();
         state.iceWatchKinds = state.iceWatchKinds || {};
         state.iceWatchIds = state.iceWatchIds || {};
@@ -324,6 +332,7 @@
         }
       })
       .catch(function (status) {
+        release();
         var tg = global.Telegram && global.Telegram.WebApp;
         if (!tg || !tg.showAlert) return;
         if (status === 409) tg.showAlert('Напоминания пока приходят только в\u00a0Telegram.');
@@ -335,6 +344,8 @@
     var id = initData();
     if (!id || !state.card) return;
     kind = kind || 'sessions';
+    if (watchBusy[kind]) return;
+    watchBusy[kind] = true;
     var wid = state.iceWatchIds && state.iceWatchIds[kind];
     function doDelete(watchId) {
       fetch('/api/webapp/client/ice-watches/' + encodeURIComponent(String(watchId)), {
@@ -343,6 +354,7 @@
       })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
         .then(function () {
+          watchBusy[kind] = false;
           if (state.iceWatchKinds) delete state.iceWatchKinds[kind];
           if (state.iceWatchIds) delete state.iceWatchIds[kind];
           paint();
@@ -350,6 +362,7 @@
           if (tg && tg.showAlert) tg.showAlert('Напоминание отключено.');
         })
         .catch(function () {
+          watchBusy[kind] = false;
           var tg = global.Telegram && global.Telegram.WebApp;
           if (tg && tg.showAlert) tg.showAlert('Не удалось отключить напоминание.');
         });
@@ -362,6 +375,7 @@
       var retry = state.iceWatchIds && state.iceWatchIds[kind];
       if (retry) doDelete(retry);
       else {
+        watchBusy[kind] = false;
         var tg = global.Telegram && global.Telegram.WebApp;
         if (tg && tg.showAlert) tg.showAlert('Подписка уже отключена.');
         paint();
@@ -2653,6 +2667,11 @@
       reloadSessions();
       return;
     }
+    if (action === 'retry-load') {
+      if (root) root.innerHTML = '<div class="arena-state">Загружаем…</div>';
+      load();
+      return;
+    }
     if (action === 'ice-watch') {
       toggleIceWatch(t.getAttribute('data-watch-kind') || 'sessions');
       return;
@@ -2711,6 +2730,8 @@
         paint();
       })
       .catch(function () {
+        // Старое расписание после сбоя не оставляем в памяти: его не от чего считать свежим.
+        state.sessions = null;
         state.sessionsError = true;
         paint();
       });
@@ -2733,17 +2754,35 @@
       });
   }
 
+  /* На слабой сети запрос без срока оставлял скелет навсегда. */
+  var FETCH_TIMEOUT_MS = 15000;
+
   function fetchJson(url) {
-    return fetch(url, { cache: 'no-store' }).then(function (r) {
-      if (r.status === 404) return null;
-      if (!r.ok) throw new Error('http ' + r.status);
-      return r.json();
+    var ctrl = typeof global.AbortController === 'function' ? new global.AbortController() : null;
+    return new Promise(function (resolve, reject) {
+      var timer = global.setTimeout(function () {
+        if (ctrl) ctrl.abort();
+        reject(new Error('fetch-timeout'));
+      }, FETCH_TIMEOUT_MS);
+      fetch(url, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+        .then(function (r) {
+          if (r.status === 404) return null;
+          if (!r.ok) throw new Error('http ' + r.status);
+          return r.json();
+        })
+        .then(
+          function (data) { global.clearTimeout(timer); resolve(data); },
+          function (err) { global.clearTimeout(timer); reject(err); }
+        );
     });
   }
 
-  function showError(text) {
+  function showError(text, retry) {
     if (!root) return;
-    root.innerHTML = '<div class="arena-state">' + esc(text) + '</div>';
+    root.innerHTML =
+      '<div class="arena-state">' + esc(text) +
+      (retry ? '<br><button type="button" class="arena-btn" data-action="retry-load">Повторить</button>' : '') +
+      '</div>';
     state.card = null;
   }
 
@@ -2799,7 +2838,8 @@
           var fresh = JSON.stringify([card, sess.ok ? sess.data : warm && warm.sessions]);
           var firstPaint = !state.card;
           state.card = card;
-          if (sess.ok) state.sessions = sess.data;
+          // Сбой сети: расписание из тёплого кэша не показываем как свежее — только «Повторить».
+          state.sessions = sess.ok ? sess.data : null;
           state.sessionsError = !sess.ok;
           if (!state.trainers) state.trainers = { items: [], groups: [] };
           M.writeArenaWarm(global.sessionStorage, state.ref, { card: card, sessions: sess.ok ? sess.data : null }, Date.now());
@@ -2825,7 +2865,7 @@
       })
       .catch(function () {
         if (state.card) return;
-        showError('Не удалось загрузить карточку. Попробуйте ещё раз.');
+        showError('Не удалось загрузить карточку.', true);
       });
   }
 
