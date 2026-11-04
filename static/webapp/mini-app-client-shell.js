@@ -218,7 +218,7 @@
     tabs.forEach(function (tab) {
       var btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'client-tab-bar__btn';
+      btn.className = 'client-tab-bar__btn ga-press';
       btn.setAttribute('role', 'tab');
       btn.dataset.tabId = tab.id;
       btn.innerHTML =
@@ -255,6 +255,7 @@
             syncTabBarActive();
             return;
           }
+          scrollPageTop();
           syncTabBarActive();
           return;
         }
@@ -449,6 +450,19 @@
   }
 
   /** Повторный тап «Поиск» на ice.html — выход с карты в список (см. IceCatalog.onTabRetap). */
+  /* Повторный тап по текущей вкладке — плавно наверх, как в нативных приложениях. */
+  function scrollPageTop() {
+    var y = global.scrollY || global.pageYOffset || 0;
+    if (y <= 0 || typeof global.scrollTo !== 'function') return;
+    var reduce = false;
+    try { reduce = global.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* */ }
+    try {
+      global.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    } catch (e) {
+      global.scrollTo(0, 0);
+    }
+  }
+
   function handleCatalogTabRetap() {
     try {
       if (global.IceCatalog && typeof global.IceCatalog.onTabRetap === 'function') {

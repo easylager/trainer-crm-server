@@ -1562,6 +1562,25 @@ def _client_slots_filter_empty_extras(
     }
 
 
+def _client_slots_arena_counts(rows: list[dict]) -> dict[str, int]:
+    """Сколько слотов на каждой арене — по полному списку, до фильтра арен.
+
+    Карточка тренера по этим числам помечает арены со слотами; отдельного запроса на
+    каждую арену нет, а выбранный фильтр цифры не меняет. Онлайн-слоты без арены не считаем.
+    """
+    counts: dict[str, int] = {}
+    for row in rows:
+        aid = row.get("arena_id")
+        if aid is None:
+            continue
+        try:
+            key = str(int(aid))
+        except (TypeError, ValueError):
+            continue
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _filter_client_slots_payload_by_arenas(rows: list[dict], arena_ids: frozenset[int] | None) -> list[dict]:
     """Post-filter serialized slot rows without burning a cache entry per arena combination."""
     if not arena_ids:
@@ -1743,6 +1762,7 @@ async def get_client_slots(
             "trainer_name": trainer_name_val,
             "slots": annotated,
             "online_booking_available": True,
+            "arena_slot_counts": _client_slots_arena_counts(cached_slots),
             **extras,
         }
 
@@ -1833,6 +1853,7 @@ async def get_client_slots(
         "trainer_name": trainer_name_val,
         "slots": annotated,
         "online_booking_available": True,
+        "arena_slot_counts": _client_slots_arena_counts(serialized_full),
         **extras,
     }
 
@@ -9280,6 +9301,11 @@ async def get_trainer_onboarding_quick_setup(
             WHERE a.is_active = true
               -- Магазин и школа — не место работы тренера (TASK-146, PDEC-028).
               AND a.venue_type = ANY(:trainer_venue_types)
+              -- Зимние катки и коробки тренеру пока не предлагаются, кроме уже привязанных.
+              AND (
+                a.venue_type <> 'outdoor'
+                OR a.id IN (SELECT ta.arena_id FROM trainer_arenas ta WHERE ta.trainer_id = :tid)
+              )
             ORDER BY c.sort_order, c.name, a.sort_order, a.name
             """
         ),

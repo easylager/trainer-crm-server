@@ -690,6 +690,48 @@
       background: color-mix(in srgb, var(--tg-theme-button-color) 16%, var(--tg-theme-secondary-bg-color));
       color: var(--tg-theme-button-color);
     }
+    .trainer-detail-arena-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 44px;
+    }
+    .trainer-detail-arena-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+      background: var(--tg-theme-button-color);
+    }
+    .trainer-detail-arena-count {
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
+      line-height: 1.4;
+      padding: 1px 7px;
+      border-radius: 999px;
+      color: var(--tg-theme-button-color);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, transparent);
+    }
+    .trainer-detail-arena-chip--none {
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-detail-arena-legend {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 12px;
+      font-size: var(--app-text-caption);
+      color: var(--tg-theme-hint-color);
+    }
+    a.trainer-detail-arena-link {
+      display: inline-block;
+      margin-top: 12px;
+      font-size: var(--app-text-caption);
+      font-weight: var(--app-weight-semibold);
+      color: var(--tg-theme-button-color);
+      text-decoration: none;
+    }
     /* Callout: описание только когда клиент зашёл с выбранной в каталоге услугой (см. renderTrainerDetail). */
     .trainer-detail-service-callout {
       margin: 0 0 18px 0;

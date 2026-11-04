@@ -369,7 +369,10 @@ async def get_trainer_profile_arenas_for_webapp(
         raise HTTPException(status_code=404, detail="Trainer not found")
     # Picker may show arenas for a city selected in the form before Save (draft city).
     # Authenticated trainer is allowed to browse any city they can pick in the dropdown.
-    items = await list_arenas(session, city_id, include_unconfirmed=True)
+    # Зимние катки и коробки тренеру пока не предлагаются (кроме уже привязанных).
+    items = await list_arenas(
+        session, city_id, include_unconfirmed=True, hide_outdoor_for_trainer_id=trainer_id
+    )
     # Same thumb enrichment as onboarding quick-setup — mini photos in the venue combobox.
     from src.application.arena_media import attach_arena_media_payloads, public_arena_thumb_url
 

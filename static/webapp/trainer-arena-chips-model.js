@@ -103,6 +103,94 @@
     return html;
   }
 
+  /**
+   * «Показать слоты» на карточке тренера: арены со слотами (с числом) идут первыми,
+   * без слотов — приглушены в конце. ``counts`` — ``arena_slot_counts`` из /client/slots
+   * (ключи — строки id); нет ответа — меток нет, порядок прежний.
+   */
+  function buildArenaSlotFilter(trainer, counts, selectedIds) {
+    trainer = trainer || {};
+    var ids = trainer.arena_ids || [];
+    var names = trainer.arena_names || [];
+    var slugs = trainer.arena_slugs || [];
+    var known = counts && typeof counts === 'object';
+    var selected = (selectedIds || []).map(Number);
+    var items = [];
+    var total = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var id = Number(ids[i]);
+      if (isNaN(id)) continue;
+      var n = known ? Number(counts[String(id)] || 0) : null;
+      if (known) total += n;
+      items.push({
+        id: id,
+        name: String(names[i] || '').trim() || 'Площадка ' + id,
+        href: arenaHref(id, slugs[i] ? String(slugs[i]).trim() : null),
+        count: n,
+        hasSlots: known ? n > 0 : null,
+        selected: selected.indexOf(id) >= 0,
+        order: i,
+      });
+    }
+    if (known) {
+      items.sort(function (a, b) {
+        if (a.hasSlots !== b.hasSlots) return a.hasSlots ? -1 : 1;
+        if (a.hasSlots && a.count !== b.count) return b.count - a.count;
+        return a.order - b.order;
+      });
+    }
+    var picked = items.filter(function (it) { return it.selected; });
+    return {
+      allActive: selected.length === 0,
+      marked: !!known,
+      total: known ? total : null,
+      items: items,
+      selectedArena: picked.length === 1 ? picked[0] : null,
+    };
+  }
+
+  function renderArenaSlotFilterHtml(view) {
+    if (!view || !(view.items || []).length) return '';
+    var base = 'trainer-detail-arena-chip';
+    var html = '<div class="trainer-detail-arena-filter">';
+    html += '<div class="trainer-detail-arena-filter-title">Показать слоты</div>';
+    html += '<div class="trainer-detail-arena-filter-chips" role="group" aria-label="Площадки">';
+    html +=
+      '<button type="button" class="' + base + (view.allActive ? ' ' + base + '--active' : '') +
+      (view.marked && view.total > 0 ? ' ' + base + '--has' : '') +
+      '" data-catalog-arena-filter="all">' +
+      (view.marked && view.total > 0 ? '<span class="trainer-detail-arena-dot" aria-hidden="true"></span>' : '') +
+      '<span>Все площадки</span>' +
+      (view.marked ? '<span class="trainer-detail-arena-count">' + view.total + '</span>' : '') +
+      '</button>';
+    for (var i = 0; i < view.items.length; i++) {
+      var it = view.items[i];
+      var cls = base;
+      if (it.selected) cls += ' ' + base + '--active';
+      if (it.hasSlots === true) cls += ' ' + base + '--has';
+      if (it.hasSlots === false) cls += ' ' + base + '--none';
+      html +=
+        '<button type="button" class="' + cls + '" data-catalog-arena-filter="' + it.id + '">' +
+        (it.hasSlots === true ? '<span class="trainer-detail-arena-dot" aria-hidden="true"></span>' : '') +
+        '<span>' + escapeHtml(it.name) + '</span>' +
+        (it.hasSlots === true ? '<span class="trainer-detail-arena-count">' + it.count + '</span>' : '') +
+        '</button>';
+    }
+    html += '</div>';
+    if (view.marked) {
+      html +=
+        '<div class="trainer-detail-arena-legend"><span class="trainer-detail-arena-dot" aria-hidden="true"></span>' +
+        'есть слоты · число — сколько их впереди</div>';
+    }
+    if (view.selectedArena && view.selectedArena.href) {
+      html +=
+        '<a class="trainer-detail-arena-link" href="' + escapeHtml(view.selectedArena.href) + '">Страница арены ' +
+        escapeHtml(view.selectedArena.name) + ' ›</a>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function formatSlotPlaceCaption(slot) {
     if (!slot) return '';
     return String(slot.arena_name || '').trim();
@@ -113,6 +201,8 @@
     OVERFLOW_FROM: OVERFLOW_FROM,
     buildTrainerArenaChips: buildTrainerArenaChips,
     renderTrainerArenaChipsHtml: renderTrainerArenaChipsHtml,
+    buildArenaSlotFilter: buildArenaSlotFilter,
+    renderArenaSlotFilterHtml: renderArenaSlotFilterHtml,
     formatSlotPlaceCaption: formatSlotPlaceCaption,
     arenaHref: arenaHref,
   };

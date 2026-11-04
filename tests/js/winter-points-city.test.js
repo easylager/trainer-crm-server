@@ -89,7 +89,10 @@ describe('IceWinter: смена города', () => {
     assert.ok(html.indexOf('data-w-view="list"') < html.indexOf('w-list'));
     assert.ok(html.indexOf('w-bell') > -1 && html.indexOf('w-bell') < html.indexOf('w-list'), 'ждём заливку — подписка первой');
     hostEl()._click({ target: { closest: (sel) => (sel === '[data-w-view]' ? { getAttribute: () => 'map' } : null) } });
-    assert.deepEqual(seen, ['map']);
+    assert.deepEqual(seen, ['map', 'map'], 'зимой сразу карта (один раз за вход), потом — по сегменту');
+    global.IceWinter.sync({ ...ctx(8), setView: (v) => seen.push(v) });
+    await tick(); await tick();
+    assert.equal(seen.length, 2, 'повторно на карту не переключаем');
   });
 
   it('залитые — карточками, подписка сразу после них, «Ждём заливку» — строками ниже', async () => {

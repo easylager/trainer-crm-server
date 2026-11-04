@@ -136,3 +136,10 @@ def test_rink_data_migration_passes_admin_validation() -> None:
     orsha = visit_view({"visit_info": module.VISIT[31]})
     assert orsha["services"]["rows"][0]["kind"] == "aid"
     assert [m["note"] for m in orsha["more"]] == ["от 24 BYN за 4 катания"]
+
+
+def test_seats_total_is_kept_and_validated() -> None:
+    assert normalize_visit_info({"seats_total": 110}) == {"seats_total": 110}
+    assert normalize_visit_info({"seats_total": ""}) == {}
+    with pytest.raises(VisitInfoError):
+        normalize_visit_info({"seats_total": 0})

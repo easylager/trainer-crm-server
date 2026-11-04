@@ -121,7 +121,12 @@ class CatalogRepository:
         ]
 
     async def list_arenas(
-        self, city_id: int, *, service_id: int | None = None, include_unconfirmed: bool = False
+        self,
+        city_id: int,
+        *,
+        service_id: int | None = None,
+        include_unconfirmed: bool = False,
+        hide_outdoor_for_trainer_id: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         Active arenas in a city with address and coords for map link.
@@ -141,6 +146,9 @@ class CatalogRepository:
         Shops and schools (``venue_type`` outside ``TRAINER_VENUE_TYPE_KEYS``, TASK-146,
         PDEC-028) are never listed: this is the list of places where trainers work, and
         every caller uses it that way.
+        ``hide_outdoor_for_trainer_id``: picker of a trainer's workplace — зимние катки и коробки
+        (``venue_type='outdoor'``) не предлагаются, кроме уже привязанных к этому тренеру
+        (иначе сохранение формы молча сняло бы привязку). Публичный каталог не передаёт.
         Missing profile is treated as published so legacy rows stay listed. ``district``
         may be NULL — the row is still returned.
         """
@@ -149,6 +157,12 @@ class CatalogRepository:
             ""
             if include_unconfirmed
             else "AND (p.status IS NULL OR p.status = 'published')"
+        )
+        outdoor_filter = (
+            "AND (a.venue_type <> 'outdoor' OR a.id IN "
+            "(SELECT ta.arena_id FROM trainer_arenas ta WHERE ta.trainer_id = :hide_outdoor_tid))"
+            if hide_outdoor_for_trainer_id is not None
+            else ""
         )
         if service_id is None:
             r = await self._session.execute(
@@ -159,11 +173,15 @@ class CatalogRepository:
                     FROM arenas a
                     LEFT JOIN arena_profiles p ON p.arena_id = a.id
                     WHERE a.city_id = :cid AND a.is_active {confirmed_filter} {published_filter}
-                      AND a.venue_type = ANY(:trainer_venue_types)
+                      AND a.venue_type = ANY(:trainer_venue_types) {outdoor_filter}
                     ORDER BY a.sort_order, a.id
                     """
                 ),
-                {"cid": city_id, "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS)},
+                {
+                    "cid": city_id,
+                    "trainer_venue_types": list(TRAINER_VENUE_TYPE_KEYS),
+                    "hide_outdoor_tid": hide_outdoor_for_trainer_id,
+                },
             )
             return [
                 {

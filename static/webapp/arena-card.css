@@ -574,6 +574,7 @@ a.arena-row {
 }
 
 .arena-modal__close {
+  position: relative;
   flex-shrink: 0;
   border: 0;
   background: var(--app-chip-bg);
@@ -1220,6 +1221,12 @@ button.arena-info__tel--copy {
 .av-fact__badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: var(--app-radius-pill); background: var(--g-accent-wash); color: var(--g-accent-ink); font-size: var(--app-text-caption); font-weight: var(--app-weight-bold); }
 .av-facts-more > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border-radius: var(--app-radius-pill); border: 1px solid var(--g-line-strong); font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); color: var(--g-ink); }
 .av-facts-more > summary::-webkit-details-marker { display: none; }
+/* Зоны пальца 44px+ при прежнем виде: крестик 32, «Ещё» 36, кнопки на фото 36. */
+.arena-modal__close::after { content: ""; position: absolute; inset: -6px; }
+.av-facts-more > summary { position: relative; }
+.av-facts-more > summary::after { content: ""; position: absolute; inset: -4px 0; }
+.ga-onphoto { position: relative; }
+.ga-onphoto::after { content: ""; position: absolute; inset: -4px; }
 .av-facts-more[open] > summary { display: none; }
 
 .av-aside { font-size: var(--app-text-caption); font-weight: var(--app-weight-semibold); color: var(--g-muted); }
@@ -1321,3 +1328,52 @@ button.arena-info__tel--copy {
 .linkish:active {
   opacity: .6;
 }
+
+/* Вкладки блока «На льду»: массовое / семейное / фигурное / ОХМ — как сегмент на сайте.
+   Панели в разметке, неактивные скрыты; свои заголовки панелей не повторяют вкладку. */
+.arena-icetabs {
+  border-top: 1px solid var(--glide-line);
+}
+.arena-icetabs__head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 0;
+}
+.arena-seg {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--glide-line);
+  border-radius: var(--app-radius-pill);
+  background: var(--app-card-bg);
+}
+.arena-seg::-webkit-scrollbar { display: none; }
+.arena-seg__i {
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: transparent;
+  color: var(--glide-hint);
+  font: inherit;
+  font-size: var(--app-text-body);
+  font-weight: var(--app-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.arena-seg__i[aria-selected="true"] {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  font-weight: var(--app-weight-semibold);
+}
+.arena-icepane[hidden] { display: none; }
+.arena-icepane > .arena-sec { border-top: 0; }
+.arena-icepane .arena-sec > .arena-h,
+.arena-icepane .arena-h-row .arena-h { display: none; }
+.arena-icepane .arena-h-row { justify-content: flex-end; }
+.arena-icepane .arena-h-row:not(:has(> :not(.arena-h))) { display: none; }

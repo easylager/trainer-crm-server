@@ -276,7 +276,7 @@
         var pm = new ym.Placemark(
           [p.lat, p.lon],
           { pin: v.pin, glyph: GLYPH[v.pin] || '', hintContent: p.name },
-          { iconLayout: Layout, iconShape: { type: 'Circle', coordinates: [0, -6], radius: 22 }, hasBalloon: false }
+          { iconLayout: Layout, iconShape: { type: 'Circle', coordinates: [0, -22], radius: 24 }, hasBalloon: false }
         );
         pm.events.add('click', function () { openCard(byId[p.id] || p); });
         return pm;

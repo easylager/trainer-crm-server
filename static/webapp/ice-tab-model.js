@@ -2357,6 +2357,15 @@
     }
   }
 
+  /**
+   * Тап по категории в шторке «Что ищем». Уже выбранную категорию обычно не трогаем —
+   * но «Зимой» живёт внутри категории (season=winter, intent не меняется), и тап по
+   * текущей категории должен из зимних точек вернуть в неё: иначе выхода нет.
+   */
+  function intentPickShouldApply(alreadyPressed, season) {
+    return !alreadyPressed || season === 'winter';
+  }
+
   return {
     ICE_STATE_KEY: ICE_STATE_KEY,
     ICE_WHEN_PREF_KEY: ICE_WHEN_PREF_KEY,
@@ -2381,6 +2390,7 @@
     seasonFacetCount: seasonFacetCount,
     seasonListFooter: seasonListFooter,
     applyCatalogMode: applyCatalogMode,
+    intentPickShouldApply: intentPickShouldApply,
     catalogStateAfterCityChange: catalogStateAfterCityChange,
     catalogSearchPlaceholder: catalogSearchPlaceholder,
     SHOP_SERVICE_FILTERS: SHOP_SERVICE_FILTERS,

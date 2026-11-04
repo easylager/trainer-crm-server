@@ -268,6 +268,20 @@
   }
 
   /** Подписка «рядом» уже есть: ответ GET /api/webapp/winter/subscriptions. */
+  /** Заголовок шторки списка на карте: сколько можно кататься и сколько ждут, без прокрутки. */
+  function drawerTitle(groups, near) {
+    var n = { now: 0, wait: 0, off: 0 };
+    (groups || []).forEach(function (g) {
+      n[g.key] = g.items.length;
+    });
+    var parts = [];
+    if (n.now) parts.push(n.now + ' ' + plural(n.now, 'залит', 'залито', 'залито'));
+    if (n.wait) parts.push(n.wait + ' ' + plural(n.wait, 'ждёт', 'ждут', 'ждут') + ' заливку');
+    if (!parts.length && n.off) parts.push(n.off + ' без свежих отметок');
+    if (!parts.length) return 'По этому фильтру ничего нет';
+    return (near ? 'Рядом с вами: ' : '') + parts.join(' · ');
+  }
+
   function hasNearSub(items) {
     return (items || []).some(function (s) {
       return s && s.kind === 'near';
@@ -415,6 +429,45 @@
     yes: 'идёт хоккей',
     no: 'хоккея нет',
   };
+
+  /* Mini App, шторка точки. Пока заливку не подтвердили, оценивать качество нечего: «Залили / Ещё не залит»
+     уходят одним нажатием. У залитой точки сначала выбирают лёд, затем по желанию людей и хоккей, и отправляют. */
+  var MARK_ICE = {
+    wait: [
+      { id: 'on', label: 'Залили' },
+      { id: 'off', label: 'Ещё не залит' },
+    ],
+    now: [
+      { id: 'on', label: 'Хороший' },
+      { id: 'bad', label: 'Плохой' },
+      { id: 'off', label: 'Льда нет' },
+    ],
+  };
+
+  function markView(point, state) {
+    var flooded = !!(point && point.state === 'flooded');
+    state = state || reportInit();
+    return {
+      title: flooded ? 'Вы у катка? Какой сейчас лёд?' : 'Вы у катка? Залили лёд?',
+      hint: flooded
+        ? 'Вашу отметку сразу увидят все, кто выбирает, куда пойти.'
+        : 'Отметьте, что видите. Когда заливку подтвердят, подписчики получат сообщение.',
+      oneTap: !flooded,
+      ice: MARK_ICE[flooded ? 'now' : 'wait'].map(function (o) {
+        return { id: o.id, label: o.label, selected: state.ice === o.id };
+      }),
+      extras: flooded && state.ice ? questionsView(state, { flooded: true }).filter(function (q) {
+        return q.key !== 'ice';
+      }) : [],
+      canSend: flooded && !!state.ice,
+    };
+  }
+
+  function hasPointSub(items, id) {
+    return (items || []).some(function (s) {
+      return s && s.kind === 'point' && Number(s.arena_id) === Number(id);
+    });
+  }
 
   function reportInit() {
     return { ice: null, crowd: null, hockey: null };
@@ -648,6 +701,27 @@
     return { reset: reset };
   }
 
+  /**
+   * Верх зимней карты: шапка каталога на ней скрыта, поэтому выход — здесь.
+   * «Назад» — из «Зимой» в категорию, где человек был; переключатель разделов — тот же чип,
+   * что в шапке каталога (значок текущего раздела и шеврон), чтобы читался как навигация,
+   * а не как ещё один фильтр. Кнопки есть, только когда экран дал, что вызвать.
+   */
+  function navRowHtml(can) {
+    can = can || {};
+    var out = '';
+    if (can.exit) {
+      out += '<button type="button" class="w-navback ga-press" data-w-exit aria-label="Назад">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>';
+    }
+    if (can.categories) {
+      out += '<button type="button" class="ice-chip ice-intent-chip is-icon ga-press" data-w-cats aria-haspopup="dialog" aria-label="Что ищем">' +
+        '<svg class="ice-intent-chip__ic" viewBox="0 0 24 24" aria-hidden="true">' + (can.categoryIcon || '') + '</svg>' +
+        '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg></button>';
+    }
+    return out ? '<div class="w-navrow">' + out + '</div>' : '';
+  }
+
   return {
     NBSP: NBSP,
     plural: plural,
@@ -682,6 +756,9 @@
     listGroups: listGroups,
     bellSlot: bellSlot,
     hasNearSub: hasNearSub,
+    hasPointSub: hasPointSub,
+    drawerTitle: drawerTitle,
+    markView: markView,
     emptyFilterText: emptyFilterText,
     QUESTIONS: QUESTIONS,
     reportInit: reportInit,
@@ -696,5 +773,6 @@
     waitText: waitText,
     newIdemKey: newIdemKey,
     quickPayload: quickPayload,
+    navRowHtml: navRowHtml,
   };
 });

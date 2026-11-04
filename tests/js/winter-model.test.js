@@ -296,3 +296,62 @@ describe('группы списка и место подписки', () => {
     assert.equal(W.hasNearSub(null), false);
   });
 });
+
+it('markView: пока ждём заливку — «Залили / Ещё не залит» одним нажатием, без оценки качества', () => {
+  const v = W.markView({ state: 'waiting' });
+  assert.equal(v.oneTap, true);
+  assert.deepEqual(v.ice.map((o) => o.label), ['Залили', 'Ещё не залит']);
+  assert.equal(v.extras.length, 0);
+  assert.equal(v.canSend, false);
+});
+
+it('markView: у залитой точки людей и хоккей спрашиваем только после выбора льда', () => {
+  const before = W.markView({ state: 'flooded' });
+  assert.equal(before.oneTap, false);
+  assert.deepEqual(before.ice.map((o) => o.id), ['on', 'bad', 'off']);
+  assert.equal(before.extras.length, 0);
+  assert.equal(before.canSend, false);
+  const after = W.markView({ state: 'flooded' }, { ice: 'bad', crowd: 'many', hockey: null });
+  assert.equal(after.ice.find((o) => o.id === 'bad').selected, true);
+  assert.deepEqual(after.extras.map((q) => q.key), ['crowd', 'hockey']);
+  assert.equal(after.extras[0].opts.find((o) => o.id === 'many').selected, true);
+  assert.equal(after.canSend, true);
+});
+
+it('hasPointSub: подписка именно на эту точку', () => {
+  const items = [{ kind: 'near', radius_m: 3000 }, { kind: 'point', arena_id: 7 }];
+  assert.equal(W.hasPointSub(items, 7), true);
+  assert.equal(W.hasPointSub(items, '7'), true);
+  assert.equal(W.hasPointSub(items, 8), false);
+  assert.equal(W.hasPointSub(null, 7), false);
+});
+
+it('drawerTitle: счёт залитых и ждущих, «рядом» только с геолокацией', () => {
+  const g = (key, n) => ({ key, items: Array.from({ length: n }, (_, i) => ({ id: i })) });
+  assert.equal(W.drawerTitle([g('now', 3), g('wait', 5)], false), '3 залито · 5 ждут заливку');
+  assert.equal(W.drawerTitle([g('now', 1), g('wait', 1)], true), 'Рядом с вами: 1 залит · 1 ждёт заливку');
+  assert.equal(W.drawerTitle([g('off', 2)], false), '2 без свежих отметок');
+  assert.equal(W.drawerTitle([], false), 'По этому фильтру ничего нет');
+});
+
+describe('navRowHtml — выход с зимней карты', () => {
+  const W = require(require('node:path').resolve(__dirname, '../../static/shared/winter-model.js'));
+  const assert = require('node:assert/strict');
+  const { it } = require('node:test');
+  it('даёт «Назад» и «Что ищем», когда экран умеет и то и другое', () => {
+    const html = W.navRowHtml({ exit: true, categories: true, categoryIcon: '<path d="M1 1"/>' });
+    assert.ok(html.includes('data-w-exit'));
+    assert.ok(html.includes('data-w-cats'));
+    assert.ok(html.includes('<path d="M1 1"/>'), 'значок текущего раздела — как в шапке');
+    assert.ok(html.includes('ice-intent-chip'), 'тот же чип, что в шапке каталога');
+  });
+  it('без колбэков ряда нет вовсе', () => {
+    assert.equal(W.navRowHtml({}), '');
+    assert.equal(W.navRowHtml(), '');
+  });
+  it('только то, что экран умеет', () => {
+    const html = W.navRowHtml({ exit: true });
+    assert.ok(html.includes('data-w-exit'));
+    assert.ok(!html.includes('data-w-cats'));
+  });
+});
