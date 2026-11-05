@@ -1,0 +1,21 @@
+{
+  "arena_id": 115,
+  "source": "minskarena CMS table massovie-katania — weekend oval slots not yet in ABWS saleframe 139/55 (2026-11)",
+  "defaults": {
+    "kind": "public_skate",
+    "duration_minutes": 45,
+    "price_adult": "9.00",
+    "price_child": "6.50",
+    "price_rental": "6.50",
+    "hall": "Конькобежная дорожка"
+  },
+  "sessions": [
+    {"date": "2026-11-07", "start": "15:00"},
+    {"date": "2026-11-07", "start": "16:30"},
+    {"date": "2026-11-07", "start": "20:00"},
+    {"date": "2026-11-08", "start": "14:30"},
+    {"date": "2026-11-08", "start": "16:00"},
+    {"date": "2026-11-08", "start": "18:00"},
+    {"date": "2026-11-08", "start": "19:30"}
+  ]
+}

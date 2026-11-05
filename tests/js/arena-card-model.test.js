@@ -353,7 +353,9 @@ describe('heroView', () => {
 describe('iceRowCta', () => {
   it('без ссылки — без кнопки; ничего не обещаем «на месте»', () => {
     const { iceRowCta } = loadModel();
-    assert.deepEqual(iceRowCta({ kind: 'public_skate' }), { cta: '', ctaKind: '', href: null, bookable: false });
+    assert.deepEqual(iceRowCta({ kind: 'public_skate' }), {
+      cta: '', ctaKind: '', href: null, bookable: false, saleNote: '',
+    });
     assert.equal(iceRowCta({ kind: 'public_skate' }, 'javascript:alert(1)').href, null);
   });
 
@@ -365,6 +367,43 @@ describe('iceRowCta', () => {
     assert.equal(linked.bookable, false);
     assert.equal(linked.href, 'https://chizhovka.example/e/1');
     assert.equal(iceRowCta({ kind: 'public_skate' }, 'https://koronaticket.by/rink').href, 'https://koronaticket.by/rink');
+  });
+
+  it('manual без external_url — не наследует tickets_url арены; «Билетов пока нет»', () => {
+    const { iceRowCta } = loadModel();
+    const announced = iceRowCta(
+      { kind: 'public_skate', schedule_basis: 'manual' },
+      'https://saleframe.minskarena.by/service/139',
+    );
+    assert.equal(announced.href, null);
+    assert.equal(announced.cta, '');
+    assert.equal(announced.saleNote, 'Билетов пока нет');
+  });
+
+  it('manual с external_url после adopt — Buy на saleframe', () => {
+    const { iceRowCta } = loadModel();
+    const live = iceRowCta(
+      {
+        kind: 'public_skate',
+        schedule_basis: 'live',
+        external_url: 'https://saleframe.minskarena.by/service/139',
+      },
+      'https://minskarena.by/page.html?slug=massovie-katania',
+    );
+    assert.equal(live.href, 'https://saleframe.minskarena.by/service/139');
+    assert.equal(live.saleNote, '');
+  });
+
+  it('live/projected без своей ссылки — по-прежнему tickets_url арены (будни овала)', () => {
+    const { iceRowCta } = loadModel();
+    assert.equal(
+      iceRowCta({ kind: 'public_skate', schedule_basis: 'live' }, 'https://saleframe.minskarena.by/service/139').href,
+      'https://saleframe.minskarena.by/service/139',
+    );
+    assert.equal(
+      iceRowCta({ kind: 'public_skate', schedule_basis: 'projected' }, 'https://koronaticket.by/rink').href,
+      'https://koronaticket.by/rink',
+    );
   });
 
   it('касса места доходит до каждой строки ленты', () => {
