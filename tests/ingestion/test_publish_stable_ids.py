@@ -170,7 +170,7 @@ async def _rows(db_session, arena_id: int) -> list[dict]:
     result = await db_session.execute(
         text("""
             SELECT id, kind, starts_at_utc, ends_at_utc, local_date, price_adult_minor, price_minor,
-                   status, source_id, session_label, schedule_basis
+                   status, source_id, session_label, schedule_basis, external_url
             FROM ice_sessions
             WHERE arena_id = :a
             ORDER BY id
@@ -265,18 +265,57 @@ async def test_admin_and_etalon_rows_keep_their_ids(db_session, seed_city_id) ->
     admin_id = await _insert_row(db_session, arena_id, day, time(12, 0), "admin")
     etalon_id = await _insert_row(db_session, arena_id, day, time(15, 0), "etalon_minsk_v1")
 
-    # Парсер видит слот на то же время, что и ручной: ручной побеждает, второго такого же не появляется.
-    same_as_admin = _draft(arena_id, day, time(12, 0))
+    # Admin: парсер усыновляет (тот же id, source_id остаётся admin). Etalon: черновик отбрасывается.
+    same_as_admin = _draft(
+        arena_id, day, time(12, 0), price=2500, source_id="abws:99", label="из кассы"
+    )
+    # CanonicalSlotDraft is frozen — set external_url via replace below.
+    from dataclasses import replace
+
+    same_as_admin = replace(same_as_admin, external_url="https://saleframe.minskarena.by/service/139")
     other = _draft(arena_id, day, time(18, 0), source_id="test:other")
-    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[same_as_admin, other]) == 1
-    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[same_as_admin, other]) == 1
+    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[same_as_admin, other]) == 2
+    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[same_as_admin, other]) == 2
 
     rows = {row["source_id"]: row for row in await _rows(db_session, arena_id)}
     assert rows["admin"]["id"] == admin_id
+    assert rows["admin"]["schedule_basis"] == "live"
+    assert rows["admin"]["external_url"] == "https://saleframe.minskarena.by/service/139"
+    assert rows["admin"]["price_adult_minor"] == 2500
     assert rows["etalon_minsk_v1"]["id"] == etalon_id
     assert rows["test:other"]["id"] not in {admin_id, etalon_id}
     assert same_as_admin.source_id not in rows
     assert len(rows) == 3
+
+
+@pytest.mark.asyncio
+async def test_admin_adopt_keeps_known_prices_when_draft_omits_them(db_session, seed_city_id) -> None:
+    """CMS анонс уже с ценами; касса без цены в черновике не обнуляет их."""
+    from dataclasses import replace
+
+    arena_id = await _arena(db_session, seed_city_id)
+    job_id = await _job_row(db_session, arena_id)
+    day = _TODAY + timedelta(days=3)
+    admin_id = await _insert_row(db_session, arena_id, day, time(16, 30), "admin", price=900)
+    await db_session.execute(
+        text("UPDATE ice_sessions SET schedule_basis = 'manual', external_url = NULL WHERE id = :i"),
+        {"i": admin_id},
+    )
+    await db_session.commit()
+
+    draft = replace(
+        _draft(arena_id, day, time(16, 30), price=900, source_id="abws:1"),
+        price_adult_minor=None,
+        external_url="https://saleframe.minskarena.by/service/139",
+    )
+    assert await _publish(db_session, arena_id=arena_id, job_id=job_id, drafts=[draft]) == 1
+
+    row = (await _rows(db_session, arena_id))[0]
+    assert row["id"] == admin_id
+    assert row["source_id"] == "admin"
+    assert row["schedule_basis"] == "live"
+    assert row["external_url"] == "https://saleframe.minskarena.by/service/139"
+    assert row["price_adult_minor"] == 900
 
 
 @pytest.mark.asyncio
