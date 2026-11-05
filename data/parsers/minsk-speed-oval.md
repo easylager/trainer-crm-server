@@ -85,3 +85,6 @@
 - CORS `*`, geo-403 нет.
 - Каденс daily: касса выкладывает ближайшие дни.
 - Sibling MK hockey/55 — отдельный job на arena 2.
+- Выходные слоты с CMS до появления в ABWS: seed как `source_id=admin` + `schedule_basis=manual` + `external_url=null`
+  (`scripts/seed_announced_ice_sessions.py`, `data/announced-schedules/`). Клиент видит «Билетов пока нет».
+  Когда касса отдаст тот же `(starts_at_utc, kind)`, publish усыновляет строку (`live` + saleframe url), `source_id` остаётся `admin`.
