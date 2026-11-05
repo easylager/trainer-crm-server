@@ -219,8 +219,10 @@ async def test_speed_oval_fixture_joins_rental_by_start() -> None:
         assert slot.price_rental_minor == gold["price_rental_minor"]
         assert slot.session_label == gold["session_label"]
         assert slot.hall == gold["hall"]
+        assert slot.external_url == "https://saleframe.minskarena.by/service/139"
     hockey = await MinskArenaSaleframeParser().extract(_minsk_arena_job())
     assert all(item.price_rental is None for item in hockey.slots)
+    assert all(item.external_url == "https://saleframe.minskarena.by/service/55" for item in hockey.slots)
 
 
 @pytest.mark.asyncio

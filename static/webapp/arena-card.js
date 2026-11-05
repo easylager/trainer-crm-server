@@ -708,11 +708,13 @@
     var time = slot.time;
     var price = '';
     var ticketHref = '';
+    var saleNote = '';
     view.groups.forEach(function (g) {
       g.times.forEach(function (t) {
         if (!t.picked) return;
         time = t.time || time;
         ticketHref = t.ticketHref || '';
+        saleNote = t.saleNote || '';
         var pp = t.prices || g.prices;
         price = pp.length ? pp[0].value : '';
       });
@@ -727,6 +729,7 @@
       time: time,
       price: price,
       ticketHref: ticketHref,
+      saleNote: saleNote,
     };
   }
 
@@ -751,11 +754,16 @@
         '<span>Купить билет</span>' + icon('buy') + '</button>'
       : '<button type="button" class="ga-btn ga-press" data-haptic="tap" data-action="share-invite">' + icon('invite') +
         '<span>Позвать</span></button>';
+    var priceBit = '';
+    if (info.price) {
+      // manual-анонс без кассы: «Билетов пока нет», не «на кассе» (касса тоже может ещё молчать).
+      var suffix = info.ticketHref ? '' : info.saleNote ? ' · ' + info.saleNote : ' на\u00a0кассе';
+      priceBit = '<span class="arena-bar__price">\u00a0· ' + esc(info.price) + esc(suffix) + '</span>';
+    }
     return (
       '<div class="arena-bar__stub">' +
       '<small id="arenaBarWhen">' + esc(info.when) + '</small>' +
-      '<b id="arenaBarTime">' + esc(info.time) +
-      (info.price ? '<span class="arena-bar__price">\u00a0· ' + esc(info.price) + (info.ticketHref ? '' : ' на\u00a0кассе') + '</span>' : '') +
+      '<b id="arenaBarTime">' + esc(info.time) + priceBit +
       '</b></div>' +
       '<div class="arena-bar__acts">' + invite + '</div>'
     );
@@ -1421,6 +1429,7 @@
             }).join('') + '</div>'
           : '') +
         (g.note ? '<p class="arena-ticket__note">' + esc(g.note) + '</p>' : '') +
+        (picked.saleNote ? '<p class="arena-ticket__note">' + esc(picked.saleNote) + '</p>' : '') +
         '</div>';
     }
     var grid = g.times.map(function (t) {

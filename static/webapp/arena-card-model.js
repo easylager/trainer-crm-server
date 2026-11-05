@@ -366,14 +366,22 @@
   /**
    * Кнопка строки сеанса. Раньше на каждом сеансе стояло «Билет на месте» — даже у Замка,
    * где билеты продаются онлайн с остатком мест: приложение врало. Теперь только факт:
-   * ссылка на сеанс (касса или страница события) или общая касса места — «Билеты»;
-   * нет ни того ни другого — кнопки нет, строка говорит временем и ценой.
+   * 1) external_url сеанса → «Билеты» на кассу события;
+   * 2) иначе, если слот не ручной анонс — общая касса места (tickets_url);
+   * 3) schedule_basis=manual без external_url — расписание уже есть, онлайн ещё нет:
+   *    кнопки нет, подпись «Билетов пока нет» (не «на кассе»: касса тоже может ещё не продавать).
    */
   function iceRowCta(session, ticketsUrl) {
-    var href = safeHttpUrl(session && session.external_url) || safeHttpUrl(ticketsUrl);
-    if (!href) return { cta: '', ctaKind: '', href: null, bookable: false };
+    var own = safeHttpUrl(session && session.external_url);
+    if (own) return { cta: 'Билеты', ctaKind: 'link', href: own, bookable: false, saleNote: '' };
+    var basis = String((session && session.schedule_basis) || 'live');
+    if (basis === 'manual') {
+      return { cta: '', ctaKind: '', href: null, bookable: false, saleNote: 'Билетов пока нет' };
+    }
+    var href = safeHttpUrl(ticketsUrl);
+    if (!href) return { cta: '', ctaKind: '', href: null, bookable: false, saleNote: '' };
     // Не 'solid': заливка у нас — своя запись («Заявка»), а это уход во внешнюю кассу.
-    return { cta: 'Билеты', ctaKind: 'link', href: href, bookable: false };
+    return { cta: 'Билеты', ctaKind: 'link', href: href, bookable: false, saleNote: '' };
   }
 
   function safeHttpUrl(value) {
@@ -413,6 +421,7 @@
         cta: cta.cta,
         ctaKind: cta.ctaKind,
         href: cta.href,
+        saleNote: cta.saleNote || '',
         bookable: false,
         nowState: nowState,
         session: s,
@@ -1146,6 +1155,7 @@
       groups[index[key]].times.push({
         time: start,
         ticketHref: cta.href,
+        saleNote: cta.saleNote || '',
         sessionId: s.id != null ? s.id : null,
         next: !!opts.markNext && nearestId && String(s.id) === nearestId,
         picked: hasPicked && String(s.id) === picked,

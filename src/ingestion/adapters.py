@@ -207,6 +207,8 @@ class MinskArenaSaleframeParser(IceParser):
         if "до" in child_name.lower():
             age_note = "детский до 14 лет" if "14" in child_name else child_name
         performance = str((init.get("performance") or {}).get("name") or "Массовое катание")
+        # Per-session Buy opens saleframe (139/55/62), not the marketing CMS page.
+        tickets_url = str(job.config.get("url") or "").strip() or None
         for event in events or []:
             start_ts = event.get("start")
             end_ts = event.get("end")
@@ -249,6 +251,7 @@ class MinskArenaSaleframeParser(IceParser):
                     source_id=str(event.get("id") or ""),
                     session_label=performance,
                     age_note=age_note,
+                    external_url=tickets_url,
                 )
             )
         snapshot = {"calendar": calendar, "events": events_blob, "init_service": (init.get("service") or {}).get("id")}
