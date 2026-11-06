@@ -672,7 +672,9 @@ async def _game(session: AsyncSession, row: Any, card: dict[str, Any], *, now: d
         "match_id": card["id"],
         "next": {"id": int(nxt.id), "away": nxt.away_team, "starts_at": _utc(nxt.starts_at)} if nxt else None,
         "total": total,
-        "home_pct": round(100 * int(picks.home or 0) / total) if total >= 10 else None,
+        # Людьми, без процентов; от 10 ходов — меньше выборка выдаёт отдельных людей.
+        "home_n": int(picks.home or 0) if total >= 10 else None,
+        "away_n": total - int(picks.home or 0) if total >= 10 else None,
         "right": int(picks.right_ or 0),
     }
 

@@ -37,6 +37,7 @@ from src.application.site_matches import (
     when_text,
     yandex_link,
 )
+from src.application.hockey_teams import display_name
 from src.shared.city_locative import city_locative
 from src.shared.config import Settings
 from src.shared.copy_ru import t
@@ -595,19 +596,19 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
     m = data["match"]
     link = game_link(base_url, m["id"], city_id=city_id)
     if game["kind"] == "soon":
-        head, sub, cta = "Угадывать Экстралигу", "Скоро откроем — позвать тебя?", "Позвать в Telegram"
-        split = ""
+        head, sub, cta = "Экстралигу скоро можно будет угадывать", "Как откроем, напишем в Telegram.", "Напомнить в Telegram"
     else:
         phase = game["phase"]
         nxt = game.get("next")
-        split = ""
         if phase == PHASE_BEFORE:
             head = "Угадай, кто победит"
             sub = "Тап за команду — и ты в таблице всей страны. Очки после матча, короны каждый месяц."
             cta = "Угадать в Telegram"
         else:
+            home_name, away_name = display_name(data["row"].home_team), display_name(data["row"].away_team)
+            nxt_day = local(nxt["starts_at"]) if nxt else None
             nxt_text = (
-                f" Следующий матч {data['row'].home_team} — {local(nxt['starts_at']).strftime('%d.%m')}, {nxt['away']}."
+                f" Следующий: {home_name} — {display_name(nxt['away'])}, {nxt_day.day} {_months(nxt_day.month)}."
                 if nxt
                 else ""
             )
@@ -616,14 +617,17 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
                 sub = nxt_text.strip() or "Матч сыгран."
             else:
                 head = "Ходы закрыты — матч идёт" if phase == PHASE_LIVE else "Ходы закрыты"
-                pct = game.get("home_pct")
-                sub = (f"{pct}% игроков за {data['row'].home_team}." if pct is not None else "") + nxt_text
+                home_n, away_n = game.get("home_n"), game.get("away_n")
+                who = (
+                    f"За {home_name} — {home_n} {plural_ru(home_n, 'игрок', 'игрока', 'игроков')}, "
+                    f"за {away_name} — {away_n}."
+                    if home_n is not None
+                    else ""
+                )
+                sub = who + nxt_text
                 sub = sub.strip() or "Игра продолжится на следующем матче."
-            cta = "Сыграть на следующий" if nxt else "Открыть игру"
+            cta = "Ход на следующий матч" if nxt else "Открыть игру"
             link = game_link(base_url, nxt["id"], city_id=city_id) if nxt else link
-            if game.get("home_pct") is not None:
-                pct = int(game["home_pct"])
-                split = f'<div class="m-split" aria-hidden="true"><span style="width:{pct}%"></span></div>'
     button = (
         f'<a class="m-btn m-btn--fill" href="{_e(link)}" rel="nofollow" data-m-sheet="game" data-m-name="{_e(m["title"])}">{_e(cta)}</a>'
         if link
@@ -631,7 +635,7 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
     )
     return (
         '<section class="m-panel m-panel--game" aria-label="Кто кого"><span class="m-sticker">КТО КОГО?</span>'
-        f'<span class="m-panel__head">{_e(head)}</span><span class="m-panel__sub">{_e(sub)}</span>{split}{button}</section>'
+        f'<span class="m-panel__head">{_e(head)}</span><span class="m-panel__sub">{_e(sub)}</span>{button}</section>'
     )
 
 
