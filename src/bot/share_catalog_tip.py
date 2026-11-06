@@ -9,10 +9,8 @@ from aiogram.enums import ParseMode
 from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
-from src.application.trainer_invite_links import build_trainer_universal_invite_link
 from src.bot import messages as msg
 from src.infrastructure.db import async_session_factory
-from src.shared.config import Settings
 
 
 async def send_trainer_share_catalog_tip_to_chat(
@@ -34,11 +32,10 @@ async def send_trainer_share_catalog_tip_to_chat(
     needs nothing but the client bot username, so there is no profile state in which we have
     nothing to send.
     """
-    settings = Settings()
-    link, err = build_trainer_universal_invite_link(
-        client_bot_username=settings.client_bot_username,
-        trainer_id=trainer_id,
-    )
+    from src.application.site_trainer_page import trainer_invite_link
+
+    async with async_session_factory() as session:
+        link, err = await trainer_invite_link(session, int(trainer_id))
     if err == "missing_username":
         await bot.send_message(
             chat_id=chat_id,

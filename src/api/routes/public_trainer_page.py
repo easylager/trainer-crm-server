@@ -56,5 +56,6 @@ async def trainer_page(ref: str, request: Request, session: AsyncSession = Depen
         page,
         base_url=(settings.webapp_base_url or "").strip().rstrip("/"),
         client_bot_username=settings.client_bot_username,
+        via=request.query_params.get("via"),
     )
     return HTMLResponse(html, headers=_CACHE)

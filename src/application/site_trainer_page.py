@@ -204,17 +204,76 @@ async def sitemap_rows(session: AsyncSession) -> list[str]:
     return out
 
 
+# ── Ссылка, которой тренер делится ───────────────────────────────────
+
+#: Метка ссылки из кабинета: человек пришёл от самого тренера — кнопка ведёт через ``welcome_ref``.
+SHARE_VIA = "link"
+#: Метка «Поделиться тренером» из Mini App: клиент советует другу — кнопка ведёт через ``share_ref``.
+RECOMMEND_VIA = "share"
+
+
+def share_url(base_url: str, trainer_id: int, name: str, *, via: str = SHARE_VIA) -> str | None:
+    """``https://glideclub.by/t/9-aleksandr-gaevskiy?via=link`` — только на настоящем https-адресе сайта."""
+    base = (base_url or "").strip().rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    return f"{trainer_page_url(base, trainer_id, name)}?via={via}"
+
+
+async def trainer_invite_link(session: AsyncSession, trainer_id: int) -> tuple[str | None, str | None]:
+    """Ссылка тренера ученикам — страница сайта ``/t/…`` (TASK-350), а не ``t.me``.
+
+    Контракт ``build_trainer_universal_invite_link``: ``(ссылка, ошибка)``. Без https-адреса сайта
+    (локально) — прежняя ``t.me/…?start=welcome_ref_{id}``. Кнопка на странице по ``via=link`` ведёт
+    туда же, через ``welcome_ref``: бот привязывает и регистрирует ученика, как раньше.
+    """
+    from src.application.trainer_invite_links import build_trainer_universal_invite_link
+    from src.shared.config import Settings
+
+    settings = Settings()  # type: ignore[call-arg]
+    fallback, err = build_trainer_universal_invite_link(
+        client_bot_username=settings.client_bot_username, trainer_id=int(trainer_id)
+    )
+    if err:
+        return None, err
+    return await site_share_link(session, int(trainer_id), via=SHARE_VIA) or fallback, None
+
+
+async def site_share_link(session: AsyncSession, trainer_id: int, *, via: str) -> str | None:
+    """Канонический ``/t/…?via=…`` по имени из профиля (не по подписи вроде «Анна К.» — без лишнего 301)."""
+    from src.shared.config import Settings
+
+    row = (
+        await session.execute(
+            text("SELECT first_name, last_name FROM trainer_profiles WHERE trainer_id = :id"), {"id": int(trainer_id)}
+        )
+    ).first()
+    name = " ".join(str(v or "").strip() for v in (row or ())).strip()
+    return share_url(Settings().webapp_base_url or "", int(trainer_id), name, via=via)  # type: ignore[call-arg]
+
+
 # ── Ссылки в Telegram ────────────────────────────────────────────────
 
 
-def app_url(base_url: str, page: Mapping[str, Any], *, client_bot_username: str | None) -> str | None:
+def app_url(
+    base_url: str, page: Mapping[str, Any], *, client_bot_username: str | None, via: str | None = None
+) -> str | None:
     """Куда ведёт «Записаться в Telegram»: карточка тренера в Mini App.
 
-    В каталоге — через учётный ``/api/public/catalog/open-telegram`` (``trainer_{id}``). Не в каталоге
-    карточка Mini App отвечает 404 незнакомому клиенту, поэтому — постоянная ссылка тренера
-    ``welcome_ref_{id}``: бот привяжет человека к тренеру, как по ссылке из кабинета.
+    В каталоге — через учётный ``/api/public/catalog/open-telegram`` (``trainer_{id}``). Пришли по
+    ссылке самого тренера (``via=link``) или тренера нет в каталоге — постоянная ссылка
+    ``welcome_ref_{id}``: бот привяжет человека к тренеру, как раньше по ссылке из кабинета
+    (карточка Mini App незнакомому клиенту скрытого тренера отвечает 404).
     """
-    if page["listed"]:
+    if via == RECOMMEND_VIA:
+        from src.application.trainer_invite_links import build_trainer_share_link
+
+        rec, _err = build_trainer_share_link(
+            webapp_base_url=base_url, client_bot_username=client_bot_username, trainer_id=int(page["id"])
+        )
+        if rec is not None:
+            return rec.bot_deep_link
+    if page["listed"] and via != SHARE_VIA:
         return public_telegram_cta_url(
             base_url, start_param=trainer_start_param(int(page["id"])), surface=TRAINER_SURFACE
         )
@@ -226,9 +285,11 @@ def app_url(base_url: str, page: Mapping[str, Any], *, client_bot_username: str 
     return link
 
 
-def primary_cta(base_url: str, page: Mapping[str, Any], *, client_bot_username: str | None) -> tuple[str, str] | None:
+def primary_cta(
+    base_url: str, page: Mapping[str, Any], *, client_bot_username: str | None, via: str | None = None
+) -> tuple[str, str] | None:
     """(подпись, адрес) главной кнопки. Подпись не обещает того, чего нет: без подписки — «Написать»."""
-    app = app_url(base_url, page, client_bot_username=client_bot_username)
+    app = app_url(base_url, page, client_bot_username=client_bot_username, via=via)
     if page["can_book"] and app:
         return "Записаться в Telegram", app
     if page.get("contact_url"):
@@ -403,7 +464,9 @@ def _trainer_hook() -> str:
     )
 
 
-def render_trainer_page(page: Mapping[str, Any], *, base_url: str, client_bot_username: str | None) -> str:
+def render_trainer_page(
+    page: Mapping[str, Any], *, base_url: str, client_bot_username: str | None, via: str | None = None
+) -> str:
     from src.application.catalog_home_page import catalog_home_og_image_url
     from src.application.place_links import breadcrumb_script
     from src.application.public_analytics import public_analytics_head_html_from_settings
@@ -413,8 +476,8 @@ def render_trainer_page(page: Mapping[str, Any], *, base_url: str, client_bot_us
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
     canonical = f"{(base_url or '').rstrip('/')}{page['path']}"
-    cta = primary_cta(base_url, page, client_bot_username=client_bot_username)
-    app = app_url(base_url, page, client_bot_username=client_bot_username)
+    cta = primary_cta(base_url, page, client_bot_username=client_bot_username, via=via)
+    app = app_url(base_url, page, client_bot_username=client_bot_username, via=via)
     note = "Откроется Glide в Telegram — ничего устанавливать не нужно." if page["can_book"] else ""
     body = (
         _hero(page)

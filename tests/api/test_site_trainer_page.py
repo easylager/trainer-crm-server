@@ -132,3 +132,42 @@ async def test_listed_trainer_in_sitemap_and_deactivated_is_404(app_use_test_db,
     assert gone.status_code == 404
     assert missing.status_code == 404
     assert re.search(r'name="robots" content="noindex"', gone.text)
+
+
+@pytest.mark.asyncio
+async def test_trainer_shared_link_is_site_page_and_keeps_welcome_ref_binding(app_use_test_db, db_session) -> None:
+    """Ссылка из кабинета — ``/t/…?via=link``; кнопка на ней — ``welcome_ref``, бот привяжет ученика."""
+    from tests.api.test_webapp_trainer_catalog import HEADERS
+    from tests.api.test_webapp_trainer_miniapp_profile_integration import (
+        _fresh_trainer_telegram_id,
+        patch_trainer_init_auth,
+    )
+
+    async with _client() as client:
+        _place_row, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(text("UPDATE trainers SET telegram_id = :tg WHERE id = :t"), {"tg": tg, "t": tid})
+    await db_session.commit()
+    with patch_trainer_init_auth(tg):
+        async with _client() as client:
+            body = (await client.get("/api/webapp/trainer/hub/universal-invite-link", headers=HEADERS)).json()
+    link = body["link"]
+    assert link == f"https://glide.example{trainer_path(tid, name)}?via=link"
+    assert link in body["share_text"]
+    async with _client() as client:
+        shared = (await client.get(link.replace("https://glide.example", ""))).text
+        plain = (await client.get(link.replace("https://glide.example", "").split("?")[0])).text
+    assert f"https://t.me/glide_test_bot?start=welcome_ref_{tid}" in shared
+    # Тот же адрес без метки — витрина: карточка в Mini App через учётный прокси.
+    assert f"startapp=trainer_{tid}&amp;surface=trainer_page" in plain
+    # Канонический адрес один — метка ссылки на него не влияет.
+    assert f'rel="canonical" href="https://glide.example{link.replace("https://glide.example", "").split("?")[0]}"' in shared
+
+
+@pytest.mark.asyncio
+async def test_page_from_client_recommendation_keeps_share_ref(app_use_test_db, db_session) -> None:
+    """«Поделиться тренером» → ``/t/…?via=share``; кнопка — ``share_ref``, как прежняя рекомендация."""
+    async with _client() as client:
+        _place_row, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        html = (await client.get(f"{trainer_path(tid, name)}?via=share")).text
+    assert f"https://t.me/glide_test_bot?start=share_ref_{tid}" in html
