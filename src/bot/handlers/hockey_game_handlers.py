@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 router = Router(name="hockey_game")
 
-TOAST_CLOSED = "Матч начался — ходы закрыты"
+TOAST_CLOSED = "Ходы на этот матч уже закрыты"
 TOAST_MISSING = "Матча уже нет"
 
 
@@ -149,7 +149,7 @@ async def on_off(cb: CallbackQuery) -> None:
     async with async_session_factory() as session:
         await set_type(session, cb.from_user.id, kind, False)
         await session.commit()
-    await cb.answer(f"Отключено: {TYPE_TITLES[kind]}. Вернуть можно в настройках игры.", show_alert=True)
+    await cb.answer(f"Отключено: {TYPE_TITLES[kind]}. Остальные сообщения игры продолжат приходить.", show_alert=True)
     await _edit_markup(cb, _without(_current_rows(cb), f"{CB_OFF}:"))
 
 
@@ -164,7 +164,7 @@ async def on_leave(cb: CallbackQuery) -> None:
         try:
             await leave_league(session, league_id=league_id, player_key=cb.from_user.id)
             await session.commit()
-            toast = "Готово: ты вышел из лиги"
+            toast = "Готово: тебя нет в лиге"
         except (LookupError, PermissionError):
             toast = "Тебя уже нет в этой лиге"
     await cb.answer(toast, show_alert=True)
