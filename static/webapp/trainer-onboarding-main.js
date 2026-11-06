@@ -2508,6 +2508,16 @@
       el.obDonePricesBtn.onclick = goSetPrices;
     }
     loadDoneCatalogInvite();
+    /* TASK-350: сразу после настройки — один вопрос по центру «Показать вас родителям на …?».
+       Отказ оставляет блок ниже и строку на главной; публикация — тот же POST, что у блока. */
+    if (window.TrainerCatalogOffer) {
+      window.TrainerCatalogOffer.maybeOpen({
+        apiUrl: apiUrl,
+        headers: apiHeaders,
+        source: 'onboarding',
+        onDone: function (res) { if (res && res.published) markDoneCatalogPublished(); },
+      });
+    }
   }
 
   /* ── «Отправить себя в каталог»: publish-first, один тап прямо с экрана «Готово» ── */
@@ -2589,7 +2599,7 @@
     if (!el.obDoneCatalog) return;
     el.obDoneCatalog.innerHTML =
       '<h2 class="ob-done-catalog__title">Вы в каталоге</h2>' +
-      '<p class="ob-done-catalog__lead">Клиенты найдут вас в списке на glideclub.by и запишутся в свободные окна. Карточку можно дополнять когда угодно — публикации это не мешает.</p>' +
+      '<p class="ob-done-catalog__lead">Родители найдут вас на страницах катков и на glideclub.by. Карточку можно дополнять когда угодно — публикации это не мешает.</p>' +
       '<p class="ob-done-catalog__ok">✓ Опубликовано</p>';
     el.obDoneCatalog.hidden = false;
   }

@@ -11,6 +11,11 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.trainer_client_invite_tracking import sql_booking_not_self
+
+# Запись тренера к самому себе — не первый клиент (TASK-350).
+_NOT_SELF = sql_booking_not_self(trainer_id_expr=":tid")
+
 
 async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: int) -> tuple[bool, bool]:
     """
@@ -23,7 +28,7 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
     """
     r1 = await session.execute(
         text(
-            """
+            f"""
             UPDATE trainer_profiles tp
             SET first_booking_milestone_at = NOW()
             WHERE tp.trainer_id = :tid
@@ -33,6 +38,7 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
                 WHERE b.trainer_id = :tid
                   AND b.status IN ('confirmed', 'completed')
                   AND NOT b.is_sandbox
+                  AND {_NOT_SELF}
               ) = 1
             RETURNING tp.trainer_id
             """
@@ -72,12 +78,13 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
         if trainer:
             r = await session.execute(
                 text(
-                    """
+                    f"""
                     SELECT b.id, c.first_name, c.last_name, s.slot_date, s.start_time
                     FROM bookings b
                     JOIN slots s ON s.id = b.slot_id
                     JOIN clients c ON c.id = b.client_id
                     WHERE b.trainer_id = :tid AND b.status IN ('confirmed', 'completed') AND NOT b.is_sandbox
+                      AND {_NOT_SELF}
                     ORDER BY s.slot_date ASC, s.start_time ASC LIMIT 1
                     """
                 ),

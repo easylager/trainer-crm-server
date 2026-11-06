@@ -393,7 +393,6 @@ from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIN
 from src.application.trainer_invite_links import (
     build_trainer_invite_links,
     build_trainer_share_link,
-    build_trainer_universal_invite_link,
 )
 from src.application.client_share_message import (
     compose_client_share_message,
@@ -3370,6 +3369,12 @@ async def get_client_share_trainer(
         raise HTTPException(status_code=503, detail=f"Share link unavailable: {err}")
 
     deep_link = share_link.bot_deep_link.strip()
+    # TASK-350: наружу — страница тренера на сайте; её кнопка ведёт через тот же share_ref.
+    from src.application.site_trainer_page import RECOMMEND_VIA, site_share_link
+
+    site_link = await site_share_link(session, int(trainer_id), via=RECOMMEND_VIA)
+    if site_link:
+        deep_link = site_link
 
     city_row = await session.execute(
         text(
@@ -6224,10 +6229,9 @@ async def get_trainer_hub_universal_invite_link(
     settings = Settings()
     if not settings.client_bot_username:
         return {"link": None}
-    link, err = build_trainer_universal_invite_link(
-        client_bot_username=settings.client_bot_username,
-        trainer_id=int(trainer_id),
-    )
+    from src.application.site_trainer_page import trainer_invite_link
+
+    link, err = await trainer_invite_link(session, int(trainer_id))
     if err or not link:
         return {"link": None, "share_text": None}
     from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
@@ -9621,10 +9625,9 @@ async def post_trainer_onboarding_quick_setup(
     settings = Settings()
     link, share_text = None, None
     if settings.client_bot_username:
-        link, err = build_trainer_universal_invite_link(
-            client_bot_username=settings.client_bot_username,
-            trainer_id=int(trainer_id),
-        )
+        from src.application.site_trainer_page import trainer_invite_link
+
+        link, err = await trainer_invite_link(session, int(trainer_id))
         if err:
             link = None
         if link:

@@ -549,6 +549,11 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
         for path, stamp in match_rows:
             urls.append((f"{base}{path}", "daily", stamp, "0.5"))
     urls.extend(winter_urls)
+    # TASK-350: страницы тренеров — только кто в каталоге (тот же предикат, что у списка в Mini App).
+    from src.application import site_trainer_page
+
+    for path in await site_trainer_page.sitemap_rows(session):
+        urls.append((f"{base}{path}", "weekly", None, "0.6"))
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for loc, freq, stamp, priority in urls:
         lastmod = _sitemap_lastmod(stamp)

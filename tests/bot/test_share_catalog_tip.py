@@ -45,11 +45,9 @@ async def _create_pending_trainer(session: AsyncSession, *, with_city: bool) -> 
     return trainer_id
 
 
-def _patch_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = MagicMock()
-    settings.webapp_base_url = "https://example.com"
-    settings.client_bot_username = "TestClientBot"
-    monkeypatch.setattr("src.bot.share_catalog_tip.Settings", lambda: settings)
+def _patch_settings(monkeypatch: pytest.MonkeyPatch, *, client_bot: str = "TestClientBot") -> None:
+    monkeypatch.setenv("WEBAPP_BASE_URL", "https://example.com")
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", client_bot)
 
 
 @pytest.mark.asyncio
@@ -82,7 +80,8 @@ async def test_trainer_always_gets_universal_invite_link(
     bot.send_message.assert_awaited_once()
     _, kwargs = bot.send_message.call_args
     assert kwargs["chat_id"] == 12345
-    assert f"start=welcome_ref_{trainer_id}" in kwargs["text"]
+    # TASK-350: ссылка ученикам — страница тренера на сайте; кнопка на ней ведёт через welcome_ref.
+    assert f"https://example.com/t/{trainer_id}-test-trainer?via=link" in kwargs["text"]
     assert "Следующий шаг к новым клиентам" in kwargs["text"]
 
 
@@ -95,10 +94,7 @@ async def test_missing_client_bot_username_explains_instead_of_sending_a_broken_
     )
     trainer_id = await _create_pending_trainer(db_session, with_city=False)
 
-    settings = MagicMock()
-    settings.webapp_base_url = "https://example.com"
-    settings.client_bot_username = ""
-    monkeypatch.setattr("src.bot.share_catalog_tip.Settings", lambda: settings)
+    _patch_settings(monkeypatch, client_bot="")
 
     bot = MagicMock()
     bot.send_message = AsyncMock()

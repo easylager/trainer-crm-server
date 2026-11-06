@@ -1183,28 +1183,34 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
 
 
 def _b_trainers(view: Mapping[str, Any], *, base_url: str, coach_href: str) -> str:
-    """Тренеры города лицами (TASK-265); больше, чем показали, — «Все тренеры» в Telegram."""
-    from src.application.place_links import public_telegram_cta_url, trainer_start_param
+    """Тренеры города лицами (TASK-265) — тап на страницу тренера ``/t/…`` (TASK-350);
+    больше, чем показали, — «Все тренеры» в Telegram."""
+    from src.application.site_trainer_page import trainer_page_url
     from src.application.style_b import section, trainer_rows_html
 
     trainers = list(view.get("trainers") or [])
-    if not trainers:
-        return ""
-    city_id = int(view["city"]["id"])
 
     def href_for(trainer: Mapping[str, Any]) -> str | None:
-        return public_telegram_cta_url(
-            base_url,
-            start_param=trainer_start_param(int(trainer["id"])),
-            surface="selection_page",
-            city_id=city_id,
-        )
+        return trainer_page_url(base_url, int(trainer["id"]), str(trainer.get("name") or ""))
 
-    body = trainer_rows_html(trainers, href_for=href_for)
+    body = trainer_rows_html(trainers, href_for=href_for) if trainers else ""
     total = int(view.get("trainer_count") or 0)
     if body and coach_href and total > len(trainers):
         body += f'<a class="b-more" href="{_esc(coach_href)}">{_esc(t("hub.trainers_all"))}</a>'
+    body += _b_city_coach_entry(str(view["city"].get("name") or ""))
     return section(t("route.trainers"), body, sec_id="trainers")
+
+
+def _b_city_coach_entry(city_name: str) -> str:
+    """«Тренируете в Минске?» — вход для тренера рядом с тренерами города, как на странице катка (TASK-350)."""
+    loc = city_locative(city_name) if city_name else None
+    title = f"Тренируете в {loc}?" if loc else t("coach.entry_first_title")
+    return (
+        '<a class="b-coach tg-out" href="/trainers?utm_source=glide&amp;utm_medium=city_hub">'
+        '<span class="b-coach__ic" aria-hidden="true">+</span>'
+        f'<span class="b-coach__t"><b>{_esc(title)}</b><span>{_esc(t("coach.city_sub"))}</span></span>'
+        f'<span class="b-coach__go">{_esc(t("coach.entry_go"))}&nbsp;›</span></a>'
+    )
 
 
 def _b_all_places(view: Mapping[str, Any]) -> str:
