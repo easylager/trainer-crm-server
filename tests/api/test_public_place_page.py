@@ -186,7 +186,7 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
 
 
 @pytest.mark.asyncio
-async def test_place_page_lists_arena_trainers_with_pereiti_cta(
+async def test_place_page_lists_arena_trainers_linking_to_trainer_page(
     app_use_test_db, db_session, monkeypatch
 ) -> None:
     monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
@@ -210,8 +210,11 @@ async def test_place_page_lists_arena_trainers_with_pereiti_cta(
     html = resp.text
     assert 'id="trainers"' in html
     assert "Александр Гаевский" in html
-    assert "Перейти" in html
-    assert f"startapp=trainer_{tid}_a_{place['arena_id']}" in html
+    # TASK-350: одна карточка — подпись по can_book, тап на страницу тренера сайта, не в Telegram.
+    trainers = re.search(r'id="trainers">(.*?)</section>', html, re.S).group(1)
+    assert "Записаться" in trainers
+    assert f"/t/{tid}-aleksandr-gaevskiy" in trainers
+    assert f"startapp=trainer_{tid}" not in trainers
 
 
 @pytest.mark.asyncio

@@ -45,6 +45,7 @@ _ALLOWED_SURFACES = frozenset(
         "catalog_home",
         "match_page",
         "matches_list",
+        "trainer_page",
     }
 )
 

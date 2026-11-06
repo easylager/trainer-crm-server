@@ -1,0 +1,17 @@
+/* Страница тренера /t/{id}-{slug} — на токенах glide-tokens.css и рядах .b-row стиля B. */
+.tp-hero { background: var(--g-surface); border-bottom: 1px solid var(--g-line); padding: 12px 16px 20px; }
+.tp-bar { display: flex; align-items: center; min-height: 40px; margin-bottom: 12px; }
+.tp-head { display: flex; gap: 16px; align-items: center; max-width: 720px; margin: 0 auto; }
+.tp-ava { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; flex: 0 0 80px; background: var(--g-chip); }
+.tp-ava--mono { display: inline-flex; align-items: center; justify-content: center; font: 600 32px/1 var(--g-font-display); color: var(--g-accent-ink); background: var(--g-accent-wash); }
+.tp-kicker { margin: 0 0 4px; color: var(--g-muted); font-size: 14px; }
+.tp-name { margin: 0; font: 600 26px/1.15 var(--g-font-display); color: var(--g-ink); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.tp-facts { margin: 6px 0 0; color: var(--g-ink-2); font-size: 15px; }
+.tp-body { max-width: 720px; margin: 0 auto; padding: 0 16px 32px; }
+.tp-cta { padding: 16px 0 4px; }
+.tp-cta__btn { display: flex; width: 100%; justify-content: center; box-sizing: border-box; }
+.tp-note { margin: 8px 0 0; color: var(--g-muted); font-size: 14px; text-align: center; }
+.tp-price { white-space: nowrap; color: var(--g-ink); font-weight: 600; }
+.tp-about { margin: 0; color: var(--g-ink-2); line-height: 1.5; white-space: pre-line; }
+.tp-hook { margin: 28px 0 0; font-size: 14px; }
+.tp-hook a { color: var(--g-accent-ink); font-weight: 600; text-decoration: none; }

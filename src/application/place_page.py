@@ -2029,11 +2029,12 @@ def _b_arrive(
 
 
 def _b_trainers(view: Mapping[str, Any], *, base_url: str, school_html: str = "") -> str:
-    """Тренеры на этом месте (TASK-265), как в Mini App: тап — карточка тренера в Telegram.
+    """Тренеры на этом месте (TASK-265), как в Mini App: тап — страница тренера ``/t/…`` (TASK-350).
 
-    Нет тренеров — нет блока: вход для тренера тогда стоит в «Ещё на катке».
+    Одна карточка везде: подпись справа — «Записаться» / «Написать» по ``can_book``, как на
+    странице тренера и в городе. Нет тренеров — нет блока: вход для тренера тогда в «Ещё на катке».
     """
-    from src.application.place_links import public_telegram_cta_url, trainer_start_param
+    from src.application.site_trainer_page import trainer_page_url
     from src.application.style_b import section, trainer_rows_html
 
     trainers = list(view.get("trainers") or [])
@@ -2041,21 +2042,13 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str, school_html: str = ""
         return ""
     card = view["card"]
     coach = _b_coach_entry(card, first=False) if _ice(card) else ""
-    arena_id = int(card["id"])
-    city_id = int(card.get("city_id") or 0) or None
 
     def href_for(trainer: Mapping[str, Any]) -> str | None:
-        return public_telegram_cta_url(
-            base_url,
-            start_param=trainer_start_param(int(trainer["id"]), arena_id),
-            surface="place_page",
-            city_id=city_id,
-            arena_id=arena_id,
-        )
+        return trainer_page_url(base_url, int(trainer["id"]), str(trainer.get("name") or ""))
 
     return section(
         t("place.trainers"),
-        trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go")) + school_html + coach,
+        trainer_rows_html(trainers, href_for=href_for) + school_html + coach,
         klass="b-sec--place",
         sec_id="trainers",
     )

@@ -318,6 +318,9 @@ describe('Mini App public URL recovery', () => {
       ['/p/orsha/orsha-arena?s=99&init_data=signed', '/webapp/arena?ref=31&s=99&init_data=signed'],
       ['/c/orsha?when=tomorrow&init_data=signed', '/webapp/ice?city_id=18&when=tomorrow&init_data=signed'],
       ['/m/5-dinamo?c=ABCD&init_data=signed', '/webapp/client-match?id=5&c=ABCD&init_data=signed'],
+      // TASK-350: страница тренера сайта → его карточка в Mini App.
+      ['/t/9-aleksandr-gaevskiy?init_data=signed', '/webapp/catalog?trainer_id=9&init_data=signed'],
+      ['/t/9?init_data=signed', '/webapp/catalog?trainer_id=9&init_data=signed'],
     ]) {
       const ctx = browser('https://app.test' + url, { initData: '' });
       assert.equal(G.maybePublicRedirect(ctx), true);
@@ -334,7 +337,7 @@ describe('Mini App public URL recovery', () => {
   });
 
   it('ordinary browser including empty Telegram SDK and startapp query stays public', () => {
-    for (const url of ['/', '/?startapp=kkm_5', '/p/orsha/orsha-arena', '/c/orsha', '/m/5-dinamo']) {
+    for (const url of ['/', '/?startapp=kkm_5', '/p/orsha/orsha-arena', '/c/orsha', '/m/5-dinamo', '/t/9-aleksandr-gaevskiy']) {
       const ctx = browser('https://app.test' + url, { initData: '' });
       assert.equal(G.maybePublicRedirect(ctx), false);
       assert.equal(ctx.location.href, 'https://app.test' + url);

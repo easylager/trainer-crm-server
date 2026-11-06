@@ -41,6 +41,7 @@ from src.api.routes.zovi_create_page import router as zovi_create_page_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
 from src.api.routes.public_matches import router as public_matches_router
+from src.api.routes.public_trainer_page import router as public_trainer_page_router
 from src.api.routes.indexnow_key import build_indexnow_key_router
 from src.api.routes.zovi_pages import router as zovi_pages_router
 from src.api.routes.public_ice_company import router as public_ice_company_router
@@ -2505,6 +2506,8 @@ _W26_PUBLIC_ASSETS = {
     "/static/share/winter.js": ("share/winter.js", "application/javascript"),
     "/static/shared/winter.css": ("shared/winter.css", "text/css"),
     "/static/shared/winter-model.js": ("shared/winter-model.js", "application/javascript"),
+    # Страница тренера /t/… (TASK-350).
+    "/static/share/trainer-page.css": ("share/trainer-page.css", "text/css"),
 }
 
 
@@ -2919,6 +2922,7 @@ app.include_router(zovi_create_page_router)
 app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
 app.include_router(public_matches_router)
+app.include_router(public_trainer_page_router)
 _indexnow_key_router = build_indexnow_key_router()
 if _indexnow_key_router is not None:
     app.include_router(_indexnow_key_router)

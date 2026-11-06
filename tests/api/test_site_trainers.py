@@ -111,7 +111,7 @@ async def _trainer_on(db_session, client: AsyncClient, place: dict, *, first_nam
 
 
 @pytest.mark.asyncio
-async def test_place_page_lists_trainers_with_telegram_link_to_their_card(app_use_test_db, db_session) -> None:
+async def test_place_page_lists_trainers_with_link_to_their_page(app_use_test_db, db_session) -> None:
     place = await _place(db_session)
     name = f"Анна{uuid.uuid4().hex[:4]}"
     async with _client() as client:
@@ -125,7 +125,12 @@ async def test_place_page_lists_trainers_with_telegram_link_to_their_card(app_us
     assert f"trainers/{tid}/a_list.jpg" in body
     # 670 BYN / 16 = 41,875 → вниз до 41,87; неактивный абонемент (2,50 за занятие) не считается.
     assert "от\u00a041,87\u00a0BYN за\u00a0занятие" in body
-    assert f"startapp=trainer_{tid}_a_{place['arena_id']}" in body
+    # TASK-350: строка ведёт на страницу тренера сайта; подпись — по can_book, как в Mini App.
+    assert f"/t/{tid}-{city_slug(name + ' Тренерова')}" in body
+    assert "startapp=trainer_" not in body
+    async with _client() as client:
+        can_book = (await client.get(f"/api/public/trainers/{tid}")).json()["can_book"]
+    assert ("Записаться" if can_book else "Написать") in body
     # Список заменяет счётчик «Здесь работает 1 тренер» в «На месте».
     assert "Здесь работает" not in html
 
@@ -162,8 +167,9 @@ async def test_city_page_shows_trainers_and_route_row_points_to_them(app_use_tes
     section = re.search(r'<section class="b-sec" id="trainers">(.*?)</section>', html, re.S)
     assert section, "нет раздела тренеров в городе"
     assert f"{name} Тренерова" in section.group(1)
-    # Из города — карточка тренера без привязки к катку.
-    assert f"startapp=trainer_{tid}&" in section.group(1)
+    # Из города — страница тренера; рядом вход для тренеров города (TASK-350).
+    assert f"/t/{tid}-" in section.group(1)
+    assert "/trainers?utm_source=glide&amp;utm_medium=city_hub" in section.group(1)
     assert 'href="#trainers"' in html
 
 
