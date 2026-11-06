@@ -12,12 +12,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, time, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
 from src.application.city_hub_page import _WINDOW_KEYS, _b_counts_line, _b_today_kicker, _price_bits, _session_when
 from src.application.ice_city_day import plural_ru
 from src.application.style_b import b_photo_url
+from src.shared.copy_ru import t
 from src.shared.public_display import format_public_name
 
 UPCOMING_LIMIT = 3
@@ -100,6 +101,20 @@ def _needs(view: Mapping[str, Any], city_id: int) -> list[dict[str, Any]]:
                 "line": " · ".join(bits),
                 "href": _ice_href(city_id, intent="ohm"),
                 "windows": _windows(ohm, city_id=city_id, hot=view.get("hot_ohm"), intent="ohm"),
+            }
+        )
+    feed = view.get("matches")
+    if feed:
+        # Как строка «Хоккей» и блок «Хоккей в {городе}» на странице города: вход в матчи, не вторая лента.
+        from src.application.site_matches_page import route_row_line
+
+        rows.append(
+            {
+                "key": "matches",
+                "title": t("route.matches"),
+                "line": route_row_line(feed),
+                "href": "client-matches?city=" + quote(str(view["city"]["name"])),
+                "windows": [],
             }
         )
     services = int(view.get("service_count") or 0)

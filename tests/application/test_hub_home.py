@@ -138,3 +138,29 @@ def test_live_home_match_takes_the_slot_but_not_over_a_booking_today() -> None:
     assert slot is not None and slot["kind"] == "kk_before" and slot["hockey"]["mode"] == "live"
     booked = now_slot(bookings=_bookings(_booking()), hockey=live, upcoming=ICE, now=NOW)
     assert booked is not None and booked["kind"] == "booking"
+
+
+def test_city_with_matches_gets_one_hockey_entry_into_the_mini_app_catalog() -> None:
+    view = _view()
+    view["matches"] = {
+        "city_count": 2,
+        "first": {"title": "Локомотив Орша — Могилев"},
+        "first_word": "сегодня",
+        "matches": [{"id": 171}, {"id": 178}],
+    }
+    block = city_block(view)
+    rows = [row for row in block["needs"] if row["key"] == "matches"]
+    assert len(rows) == 1, "вход в занятие, а не лента матчей"
+    row = rows[0]
+    assert row["title"] == "Хоккей"
+    assert row["line"] == "2\u00a0матча на неделе · сегодня Локомотив Орша — Могилев"
+    assert row["href"] == "client-matches?city=%D0%9C%D0%B8%D0%BD%D1%81%D0%BA"
+    assert row["windows"] == []
+    assert [r["key"] for r in block["needs"]][:3] == ["skate", "ohm", "matches"], "порядок как на странице города"
+
+
+def test_city_without_matches_has_no_hockey_entry() -> None:
+    for feed in (None, {}):
+        view = _view()
+        view["matches"] = feed
+        assert "matches" not in [row["key"] for row in city_block(view)["needs"]]

@@ -11,6 +11,7 @@
   var state = {
     ref: null,
     card: null,
+    matches: null,
     sessions: null,
     trainers: null,
     day: null,
@@ -892,6 +893,35 @@
       '<div class="arena-sec" id="arenaPartners"><div class="gp-head-row"><p class="arena-h">После катка</p>' +
       '<span class="gp-kicker">Партнёры Glide</span></div><div class="gp-list">' + rows + '</div></div>'
     );
+  }
+
+  /** «Матчи здесь» — те же матчи, что блок на странице места; касание ведёт на экран матча в Mini App. */
+  function renderHereMatches() {
+    var list = (state.matches || []).filter(function (m) {
+      return m && /^client-match\?id=[1-9][0-9]*$/.test(String(m.href || ''));
+    });
+    if (!list.length) return '';
+    var rows = list.map(function (m) {
+      return (
+        '<button type="button" class="av-row arena-match ga-press" data-action="open-match" data-path="' + esc(m.href) + '">' +
+        '<span class="arena-match__when">' + esc(m.when) + '<br>' + esc(m.time) + '</span>' +
+        '<span class="av-row__b"><b>' + esc(m.title) + '</b>' + (m.league_label ? '<span>' + esc(m.league_label) + '</span>' : '') + '</span>' +
+        '<svg class="arena-match__go" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>'
+      );
+    }).join('');
+    return '<div class="arena-sec" id="arenaMatches"><p class="arena-h">Матчи здесь</p><div class="av-list">' + rows + '</div></div>';
+  }
+
+  function loadHereMatches(card) {
+    if (!card || !/^[1-9][0-9]*$/.test(String(card.id || ''))) return;
+    fetchJson('/api/public/arenas/' + encodeURIComponent(String(card.id)) + '/matches')
+      .then(function (data) {
+        var list = (data && data.matches) || [];
+        if (!list.length && !(state.matches || []).length) return;
+        state.matches = list;
+        paint();
+      })
+      .catch(function () { /* без матчей карточка остаётся как есть */ });
   }
 
   /** Окна массового катания и прокат — structured opening_hours, не простыня в описании. */
@@ -2282,6 +2312,7 @@
       var heroHtml = renderHero();
       var restHtml =
         renderIceTabs() +
+        renderHereMatches() +
         // Карточка v2 — порядок PLACE_BLOCKS, как на сайте: на месте → тренеры → партнёры → ещё.
         (visit() && String(state.card.venue_type || '') !== 'shop' ? renderFacts() : renderAmenities()) +
         renderServices() +
@@ -2595,6 +2626,11 @@
     var t = ev.target.closest('[data-action]');
     if (!t) return;
     var action = t.getAttribute('data-action');
+    if (action === 'open-match') {
+      var matchPath = String(t.getAttribute('data-path') || '');
+      if (/^client-match\?id=[1-9][0-9]*$/.test(matchPath)) shellNav(matchPath);
+      return;
+    }
     if (action === 'trainer') {
       /*
        * Тренер с арены ведёт СТРОГО на его карточку — не на выбор времени.
@@ -2865,6 +2901,7 @@
             if (firstPaint) revealOnPaint();
             paint();
           }
+          loadHereMatches(card);
           syncIceWatches().then(function () {
             paint();
           });

@@ -422,3 +422,44 @@ describe('arena contact clicks in Mini App', () => {
     assert.equal(ctx.opened.length, 1);
   });
 });
+
+describe('«Матчи здесь» на карточке катка в Mini App', () => {
+  const src = read('arena-card.js');
+
+  it('блок идёт сразу после расписания, как на странице места', () => {
+    const paint = src.slice(src.indexOf('function paint()'));
+    assert.ok(paint.indexOf('renderIceTabs()') < paint.indexOf('renderHereMatches()'));
+    assert.ok(paint.indexOf('renderHereMatches()') < paint.indexOf('renderFacts()'));
+  });
+
+  it('матчи берутся из /api/public/arenas/{id}/matches, касание — экран client-match через шелл', () => {
+    assert.match(src, /'\/api\/public\/arenas\/' \+ encodeURIComponent\(String\(card\.id\)\) \+ '\/matches'/);
+    assert.match(src, /action === 'open-match'[\s\S]{0,200}shellNav\(matchPath\)/);
+    assert.ok(!/href="\/m\//.test(src), 'нет ссылок на публичную страницу матча');
+  });
+
+  it('рисует строки как на сайте и не пропускает чужие ссылки', () => {
+    let click;
+    const navigated = [];
+    const root = { addEventListener(type, fn) { if (type === 'click') click = fn; }, innerHTML: '' };
+    const document = {
+      readyState: 'loading',
+      getElementById(id) { return id === 'arenaRoot' ? root : null; },
+      addEventListener() {},
+    };
+    const location = { href: 'https://app.test/webapp/arena?ref=31', pathname: '/webapp/arena', search: '?ref=31' };
+    const context = {
+      document, location, Telegram: { WebApp: { initData: 'signed' } }, ArenaCardModel: loadArenaModel(),
+      ClientShell: { navigate: (p) => navigated.push(p) },
+    };
+    context.window = context;
+    vm.runInNewContext(src, context);
+    const tap = (path) => {
+      const element = { getAttribute: (key) => (key === 'data-action' ? 'open-match' : key === 'data-path' ? path : null) };
+      click({ target: { closest: (sel) => (sel === '[data-action]' ? element : null) }, preventDefault() {} });
+    };
+    tap('client-match?id=171');
+    tap('https://glideclub.by/m/171-lokomotiv-orsha-mogilev');
+    assert.deepEqual(navigated, ['client-match?id=171']);
+  });
+});

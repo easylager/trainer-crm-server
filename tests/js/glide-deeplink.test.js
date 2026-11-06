@@ -348,8 +348,21 @@ describe('Mini App public URL recovery', () => {
     }
   });
 
-  it('leaves /hockey alone: no evidence it lands in the Mini App shell recovery path', () => {
-    const ctx = browser('https://app.test/hockey', { initData: 'signed' });
+  it('recovers /hockey to the Mini App matches catalog without the site city slug', () => {
+    for (const [url, target] of [
+      ['/hockey', '/webapp/client-matches'],
+      ['/hockey?city=orsha', '/webapp/client-matches'],
+      ['/hockey?club=lokomotiv-orsha&init_data=signed', '/webapp/client-matches?team=lokomotiv-orsha&init_data=signed'],
+    ]) {
+      const ctx = browser('https://app.test' + url, { initData: url.includes('init_data') ? '' : 'signed' });
+      assert.equal(G.maybePublicRedirect(ctx), true);
+      assert.equal(ctx.location.pathname + ctx.location.search, url.includes('init_data') ? target : target + (target.includes('?') ? '&' : '?') + 'init_data=signed');
+      assert.equal(ctx.history.length, 1);
+    }
+  });
+
+  it('ordinary browser keeps /hockey public', () => {
+    const ctx = browser('https://app.test/hockey?city=orsha', { initData: '' });
     assert.equal(G.maybePublicRedirect(ctx), false);
     assert.equal(ctx.location.pathname, '/hockey');
   });

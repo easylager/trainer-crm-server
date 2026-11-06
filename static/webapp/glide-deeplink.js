@@ -187,7 +187,8 @@
     var loc = ctx.location;
     if (!loc) return false;
     var p = loc.pathname;
-    if (p !== '/' && !/^\/(p|c|m)\//.test(p)) return false;
+    var hockeyList = p === '/hockey' || p === '/hockey/';
+    if (p !== '/' && !hockeyList && !/^\/(p|c|m)\//.test(p)) return false;
     var tg = ctx.Telegram && ctx.Telegram.WebApp;
     var query = new URLSearchParams(loc.search || '');
     var hashParams = new URLSearchParams(String(loc.hash || '').replace(/^#/, ''));
@@ -208,6 +209,8 @@
     var path = target && target.path;
     if (!path) {
       if (p === '/') path = 'client-home';
+      /* Список сайта /hockey → каталог матчей Mini App. Город сайта — slug, каталог ждёт название: не подставляем. */
+      else if (hockeyList) path = 'client-matches' + (/^[a-z0-9-]{1,64}$/.test(query.get('club') || '') ? '?team=' + query.get('club') : '');
       else if (/^\/m\/[1-9][0-9]*-/.test(p)) path = 'client-match?id=' + p.split('/')[2].split('-')[0];
       else {
         var attr = p.indexOf('/p/') === 0 ? 'data-arena-id' : 'data-city-id';
@@ -219,6 +222,7 @@
     }
     var url = new URL(resolveWebappPath(path, loc), loc.href);
     query.forEach(function (value, key) {
+      if (hockeyList && (key === 'city' || key === 'club')) return;
       if (!url.searchParams.has(key)) url.searchParams.set(key, value);
     });
     if (p.indexOf('/c/') === 0 && !url.searchParams.has('when') && query.get('w')) {

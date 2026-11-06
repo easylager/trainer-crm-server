@@ -1237,6 +1237,9 @@ button.arena-info__tel--copy {
 .av-row__b b { font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); }
 .av-row__b span { font-size: var(--app-text-caption); color: var(--g-muted); }
 .av-row__p { font-size: var(--app-text-body); font-weight: var(--app-weight-bold); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.arena-match { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.arena-match__when { flex: none; min-width: 44px; font-size: var(--app-text-caption); line-height: 1.25; color: var(--g-muted); font-variant-numeric: tabular-nums; }
+.arena-match__go { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--g-quiet); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .av-pic { width: 56px; height: 56px; flex: none; border-radius: var(--app-radius-lg); display: grid; place-items: center; background: var(--g-accent-wash); }
 .av-penguin { width: 46px; height: 46px; }
 

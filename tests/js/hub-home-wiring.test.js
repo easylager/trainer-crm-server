@@ -187,3 +187,11 @@ describe('hub-home.js', () => {
     assert.equal(HubHome._shortKicker('понедельник, 19 октября'), 'пн, 19 октября');
   });
 });
+
+describe('«Чем займёмся?»: пункт «Хоккей»', () => {
+  it('у строки matches есть своя иконка, ссылка уходит через шелл на экран Mini App', () => {
+    assert.match(hubJs, /\n    matches: '/);
+    const needs = hubJs.slice(hubJs.indexOf('function needs('), hubJs.indexOf('function ready('));
+    assert.match(needs, /link\(el\('a', 'hw__link'\), n\.href\)/);
+  });
+});
