@@ -66,7 +66,7 @@
       class: 'kk-hs kk-hs--' + size,
       id: 'kk-s-' + m.id + '-' + idx + (delta > 0 ? 'p' : 'm'),
       'data-keep': '',
-      'aria-label': (delta > 0 ? 'Больше голов ' : 'Меньше голов ') + team,
+      'aria-label': (delta > 0 ? 'Больше шайб: ' : 'Меньше шайб: ') + team,
       onclick: function () { step(m, idx, delta); },
       text: delta > 0 ? '+' : '−',
     });
@@ -139,7 +139,7 @@
       kids.push(h('div', { class: 'kk-hbox' }, [
         h('div', { class: 'kk-hbox__head' }, [
           h('span', { class: 'kk-hbox__t', text: 'Точный счёт' }),
-          h('span', { class: 'kk-hbox__s', text: 'будет «в точку»' }),
+          h('span', { class: 'kk-hbox__s', text: 'необязательно' }),
         ]),
         scoreRow(m, eff, 'lg'),
       ].concat(trumpButton(m))));

@@ -488,7 +488,7 @@
       keep.focus();
       return;
     }
-    var row = M.kkRow(ev);
+    var row = M.kkRow(ev, new Date());
     var card = el('div', 'cm-card cm-kk');
     var main = el('a', 'cm-kk__main');
     main.href = row.href;

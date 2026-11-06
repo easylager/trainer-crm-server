@@ -17,13 +17,20 @@
   var IDEAS = ['Раздевалка', 'Офис', 'Двор', 'Семья'];
   var SCOPES = [
     ['dinamo', 'Динамо-Минск', 'КХЛ, дома и на выезде'],
-    ['extraliga', 'Вся Экстралига', 'Все клубы Беларуси, без Динамо'],
-    ['all', 'Всё сразу', 'Динамо и вся Экстралига'],
+    ['extraliga', 'Вся Экстралига', 'Чемпионат Беларуси'],
+    ['all', 'Всё сразу', 'Динамо-Минск (КХЛ) и вся Экстралига'],
     ['pick', 'Свои команды', 'Одна или несколько — например, Юность и Динамо'],
   ];
 
   function nowIso() {
     return new Date().toISOString();
+  }
+
+  /** «Чемпионат Беларуси, 15 клубов»: число клубов — из списка клубов, а не из головы. */
+  function scopeSub(it, clubs) {
+    if (it[0] !== 'extraliga') return it[2];
+    var n = clubs.filter(function (c) { return c.league === 'extraliga'; }).length;
+    return n ? it[2] + ', ' + n + '\u00a0' + M.plural(n, 'клуб', 'клуба', 'клубов') : it[2];
   }
 
   // ---------- Новая лига ----------
@@ -150,7 +157,7 @@
         h('div', { class: 'kk-sec' }, [
           h('span', { class: 'kk-lbl', text: 'КАКИЕ МАТЧИ' }),
           h('div', { class: 'kk-opts', role: 'group', 'aria-label': 'Матчи' }, SCOPES.map(function (it) {
-            return opt(scopeFace(it[0], clubs), it[1], it[2], f.scope === it[0], function () { change(a, { scope: it[0] }); });
+            return opt(scopeFace(it[0], clubs), it[1], scopeSub(it, clubs), f.scope === it[0], function () { change(a, { scope: it[0] }); });
           })),
           f.scope === 'pick'
             ? h('div', { class: 'kk-clubgrid' }, clubs.map(function (c) {
@@ -200,7 +207,7 @@
       return [
         h('main', { class: 'kk-main kk-center' }, [
           h('span', { class: 'kk-badge-big', 'aria-hidden': 'true', text: l.name.slice(0, 2).toUpperCase() }),
-          h('h2', { class: 'kk-h2 kk-h2--xl', text: '«' + l.name + '» готова' }),
+          h('h2', { class: 'kk-h2 kk-h2--xl', text: 'Лига «' + l.name + '» готова' }),
           h('span', { class: 'kk-sub', text: S.leagueSub(l) + '. Пока в лиге только ты — позови своих, очки за матчи пойдут и сюда, и в общую таблицу.' }),
           l.few_matches ? h('span', { class: 'kk-tx kk-tx--warn', text: 'Матчей до конца лиги мало — таблица будет почти пустой.' }) : null,
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l)); }, text: 'Позвать в Telegram' }),
@@ -329,7 +336,7 @@
         var others = (l.items || []).filter(function (r) { return !r.is_me; });
         var text = 'Твои очки останутся в общей таблице. Вернуться можно по той же ссылке.';
         if (l.is_owner && others.length) text = 'Твои очки останутся в общей таблице. Лига перейдёт тому, кто здесь дольше всех. Вернуться можно по той же ссылке.';
-        if (!others.length) text = 'Ты здесь один — лига исчезнет. Твои очки останутся в общей таблице.';
+        if (!others.length) text = 'В лиге больше никого — она исчезнет. Твои очки останутся в общей таблице.';
         return K.sheet('Выйти из «' + (l.name || '') + '»?', null, [
           h('span', { class: 'kk-tx', text: text }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--alt', text: 'Остаться', onclick: K.closeSheet }),
@@ -380,15 +387,15 @@
       if (state.joinError === 'gone') {
         return [h('main', { class: 'kk-main kk-center' }, [
           h('h2', { class: 'kk-h2 kk-h2--xl', text: 'Этой лиги больше нет' }),
-          h('span', { class: 'kk-sub', text: 'Все из неё вышли. Можно угадывать самому или собрать свою.' }),
+          h('span', { class: 'kk-sub', text: 'Все из неё вышли. Можно собрать свою или играть без лиги.' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.replace('leagueNew', {}); }, text: 'Создать свою лигу' }),
-          h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'Угадывать самому' }),
+          h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'Играть без лиги' }),
         ])];
       }
       var p = state.joinPreview;
       var next = S.nextMatch(state.matches, { id: 0, home_team: '', away_team: '' });
       return [h('main', { class: 'kk-main' }, [
-        h('span', { class: 'kk-lbl', text: 'КТО КОГО' }),
+        h('span', { class: 'kk-lbl', text: 'КТО КОГО?' }),
         p ? h('div', { class: 'kk-sec' }, [
           h('div', { class: 'kk-faces', 'aria-hidden': 'true' }, (p.names || []).slice(0, 5).map(function (n) { return K.ava(n, 48); })),
           h('span', { class: 'kk-tx', text: p.names && p.names[0] ? p.names[0] + ' зовёт тебя в лигу' : 'Тебя зовут в лигу' }),

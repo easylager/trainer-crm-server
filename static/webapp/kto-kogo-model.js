@@ -275,7 +275,7 @@
   /** Подсказка в шторке счёта: этот черновик, не правила целиком. */
   function scoreHint(home, away) {
     if (home === away) return 'Ничьей в хоккее не бывает — поправь счёт';
-    return home + ':' + away + ' — так будет «в точку»';
+    return 'Закончится ' + home + ':' + away + ' — будет «в точку»';
   }
 
   /** startapp=kk_<КОД> → код лиги или ''. */
@@ -353,17 +353,18 @@
 
   /** Итоги месяца: заголовок и строка под ним. */
   function monthHead(res) {
-    if (res.won) return res.title + ' твой';
-    if (!res.winners || !res.winners.length) return res.title + ' без короны';
-    return 'корона — ' + joinNames(res.winners);
+    var title = res.title ? res.title.charAt(0).toUpperCase() + res.title.slice(1) : '';
+    if (res.won) return title + ' твой';
+    if (!res.winners || !res.winners.length) return title + ' без короны';
+    return 'Корона: ' + joinNames(res.winners);
   }
 
   function monthLine(res) {
     var where = res.league ? 'в' + NBSP + 'лиге «' + res.league.name + '»' : 'в общей таблице';
     if (res.won) return 'Первое место ' + where + NBSP + '· ' + points(res.points);
     if (res.rank == null) return 'В этом месяце без твоих ходов ' + where;
-    if (!res.gap) return 'Ты ' + res.rank + '-й ' + where;
-    return 'Ты ' + res.rank + '-й ' + where + ', до короны не хватило ' + points(res.gap);
+    if (!res.gap) return res.rank + '-е место ' + where;
+    return res.rank + '-е место ' + where + ', до короны не хватило ' + points(res.gap);
   }
 
   /** Вступил в середине месяца — сколько матчей осталось. */
