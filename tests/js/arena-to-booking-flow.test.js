@@ -17,6 +17,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const webapp = path.resolve(__dirname, '../../static/webapp');
 
@@ -365,5 +366,100 @@ describe('выбор дня сверху на «Выберите время»', 
     );
     assert.match(chip, /'Сегодня'/);
     assert.match(chip, /'Завтра'/);
+  });
+});
+
+describe('arena contact clicks in Mini App', () => {
+  function arena(tg) {
+    let click;
+    const opened = [];
+    const document = {
+      readyState: 'loading',
+      getElementById(id) {
+        return id === 'arenaRoot' ? { addEventListener(type, fn) { if (type === 'click') click = fn; } } : null;
+      },
+      addEventListener() {},
+    };
+    const location = { href: 'https://app.test/webapp/arena?ref=31', pathname: '/webapp/arena', search: '?ref=31' };
+    const context = { document, location, Telegram: { WebApp: tg }, ArenaCardModel: loadArenaModel(), open: (...args) => opened.push(args) };
+    context.window = context;
+    vm.runInNewContext(read('arena-card.js'), context);
+    return {
+      location, opened,
+      click(action, attrs) {
+        const element = { getAttribute: (key) => key === 'data-action' ? action : attrs[key] || null };
+        const event = { target: { closest: (selector) => selector === '[data-action]' ? element : null }, preventDefault() { this.defaultPrevented = true; } };
+        click(event);
+        return event;
+      },
+    };
+  }
+
+  it('Site from /webapp/arena?ref=31 calls tg.openLink without navigating document', () => {
+    const links = [];
+    const ctx = arena({ initData: 'signed', openLink: (...args) => links.push(args) });
+    const href = loadArenaModel().quickActions({ website_url: 'https://lokomotiv-orsha.by/расписание/' }).find((a) => a.id === 'site').href;
+    const event = ctx.click('external', { 'data-href': href });
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(links[0][0], href);
+    assert.equal(links[0][1].try_instant_view, false);
+    assert.equal(ctx.location.href, 'https://app.test/webapp/arena?ref=31');
+    assert.equal(ctx.opened.length, 0);
+  });
+
+  it('Telegram openLink failure never falls back to a browser window', () => {
+    const ctx = arena({ initData: 'signed', openLink() { throw new Error('bridge unavailable'); } });
+    ctx.click('external', { 'data-href': 'https://lokomotiv-orsha.by/расписание/' });
+    assert.equal(ctx.opened.length, 0);
+    assert.equal(ctx.location.href, 'https://app.test/webapp/arena?ref=31');
+  });
+
+  it('outside Telegram empty SDK does not hijack the browser link behavior', () => {
+    let tgCalls = 0;
+    const ctx = arena({ initData: '', openLink() { tgCalls++; } });
+    ctx.click('external', { 'data-href': 'https://lokomotiv-orsha.by/расписание/' });
+    assert.equal(tgCalls, 0);
+    assert.equal(ctx.opened.length, 1);
+  });
+});
+
+describe('«Матчи здесь» на карточке катка в Mini App', () => {
+  const src = read('arena-card.js');
+
+  it('блок идёт сразу после расписания, как на странице места', () => {
+    const paint = src.slice(src.indexOf('function paint()'));
+    assert.ok(paint.indexOf('renderIceTabs()') < paint.indexOf('renderHereMatches()'));
+    assert.ok(paint.indexOf('renderHereMatches()') < paint.indexOf('renderFacts()'));
+  });
+
+  it('матчи берутся из /api/public/arenas/{id}/matches, касание — экран client-match через шелл', () => {
+    assert.match(src, /'\/api\/public\/arenas\/' \+ encodeURIComponent\(String\(card\.id\)\) \+ '\/matches'/);
+    assert.match(src, /action === 'open-match'[\s\S]{0,200}shellNav\(matchPath\)/);
+    assert.ok(!/href="\/m\//.test(src), 'нет ссылок на публичную страницу матча');
+  });
+
+  it('рисует строки как на сайте и не пропускает чужие ссылки', () => {
+    let click;
+    const navigated = [];
+    const root = { addEventListener(type, fn) { if (type === 'click') click = fn; }, innerHTML: '' };
+    const document = {
+      readyState: 'loading',
+      getElementById(id) { return id === 'arenaRoot' ? root : null; },
+      addEventListener() {},
+    };
+    const location = { href: 'https://app.test/webapp/arena?ref=31', pathname: '/webapp/arena', search: '?ref=31' };
+    const context = {
+      document, location, Telegram: { WebApp: { initData: 'signed' } }, ArenaCardModel: loadArenaModel(),
+      ClientShell: { navigate: (p) => navigated.push(p) },
+    };
+    context.window = context;
+    vm.runInNewContext(src, context);
+    const tap = (path) => {
+      const element = { getAttribute: (key) => (key === 'data-action' ? 'open-match' : key === 'data-path' ? path : null) };
+      click({ target: { closest: (sel) => (sel === '[data-action]' ? element : null) }, preventDefault() {} });
+    };
+    tap('client-match?id=171');
+    tap('https://glideclub.by/m/171-lokomotiv-orsha-mogilev');
+    assert.deepEqual(navigated, ['client-match?id=171']);
   });
 });

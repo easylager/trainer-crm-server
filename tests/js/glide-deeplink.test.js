@@ -242,3 +242,135 @@ describe('«Кто кого» из сообщений бота (TASK-335)', () =
     assert.deepEqual(G.deepLinkTarget('kkm_5'), { key: 'client-match', path: 'client-match?id=5' });
   });
 });
+
+describe('Mini App public URL recovery', () => {
+  const G = load();
+
+  function browser(url, { initData = 'signed', startParam = '', arenaId = '31', cityId = '18', storage = new Map() } = {}) {
+    let current = new URL(url);
+    const entries = [current.href];
+    let index = 0;
+    const loc = {
+      get href() { return current.href; },
+      set href(value) {
+        current = new URL(value, current);
+        entries.splice(++index, entries.length, current.href);
+      },
+      get pathname() { return current.pathname; },
+      get search() { return current.search; },
+      get hash() { return current.hash; },
+      replace(value) {
+        current = new URL(value, current);
+        entries[index] = current.href;
+      },
+    };
+    const history = {
+      get length() { return entries.length; },
+      back() { if (index > 0) current = new URL(entries[--index]); },
+    };
+    return {
+      location: loc, history, entries,
+      sessionStorage: { getItem: (key) => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
+      Telegram: { WebApp: { initData, initDataUnsafe: { start_param: startParam } } },
+      document: {
+        querySelector(selector) {
+          const id = selector.includes('arena') ? arenaId : cityId;
+          return id ? { getAttribute() { return id; } } : null;
+        },
+      },
+    };
+  }
+
+  it('resolves webapp paths under /webapp even when launched on / or /p/', () => {
+    for (const url of ['https://app.test/', 'https://app.test/p/orsha/orsha-arena']) {
+      assert.equal(G.resolveWebappPath('client-match?id=5', { href: url }), '/webapp/client-match?id=5');
+    }
+  });
+
+  it('launch on / replaces / and arena Back returns to the Mini App home', () => {
+    const ctx = browser('https://app.test/#tgWebAppData=signed');
+    assert.equal(G.maybePublicRedirect(ctx), true);
+    assert.equal(ctx.location.pathname, '/webapp/client-home');
+    assert.equal(ctx.history.length, 1);
+    ctx.location.href = '/webapp/arena?ref=31';
+    ctx.history.back();
+    assert.equal(ctx.location.pathname, '/webapp/client-home');
+    assert.ok(ctx.entries.every((url) => new URL(url).pathname !== '/'));
+  });
+
+  it('public entry preserves kkm_, arena_ session and catalog_ startapp targets', () => {
+    for (const [sp, target] of [
+      ['kkm_5_ABCD', '/webapp/client-match?id=5&c=ABCD'],
+      ['arena_31_s_99', '/webapp/arena?ref=31&s=99'],
+      ['catalog_18_skate_tomorrow', '/webapp/ice?city_id=18&intent=skate&when=tomorrow'],
+    ]) {
+      const ctx = browser('https://app.test/#tgWebAppData=signed', { startParam: sp });
+      assert.equal(G.maybePublicRedirect(ctx), true);
+      assert.equal(ctx.location.pathname + ctx.location.search, target);
+      assert.equal(ctx.location.hash, '#tgWebAppData=signed');
+      assert.equal(ctx.history.length, 1);
+      assert.equal(ctx.sessionStorage.getItem(G.DEEP_LINK_FLAG), sp);
+    }
+  });
+
+  it('recovers /p/, /c/ and /m/ to the corresponding screen and keeps context', () => {
+    for (const [url, target] of [
+      ['/p/orsha/orsha-arena?s=99&init_data=signed', '/webapp/arena?ref=31&s=99&init_data=signed'],
+      ['/c/orsha?when=tomorrow&init_data=signed', '/webapp/ice?city_id=18&when=tomorrow&init_data=signed'],
+      ['/m/5-dinamo?c=ABCD&init_data=signed', '/webapp/client-match?id=5&c=ABCD&init_data=signed'],
+    ]) {
+      const ctx = browser('https://app.test' + url, { initData: '' });
+      assert.equal(G.maybePublicRedirect(ctx), true);
+      assert.equal(ctx.location.pathname + ctx.location.search, target);
+      assert.equal(ctx.history.length, 1);
+    }
+  });
+
+  it('used startapp cannot hijack recovery after Back to public /', () => {
+    const storage = new Map([[G.DEEP_LINK_FLAG, 'arena_31'], ['glide_mini_app_active_v1', '1']]);
+    const ctx = browser('https://app.test/', { storage, initData: '', startParam: 'arena_31' });
+    assert.equal(G.maybePublicRedirect(ctx), true);
+    assert.equal(ctx.location.pathname, '/webapp/client-home');
+  });
+
+  it('ordinary browser including empty Telegram SDK and startapp query stays public', () => {
+    for (const url of ['/', '/?startapp=kkm_5', '/p/orsha/orsha-arena', '/c/orsha', '/m/5-dinamo']) {
+      const ctx = browser('https://app.test' + url, { initData: '' });
+      assert.equal(G.maybePublicRedirect(ctx), false);
+      assert.equal(ctx.location.href, 'https://app.test' + url);
+    }
+  });
+
+  it('does not redirect /webapp or guess arena/city IDs when SSR metadata is missing', () => {
+    for (const url of ['/webapp/client-home', '/webapp/arena?ref=31', '/p/orsha/unknown', '/c/unknown']) {
+      const ctx = browser('https://app.test' + url, { arenaId: '', cityId: '' });
+      assert.equal(G.maybePublicRedirect(ctx), false);
+    }
+  });
+
+  it('recovers /hockey to the Mini App matches catalog without the site city slug', () => {
+    for (const [url, target] of [
+      ['/hockey', '/webapp/client-matches'],
+      ['/hockey?city=orsha', '/webapp/client-matches'],
+      ['/hockey?club=lokomotiv-orsha&init_data=signed', '/webapp/client-matches?team=lokomotiv-orsha&init_data=signed'],
+    ]) {
+      const ctx = browser('https://app.test' + url, { initData: url.includes('init_data') ? '' : 'signed' });
+      assert.equal(G.maybePublicRedirect(ctx), true);
+      assert.equal(ctx.location.pathname + ctx.location.search, url.includes('init_data') ? target : target + (target.includes('?') ? '&' : '?') + 'init_data=signed');
+      assert.equal(ctx.history.length, 1);
+    }
+  });
+
+  it('ordinary browser keeps /hockey public', () => {
+    const ctx = browser('https://app.test/hockey?city=orsha', { initData: '' });
+    assert.equal(G.maybePublicRedirect(ctx), false);
+    assert.equal(ctx.location.pathname, '/hockey');
+  });
+
+  it('public home and shared place/city/match template wire recovery', () => {
+    for (const file of ['catalog-home.html', 'b.html']) {
+      const html = fs.readFileSync(path.join(webapp, '../share', file), 'utf8');
+      assert.match(html.slice(0, html.indexOf('</head>')), /src="\/static\/webapp\/glide-deeplink\.js\?v=/);
+    }
+  });
+});

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
@@ -54,6 +54,8 @@ _MAP_CONFIG_EMPTY_WARN_SEC = 600.0
 _map_config_empty_warned_at = 0.0
 
 router = APIRouter(prefix="/api/public", tags=["public-ice"])
+# Как блок «Матчи здесь» на странице места (here_section): ближайшие три.
+HERE_MATCHES_LIMIT = 3
 
 
 def _query_error(exc: IcePublicQueryError) -> HTTPException:
@@ -331,6 +333,35 @@ async def get_public_arena_sessions(
         raise HTTPException(status_code=404, detail="Arena not found")
     set_public_json_list_cache(response)
     return payload
+
+
+@router.get("/arenas/{arena_id:int}/matches")
+async def get_public_arena_matches(
+    arena_id: int,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Матчи здесь» для карточки в Mini App: те же матчи, что блок на странице места, но ссылка — экран матча."""
+    from src.application import site_matches
+    from src.application.hockey_event import event_href
+
+    set_public_json_list_cache(response)
+    if not site_matches.site_enabled():
+        return {"matches": []}
+    found = await site_matches.arena_matches(session, arena_id=arena_id, now=datetime.now(timezone.utc))
+    return {
+        "matches": [
+            {
+                "id": m["id"],
+                "href": event_href(m["id"]),
+                "title": m["title"],
+                "when": f"{site_matches.WEEKDAYS_SHORT[m['day'].weekday()]} {m['day'].day}",
+                "time": m["time"],
+                "league_label": m["league_label"],
+            }
+            for m in found[:HERE_MATCHES_LIMIT]
+        ]
+    }
 
 
 @router.get("/arenas/{arena_ref}/trainers")

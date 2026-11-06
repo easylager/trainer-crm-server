@@ -103,7 +103,7 @@
 
   function webappBasePath() {
     var p = global.location.pathname || '';
-    return p.replace(/[^/]+$/, '') || '/webapp/';
+    return p.indexOf('/static/webapp/') === 0 ? '/static/webapp/' : '/webapp/';
   }
 
   function getInitData() {
@@ -554,7 +554,7 @@
     });
   }
 
-  function navigate(path) {
+  function navigate(path, opts) {
     if (isSameTabRoute(path)) {
       closeMoreSheet();
       if (normalizeRoutePath(path).split('?')[0] === 'ice' && handleCatalogTabRetap()) {
@@ -569,8 +569,25 @@
     var raw = String(path || '');
     var url = raw.charAt(0) === '/' ? withInit(raw) : withInit(webappBasePath() + raw);
     // Full page loads in Telegram WebView: View Transitions delay navigation until snapshot capture.
-    global.location.href = url;
+    if (opts && opts.replace) global.location.replace(url);
+    else global.location.href = url;
   }
+
+  document.addEventListener('click', function (ev) {
+    var tg = getTg();
+    if (ev.defaultPrevented || !tg || !getInitData()) return;
+    var a = ev.target.closest('a[href]');
+    if (!a) return;
+    var url = new URL(a.href, global.location.href);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+    if (url.origin === new URL(global.location.href).origin && a.getAttribute('target') !== '_blank' && a.getAttribute('data-action') !== 'external') return;
+    ev.preventDefault();
+    try {
+      tg.openLink(url.href, { try_instant_view: false });
+    } catch (e) {
+      if (typeof tg.showAlert === 'function') tg.showAlert('Не удалось открыть ссылку. Попробуйте ещё раз.');
+    }
+  });
 
   function openMoreSheet() {
     refreshWatchesSummary();
@@ -1211,7 +1228,7 @@
       global.sessionStorage.setItem(DEEP_LINK_FLAG, sp);
     } catch (e) { /* без storage — как раньше, по ключу страницы */ }
     if (isAlreadyOnDeepLinkTarget(target)) return false;
-    navigate(target.path);
+    navigate(target.path, { replace: true });
     return true;
   }
 
@@ -1326,6 +1343,9 @@
     observer.observe(document.documentElement, { childList: true });
   }
 
+  try {
+    if (getTg() && getInitData()) global.sessionStorage.setItem('glide_mini_app_active_v1', '1');
+  } catch (e) { /* storage может быть запрещён */ }
   mountTabBarEarly();
 
   /*

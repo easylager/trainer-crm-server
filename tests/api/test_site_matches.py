@@ -491,6 +491,21 @@ async def test_arena_without_matches_and_flag_off_unchanged(app_use_test_db, db_
     assert "Матчи здесь" not in html and "matches.css" not in html
 
 
+@pytest.mark.asyncio
+async def test_arena_matches_api_for_mini_app_mirrors_here_block(app_use_test_db, db_session, monkeypatch):
+    w = await _world(db_session)
+    mid = await _match(db_session)
+    data = (await _get(f"/api/public/arenas/{w['chizh']}/matches")).json()
+    assert [m["id"] for m in data["matches"]] == [mid]
+    m = data["matches"][0]
+    assert m["href"] == f"client-match?id={mid}", "экран Mini App, не публичная /m/"
+    assert m["title"] == "Юность — Шахтер" and m["league_label"] == "Экстралига"
+    assert m["time"] and m["when"]
+    assert (await _get(f"/api/public/arenas/{w['dinamo']}/matches")).json() == {"matches": []}
+    monkeypatch.setenv("SITE_MATCHES_ENABLED", "0")
+    assert (await _get(f"/api/public/arenas/{w['chizh']}/matches")).json() == {"matches": []}
+
+
 # ── Тексты и границы ─────────────────────────────────────────────────
 
 
