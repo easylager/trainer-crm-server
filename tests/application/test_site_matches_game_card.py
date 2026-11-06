@@ -29,12 +29,12 @@ def test_live_panel_hides_counts_below_the_threshold_and_names_the_next_match() 
     html = _card({"kind": "game", "phase": PHASE_LIVE, "match_id": 7, "next": nxt, "total": 3, "home_n": None, "away_n": None, "right": 0})
     assert "Следующий: Динамо-Минск — Шахтёр, 12 ноября." in html
     assert "За Динамо-Минск" not in html
-    assert "Ход на следующий матч" in html
+    assert "Сделать ход на следующий матч" in html
 
 
 def test_soon_panel_offers_a_reminder_not_an_invite() -> None:
     html = _card({"kind": "soon", "match_id": 7})
-    assert "Экстралигу скоро можно будет угадывать" in html
+    assert "Скоро можно будет угадывать и Экстралигу" in html
     assert "Напомнить в Telegram" in html
     assert "позвать" not in html.lower()
 

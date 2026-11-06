@@ -456,7 +456,7 @@ def result_text(
     total = points * (2 if doubled else 1)
     x2 = " с козырем" if doubled else ""
     # Слова вердикта те же, что ``verdict`` в kto-kogo-model.js: бот и Mini App называют исход одинаково.
-    head = {POINTS_EXACT: "В точку!", 30: "Почти в точку", 20: "Есть победитель", 10: "Шайбы угаданы"}.get(points)
+    head = {POINTS_EXACT: "В точку!", 30: "Почти в точку", 20: "Угадан победитель", 10: "Шайбы угаданы"}.get(points)
     if head is None:
         verdict = "Мимо. Бывает."
     elif points == POINTS_EXACT:

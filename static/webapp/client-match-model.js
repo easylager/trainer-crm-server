@@ -105,7 +105,7 @@
   function verdict(points) {
     if (points === EXACT) return 'В точку! +50';
     if (points === 30) return 'Почти в точку · +30';
-    if (points === 20) return 'Есть победитель · +20';
+    if (points === 20) return 'Угадан победитель · +20';
     if (points === 10) return 'Шайбы угаданы · +10';
     return 'В этот раз мимо';
   }

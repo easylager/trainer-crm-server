@@ -213,7 +213,7 @@
   function verdict(pointsWon) {
     if (pointsWon === 50) return { head: 'в точку!', sticker: '+50', tone: 'win', tail: 'точный счёт' };
     if (pointsWon === 30) return { head: 'почти в точку', sticker: '+30', tone: 'ok', tail: 'победитель и ещё часть счёта' };
-    if (pointsWon === 20) return { head: 'есть победитель', sticker: '+20', tone: 'ok', tail: 'победитель угадан' };
+    if (pointsWon === 20) return { head: 'угадан победитель', sticker: '+20', tone: 'ok', tail: 'угадан победитель' };
     if (pointsWon === 10) return { head: 'шайбы угаданы', sticker: '+10', tone: 'ok', tail: 'шайбы одной команды' };
     return { head: 'мимо', sticker: '0', tone: 'miss', tail: 'бывает' };
   }
@@ -342,8 +342,8 @@
   /** Строка под финалом месяца: факт без шансов («Катя впереди на 20»). */
   function leaderNote(leader) {
     if (!leader) return '';
-    if (leader.me_leading) return leader.gap ? 'Ты впереди на ' + points(leader.gap) : 'Очков поровну — решит финал';
-    return leader.gap ? leader.leader + ' впереди на ' + points(leader.gap) : 'Очков поровну — решит финал';
+    if (leader.me_leading) return leader.gap ? 'Ты впереди на ' + points(leader.gap) : 'Если очков поровну, всё решит финал';
+    return leader.gap ? leader.leader + ' впереди на ' + points(leader.gap) : 'Если очков поровну, всё решит финал';
   }
 
   function joinNames(names) {

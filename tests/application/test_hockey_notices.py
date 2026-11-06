@@ -188,7 +188,7 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     assert sasha.kind == "result"
     assert sasha.text.startswith("<b>Юность — Шахтёр 3:2.</b> В точку! +50.\nТвоё место в «")
     assert sasha.text.endswith("»: 1-е из 4.")
-    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Есть победитель: +20.")
+    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Угадан победитель: +20.")
     assert by_player[VOVA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Мимо. Бывает.")
     labels = [b["text"] for row in sasha.buttons for b in row]
     assert "Следующий ход" in labels and "Таблица" in labels

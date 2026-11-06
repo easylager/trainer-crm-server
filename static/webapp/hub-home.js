@@ -504,12 +504,12 @@
       what.appendChild(el('span', 'hn__sub', clubName(m.home.name) + ' — ' + clubName(m.away.name) + ', ' + whenLabel(m.starts_at)));
       row.appendChild(what);
       var hasScore = pick.home_score != null;
-      row.appendChild(el('span', 'hn__chip', hasScore ? pick.home_score + ':' + pick.away_score : 'счёт?'));
+      row.appendChild(el('span', 'hn__chip', hasScore ? pick.home_score + ':' + pick.away_score : 'Какой счёт?'));
       host.replaceChildren(row);
       return;
     }
     var head = el('div', 'hn__row');
-    head.appendChild(el('span', 'hn__title hh-display', 'Кто кого'));
+    head.appendChild(el('span', 'hn__title hh-display', 'КТО КОГО?'));
     head.appendChild(el('span', 'hn__when', whenLabel(m.starts_at)));
     root.appendChild(head);
     var teams = el('div', 'hn__teams');

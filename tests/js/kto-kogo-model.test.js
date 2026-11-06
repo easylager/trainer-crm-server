@@ -161,7 +161,7 @@ describe('гонка месяца (TASK-334)', () => {
   });
   it('строка финала и итоги месяца', () => {
     assert.equal(M.leaderNote({ leader: 'Катя', gap: 20, me_leading: false }), 'Катя впереди на 20' + NBSP + 'очков');
-    assert.equal(M.leaderNote({ gap: 0, me_leading: true }), 'Очков поровну — решит финал');
+    assert.equal(M.leaderNote({ gap: 0, me_leading: true }), 'Если очков поровну, всё решит финал');
     const won = { title: 'ноябрь', won: true, points: 280, league: { name: 'ОХМ' }, winners: ['Я'] };
     assert.equal(M.monthHead(won), 'Ноябрь твой');
     assert.equal(M.monthLine(won), 'Первое место в' + NBSP + 'лиге «ОХМ»' + NBSP + '· 280' + NBSP + 'очков');

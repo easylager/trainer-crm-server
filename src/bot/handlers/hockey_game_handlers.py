@@ -164,7 +164,7 @@ async def on_leave(cb: CallbackQuery) -> None:
         try:
             await leave_league(session, league_id=league_id, player_key=cb.from_user.id)
             await session.commit()
-            toast = "Готово: тебя нет в лиге"
+            toast = "Ты вышел из лиги"
         except (LookupError, PermissionError):
             toast = "Тебя уже нет в этой лиге"
     await cb.answer(toast, show_alert=True)

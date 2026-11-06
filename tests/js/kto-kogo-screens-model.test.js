@@ -54,9 +54,9 @@ describe('«Если угадаешь»', () => {
     assert.equal(lines[1].text, 'Все · сезон: 214-е → около 190-го');
     assert.equal(lines[2].text, 'Лига «Офис»: 3-е → около 2-го');
   });
-  it('новичок без места: «станешь N-м»', () => {
+  it('новичок без места: будущее место', () => {
     const [l] = S.stakeLines([{ kind: 'slice', club: 'Лида', period_title: 'ноябрь', rank_now: null, rank_if: 2, crown: false }]);
-    assert.equal(l.text, 'Лида · ноябрь: станешь 2-м');
+    assert.equal(l.text, 'Лида · ноябрь: будешь на 2-м месте');
   });
 });
 
@@ -102,7 +102,7 @@ describe('очки и живой счёт', () => {
     assert.equal(S.liveWhy(pick('home', 4, 1), { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди. До «в точку» не хватает 2\u00a0шайбы.');
     assert.match(S.liveWhy(pick('home', 2, 1), { home_score: 2, away_score: 1 }, names), /«в точку»/);
     assert.equal(S.liveWhy({ side: 'home', home_score: null }, { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди.');
-    assert.equal(S.liveWhy(pick('home', 3, 2), null), 'Счёт обновляется раз в 15\u00a0минут');
+    assert.equal(S.liveWhy(pick('home', 3, 2), null), 'Счёт обновляем каждые 15\u00a0минут');
     // Шайб на табло уже больше, чем в ходе: «в точку» не выйдет.
     assert.equal(S.liveWhy(pick('home', 3, 1), { home_score: 4, away_score: 1 }, names), 'Пока сходится: Динамо впереди. «В точку» уже не выйдет.');
   });
@@ -211,7 +211,7 @@ describe('итог и движение', () => {
     assert.equal(S.resultHead(50), 'В точку!');
     assert.equal(S.resultHead(0), 'Мимо');
     assert.equal(S.resultHead(30), 'Почти в точку');
-    assert.equal(S.resultHead(20), 'Есть победитель');
+    assert.equal(S.resultHead(20), 'Угадан победитель');
     const rows = S.movementRows([
       { kind: 'slice', club: 'Юность', period_title: 'ноябрь', rank_before: 2, rank_after: 1, crown: true },
       { kind: 'slice', club: null, period_title: 'сезон 2026/27', rank_before: 214, rank_after: 214, crown: false },
@@ -270,7 +270,7 @@ describe('таблица', () => {
   });
   it('строка про корону: порог трёх, моё положение, звание сезона', () => {
     const view = { players_with_points: 5, me: { rank: 3 }, to_crown: 20 };
-    assert.match(S.tableCrownLine(view, 'Юность', '2026-11', 'сезон 2026/27'), /^Корона за ноябрь по матчам Юности — тому, кто будет первым после последнего матча месяца\. До первого места — 20.очков\.$/);
+    assert.match(S.tableCrownLine(view, 'Юность', '2026-11', 'сезон 2026/27'), /^Корона за ноябрь по матчам Юности — у лидера после последнего матча месяца\. До первого места — 20.очков\.$/);
     assert.match(S.tableCrownLine({ players_with_points: 5, me: { rank: 1 }, to_crown: 0 }, null, '2026-11', ''), /Сейчас первое место твоё/);
     assert.match(S.tableCrownLine({ players_with_points: 2 }, null, '2026-11', ''), /хотя бы у троих/);
     assert.match(S.tableCrownLine(view, null, 'season', 'сезон 2026/27'), /Знаток сезона 2026\/27/);
@@ -330,7 +330,7 @@ describe('лиги', () => {
     assert.match(ch[0].sub, /по 31.июля · корона каждый месяц/);
     assert.equal(ch[1].label, 'Ноябрь');
     assert.match(ch[1].sub, /одна корона в конце/);
-    assert.match(ch[2].sub, /с сегодняшнего дня по 30.ноября/);
+    assert.match(ch[2].sub, /с 3.ноября по 30.ноября/);
     assert.match(ch[3].sub, /1.марта.–.31.мая/);
     assert.match(ch[4].sub, /не дальше 31.июля/);
     // Плей-офф кончился — сервер его не прислал: в списке его нет.
@@ -354,10 +354,10 @@ describe('лиги', () => {
   });
   it('строка про корону лиги: месяц и весь срок', () => {
     const l = { term: 'season', ends_at: '2027-07-31T21:00:00Z', period: { key: '2026-11' } };
-    assert.equal(S.leagueCrownLine(l, 'month', { rank: 3, points: 210 }, 230), 'Корону лиги за ноябрь получит тот, кто будет первым после последнего матча месяца. Сейчас ты на 3-м месте, до первого — 20' + NBSP + 'очков.');
+    assert.equal(S.leagueCrownLine(l, 'month', { rank: 3, points: 210 }, 230), 'Корону лиги за ноябрь заберёт лидер после последнего матча месяца. Сейчас ты на 3-м месте, до первого — 20' + NBSP + 'очков.');
     assert.match(S.leagueCrownLine(l, 'month', { rank: 1, points: 230 }, 230), /Сейчас первое место твоё/);
-    assert.match(S.leagueCrownLine(l, 'all', null, 0), /^Чемпиона лиги назовём после 31.июля/);
-    assert.match(S.leagueCrownLine({ term: 'month', ends_at: '2026-11-30T21:00:00Z' }, 'all', null, 0), /^Корону лиги получит тот, кто будет первым, когда лига закончится: 30.ноября/);
+    assert.match(S.leagueCrownLine(l, 'all', null, 0), /^Чемпиона лиги определим после 31.июля/);
+    assert.match(S.leagueCrownLine({ term: 'month', ends_at: '2026-11-30T21:00:00Z' }, 'all', null, 0), /^Корону лиги заберёт лидер, когда лига закончится — 30.ноября/);
   });
   it('приглашение без азартных слов', () => {
     assert.match(S.inviteText('Офис', { scope: 'extraliga', clubs: [] }), /Вся Экстралига/);
@@ -453,7 +453,7 @@ describe('шторка «Как считаются очки»', () => {
     assert.deepEqual(r.rows.map((x) => x.value), [String(M.POINTS.winner), '+' + M.POINTS.diff, String(M.POINTS.exact)]);
     assert.equal(M.POINTS.diff, M.POINTS.goals); // одна строка «+10» говорит и про разницу, и про голы
     assert.equal(r.rows[2].gold, true);
-    assert.equal(r.rows[0].text, 'Победитель угадан.');
+    assert.equal(r.rows[0].text, 'Угадал победителя.');
     assert.equal(r.trumpTitle, 'Козырь');
     assert.match(r.trumpText, /удвоятся/);
     assert.equal(M.PICK_CLOSES_BEFORE_SEC, 60);

@@ -124,7 +124,7 @@ async def test_leave_button_leaves_the_extended_league(db_session) -> None:
     await join_by_code(db_session, player_key=ME, display_name="Саша", code=league.invite_code)
     cb = _callback(f"kk:lv:{league.id}", [[("Выйти из лиги", f"kk:lv:{league.id}")]])
     await h.on_leave(cb)
-    assert cb.answer.await_args.args[0] == "Готово: тебя нет в лиге"
+    assert cb.answer.await_args.args[0] == "Ты вышел из лиги"
     left = (
         await db_session.execute(
             text("SELECT 1 FROM hockey_league_members WHERE league_id = :l AND player_key = :p"),

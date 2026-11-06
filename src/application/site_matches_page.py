@@ -596,7 +596,7 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
     m = data["match"]
     link = game_link(base_url, m["id"], city_id=city_id)
     if game["kind"] == "soon":
-        head, sub, cta = "Экстралигу скоро можно будет угадывать", "Как откроем, напишем в Telegram.", "Напомнить в Telegram"
+        head, sub, cta = "Скоро можно будет угадывать и Экстралигу", "Как откроем, напишем в Telegram.", "Напомнить в Telegram"
     else:
         phase = game["phase"]
         nxt = game.get("next")
@@ -626,7 +626,7 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
                 )
                 sub = who + nxt_text
                 sub = sub.strip() or "Игра продолжится на следующем матче."
-            cta = "Ход на следующий матч" if nxt else "Открыть игру"
+            cta = "Сделать ход на следующий матч" if nxt else "Открыть игру"
             link = game_link(base_url, nxt["id"], city_id=city_id) if nxt else link
     button = (
         f'<a class="m-btn m-btn--fill" href="{_e(link)}" rel="nofollow" data-m-sheet="game" data-m-name="{_e(m["title"])}">{_e(cta)}</a>'
