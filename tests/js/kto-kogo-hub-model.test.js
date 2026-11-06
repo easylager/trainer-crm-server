@@ -39,8 +39,12 @@ describe('очки — те же числа, что на сервере', () => 
     const now = NOW.toISOString();
     const free = [{ week_start: wk, match_id: null, locked: false }];
     assert.equal(S.trumpHint(a, free, [a, b], now), 'Один на неделю: очки за этот матч удвоятся.');
+    const onA = [{ week_start: wk, match_id: 1, locked: false }];
+    assert.equal(S.trumpHint({ ...a, my_pick: { side: 'home', doubled: true } }, onA, [a, b], now), 'Тапни ещё раз, чтобы снять.');
+    assert.equal(S.trumpHint(a, [{ week_start: wk, match_id: 2, locked: true }], [a, b], now), 'Козырь этой недели уже сыгран.');
+    assert.equal(S.trumpHint(a, [], [a, b], now), 'Козырь откроется 26\u00a0октября.');
     const onB = [{ week_start: wk, match_id: 2, locked: false }];
-    assert.equal(S.trumpHint(a, onB, [a, b], now), 'Козырь этой недели — на матче Локомотив — Лида. Можно перенести до 19:29.');
+    assert.equal(S.trumpHint(a, onB, [a, b], now), 'Козырь этой недели стоит на матче Локомотив — Лида. Перенести сюда можно до 19:29.');
     assert.match(S.trumpHint({ id: 3, starts_at: a.starts_at, my_pick: null }, free, [], now), /^Сначала тапни за команду\.$/);
   });
 });
@@ -75,8 +79,8 @@ describe('heroMatch — «Твоя команда»', () => {
     assert.equal(S.heroMeta(mk(1, '2026-11-03T15:30:00Z')), 'ВТ 3 НОЯБРЯ · 18:30 · ЭКСТРАЛИГА');
   });
   it('«Можно менять до»', () => {
-    assert.equal(S.changeUntil('2026-11-05T16:30:00Z', NOW), 'Можно менять до 19:29 в четверг');
-    assert.equal(S.changeUntil('2026-11-03T16:30:00Z', NOW), 'Можно менять до 19:29 сегодня');
+    assert.equal(S.changeUntil('2026-11-05T16:30:00Z', NOW), 'Можно менять в четверг до 19:29');
+    assert.equal(S.changeUntil('2026-11-03T16:30:00Z', NOW), 'Можно менять сегодня до 19:29');
   });
 });
 

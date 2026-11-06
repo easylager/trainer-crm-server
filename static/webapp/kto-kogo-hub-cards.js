@@ -66,7 +66,7 @@
       class: 'kk-hs kk-hs--' + size,
       id: 'kk-s-' + m.id + '-' + idx + (delta > 0 ? 'p' : 'm'),
       'data-keep': '',
-      'aria-label': (delta > 0 ? 'Больше голов ' : 'Меньше голов ') + team,
+      'aria-label': (delta > 0 ? 'Больше шайб: ' : 'Меньше шайб: ') + team,
       onclick: function () { step(m, idx, delta); },
       text: delta > 0 ? '+' : '−',
     });
@@ -139,7 +139,7 @@
       kids.push(h('div', { class: 'kk-hbox' }, [
         h('div', { class: 'kk-hbox__head' }, [
           h('span', { class: 'kk-hbox__t', text: 'Точный счёт' }),
-          h('span', { class: 'kk-hbox__s', text: 'будет «в точку»' }),
+          h('span', { class: 'kk-hbox__s', text: 'необязательно' }),
         ]),
         scoreRow(m, eff, 'lg'),
       ].concat(trumpButton(m))));
@@ -207,7 +207,7 @@
         h('span', { class: 'kk-cnt' + (d.total && d.made === d.total ? ' is-done' : ''), text: S.dayCount(d.made, d.total) }),
       ]),
       h('div', { class: 'kk-day' }, d.items.map(function (m) { return dayRow(m, d.mixed); })),
-      h('span', { class: 'kk-sub', text: 'Ходы закрываются за минуту до старта матча. До\u00a0этого всё можно поменять.' }),
+      h('span', { class: 'kk-sub', text: 'Ход можно изменить до минуты перед стартом матча.' }),
     ]);
   }
 

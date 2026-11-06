@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.application.hockey_teams import TEAMS, UNKNOWN_COLOR, team_card
+from src.application.hockey_teams import TEAMS, UNKNOWN_COLOR, display_name, team_card
 from src.ingestion.hockey_sources import parse_hcdinamo_logo_index
 
 FIXTURES = Path(__file__).resolve().parents[2] / "data/fixtures/hockey"
@@ -53,3 +53,10 @@ def test_examples_from_the_brief() -> None:
     assert team_card("Динамо-Минск")["short"] == "ДМ"
     assert team_card("Барыс")["short"] == "БР"
     assert team_card("ХК Сочи")["short"] == "СЧ"
+
+
+def test_display_name_spells_yo_for_eyes_only() -> None:
+    # В базе «Шахтер» и «Могилев» без ё — по ним ищут матчи; людям показываем с ё, как Mini App.
+    assert display_name("Шахтер") == "Шахтёр"
+    assert display_name("Могилев") == "Могилёв"
+    assert display_name("Юность") == "Юность"

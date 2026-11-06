@@ -213,7 +213,7 @@
   function verdict(pointsWon) {
     if (pointsWon === 50) return { head: 'в точку!', sticker: '+50', tone: 'win', tail: 'точный счёт' };
     if (pointsWon === 30) return { head: 'почти в точку', sticker: '+30', tone: 'ok', tail: 'победитель и ещё часть счёта' };
-    if (pointsWon === 20) return { head: 'есть победитель', sticker: '+20', tone: 'ok', tail: 'победитель угадан' };
+    if (pointsWon === 20) return { head: 'угадал победителя', sticker: '+20', tone: 'ok', tail: 'угадал победителя' };
     if (pointsWon === 10) return { head: 'шайбы угаданы', sticker: '+10', tone: 'ok', tail: 'шайбы одной команды' };
     return { head: 'мимо', sticker: '0', tone: 'miss', tail: 'бывает' };
   }
@@ -275,7 +275,7 @@
   /** Подсказка в шторке счёта: этот черновик, не правила целиком. */
   function scoreHint(home, away) {
     if (home === away) return 'Ничьей в хоккее не бывает — поправь счёт';
-    return home + ':' + away + ' — так будет «в точку»';
+    return 'Закончится ' + home + ':' + away + ' — будет «в точку»';
   }
 
   /** startapp=kk_<КОД> → код лиги или ''. */
@@ -307,7 +307,7 @@
     var played = race.played || 0;
     var known = race.known || 0;
     var left = '';
-    if (known && race.final_match_id && played === known - 1) left = 'остался финал';
+    if (known && race.final_match_id && played === known - 1) left = 'остался последний матч';
     else if (known) left = 'сыграно ' + played + ' из ' + known;
     return { title: race.title, left: left };
   }
@@ -334,16 +334,16 @@
       var second = rows.filter(function (r) { return !r.is_me; })[0];
       if (!second) return null;
       var lead = me.points - second.points;
-      return lead > 0 ? { text: 'Ты первый. Отрыв', num: points(lead) } : { text: 'Первое место делишь', num: '' };
+      return lead > 0 ? { text: 'Ты на первом месте. Отрыв', num: points(lead) } : { text: 'Первое место делишь', num: '' };
     }
-    return { text: 'Ты ' + me.rank + '-й. До первого места', num: points(rows[0].points - me.points) };
+    return { text: 'Ты на ' + me.rank + '-м месте. До первого места', num: points(rows[0].points - me.points) };
   }
 
   /** Строка под финалом месяца: факт без шансов («Катя впереди на 20»). */
   function leaderNote(leader) {
     if (!leader) return '';
-    if (leader.me_leading) return leader.gap ? 'Ты впереди на ' + points(leader.gap) : 'Очков поровну — решит финал';
-    return leader.gap ? leader.leader + ' впереди на ' + points(leader.gap) : 'Очков поровну — решит финал';
+    if (leader.me_leading) return leader.gap ? 'Ты впереди на ' + points(leader.gap) : 'Если очков поровну, всё решит последний матч';
+    return leader.gap ? leader.leader + ' впереди на ' + points(leader.gap) : 'Если очков поровну, всё решит последний матч';
   }
 
   function joinNames(names) {
@@ -353,17 +353,18 @@
 
   /** Итоги месяца: заголовок и строка под ним. */
   function monthHead(res) {
-    if (res.won) return res.title + ' твой';
-    if (!res.winners || !res.winners.length) return res.title + ' без короны';
-    return 'корона — ' + joinNames(res.winners);
+    var title = res.title ? res.title.charAt(0).toUpperCase() + res.title.slice(1) : '';
+    if (res.won) return title + ' твой';
+    if (!res.winners || !res.winners.length) return title + ' без короны';
+    return 'Корона: ' + joinNames(res.winners);
   }
 
   function monthLine(res) {
     var where = res.league ? 'в' + NBSP + 'лиге «' + res.league.name + '»' : 'в общей таблице';
     if (res.won) return 'Первое место ' + where + NBSP + '· ' + points(res.points);
     if (res.rank == null) return 'В этом месяце без твоих ходов ' + where;
-    if (!res.gap) return 'Ты ' + res.rank + '-й ' + where;
-    return 'Ты ' + res.rank + '-й ' + where + ', до короны не хватило ' + points(res.gap);
+    if (!res.gap) return res.rank + '-е место ' + where;
+    return res.rank + '-е место ' + where + ', до короны не хватило ' + points(res.gap);
   }
 
   /** Вступил в середине месяца — сколько матчей осталось. */

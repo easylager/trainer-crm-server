@@ -62,9 +62,9 @@ async def test_button_pick_is_saved_and_marks_the_chosen_side(db_session) -> Non
     cb = _callback(f"kk:p:{m}:a", rows)
     await h.on_pick(cb)
     assert tuple(await _row(db_session)) == ("away", None, None, False)
-    cb.answer.assert_awaited_once_with("Ход принят: Шахтер")
+    cb.answer.assert_awaited_once_with("Ход принят: Шахтёр")
     markup = cb.message.edit_reply_markup.await_args.kwargs["reply_markup"]
-    assert [b.text for b in markup.inline_keyboard[0]] == ["Юность", "✓ Шахтер"]
+    assert [b.text for b in markup.inline_keyboard[0]] == ["Юность", "✓ Шахтёр"]
     assert markup.inline_keyboard[1][0].callback_data == "kk:off:nm"
     # Сменить сторону до старта можно.
     await h.on_pick(_callback(f"kk:p:{m}:h", rows))
@@ -77,7 +77,7 @@ async def test_pick_after_start_says_closed_and_removes_buttons(db_session) -> N
     rows = [[("Юность", f"kk:p:{m}:h"), ("Шахтер", f"kk:p:{m}:a")], [("Отключить такие сообщения", "kk:off:nm")]]
     cb = _callback(f"kk:p:{m}:h", rows)
     await h.on_pick(cb)
-    cb.answer.assert_awaited_once_with("Матч начался — ходы закрыты", show_alert=True)
+    cb.answer.assert_awaited_once_with("Ходы на этот матч уже закрыты", show_alert=True)
     assert await _row(db_session) is None
     markup = cb.message.edit_reply_markup.await_args.kwargs["reply_markup"]
     assert [[b.callback_data for b in row] for row in markup.inline_keyboard] == [["kk:off:nm"]]
@@ -124,7 +124,7 @@ async def test_leave_button_leaves_the_extended_league(db_session) -> None:
     await join_by_code(db_session, player_key=ME, display_name="Саша", code=league.invite_code)
     cb = _callback(f"kk:lv:{league.id}", [[("Выйти из лиги", f"kk:lv:{league.id}")]])
     await h.on_leave(cb)
-    assert cb.answer.await_args.args[0] == "Готово: ты вышел из лиги"
+    assert cb.answer.await_args.args[0] == "Ты вышел из лиги"
     left = (
         await db_session.execute(
             text("SELECT 1 FROM hockey_league_members WHERE league_id = :l AND player_key = :p"),

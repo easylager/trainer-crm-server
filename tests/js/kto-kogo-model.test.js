@@ -100,7 +100,7 @@ describe('счёт и ссылки', () => {
     assert.equal(M.stakeLine(score, names, 'live'), 'твой счёт 3:1 · ждём сирену');
     assert.equal(M.stakeLine(null, names, 'live'), 'ходы закрыты · этот матч без тебя');
     assert.equal(M.moveLine(score, names), 'твой счёт 3:1');
-    assert.equal(M.scoreHint(3, 1), '3:1 — так будет «в точку»');
+    assert.equal(M.scoreHint(3, 1), 'Закончится 3:1 — будет «в точку»');
     assert.equal(M.scoreHint(2, 2), 'Ничьей в хоккее не бывает — поправь счёт');
     assert.equal(M.nudgeLine({ home: [], away: [] }, names), 'Без хода очков не будет');
     assert.equal(
@@ -137,9 +137,9 @@ describe('счёт и ссылки', () => {
 
 describe('гонка месяца (TASK-334)', () => {
   const race = { monthly: true, title: 'ноябрь', played: 8, known: 12, final_match_id: 7 };
-  it('шапка: месяц и сыграно, перед финалом — «остался финал», до гонки — «таблица»', () => {
+  it('шапка: месяц и сыграно, перед последним матчем — «остался последний матч», до гонки — «таблица»', () => {
     assert.deepEqual(M.raceHead(race), { title: 'ноябрь', left: 'сыграно 8 из 12' });
-    assert.equal(M.raceHead({ ...race, played: 11 }).left, 'остался финал');
+    assert.equal(M.raceHead({ ...race, played: 11 }).left, 'остался последний матч');
     assert.deepEqual(M.raceHead({ monthly: false }), { title: 'таблица', left: '' });
   });
   it('полоса: финал жёлтый только когда он известен', () => {
@@ -154,20 +154,21 @@ describe('гонка месяца (TASK-334)', () => {
       { rank: 1, display_name: 'Катя', points: 190 },
       { rank: 2, display_name: 'Я', points: 170, is_me: true },
     ];
-    assert.deepEqual(M.chaseLine(rows), { text: 'Ты 2-й. До первого места', num: '20' + NBSP + 'очков' });
+    assert.deepEqual(M.chaseLine(rows), { text: 'Ты на 2-м месте. До первого места', num: '20' + NBSP + 'очков' });
     const lead = [{ rank: 1, points: 50, is_me: true }, { rank: 2, points: 30 }];
-    assert.deepEqual(M.chaseLine(lead), { text: 'Ты первый. Отрыв', num: '20' + NBSP + 'очков' });
+    assert.deepEqual(M.chaseLine(lead), { text: 'Ты на первом месте. Отрыв', num: '20' + NBSP + 'очков' });
     assert.equal(M.chaseLine([{ rank: 1, points: 10 }]), null);
   });
   it('строка финала и итоги месяца', () => {
     assert.equal(M.leaderNote({ leader: 'Катя', gap: 20, me_leading: false }), 'Катя впереди на 20' + NBSP + 'очков');
-    assert.equal(M.leaderNote({ gap: 0, me_leading: true }), 'Очков поровну — решит финал');
+    assert.equal(M.leaderNote({ gap: 0, me_leading: true }), 'Если очков поровну, всё решит последний матч');
     const won = { title: 'ноябрь', won: true, points: 280, league: { name: 'ОХМ' }, winners: ['Я'] };
-    assert.equal(M.monthHead(won), 'ноябрь твой');
+    assert.equal(M.monthHead(won), 'Ноябрь твой');
     assert.equal(M.monthLine(won), 'Первое место в' + NBSP + 'лиге «ОХМ»' + NBSP + '· 280' + NBSP + 'очков');
     const lost = { title: 'ноябрь', won: false, rank: 2, gap: 10, points: 250, league: null, winners: ['Катя', 'Саша'] };
-    assert.equal(M.monthHead(lost), 'корона — Катя и Саша');
-    assert.equal(M.monthLine(lost), 'Ты 2-й в общей таблице, до короны не хватило 10' + NBSP + 'очков');
+    assert.equal(M.monthHead(lost), 'Корона: Катя и Саша');
+    assert.equal(M.monthHead({ title: 'ноябрь', won: false, winners: [] }), 'Ноябрь без короны');
+    assert.equal(M.monthLine(lost), '2-е место в общей таблице, до короны не хватило 10' + NBSP + 'очков');
   });
   it('вступил в середине месяца', () => {
     assert.equal(M.remainingLine(race), 'В этом месяце ещё 4\u00a0матча. Очки в лиге — с ближайшего матча, с 1-го числа все с нуля.');

@@ -319,10 +319,16 @@
 
   // ---------- слот «сейчас» ----------
 
+  /** Имя клуба для глаз: в базе «Шахтер» и «Могилев» без ё (та же таблица, что SPELL в kto-kogo-model.js). */
+  var SPELL = { 'Шахтер': 'Шахтёр', 'Могилев': 'Могилёв' };
+  function clubName(name) {
+    return SPELL[name] || name || '';
+  }
+
   function teamButton(team, side, onPick) {
     var b = el('button', 'hn__team');
     b.type = 'button';
-    b.setAttribute('aria-label', 'Я за ' + team.name);
+    b.setAttribute('aria-label', 'Победит ' + clubName(team.name));
     var logo = el('span', 'hn__logo');
     if (team.logo) {
       var img = el('img');
@@ -333,7 +339,7 @@
       logo.textContent = team.short || '';
     }
     b.appendChild(logo);
-    b.appendChild(doc.createTextNode(team.name));
+    b.appendChild(doc.createTextNode(clubName(team.name)));
     b.addEventListener('click', function () { onPick(side); });
     return b;
   }
@@ -360,7 +366,7 @@
     if (card.mode === 'live') return { text: 'ИДЁТ', dot: true, live: true };
     if (r && r.home_score != null) return { text: 'ИТОГ ' + r.home_score + ':' + r.away_score, dot: false, live: false };
     // Последний матч месяца в гонке «Кто кого» (TASK-334): та же наклейка, другие слова.
-    if (m.race_final) return { text: 'ФИНАЛ МЕСЯЦА', dot: false, live: false };
+    if (m.race_final) return { text: 'ПОСЛЕДНИЙ МАТЧ МЕСЯЦА', dot: false, live: false };
     var p = minskParts(new Date(m.starts_at));
     var n = minskParts(now || new Date());
     if (p.y === n.y && p.m === n.m && p.d === n.d) return { text: 'СЕГОДНЯ', dot: true, live: false };
@@ -494,16 +500,16 @@
       } else logo.textContent = mine.short || '';
       row.appendChild(logo);
       var what = el('span', 'hn__what');
-      what.appendChild(el('span', 'hn__name', 'Ты за ' + mine.name));
-      what.appendChild(el('span', 'hn__sub', m.home.name + ' — ' + m.away.name + ', ' + whenLabel(m.starts_at)));
+      what.appendChild(el('span', 'hn__name', 'Ты за ' + clubName(mine.name)));
+      what.appendChild(el('span', 'hn__sub', clubName(m.home.name) + ' — ' + clubName(m.away.name) + ', ' + whenLabel(m.starts_at)));
       row.appendChild(what);
       var hasScore = pick.home_score != null;
-      row.appendChild(el('span', 'hn__chip', hasScore ? pick.home_score + ':' + pick.away_score : 'счёт +50'));
+      row.appendChild(el('span', 'hn__chip', hasScore ? pick.home_score + ':' + pick.away_score : 'Какой счёт?'));
       host.replaceChildren(row);
       return;
     }
     var head = el('div', 'hn__row');
-    head.appendChild(el('span', 'hn__title hh-display', 'Кто кого?'));
+    head.appendChild(el('span', 'hn__title hh-display', 'КТО КОГО?'));
     head.appendChild(el('span', 'hn__when', whenLabel(m.starts_at)));
     root.appendChild(head);
     var teams = el('div', 'hn__teams');
@@ -524,9 +530,7 @@
     teams.appendChild(teamButton(m.home, 'home', onPick));
     teams.appendChild(teamButton(m.away, 'away', onPick));
     root.appendChild(teams);
-    var hint = el('span', 'hn__hint', 'Без хода очков не будет. Точный счёт — ');
-    hint.appendChild(el('b', 'hn__plus', '+50'));
-    root.appendChild(hint);
+    root.appendChild(el('span', 'hn__hint', 'Без хода очков не будет. Можно угадать и точный счёт.'));
     host.replaceChildren(root);
   }
 
@@ -542,8 +546,8 @@
     a.appendChild(el('span', 'hn__sticker' + (pts ? '' : ' hn__sticker--miss'), pts ? '+' + (doubled ? pts * 2 : pts) : '0'));
     var what = el('span', 'hn__what');
     what.appendChild(el('span', 'hn__head hh-display', head));
-    var line = m.home.name + ' — ' + m.away.name + ' ' + r.home_score + ':' + r.away_score;
-    if (card.place) line += ' · ты ' + card.place.rank + '-й в лиге';
+    var line = clubName(m.home.name) + ' — ' + clubName(m.away.name) + ' ' + r.home_score + ':' + r.away_score;
+    if (card.place) line += ' · ' + card.place.rank + '-е место' + (card.place.league_name ? ' в лиге «' + card.place.league_name + '»' : ' в лиге');
     what.appendChild(el('span', 'hn__sub', line));
     a.appendChild(what);
     a.appendChild(icon('chevron', 'hn__go'));
@@ -555,9 +559,10 @@
     var res = card.race || {};
     var won = !!res.won;
     var winners = res.winners || [];
-    var head = won ? res.title + ' твой' : winners.length ? 'корона — ' + winners.join(' и ') : res.title + ' без короны';
+    var title = res.title ? res.title.charAt(0).toUpperCase() + res.title.slice(1) : '';
+    var head = won ? title + ' твой' : winners.length ? 'Корона: ' + winners.join(' и ') : title + ' без короны';
     var where = res.league ? 'в «' + res.league.name + '»' : 'в общей таблице';
-    var line = won ? 'Первое место ' + where : res.rank ? 'Ты ' + res.rank + '-й ' + where : 'Итоги ' + where;
+    var line = won ? 'Первое место ' + where : res.rank ? res.rank + '-е место ' + where : 'Итоги ' + where;
     var a = link(el('a', 'hn__card hn__card--dark'), 'kto-kogo?month=' + res.race_id);
     a.setAttribute('aria-label', 'Итоги месяца: ' + head);
     var st = el('span', 'hn__sticker' + (won ? '' : ' hn__sticker--miss'));

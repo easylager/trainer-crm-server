@@ -62,7 +62,7 @@
   /** Страница матча в Mini App: «Иду / Позвать / Билеты» живут там — здесь только вход, кнопок не дублируем. */
   function matchPageLink(m) {
     if (!m.has_page) return null;
-    return h('button', { type: 'button', class: 'kk-mini kk-mini--link', onclick: function () { K.openMatchPage(m.id); } }, ['Страница матча: иду, позвать, билеты']);
+    return h('button', { type: 'button', class: 'kk-mini kk-mini--link', onclick: function () { K.openMatchPage(m.id); } }, ['Билеты и кто идёт']);
   }
 
   function sideButton(m, side, colors, mine) {
@@ -93,7 +93,7 @@
               l.gold ? K.crownIcon(18) : icon(l.icon === 'duel' ? I.swap : I.up, 18),
               h('span', { text: l.text }),
             ]);
-          }).concat([h('span', { class: 'kk-st kk-st--note', text: 'Оценка по таблице на сейчас: чужие ходы ещё меняются.' })])
+          }).concat([h('span', { class: 'kk-st kk-st--note', text: S.STAKES_NOTE })])
         : [h('span', { class: 'kk-st kk-st--mute', text: S.stakesEmpty(true) })];
     }
     return h('div', { class: 'kk-block' }, [h('span', { class: 'kk-lbl kk-lbl--gold', text: 'ЕСЛИ УГАДАЕШЬ' })].concat(rows));
@@ -139,13 +139,13 @@
         h('span', { class: 'kk-meta', text: metaLine(m) }),
         movedNote(m),
         h('section', { class: 'kk-card kk-card--play' }, [
-          K.sticker(m.race_final ? 'ФИНАЛ МЕСЯЦА' : mine ? 'ХОД СДЕЛАН' : 'КТО КОГО?'),
+          K.sticker(m.race_final ? 'ПОСЛЕДНИЙ МАТЧ МЕСЯЦА' : mine ? 'ХОД СДЕЛАН' : 'КТО КОГО?'),
           h('div', { class: 'kk-q' }, [
             h('span', { class: 'kk-q__t' }, [S.questionLine(mine, team), doubled ? h('span', { class: 'kk-tag kk-tag--inline', text: 'с козырем' }) : null]),
             h('span', { class: 'kk-sub', text: sub }),
           ]),
           h('div', { class: 'kk-two' }, [sideButton(m, 'home', colors, mine), sideButton(m, 'away', colors, mine)]),
-          h('button', { type: 'button', class: 'kk-mini kk-mini--wide', onclick: function () { openScore(m); } }, [mine && mine.home_score != null ? 'Счёт ' + mine.home_score + ':' + mine.away_score + ' · «в точку»' : 'Угадать точный счёт · «в точку»']),
+          h('button', { type: 'button', class: 'kk-mini kk-mini--wide', onclick: function () { openScore(m); } }, [mine && mine.home_score != null ? 'Изменить счёт ' + mine.home_score + ':' + mine.away_score : 'Угадать точный счёт']),
           h('button', {
             type: 'button',
             class: 'kk-mini kk-mini--wide' + (trump.on ? ' is-gold' : '') + (trump.usable ? '' : ' is-off'),
@@ -234,7 +234,7 @@
       body.appendChild(placesBlock(m, points));
       body.appendChild(duelsBlock(m));
     } else {
-      body.appendChild(K.emptyCard('ХОДЫ ЗАКРЫТЫ', 'Этот матч без твоего хода. Следующий — в хабе игры.'));
+      body.appendChild(K.emptyCard('ХОДЫ ЗАКРЫТЫ', 'Этот матч без твоего хода. Ближайшие матчи — на главной игры.'));
     }
     body.appendChild(crowdBlock(m));
     var pageLink = matchPageLink(m);
@@ -250,7 +250,7 @@
     return h('div', { class: 'kk-sec' }, [
       h('span', { class: 'kk-lbl', text: 'ТВОИ МЕСТА ПРЯМО СЕЙЧАС' }),
       h('div', { class: 'kk-rows' }, rows.map(moveRow)),
-      h('span', { class: 'kk-sub', text: 'Места — по таблице до матча, если так закончится.' }),
+      h('span', { class: 'kk-sub', text: 'Места по таблице до матча — если матч так и закончится.' }),
     ]);
   }
 
@@ -326,10 +326,10 @@
     if (!done.length || mineTotal == null) return null;
     var f = done[0];
     var res = S.duelFinal(mineTotal, f.points);
-    var head = 'Дуэль · ' + f.display_name + ' — ' + (res === 'win' ? 'твоя' : res === 'lose' ? 'не твоя' : 'ничья');
+    var head = 'Дуэль: ' + (res === 'win' ? 'победа' : res === 'lose' ? 'поражение' : 'ничья');
     return h('section', { class: 'kk-card kk-duel' }, [
       K.ava(f.display_name, 36),
-      h('span', { class: 'kk-grow kk-col' }, [h('b', { text: head }), h('span', { class: 'kk-sub', text: mineTotal + ' : ' + f.points + ' · ' + f.display_name + ' — за ' + name(m[f.side]) })]),
+      h('span', { class: 'kk-grow kk-col' }, [h('b', { text: head }), h('span', { class: 'kk-sub', text: mineTotal + ' : ' + f.points + ' · ' + f.display_name + ' за ' + name(m[f.side]) })]),
     ]);
   }
 
@@ -377,7 +377,7 @@
     var place = S.bestLeagueChip(items);
     if (place) chips.push(h('span', { class: 'kk-chipx', text: place }));
     return h('section', { class: 'kk-cel', 'aria-label': 'Итог хода', style: 'background:' + tone.bg + ';color:' + tone.ink }, burst(tone).concat([
-      h('span', { class: 'kk-cel__d', text: S.dayLabelUp(m.starts_at) + ' · ФИНАЛ' }),
+      h('span', { class: 'kk-cel__d', text: S.dayLabelUp(m.starts_at) + ' · ИТОГ' }),
       h('div', { class: 'kk-cel__s' }, [K.logoDisc(m.home, 60), h('span', { class: 'kk-cel__n', text: r.home_score + ':' + r.away_score }), K.logoDisc(m.away, 60)]),
       h('span', { class: 'kk-pop', text: 'В ТОЧКУ!' }),
       h('span', { class: 'kk-cel__l', text: 'Твой ход ' + mine.home_score + ':' + mine.away_score + ' — так и вышло.' }),
@@ -406,7 +406,7 @@
     ]);
     var main = h('main', { class: 'kk-main' });
     if (!mine) {
-      main.appendChild(K.emptyCard('ЭТОТ МАТЧ БЕЗ ТЕБЯ', 'Хода на матч не было, очков нет. Следующий матч — в хабе игры.'));
+      main.appendChild(K.emptyCard('ЭТОТ МАТЧ БЕЗ ТЕБЯ', 'Хода на матч не было, очков нет. Следующий матч — на главной игры.'));
     } else {
       var tone = winTone();
       if (exact) {
@@ -476,7 +476,7 @@
   }
 
   function notFound() {
-    return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.emptyCard('МАТЧ НЕ НАЙДЕН', 'Такого матча нет или ссылка устарела. Ближайшие матчи — в хабе игры.')])];
+    return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.emptyCard('МАТЧ НЕ НАЙДЕН', 'Такого матча нет или ссылка устарела. Ближайшие матчи — на главной игры.')])];
   }
 
   // ---------- регистрация ----------

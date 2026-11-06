@@ -9,6 +9,7 @@
   var NBSP = ' ';
   var WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   var MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  var WD_IN = ['в воскресенье', 'в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу'];
   var EXACT = 50;
 
   function parts(d) {
@@ -104,8 +105,8 @@
   function verdict(points) {
     if (points === EXACT) return 'В точку! +50';
     if (points === 30) return 'Почти в точку · +30';
-    if (points === 20) return 'Есть победитель · +20';
-    if (points === 10) return 'Шайбы угаданы · +10';
+    if (points === 20) return 'Угадал победителя · +20';
+    if (points === 10) return 'Угадал шайбы · +10';
     return 'В этот раз мимо';
   }
 
@@ -119,33 +120,41 @@
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   }
 
+  /** Ходы закрываются за минуту до старта (PICK_CLOSES_BEFORE в hockey_game.py): «Можно менять сегодня до 19:29». */
+  function changeUntil(startsAt, now) {
+    var p = parts(new Date(new Date(startsAt).getTime() - 60000));
+    var diff = dayDiff(p, parts(now || new Date()));
+    var day = diff <= 0 ? 'сегодня' : diff === 1 ? 'завтра' : diff < 7 ? WD_IN[p.wd] : p.d + NBSP + MONTHS[p.m - 1];
+    return 'Можно менять ' + day + ' до ' + Number(p.hh) + ':' + p.mm;
+  }
+
   /**
    * Строка «КТО КОГО?» на ивенте: одна, небольшая, ведёт в игру (решение владельца 2026-10-20).
    * Имена друзей — только если они уже сделали ход; иначе строка без имён.
    */
-  function kkRow(ev) {
+  function kkRow(ev, now) {
     var kk = ev.kk || {};
     var m = ev.match;
     var names = kk.company_names || [];
-    // Без рода и падежа: «Уже с ходом: Аня и Петя», а не «Аня сделала» или «вместе с Аней».
-    var friends = names.length ? 'Уже с' + NBSP + 'ходом: ' + joinNames(names) : '';
+    // Без рода и падежа: «Уже угадывают: Аня и Петя», а не «Аня сделала» или «вместе с Аней».
+    var friends = names.length ? 'Уже угадывают: ' + joinNames(names) : '';
     var pick = kk.my_pick;
-    var start = parts(new Date(m.starts_at));
     if (kk.phase === 'open') {
       return {
         title: 'Угадай счёт',
-        sub: friends ? friends + ' · точный — 50' : 'Точный счёт — 50 очков',
+        // Числа очков до матча не пишем: очки приходят после финальной сирены.
+        sub: friends || 'Можно угадать и точный счёт',
         href: 'kto-kogo?match=' + m.id,
       };
     }
     if (kk.phase === 'picked') {
-      return { title: cap(moveText(pick, m)), sub: 'Можно изменить до ' + start.hh + ':' + start.mm, href: 'kto-kogo?match=' + m.id };
+      return { title: cap(moveText(pick, m)), sub: changeUntil(m.starts_at, now), href: 'kto-kogo?match=' + m.id };
     }
     if (kk.phase === 'live') {
       var mine = moveText(pick, m);
       return {
         title: mine ? 'Ходы закрыты · ' + mine : 'Ходы закрыты',
-        sub: names.length ? 'Ходы компании: ' + joinNames(names) : 'Итог — после финальной сирены',
+        sub: names.length ? 'Друзья: ' + joinNames(names) : 'Итог — после финальной сирены',
         href: 'kto-kogo?match=' + m.id,
       };
     }

@@ -30,7 +30,7 @@
         .then(function (r) {
           state.remind = !!(r && r.on);
           K.haptic('success');
-          K.toast(on ? 'Напомню о ходе за 3 часа до матча твоей команды' : 'Напоминания выключены');
+          K.toast(on ? 'Напомним о твоём ходе и пришлём итог' : 'Сообщения в чате выключены');
         })
         .catch(K.fail);
     }
@@ -39,7 +39,7 @@
     try {
       tg.requestWriteAccess(function (granted) {
         if (granted === true) save();
-        else K.toast('Без разрешения бот не сможет напомнить');
+        else K.toast('Без разрешения не получится написать в чат');
       });
     } catch (e) {
       save();
@@ -51,10 +51,10 @@
     return h('div', { class: 'kk-card kk-remind' }, [
       icon(I.bell, 20),
       h('span', { class: 'kk-grow kk-col' }, [
-        h('b', { text: state.remind ? 'Напомню о ходе за 3 часа до матча' : 'Напомнить о ходе за 3 часа до матча' }),
-        h('span', { class: 'kk-sub', text: 'Если хода ещё нет — по матчу твоей команды. После матча пришлю итог и твоё место в таблице.' }),
+        h('b', { text: 'Сообщения в чате' }),
+        h('span', { class: 'kk-sub', text: 'Напомним о ходе, если его нет, а после матча пришлём итог и место в таблице. Напоминания — не чаще раза в день, ночью не пишем.' }),
       ]),
-      h('button', { type: 'button', class: 'kk-toggle' + (state.remind ? ' is-on' : ''), role: 'switch', 'aria-checked': state.remind ? 'true' : 'false', 'aria-label': 'Напоминать о ходе за 3 часа до матча', onclick: function () { setRemind(!state.remind); } }, [h('span')]),
+      h('button', { type: 'button', class: 'kk-toggle' + (state.remind ? ' is-on' : ''), role: 'switch', 'aria-checked': state.remind ? 'true' : 'false', 'aria-label': 'Сообщения в чате', onclick: function () { setRemind(!state.remind); } }, [h('span')]),
     ]);
   }
 
@@ -79,28 +79,36 @@
     ]);
   }
 
+  /** Козырь одной фразой: свободен · на матче «Динамо — Торпедо» · сыгран. */
+  function trumpStatus(trump) {
+    if (!trump || !trump.match_id) return 'козырь свободен';
+    if (trump.locked) return 'козырь сыгран';
+    var m = K.findMatch(trump.match_id);
+    return m ? 'козырь на ' + S.clubShort(m.home.name) + ' — ' + S.clubShort(m.away.name) : 'козырь на матче';
+  }
+
   function fanCard() {
     var p = state.profile;
     if (!p) return h('div', { class: 'kk-skel kk-skel--card' });
     if (!p.played) {
       return h('section', { class: 'kk-card kk-card--fan kk-card--intro' }, [
-        K.sticker('КТО КОГО'),
+        K.sticker('КТО КОГО?'),
         h('b', { class: 'kk-hd', text: 'Угадай матч — один тап' }),
-        h('span', { class: 'kk-tx', text: 'Тап за команду в карточке матча — и ты в игре, регистрации нет. В таблице появишься после первого итога.' }),
+        h('span', { class: 'kk-tx', text: 'Тап за команду в карточке матча — и ты в игре, регистрации нет. Очки придут после матча — тогда появишься в таблице.' }),
       ]);
     }
     var club = p.club;
     var trump = state.double;
-    var trumpText = !trump || !trump.match_id ? 'козырь есть' : trump.locked ? 'козырь сыграл' : 'козырь на матче';
+    var trumpText = trumpStatus(trump);
     var crowns = (p.crowns || []).length;
     return h('button', { type: 'button', class: 'kk-card kk-card--fan', style: club ? 'background:' + club.color : '', onclick: function () { K.go('profile', {}); } }, [
-      K.sticker('КТО КОГО'),
+      K.sticker('КТО КОГО?'),
       club ? K.logoDisc(club, 52) : K.worldDisc(52),
       h('span', { class: 'kk-col kk-grow' }, [
         h('span', { class: 'kk-fan__t' }, [(p.display_name || 'Ты'), club ? ' · ' : null, club ? h('span', { class: 'kk-nowrap', text: 'за ' + name(club) }) : null]),
         h('span', { class: 'kk-fan__s' }, [
           crowns ? h('span', { class: 'kk-crownw kk-crownw--on' }, [K.crownIcon(14), S.crownCount(crowns)]) : null,
-          p.streak ? h('span', { text: 'серия ' + p.streak }) : null,
+          p.streak ? h('span', { text: 'угадано подряд: ' + p.streak }) : null,
           h('span', { class: 'kk-fan__bolt' }, [icon(I.bolt, 13), trumpText]),
         ]),
       ]),
@@ -137,7 +145,7 @@
               h('span', { class: 'kk-lg__r' + (l.my_rank === 1 ? ' is-gold' : '') }, [l.my_rank === 1 ? K.crownIcon(15) : null, l.my_rank ? String(l.my_rank) : '—']),
             ]);
           }))
-          : h('span', { class: 'kk-sub', text: 'Лига — это ты, твои люди и выбранные команды. Очки за матчи идут и в общую таблицу.' }),
+          : h('span', { class: 'kk-sub', text: 'Лига — своя таблица с друзьями. Очки за матчи идут и в общую таблицу.' }),
     ]);
   }
 
@@ -299,16 +307,15 @@
       var best = (state.peaks || [])[0];
       var main = h('main', { class: 'kk-main' }, [K.topbar('Болельщик', 'сезон ' + p.season)]);
       main.appendChild(h('section', { class: 'kk-card kk-card--fan kk-card--big', style: club ? 'background:' + club.color : '' }, [
-        K.sticker('КТО КОГО · ' + p.season),
+        K.sticker('КТО КОГО? · ' + p.season),
         h('div', { class: 'kk-fan' }, [
           club ? K.logoDisc(club, 60) : K.worldDisc(60),
-          h('span', { class: 'kk-col' }, [h('span', { class: 'kk-lbl kk-lbl--on', text: club ? 'БОЛЕЮ ЗА ' + name(club).toUpperCase() : 'КТО КОГО' }), h('span', { class: 'kk-fan__name', text: p.display_name || 'Ты' })]),
+          h('span', { class: 'kk-col' }, [h('span', { class: 'kk-lbl kk-lbl--on', text: club ? 'БОЛЕЮ ЗА ' + name(club).toUpperCase() : 'КТО КОГО?' }), h('span', { class: 'kk-fan__name', text: p.display_name || 'Ты' })]),
         ]),
         h('div', { class: 'kk-stats' }, [
           stat(String(p.played), M.plural(p.played, 'ход', 'хода', 'ходов')),
-          stat(p.correct_percent == null ? '—' : p.correct_percent + '%', 'угадано'),
-          stat(String(p.exact), M.plural(p.exact, 'точный', 'точных', 'точных')),
-          stat(String(p.streak), 'серия · лучшая ' + p.best_streak),
+          stat(String(p.exact), 'в точку'),
+          stat(String(p.streak), 'угадано подряд', 'рекорд — ' + p.best_streak),
         ]),
         best ? h('span', { class: 'kk-fan__line', text: 'Лучшее место: ' + S.sliceLabel(best.club, best.period_title) + ' — ' + best.rank + NBSP + 'из' + NBSP + S.spaced(best.players) }) : null,
       ]));
@@ -325,7 +332,7 @@
       });
       if (lines.length || earned.length) {
         main.appendChild(h('div', { class: 'kk-sec' }, [
-          h('span', { class: 'kk-lbl', text: 'ЗВАНИЯ СЕЗОНА · ПОСЛЕ ФИНАЛА' }),
+          h('span', { class: 'kk-lbl', text: 'ЗВАНИЯ СЕЗОНА · ПОСЛЕ ПОСЛЕДНЕГО МАТЧА' }),
           h('div', { class: 'kk-rows' }, earned.concat(lines.map(function (l) {
             return h('div', { class: 'kk-cr' }, [h('span', { class: 'kk-cr__n', text: String(l.rank) }), h('span', { class: 'kk-grow', text: l.label }), h('span', { class: 'kk-mute', text: l.note })]);
           }))),
@@ -347,7 +354,7 @@
     },
   });
 
-  function stat(v, l) {
-    return h('span', { class: 'kk-stat' }, [h('span', { class: 'kk-stat__v', text: v }), h('span', { class: 'kk-stat__l', text: l })]);
+  function stat(v, l, extra) {
+    return h('span', { class: 'kk-stat' }, [h('span', { class: 'kk-stat__v', text: v }), h('span', { class: 'kk-stat__l', text: l }), extra ? h('span', { class: 'kk-stat__l kk-stat__l--sub', text: extra }) : null]);
   }
 })();

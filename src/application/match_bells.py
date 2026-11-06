@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application import site_matches
 from src.application.hockey_matches import STATUS_FINAL
-from src.application.hockey_teams import TEAMS
+from src.application.hockey_teams import TEAMS, display_name
 from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ def _utc(value: datetime) -> datetime:
 
 
 def _title(row: Any) -> str:
-    return f"{html.escape(row.home_team)} — {html.escape(row.away_team)}"
+    return f"{html.escape(display_name(row.home_team))} — {html.escape(display_name(row.away_team))}"
 
 
 def _when(starts_at: datetime) -> str:
@@ -86,11 +86,11 @@ def subscribed_text(row: Any, *, now: datetime, already: bool) -> str:
     head = "Уже стоит" if already else "Готово"
     starts = _utc(row.starts_at)
     if now >= starts - REMIND_AHEAD:
-        when = f"Матч {_title(row)} скоро — {_when(starts)}. Напомню в ближайшие минуты."
+        when = f"Матч {_title(row)} скоро — {_when(starts)}. Напомним в ближайшие минуты."
         return f"{head}: {when}"
     return (
-        f"{head}: напомню о матче {_title(row)} — {_when(starts)}, "
-        f"сообщение придёт в {_remind_time(starts)}, за 3 часа до начала. После матча пришлю счёт."
+        f"{head}: напомним о матче {_title(row)} — {_when(starts)}, "
+        f"сообщение придёт в {_remind_time(starts)}, за 3 часа до начала. После матча пришлём счёт."
     )
 
 
@@ -103,7 +103,7 @@ def remind_text(row: Any, *, now: datetime, arena: str | None) -> str:
 
 
 def moved_text(row: Any) -> str:
-    return f"Матч {_title(row)} перенесён: теперь {_when(row.starts_at)}. Напомню за 3 часа."
+    return f"Матч {_title(row)} перенесён: теперь {_when(row.starts_at)}. Напомним за 3 часа."
 
 
 def result_text(row: Any) -> str:
@@ -114,7 +114,7 @@ def result_text(row: Any) -> str:
 
 
 def cancel_text(row: Any) -> str:
-    return f"Матч {_title(row)} перенесён или отменён — напоминание снято. Уточните на hockey.by."
+    return f"Матч {_title(row)} перенесён или отменён — напоминание снято. Уточни на hockey.by."
 
 
 def past_text(row: Any) -> str:
