@@ -1391,6 +1391,17 @@ def webapp_trainer_first_students_js(request: Request):
     )
 
 
+@app.get("/webapp/trainer-catalog-offer.js")
+def webapp_trainer_catalog_offer_js(request: Request):
+    """Окно «Показать вас родителям на …?» после онбординга и на главной (TASK-350)."""
+    path = _WEBAPP_DIR / "trainer-catalog-offer.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path, media_type="application/javascript", headers=_webapp_versioned_asset_cache_headers(request)
+    )
+
+
 @app.get("/webapp/trainer-client-relay-ui.js")
 def webapp_trainer_client_relay_ui_js(request: Request):
     """Relay message sheet → POST relay-messages; trainer-home, schedule-editor, trainer-clients."""

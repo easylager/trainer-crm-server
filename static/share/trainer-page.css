@@ -15,3 +15,5 @@
 .tp-about { margin: 0; color: var(--g-ink-2); line-height: 1.5; white-space: pre-line; }
 .tp-hook { margin: 28px 0 0; font-size: 14px; }
 .tp-hook a { color: var(--g-accent-ink); font-weight: 600; text-decoration: none; }
+/* Шапка без фото: знак сайта тёмным, а не белым поверх героя. */
+.tp-bar .b-brand { color: var(--g-ink); text-shadow: none; }

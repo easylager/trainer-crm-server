@@ -780,7 +780,13 @@
       function hubCatalogStatusChip(onb) {
         if (!onb || !(onb.is_active || hubDataSaysTrainerActive(onb))) return null;
         var visible = !!onb.is_catalog_visible;
-        return { text: visible ? 'Каталог · активен' : 'Каталог · скрыт', tone: 'ok' };
+        /* TASK-350: чип нажимается — в «Каталоге» видно, почему вас не видно и как вернуться. */
+        return {
+          text: visible ? 'Каталог · активен' : 'Каталог · скрыт',
+          tone: 'ok',
+          action: 'catalog',
+          title: visible ? 'Как вас видят родители' : 'Почему вас не видно и как вернуться',
+        };
       }
 
       function buildHubDayCanvasStatusChips(onb) {
@@ -943,6 +949,10 @@
         if (!a) return;
         if (a === 'pending_inbox') {
           openHubPendingConfirmSheet();
+          return;
+        }
+        if (a === 'catalog') {
+          navigateTo('trainer-catalog');
           return;
         }
         if (a === 'requests') {
@@ -2183,6 +2193,35 @@
         return out;
       }
 
+      var hubCatalogOfferTried = false;
+      /** TASK-350: сервер прислал «Вас пока нет в каталоге» — один раз спрашиваем по центру. */
+      function maybeOfferCatalogOnce(inbox) {
+        if (hubCatalogOfferTried) return;
+        var items = (inbox && (inbox.rhythm || inbox.items)) || [];
+        var has = false;
+        for (var i = 0; i < items.length; i++) {
+          if (items[i] && items[i].id === 'catalog_publication') has = true;
+        }
+        if (!has) return;
+        hubCatalogOfferTried = true;
+        openHubCatalogOffer(true);
+      }
+
+      /** Окно «Показать вас родителям» (trainer-catalog-offer.js). once — разово при входе. */
+      function openHubCatalogOffer(once) {
+        if (!window.TrainerCatalogOffer) return Promise.resolve(false);
+        return window.TrainerCatalogOffer.maybeOpen({
+          apiUrl: apiUrlWithQuery,
+          headers: headersJson,
+          source: 'hub',
+          once: !!once,
+          onDone: function(res) {
+            /* Карточка опубликована — чип и строки инбокса устарели: перечитываем главную. */
+            if (res && res.published) window.location.reload();
+          },
+        });
+      }
+
       function runRhythmCandidateAction(cand) {
         if (!cand || !cand.action) return;
         if (cand.action === 'subscription') {
@@ -2260,7 +2299,11 @@
           return;
         }
         if (cand.action === 'profile_catalog') {
-          navigateTo('trainer-catalog');
+          /* TASK-350: «Вас пока нет в каталоге» — тот же вопрос по центру, что после онбординга;
+             карточка не готова (нет города/услуги) — в раздел, там сказано, чего не хватает. */
+          openHubCatalogOffer(false).then(function(opened) {
+            if (!opened) navigateTo('trainer-catalog');
+          });
           return;
         }
         if (cand.action === 'trainer_referral') {
@@ -8936,6 +8979,7 @@
         }
         if (payload.action_inbox && typeof payload.action_inbox === 'object') {
           hubServerActionInbox = payload.action_inbox;
+          maybeOfferCatalogOnce(payload.action_inbox);
         }
         if (payload.features && typeof payload.features.collective_enabled === 'boolean') {
           if (window.TrainerShell && typeof TrainerShell.applyCollectiveFeatureFlag === 'function') {

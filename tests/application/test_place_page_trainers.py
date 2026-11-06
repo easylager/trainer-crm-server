@@ -1,4 +1,4 @@
-"""TASK-260: тренеры на SSR-карточке места — CTA «Перейти» в Telegram."""
+"""TASK-260 → TASK-350: тренеры на SSR-карточке места — одна карточка, тап на страницу тренера ``/t/…``."""
 
 from __future__ import annotations
 
@@ -17,23 +17,21 @@ def test_trainer_rows_html_fixed_go_cta() -> None:
     assert "Записаться" not in html
 
 
-def test_b_trainers_renders_pereiti_and_trainer_startapp() -> None:
-    html = _b_trainers(
-        {
+def test_b_trainers_link_to_trainer_page_with_can_book_label() -> None:
+    def view(can_book: bool) -> dict:
+        return {
             "card": {"id": 9, "city_id": 1, "venue_type": "ice"},
             "trainers": [
-                {
-                    "id": 42,
-                    "name": "Александр Гаевский",
-                    "line": "С нуля · от 50 BYN за занятие",
-                    "can_book": True,
-                }
+                {"id": 42, "name": "Александр Гаевский", "line": "С нуля · от 50 BYN за занятие", "can_book": can_book}
             ],
-        },
-        base_url="https://glide.by",
-    )
+        }
+
+    html = _b_trainers(view(True), base_url="https://glide.by")
     assert 'id="trainers"' in html
     assert "Александр Гаевский" in html
-    assert "Перейти" in html
-    assert "startapp=trainer_42_a_9" in html
-    assert "surface=place_page" in html
+    assert 'href="https://glide.by/t/42-aleksandr-gaevskiy"' in html
+    assert "startapp=" not in html
+    assert "Записаться" in html and "Перейти" not in html
+    # Без подписки с онлайн-записью карточка бесплатная — «Написать», не «Записаться» (PDEC-025).
+    free = _b_trainers(view(False), base_url="https://glide.by")
+    assert "Написать" in free and "Записаться" not in free

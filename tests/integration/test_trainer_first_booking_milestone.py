@@ -173,3 +173,49 @@ async def test_milestone_not_reclaimed_after_cancel_first_booking(db_session: As
         created_by_trainer=True,
     )
     assert flags2 == (False, False)
+
+
+@pytest.mark.asyncio
+async def test_trainer_booking_himself_is_not_his_first_client(db_session: AsyncSession) -> None:
+    """TASK-350: тренер записался к себе из клиентского бота «посмотреть» — это не первый клиент.
+
+    Иначе гаснет серия возврата, уходит поздравление и реферальный бонус, а метрика
+    «первая запись от своего клиента» считает самозапись.
+    """
+    from src.application.trainer_client_invite_tracking import sql_trainer_has_real_booking
+
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0)
+    )
+    tg = unique_test_telegram_id()
+    await db_session.execute(text("UPDATE trainers SET telegram_id = :tg WHERE id = :t"), {"tg": tg, "t": trainer_id})
+    await db_session.commit()
+    self_client = await _create_client(db_session, tg)
+    bid, flags = await create_booking(
+        db_session, slot_id=slot_id, trainer_id=trainer_id, client_id=self_client, service_id=service_id,
+        created_by_trainer=True,
+    )
+    assert bid is not None
+    assert flags == (False, False)
+    real = (
+        await db_session.execute(text(f"SELECT {sql_trainer_has_real_booking(trainer_id_expr=':tid')}"), {"tid": trainer_id})
+    ).scalar()
+    assert real is False
+
+    r2 = await db_session.execute(
+        text(
+            "INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity) "
+            "VALUES (:tid, :d, :st, :en, 'available', 1) RETURNING id"
+        ),
+        {"tid": trainer_id, "d": tomorrow, "st": time(14, 0), "en": time(15, 0)},
+    )
+    (slot2,) = r2.fetchone()
+    await db_session.commit()
+    other = await _create_client(db_session, unique_test_telegram_id())
+    _bid2, flags2 = await create_booking(
+        db_session, slot_id=slot2, trainer_id=trainer_id, client_id=other, service_id=service_id,
+        created_by_trainer=True,
+    )
+    # Первый настоящий клиент — после самозаписи всё ещё «первый».
+    assert flags2[0] is True
