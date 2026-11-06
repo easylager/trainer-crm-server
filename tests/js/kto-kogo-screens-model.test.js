@@ -102,7 +102,7 @@ describe('очки и живой счёт', () => {
     assert.equal(S.liveWhy(pick('home', 4, 1), { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди. До «в точку» не хватает 2\u00a0шайбы.');
     assert.match(S.liveWhy(pick('home', 2, 1), { home_score: 2, away_score: 1 }, names), /«в точку»/);
     assert.equal(S.liveWhy({ side: 'home', home_score: null }, { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди.');
-    assert.equal(S.liveWhy(pick('home', 3, 2), null), 'Счёт обновляем каждые 15\u00a0минут');
+    assert.equal(S.liveWhy(pick('home', 3, 2), null), 'Счёт появится здесь, как только начнём его получать');
     // Шайб на табло уже больше, чем в ходе: «в точку» не выйдет.
     assert.equal(S.liveWhy(pick('home', 3, 1), { home_score: 4, away_score: 1 }, names), 'Пока сходится: Динамо впереди. «В точку» уже не выйдет.');
   });
@@ -211,7 +211,7 @@ describe('итог и движение', () => {
     assert.equal(S.resultHead(50), 'В точку!');
     assert.equal(S.resultHead(0), 'Мимо');
     assert.equal(S.resultHead(30), 'Почти в точку');
-    assert.equal(S.resultHead(20), 'Угадан победитель');
+    assert.equal(S.resultHead(20), 'Угадал победителя');
     const rows = S.movementRows([
       { kind: 'slice', club: 'Юность', period_title: 'ноябрь', rank_before: 2, rank_after: 1, crown: true },
       { kind: 'slice', club: null, period_title: 'сезон 2026/27', rank_before: 214, rank_after: 214, crown: false },
@@ -356,7 +356,7 @@ describe('лиги', () => {
     const l = { term: 'season', ends_at: '2027-07-31T21:00:00Z', period: { key: '2026-11' } };
     assert.equal(S.leagueCrownLine(l, 'month', { rank: 3, points: 210 }, 230), 'Корону лиги за ноябрь заберёт лидер после последнего матча месяца. Сейчас ты на 3-м месте, до первого — 20' + NBSP + 'очков.');
     assert.match(S.leagueCrownLine(l, 'month', { rank: 1, points: 230 }, 230), /Сейчас первое место твоё/);
-    assert.match(S.leagueCrownLine(l, 'all', null, 0), /^Чемпиона лиги определим после 31.июля/);
+    assert.match(S.leagueCrownLine(l, 'all', null, 0), /^Чемпиона лиги определим 31.июля/);
     assert.match(S.leagueCrownLine({ term: 'month', ends_at: '2026-11-30T21:00:00Z' }, 'all', null, 0), /^Корону лиги заберёт лидер, когда лига закончится — 30.ноября/);
   });
   it('приглашение без азартных слов', () => {
@@ -457,6 +457,6 @@ describe('шторка «Как считаются очки»', () => {
     assert.equal(r.trumpTitle, 'Козырь');
     assert.match(r.trumpText, /удвоятся/);
     assert.equal(M.PICK_CLOSES_BEFORE_SEC, 60);
-    assert.match(r.foot, /за минуту до начала матча/);
+    assert.match(r.foot, /до минуты перед стартом матча/);
   });
 });

@@ -596,7 +596,7 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
     m = data["match"]
     link = game_link(base_url, m["id"], city_id=city_id)
     if game["kind"] == "soon":
-        head, sub, cta = "Скоро можно будет угадывать и Экстралигу", "Как откроем, напишем в Telegram.", "Напомнить в Telegram"
+        head, sub, cta = "Игра в Экстралиге скоро появится на сайте", "Как откроем, напишем в Telegram.", "Напомнить в Telegram"
     else:
         phase = game["phase"]
         nxt = game.get("next")

@@ -213,7 +213,7 @@
   function verdict(pointsWon) {
     if (pointsWon === 50) return { head: 'в точку!', sticker: '+50', tone: 'win', tail: 'точный счёт' };
     if (pointsWon === 30) return { head: 'почти в точку', sticker: '+30', tone: 'ok', tail: 'победитель и ещё часть счёта' };
-    if (pointsWon === 20) return { head: 'угадан победитель', sticker: '+20', tone: 'ok', tail: 'угадан победитель' };
+    if (pointsWon === 20) return { head: 'угадал победителя', sticker: '+20', tone: 'ok', tail: 'угадал победителя' };
     if (pointsWon === 10) return { head: 'шайбы угаданы', sticker: '+10', tone: 'ok', tail: 'шайбы одной команды' };
     return { head: 'мимо', sticker: '0', tone: 'miss', tail: 'бывает' };
   }
@@ -307,7 +307,7 @@
     var played = race.played || 0;
     var known = race.known || 0;
     var left = '';
-    if (known && race.final_match_id && played === known - 1) left = 'остался финал';
+    if (known && race.final_match_id && played === known - 1) left = 'остался последний матч';
     else if (known) left = 'сыграно ' + played + ' из ' + known;
     return { title: race.title, left: left };
   }
@@ -336,14 +336,14 @@
       var lead = me.points - second.points;
       return lead > 0 ? { text: 'Ты первый. Отрыв', num: points(lead) } : { text: 'Первое место делишь', num: '' };
     }
-    return { text: 'Ты ' + me.rank + '-й. До первого места', num: points(rows[0].points - me.points) };
+    return { text: 'Ты на ' + me.rank + '-м месте. До первого места', num: points(rows[0].points - me.points) };
   }
 
   /** Строка под финалом месяца: факт без шансов («Катя впереди на 20»). */
   function leaderNote(leader) {
     if (!leader) return '';
-    if (leader.me_leading) return leader.gap ? 'Ты впереди на ' + points(leader.gap) : 'Если очков поровну, всё решит финал';
-    return leader.gap ? leader.leader + ' впереди на ' + points(leader.gap) : 'Если очков поровну, всё решит финал';
+    if (leader.me_leading) return leader.gap ? 'Ты впереди на ' + points(leader.gap) : 'Если очков поровну, всё решит последний матч';
+    return leader.gap ? leader.leader + ' впереди на ' + points(leader.gap) : 'Если очков поровну, всё решит последний матч';
   }
 
   function joinNames(names) {

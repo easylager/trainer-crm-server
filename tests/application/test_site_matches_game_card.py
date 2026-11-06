@@ -34,7 +34,7 @@ def test_live_panel_hides_counts_below_the_threshold_and_names_the_next_match() 
 
 def test_soon_panel_offers_a_reminder_not_an_invite() -> None:
     html = _card({"kind": "soon", "match_id": 7})
-    assert "Скоро можно будет угадывать и Экстралигу" in html
+    assert "Игра в Экстралиге скоро появится на сайте" in html
     assert "Напомнить в Telegram" in html
     assert "позвать" not in html.lower()
 
