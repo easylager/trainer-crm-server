@@ -334,7 +334,7 @@
       var second = rows.filter(function (r) { return !r.is_me; })[0];
       if (!second) return null;
       var lead = me.points - second.points;
-      return lead > 0 ? { text: 'Ты первый. Отрыв', num: points(lead) } : { text: 'Первое место делишь', num: '' };
+      return lead > 0 ? { text: 'Ты на первом месте. Отрыв', num: points(lead) } : { text: 'Первое место делишь', num: '' };
     }
     return { text: 'Ты на ' + me.rank + '-м месте. До первого места', num: points(rows[0].points - me.points) };
   }

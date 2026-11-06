@@ -102,7 +102,7 @@ describe('очки и живой счёт', () => {
     assert.equal(S.liveWhy(pick('home', 4, 1), { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди. До «в точку» не хватает 2\u00a0шайбы.');
     assert.match(S.liveWhy(pick('home', 2, 1), { home_score: 2, away_score: 1 }, names), /«в точку»/);
     assert.equal(S.liveWhy({ side: 'home', home_score: null }, { home_score: 2, away_score: 1 }, names), 'Пока сходится: Динамо впереди.');
-    assert.equal(S.liveWhy(pick('home', 3, 2), null), 'Счёт появится здесь, как только начнём его получать');
+    assert.equal(S.liveWhy(pick('home', 3, 2), null), 'Счёт появится здесь, как только будет доступен');
     // Шайб на табло уже больше, чем в ходе: «в точку» не выйдет.
     assert.equal(S.liveWhy(pick('home', 3, 1), { home_score: 4, away_score: 1 }, names), 'Пока сходится: Динамо впереди. «В точку» уже не выйдет.');
   });

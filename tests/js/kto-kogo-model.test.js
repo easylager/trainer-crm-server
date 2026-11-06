@@ -156,7 +156,7 @@ describe('гонка месяца (TASK-334)', () => {
     ];
     assert.deepEqual(M.chaseLine(rows), { text: 'Ты на 2-м месте. До первого места', num: '20' + NBSP + 'очков' });
     const lead = [{ rank: 1, points: 50, is_me: true }, { rank: 2, points: 30 }];
-    assert.deepEqual(M.chaseLine(lead), { text: 'Ты первый. Отрыв', num: '20' + NBSP + 'очков' });
+    assert.deepEqual(M.chaseLine(lead), { text: 'Ты на первом месте. Отрыв', num: '20' + NBSP + 'очков' });
     assert.equal(M.chaseLine([{ rank: 1, points: 10 }]), null);
   });
   it('строка финала и итоги месяца', () => {

@@ -106,7 +106,7 @@
     if (points === EXACT) return 'В точку! +50';
     if (points === 30) return 'Почти в точку · +30';
     if (points === 20) return 'Угадал победителя · +20';
-    if (points === 10) return 'Шайбы угаданы · +10';
+    if (points === 10) return 'Угадал шайбы · +10';
     return 'В этот раз мимо';
   }
 

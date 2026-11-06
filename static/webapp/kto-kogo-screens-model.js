@@ -175,7 +175,7 @@
    * names — {home, away} коротко. «Пока сходится: Динамо впереди. До «в точку» не хватает одной шайбы.»
    */
   function liveWhy(pick, live, names) {
-    if (!live) return 'Счёт появится здесь, как только начнём его получать';
+    if (!live) return 'Счёт появится здесь, как только будет доступен';
     if (live.home_score === live.away_score) return 'Пока ничья — победителя ещё нет';
     var leader = live.home_score > live.away_score ? 'home' : 'away';
     var lead = names && names[leader] ? names[leader] : leader === 'home' ? 'хозяева' : 'гости';
@@ -501,7 +501,7 @@
       rows: [
         { value: String(P.winner), text: 'Угадал победителя.', gold: false },
         { value: '+' + P.diff, text: 'За совпавшую разницу, шайбы хозяев или гостей.', gold: false },
-        { value: String(P.exact), text: 'Счёт угадан целиком — это «в точку».', gold: true },
+        { value: String(P.exact), text: 'Угадал точный счёт — это «в точку».', gold: true },
       ],
       trumpTitle: 'Козырь',
       trumpText: 'Один на неделю. Выбери матч для козыря — очки за него удвоятся. Передумаешь — перенеси его на другой матч недели, пока игра не началась.',
