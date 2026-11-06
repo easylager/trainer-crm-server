@@ -434,17 +434,15 @@
   }
 
   function openExternal(url) {
+    if (!/^https?:\/\//i.test(String(url || ''))) return;
     var tg = global.Telegram && global.Telegram.WebApp;
-    if (tg && typeof tg.openLink === 'function') {
+    if (tg && tg.initData) {
       try {
         tg.openLink(url, { try_instant_view: false });
-        return;
-      } catch (e1) {
-        try {
-          tg.openLink(url);
-          return;
-        } catch (e2) { /* fall through */ }
+      } catch (e) {
+        if (typeof tg.showAlert === 'function') tg.showAlert('Не удалось открыть ссылку. Попробуйте ещё раз.');
       }
+      return;
     }
     global.open(url, '_blank', 'noopener,noreferrer');
   }

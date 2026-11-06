@@ -178,8 +178,60 @@
   }
 
   function resolveWebappPath(relativePath, loc) {
-    var u = new URL(String(relativePath || ''), loc.href);
+    var u = new URL(String(relativePath || ''), new URL('/webapp/', loc.href));
     return u.pathname + u.search;
+  }
+
+  function maybePublicRedirect(ctx) {
+    ctx = ctx || (typeof window !== 'undefined' ? window : {});
+    var loc = ctx.location;
+    if (!loc) return false;
+    var p = loc.pathname;
+    if (p !== '/' && !/^\/(p|c|m)\//.test(p)) return false;
+    var tg = ctx.Telegram && ctx.Telegram.WebApp;
+    var query = new URLSearchParams(loc.search || '');
+    var hashParams = new URLSearchParams(String(loc.hash || '').replace(/^#/, ''));
+    var storage;
+    var active = !!((tg && tg.initData) || query.get('init_data') || hashParams.get('tgWebAppData'));
+    try {
+      storage = ctx.sessionStorage;
+      if (active && storage) storage.setItem('glide_mini_app_active_v1', '1');
+      if (storage && storage.getItem('glide_mini_app_active_v1') === '1') active = true;
+    } catch (e) { /* storage может быть запрещён */ }
+    if (!active) return false;
+
+    var sp = String(readStartParam(ctx) || '').trim();
+    var target = deepLinkTarget(sp);
+    try {
+      if (storage && storage.getItem(DEEP_LINK_FLAG) === sp) target = null;
+    } catch (e2) { /* */ }
+    var path = target && target.path;
+    if (!path) {
+      if (p === '/') path = 'client-home';
+      else if (/^\/m\/[1-9][0-9]*-/.test(p)) path = 'client-match?id=' + p.split('/')[2].split('-')[0];
+      else {
+        var attr = p.indexOf('/p/') === 0 ? 'data-arena-id' : 'data-city-id';
+        var tag = ctx.document && ctx.document.querySelector('script[' + attr + ']');
+        var id = tag && tag.getAttribute(attr);
+        if (!/^[1-9][0-9]*$/.test(String(id || ''))) return false;
+        path = attr === 'data-arena-id' ? 'arena?ref=' + id : 'ice?city_id=' + id;
+      }
+    }
+    var url = new URL(resolveWebappPath(path, loc), loc.href);
+    query.forEach(function (value, key) {
+      if (!url.searchParams.has(key)) url.searchParams.set(key, value);
+    });
+    if (p.indexOf('/c/') === 0 && !url.searchParams.has('when') && query.get('w')) {
+      url.searchParams.set('when', query.get('w'));
+    }
+    if (!url.searchParams.has('init_data') && !hashParams.get('tgWebAppData') && tg && tg.initData) {
+      url.searchParams.set('init_data', tg.initData);
+    }
+    try {
+      if (target && storage) storage.setItem(DEEP_LINK_FLAG, sp);
+    } catch (e3) { /* */ }
+    loc.replace(url.pathname + url.search + (loc.hash || ''));
+    return true;
   }
 
   /**
@@ -189,7 +241,7 @@
     ctx = ctx || {};
     var loc = ctx.location || (typeof location !== 'undefined' ? location : null);
     var storage = ctx.sessionStorage;
-    if (!loc) return false;
+    if (!loc || !/^\/(?:webapp|static\/webapp)\//.test(loc.pathname || '')) return false;
     if (!storage && typeof sessionStorage !== 'undefined') storage = sessionStorage;
     var sp = String(readStartParam(ctx) || '').trim();
     /* Arena startapp ждёт mini_app_server_place_card из /client/session — обрабатывает shell. */
@@ -217,6 +269,8 @@
     deepLinkTarget: deepLinkTarget,
     pathnameKey: pathnameKey,
     isAlreadyOnTarget: isAlreadyOnTarget,
+    resolveWebappPath: resolveWebappPath,
+    maybePublicRedirect: maybePublicRedirect,
     maybeEarlyRedirect: maybeEarlyRedirect,
   };
 });
@@ -224,7 +278,12 @@
 /* entry-страница подключает этот файл синхронно в <head> — уходим до разбора body */
 (function () {
   if (typeof window === 'undefined' || !window.GlideDeepLink) return;
+  function recover() {
+    return window.GlideDeepLink.maybePublicRedirect(window);
+  }
   try {
-    window.GlideDeepLink.maybeEarlyRedirect();
+    if (!recover()) window.GlideDeepLink.maybeEarlyRedirect(window);
+    window.document.addEventListener('DOMContentLoaded', recover);
+    window.addEventListener('pageshow', recover);
   } catch (e) { /* не ломаем загрузку хаба */ }
 })();
