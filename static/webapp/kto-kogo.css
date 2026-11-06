@@ -248,7 +248,7 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-chip { height: 44px; padding: 0 12px 0 8px; border-radius: 999px; border: 0; display: flex; align-items: center; gap: 8px; font: 600 15px var(--kk-text); background: var(--kk-card); color: var(--kk-ink); min-width: 0; }
 .kk-chip--alt { padding-left: 14px; background: var(--kk-chip); }
 .kk-chip__t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kk-chip svg:last-child { margin-left: auto; flex: none; }
+.kk-chip > svg:last-child { margin-left: auto; flex: none; }
 .kk-scs { display: flex; gap: 6px; align-items: center; overflow-x: auto; padding-bottom: 2px; }
 .kk-sc { min-height: 44px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--kk-line); background: none; color: var(--kk-soft); font: 600 13px var(--kk-text); white-space: nowrap; flex: none; }
 .kk-sc.is-on { background: var(--kk-chip); color: var(--kk-ink); }
@@ -279,10 +279,11 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-pr__n { display: flex; align-items: center; gap: 6px; font: 500 13px var(--kk-text); color: var(--kk-muted); }
 
 /* Карточка болельщика */
-.kk-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.kk-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .kk-stat { display: flex; flex-direction: column; gap: 2px; }
 .kk-stat__v { font: 400 22px/1 var(--kk-display); }
 .kk-stat__l { font: 500 12px var(--kk-text); opacity: 0.85; }
+.kk-stat__l--sub { opacity: 0.7; }
 .kk-cr { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 12px; background: var(--kk-row); font: 600 14px var(--kk-text); }
 .kk-cr--empty { background: none; border: 1px dashed var(--kk-line); color: var(--kk-muted); }
 .kk-cr--c { justify-content: center; gap: 6px; }

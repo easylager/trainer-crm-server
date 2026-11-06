@@ -176,7 +176,7 @@
     send: ['M21 4L3 11l6 2 2 6 3-4 5 4z'],
     plus: ['M12 5v14', 'M5 12h14'],
     bell: ['M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.9 1.9 0 0 0 3.4 0'],
-    globe: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M3 12h18', 'M12 3a14 14 0 0 1 0 18', 'M12 3a14 14 0 0 0 0 18'],
+    globe: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M3 12h18', 'M12 3c3 2.5 4.5 5.6 4.5 9s-1.5 6.5-4.5 9c-3-2.5-4.5-5.6-4.5-9S9 5.5 12 3z'],
     invite: ['M16 11a4 4 0 1 0-8 0', 'M4 20c1.5-3 4.5-4.5 8-4.5s6.5 1.5 8 4.5', 'M19 3v4', 'M17 5h4'],
   };
 
@@ -208,7 +208,10 @@
   }
 
   function worldDisc(size) {
-    return h('span', { class: 'kk-disc kk-disc--world', style: 'width:' + size + 'px;height:' + size + 'px', 'aria-hidden': 'true' }, [icon(I.globe, Math.round(size * 0.58))]);
+    var globe = icon(I.globe, Math.round(size * 0.58));
+    // Тонкий штрих: в иконке 16–20 px меридианы при 2.2 сливаются в крест.
+    globe.setAttribute('stroke-width', '1.7');
+    return h('span', { class: 'kk-disc kk-disc--world', style: 'width:' + size + 'px;height:' + size + 'px', 'aria-hidden': 'true' }, [globe]);
   }
 
   function ava(name, size, cls) {
@@ -690,7 +693,7 @@
     if (params.get('remind') === 'off') {
       api('PUT', '/client/hockey/remind', { on: false }).then(function () {
         state.remind = false;
-        toast('Напоминания выключены');
+        toast('Сообщения в чате выключены');
       }, function () {});
     }
     var loadError = null;
