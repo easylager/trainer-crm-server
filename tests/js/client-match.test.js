@@ -45,6 +45,12 @@ describe('строка «КТО КОГО?»', () => {
     const done = ev({ phase: 'final', my_pick: { side: 'home', home_score: 3, away_score: 2 }, points: 50 });
     done.match.result = { home_score: 3, away_score: 2 };
     assert.deepEqual(M.kkRow(done), { title: 'В точку! +50', sub: 'Похвастаться в чате', href: 'kto-kogo?reveal=7' });
+    const trump = ev({ phase: 'final', my_pick: { side: 'home', home_score: 3, away_score: 2, doubled: true }, points: 50 });
+    trump.match.result = { home_score: 3, away_score: 2 };
+    assert.equal(M.kkRow(trump).title, 'В точку! +100');
+    const miss = ev({ phase: 'final', my_pick: { side: 'away', home_score: 0, away_score: 1 }, points: 0 });
+    miss.match.result = { home_score: 3, away_score: 2 };
+    assert.equal(M.kkRow(miss).title, 'Мимо');
     const none = ev({ phase: 'final', my_pick: null });
     none.match.result = { home_score: 3, away_score: 2 };
     assert.equal(M.kkRow(none).title, 'Итог 3:2');

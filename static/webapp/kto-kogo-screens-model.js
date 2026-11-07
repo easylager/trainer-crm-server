@@ -629,7 +629,7 @@
     };
   }
 
-  /** Плашка вместо строки «ты», если в срезе нет моих ходов. */
+  /** Строка над кнопкой «Сделать ход», если в срезе нет моих ходов. */
   function noMeLine(club, periodKey, nowIso) {
     var closed = periodKey !== 'season' && periodKey !== monthKey(nowIso);
     if (closed) return 'В этом периоде у тебя не было ходов — загляни в другой';
@@ -645,7 +645,7 @@
     var isMonth = p.period !== 'season';
     var crowned = isMonth && (crowns || []).some(function (c) { return c.kind === 'month' && c.period === p.period && (c.club || null) === (p.club || null); });
     var note = crowned ? 'корона твоя' : p.rank === 1 ? 'лидируешь' : 'из ' + spaced(p.players);
-    return { rank: String(p.rank), label: sliceLabel(p.club, p.period_title), note: note, gold: crowned || p.rank === 1 };
+    return { rank: String(p.rank), name: p.club ? clubShort(p.club) : 'Все матчи', slice: periodShort(p.period_title), note: note, gold: crowned || p.rank === 1 };
   }
 
   function crownCount(n) {

@@ -303,7 +303,7 @@
       .catch(function () {
         if (mine !== seq) return;
         var s = $('cmState');
-        s.textContent = 'Не получилось загрузить матчи. Попробуйте ещё раз.';
+        s.textContent = 'Не получилось загрузить матчи. Попробуй ещё раз.';
         s.hidden = false;
       });
   }

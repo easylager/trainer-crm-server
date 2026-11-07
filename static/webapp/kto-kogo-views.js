@@ -454,7 +454,9 @@
   function brag(m, v) {
     var league = (state.leagues || [])[0];
     var r = m.result;
-    var text = S.resultHead(m.my_pick.points) + ' ' + name(m.home) + ' — ' + name(m.away) + ' ' + r.home_score + ':' + r.away_score + ', ' + v.sticker + '. А ты угадаешь?';
+    var total = M.totalPoints(m.my_pick);
+    var shown = total ? '+' + total + (m.my_pick.doubled ? ' с козырем' : '') : v.sticker;
+    var text = S.resultHead(m.my_pick.points) + ' ' + name(m.home) + ' — ' + name(m.away) + ' ' + r.home_score + ':' + r.away_score + ', ' + shown + '. А ты угадаешь?';
     K.shareCard({ card: 'result', match_id: m.id }, league ? league.invite_url : null, text);
   }
 

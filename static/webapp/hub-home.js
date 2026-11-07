@@ -525,6 +525,12 @@
         if (!r.ok) throw new Error(String(r.status));
       }).catch(function () {
         kkBefore(card, host);
+        // Кнопка откатилась — говорим об этом в строке подсказки карточки (тостов на главной нет).
+        var hint = host.querySelector('.hn__hint');
+        if (hint) {
+          hint.textContent = 'Не получилось, попробуй ещё раз';
+          hint.setAttribute('role', 'status');
+        }
       });
     }
     teams.appendChild(teamButton(m.home, 'home', onPick));
@@ -539,7 +545,7 @@
     var r = m.result || {};
     var pts = card.points == null ? 0 : card.points;
     // Те же слова, что KtoKogoModel.verdict: модель игры на главную не грузим ради одной строки.
-    var head = pts === 50 ? 'в точку!' : pts === 30 ? 'почти в точку' : pts === 20 ? 'есть победитель' : pts === 10 ? 'шайбы угаданы' : 'в этот раз мимо';
+    var head = pts === 50 ? 'в точку!' : pts === 30 ? 'почти в точку' : pts === 20 ? 'угадал победителя' : pts === 10 ? 'шайбы угаданы' : 'мимо';
     var a = link(el('a', 'hn__card hn__card--dark'), 'kto-kogo?reveal=' + m.id);
     // ×2 (TASK-335): слова — по базовым очкам, наклейка — с умножением.
     var doubled = !!(card.my_pick && card.my_pick.doubled);
