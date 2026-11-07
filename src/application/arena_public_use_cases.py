@@ -2552,8 +2552,11 @@ async def _trainer_windows_on_arena(
     *,
     timezone_name: str,
     now: datetime | None = None,
+    limit: int = TRAINER_WINDOWS_LIMIT,
 ) -> dict[int, list[dict[str, Any]]]:
     """Ближайшие свободные окна тренеров именно на этой арене — один запрос на всех.
+
+    ``limit`` — окон на тренера; страница тренера берёт всю неделю (``site_trainer_page.WEEK_WINDOWS_LIMIT``).
 
     ``arena_id=None`` — на всех площадках тренера (страница тренера ``/t/…``); у окна тогда
     есть ``arena_id``, чтобы подписать, где оно.
@@ -2614,14 +2617,14 @@ async def _trainer_windows_on_arena(
             "horizon": horizon,
             "d_from": now_slot.date(),
             "d_to": horizon.astimezone(slot_tz).date(),
-            "fetch": _TRAINER_WINDOWS_FETCH,
+            "fetch": max(_TRAINER_WINDOWS_FETCH, int(limit)),
         },
     )
     today = moment.astimezone(view_tz).date()
     out: dict[int, list[dict[str, Any]]] = {}
     for slot_id, trainer_id, slot_date, start_time, end_time, min_hours, slot_arena_id in result.fetchall():
         bucket = out.setdefault(int(trainer_id), [])
-        if len(bucket) >= TRAINER_WINDOWS_LIMIT:
+        if len(bucket) >= limit:
             continue
         if working_hours_between(now_slot, slot_date, start_time) < int(min_hours):
             continue
