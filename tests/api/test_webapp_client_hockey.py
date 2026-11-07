@@ -179,7 +179,7 @@ async def test_pick_side_exact_replace_and_errors(app_use_test_db, db_session) -
                 json={"side": "home"},
             )
             assert closed.status_code == 409
-            assert closed.json()["detail"] == "Матч уже начался"
+            assert closed.json()["detail"] == "Ходы на этот матч уже закрыты"
 
             missing = await client.put(
                 "/api/webapp/client/hockey/matches/987654321/pick",

@@ -12,6 +12,7 @@ from sqlalchemy import text
 from src.api.app import app
 from src.application.hockey_game import make_pick, score_finished_matches
 from src.application.hockey_matches import set_manual_result
+from src.ingestion.hockey_sources import MINSK_TZ
 from tests.api.test_webapp_client_hockey import patch_client_principal
 
 ME, B, C = 880_334_001, 880_334_002, 880_334_003
@@ -38,6 +39,28 @@ async def _match(db, starts_at, *, home="Юность", away="Неман", extra
     )
 
 
+def _upcoming_in_current_minsk_week(now: datetime) -> datetime:
+    """Kickoff after ``now`` but still in the current Europe/Minsk Mon–Sun week.
+
+    ``PUT …/double`` stores the trump on the match's week, while the response's
+    ``double`` field is only the *current* week via ``my_double``. A blind
+    ``now + 2 days`` slips into next week on Sat/Sun and the assertion sees
+    ``match_id is None`` even though the request returned 200.
+    """
+    local = now.astimezone(MINSK_TZ)
+    sunday = local.date() + timedelta(days=6 - local.weekday())
+    # Picks close 60s before start — need ≥2 minutes of headroom inside this week.
+    latest = datetime(sunday.year, sunday.month, sunday.day, 23, 59, tzinfo=MINSK_TZ)
+    earliest = local + timedelta(minutes=2)
+    if earliest > latest:
+        pytest.skip("нет окна для матча текущей недели Europe/Minsk")
+    for delta in (timedelta(days=2), timedelta(hours=2), timedelta(minutes=5), timedelta(minutes=2)):
+        candidate = local + delta
+        if earliest <= candidate <= latest:
+            return candidate
+    return latest
+
+
 @pytest.mark.asyncio
 async def test_standings_peaks_stakes_and_matches_filter(app_use_test_db, db_session) -> None:
     now = datetime.now(timezone.utc)
@@ -58,7 +81,7 @@ async def test_standings_peaks_stakes_and_matches_filter(app_use_test_db, db_ses
         db_session, played, home_score=3, away_score=1, decided_in="regulation", now=start + timedelta(hours=3)
     )
     await score_finished_matches(db_session, now=start + timedelta(hours=3))
-    upcoming = await _match(db_session, now + timedelta(days=2))
+    upcoming = await _match(db_session, _upcoming_in_current_minsk_week(now))
     dinamo_game = await _match(db_session, now + timedelta(days=3), home="Динамо-Минск", away="Барыс", extraliga=False)
     await db_session.commit()
 

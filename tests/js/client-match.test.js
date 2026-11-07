@@ -30,13 +30,13 @@ function ev(kk, extra) {
 
 describe('строка «КТО КОГО?»', () => {
   it('до хода: без компании — без имён; с компанией — без падежей и рода', () => {
-    assert.deepEqual(M.kkRow(ev({ phase: 'open', company_names: [] })), { title: 'Угадай счёт', sub: 'Точный счёт — 50 очков', href: 'kto-kogo?match=7' });
-    assert.equal(M.kkRow(ev({ phase: 'open', company_names: ['Аня', 'Петя'] })).sub, 'Уже с' + NBSP + 'ходом: Аня и' + NBSP + 'Петя · точный — 50');
+    assert.deepEqual(M.kkRow(ev({ phase: 'open', company_names: [] })), { title: 'Угадай счёт', sub: 'Можно угадать и точный счёт', href: 'kto-kogo?match=7' });
+    assert.equal(M.kkRow(ev({ phase: 'open', company_names: ['Аня', 'Петя'] })).sub, 'Уже угадывают: Аня и' + NBSP + 'Петя');
   });
 
-  it('ход сделан → «Твой счёт 3:2 · можно изменить до 19:30» (время Минска)', () => {
+  it('ход сделан → «Твой счёт 3:2 · можно менять до 19:29» (время Минска, ходы закрыты за минуту до старта)', () => {
     const row = M.kkRow(ev({ phase: 'picked', my_pick: { side: 'home', home_score: 3, away_score: 2 } }));
-    assert.deepEqual(row, { title: 'Твой счёт 3:2', sub: 'Можно изменить до 19:30', href: 'kto-kogo?match=7' });
+    assert.deepEqual(row, { title: 'Твой счёт 3:2', sub: 'Можно менять сегодня до 19:29', href: 'kto-kogo?match=7' });
     assert.equal(M.kkRow(ev({ phase: 'picked', my_pick: { side: 'away' } })).title, 'Ты за' + NBSP + 'СКА');
   });
 
@@ -45,6 +45,12 @@ describe('строка «КТО КОГО?»', () => {
     const done = ev({ phase: 'final', my_pick: { side: 'home', home_score: 3, away_score: 2 }, points: 50 });
     done.match.result = { home_score: 3, away_score: 2 };
     assert.deepEqual(M.kkRow(done), { title: 'В точку! +50', sub: 'Похвастаться в чате', href: 'kto-kogo?reveal=7' });
+    const trump = ev({ phase: 'final', my_pick: { side: 'home', home_score: 3, away_score: 2, doubled: true }, points: 50 });
+    trump.match.result = { home_score: 3, away_score: 2 };
+    assert.equal(M.kkRow(trump).title, 'В точку! +100');
+    const miss = ev({ phase: 'final', my_pick: { side: 'away', home_score: 0, away_score: 1 }, points: 0 });
+    miss.match.result = { home_score: 3, away_score: 2 };
+    assert.equal(M.kkRow(miss).title, 'Мимо');
     const none = ev({ phase: 'final', my_pick: null });
     none.match.result = { home_score: 3, away_score: 2 };
     assert.equal(M.kkRow(none).title, 'Итог 3:2');

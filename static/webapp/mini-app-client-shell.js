@@ -36,7 +36,7 @@
       path: 'kto-kogo',
       label: 'Кто кого',
       iconId: 'kto-kogo',
-      hint: 'Угадай матч Динамо-Минск с друзьями',
+      hint: 'Угадывай матчи Динамо и Экстралиги',
     },
     {
       path: 'client-saved-trainers',

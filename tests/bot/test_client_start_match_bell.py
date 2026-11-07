@@ -26,7 +26,7 @@ async def test_start_bell_subscribes_once_and_unsubscribes(app_use_test_db, db_s
     first = _message(f"mbell_{mid}", tid)
     await client_handlers.cmd_start(first)
     body = first.answer.await_args.args[0]
-    assert body.startswith("Готово: напомню о матче")
+    assert body.startswith("Готово: напомним о матче")
     buttons = [b for row in first.answer.await_args.kwargs["reply_markup"].inline_keyboard for b in row]
     assert any(b.callback_data == f"mbell_off:{mid}" for b in buttons)
     second = _message(f"mbell_{mid}", tid)

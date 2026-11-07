@@ -272,7 +272,7 @@ async def put_client_hockey_pick(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail="Матч не найден") from exc
     except PicksClosed as exc:
-        raise HTTPException(status_code=409, detail="Матч уже начался") from exc
+        raise HTTPException(status_code=409, detail="Ходы на этот матч уже закрыты") from exc
     await session.commit()
     return {"my_pick": _pick_out(pick.side, pick.home_score, pick.away_score, pick.points, pick.doubled)}
 
