@@ -83,6 +83,7 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
     # Время — сразу запись на этот слот в Mini App (TASK-357), через учётный прокси.
     assert "Ближайшее время — записаться" in html
     assert re.search(rf"startapp=trainer_{tid}_s_[1-9][0-9]*&amp;surface=trainer_page", html)
+    assert "Нужен Telegram — запись и переписка идут там." in html
     assert "Всё время на неделю" in html and "нет окон" in html
     assert 'id="tp-mbar"' in html and "Записаться на " in html
     # Каток — ссылкой на страницу катка сайта, не в Telegram.
@@ -341,6 +342,7 @@ async def test_few_ratings_hidden_and_no_photo_shows_letter(app_use_test_db, db_
     assert "★" not in html and "Оценки учеников" not in html and "оценк" not in html.lower().replace("оценить", "")
     assert "В Glide с" not in html
     assert "Онлайн-записи нет — напишите и договоритесь о времени." in html
+    assert "Нужен Telegram — переписка идёт там." in html
 
 
 @pytest.mark.asyncio

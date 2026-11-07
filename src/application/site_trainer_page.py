@@ -894,14 +894,14 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
                 f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(contact)}"{_write_attrs(page, via)}>Написать в Telegram</a></div>'
             )
         parts.append(also)
-        parts.append('<span class="tp-fine">Запись в Telegram, оплата тренеру на месте.</span>')
+        parts.append('<span class="tp-fine">Нужен Telegram — запись и переписка идут там. Оплата тренеру на месте.</span>')
     else:
         if cta:
             label, href = cta
             attrs = _write_attrs(page, via) if href == contact else ' rel="nofollow"'
             parts.append(f'<div class="tp-act"><a class="tp-btn tp-btn--tg" href="{esc(href)}"{attrs}>{esc(label)}</a></div>')
         parts.append(also)
-        parts.append('<span class="tp-fine">Онлайн-записи нет — напишите и договоритесь о времени.</span>')
+        parts.append('<span class="tp-fine">Онлайн-записи нет — напишите и договоритесь о времени. Нужен Telegram — переписка идёт там.</span>')
     return f'<div class="tp-pcard" id="tp-pcard">{"".join(p for p in parts if p)}</div>'
 
 
