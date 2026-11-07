@@ -245,3 +245,59 @@ describe('профиль ребёнка не дублируется', () => {
     assert.deepEqual(h.posts('/api/webapp/client/booking').map((c) => c.headers['X-Profile-Id']), ['501', '501']);
   });
 });
+
+describe('услуга и формат слота (онлайн/очно)', () => {
+  const mixed = () => trainer(1, { services: [
+    svc(1, tiers([['adult', 5000]])),
+    { ...svc(99, tiers([['adult', 3000]])), is_public: false, direction_service_id: 1, is_online: true, service_name: 'Онлайн-разбор' },
+    svc(2, tiers([['adult', 4000]])),
+  ] });
+
+  it('очный слот: онлайн-услуга не предлагается, на сервер не уходит', async () => {
+    const h = boot({ showcase: { items: [mixed()] }, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(401)] }) },
+      { match: (c) => isPath(c, '/api/webapp/client/booking'), reply: (c) => (c.body.service_id === 99 ? resp(422, { detail: 'Эта услуга только онлайн — выберите онлайн-слот.' }) : resp(200, { success: true })) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'dir', 'data-key': 's-nulya' }); // направление с очной 1 и онлайн 99
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 401 });
+    // Подходит одна (очная 1) — выбрана сразу, «Какое занятие?» не спрашиваем.
+    assert.ok(!h.app.innerHTML.includes('data-sid="99"'));
+    h.click({ 'data-act': 'pick', 'data-k': 'adult' });
+    h.input('name', 'Иван', 'self');
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    const b = h.posts('/api/webapp/client/booking');
+    assert.equal(b.length, 1);
+    assert.equal(b[0].body.service_id, 1);
+    assert.equal(h.S.view, 'sent');
+  });
+
+  it('«Все»: в форме только очные услуги; выбранная раньше онлайн-услуга сброшена', async () => {
+    const h = boot({ search: '?trainer_id=1&slot_id=401&service_id=99', showcase: { items: [mixed()] }, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [] }) },
+      { match: (c) => c.url.startsWith('/api/webapp/client/slot/401'), reply: () => resp(200, { available: true, slot: slot(401) }) },
+    ] });
+    await tick(80);
+    assert.equal(h.S.view, 'book');
+    assert.equal(h.S.serviceId, null);
+    const offered = (h.app.innerHTML.match(/data-act="svc" data-sid="(\d+)"/g) || []).map((x) => x.match(/\d+/)[0]);
+    assert.deepEqual(offered, ['1', '2']);
+    assert.match(h.app.innerHTML, /cta off/);
+  });
+
+  it('онлайн-слот: подходит только онлайн-услуга — выбрана сама', async () => {
+    const h = boot({ showcase: { items: [mixed()] }, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(402, { is_online: true, arena_id: null })] }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 402 });
+    assert.ok(h.app.innerHTML.includes('Онлайн-разбор'));
+    assert.ok(!h.app.innerHTML.includes('Какое занятие?'));
+  });
+});

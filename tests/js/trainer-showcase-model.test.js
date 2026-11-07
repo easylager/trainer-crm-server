@@ -259,3 +259,16 @@ describe('«от» вкладки — с сервера (min_price_by_direction)
     assert.deepEqual(Mo.minPriceOf([t(1, { all: p(4500) })]), p(4500));
   });
 });
+
+describe('услуга подходит к слоту — как проверяет сервер (422)', () => {
+  it('онлайн-слот — онлайн-услуга, очный — очная; онлайн-флаг при катке = очный', () => {
+    const live = { service_id: 1, is_online: false };
+    const web = { service_id: 9, is_online: true };
+    assert.equal(M.serviceFitsSlot(live, { is_online: false, arena_id: 3 }), true);
+    assert.equal(M.serviceFitsSlot(web, { is_online: false, arena_id: 3 }), false);
+    assert.equal(M.serviceFitsSlot(web, { is_online: true, arena_id: null }), true);
+    assert.equal(M.serviceFitsSlot(live, { is_online: true, arena_id: null }), false);
+    assert.equal(M.serviceFitsSlot(web, { is_online: true, arena_id: 3 }), false);
+    assert.deepEqual(M.servicesForSlot([live, web], { is_online: false, arena_id: 3 }).map((s) => s.service_id), [1]);
+  });
+});

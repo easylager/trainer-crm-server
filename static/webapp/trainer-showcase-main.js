@@ -309,6 +309,12 @@
     return svcs.length === 1 ? svcs[0] : null;
   }
 
+  /** Услуги, которые можно записать на этот слот (онлайн/очно — как проверяет сервер): сначала из направления. */
+  function servicesForSlot(t, slot) {
+    var fit = M.servicesForSlot(serviceList(t, S.dirKey), slot);
+    return fit.length ? fit : M.servicesForSlot(t.services, slot);
+  }
+
   function slotLabel(slot, withArena) {
     var small = M.daySmall(slot.slot_date, S.todayIso);
     if (withArena && slot.arena_name) small += ' · ' + slot.arena_name;
@@ -672,6 +678,10 @@
       notice: '',
     };
     if (slot.capacity > 1 && slot.service_id) S.serviceId = slot.service_id;
+    else if (S.serviceId != null) {
+      var picked = (S.trainer.services || []).filter(function (s) { return Number(s.service_id) === Number(S.serviceId); })[0];
+      if (picked && !M.serviceFitsSlot(picked, slot)) S.serviceId = null; // форма спросит подходящую услугу
+    }
     // В группу — одно место на запись: из двоих, отмеченных на прошлом слоте, остаётся первый.
     if (slot.capacity > 1 && S.book.selected.length > 1) S.book.selected = S.book.selected.slice(0, 1);
     BC.emitBookingAnalytics('booking_step_viewed', { step: 'form', host: 'trainers' });
@@ -685,7 +695,12 @@
       var g = (S.trainer.services || []).filter(function (s) { return Number(s.service_id) === Number(b.slot.service_id); })[0];
       if (g) return g;
     }
-    return currentService();
+    var svc = currentService();
+    if (!b || !b.slot) return svc;
+    // Онлайн-услуга на очный слот (и наоборот) — сервер ответит 422; такую пару форма не собирает.
+    if (svc && M.serviceFitsSlot(svc, b.slot)) return svc;
+    var fit = servicesForSlot(S.trainer, b.slot);
+    return fit.length === 1 ? fit[0] : null;
   }
 
   /** Групповой слот: одна запись = одно место = один участник (второй профиль и «двое» недоступны). */
@@ -748,7 +763,7 @@
     h += '<div class="sum"><div class="k">' + (t.photo_url ? '<img src="' + esc(t.photo_url) + '" alt="">' : '<i>' + esc(t.initial || 'Т') + '</i>') +
       '<div class="when"><b>' + esc(M.slotWhen(slot, S.todayIso)) + '</b><br><span>' + esc([t.name, what, place].filter(Boolean).join(' · ')) + '</span></div></div></div>';
     if (!svc) {
-      var svcs = serviceList(t, S.dirKey);
+      var svcs = servicesForSlot(t, slot);
       h += '<div class="fl"><span class="lbl">Какое занятие?</span><div class="opt">' + svcs.map(function (s) {
         var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин · ' : '';
         return '<button type="button" data-act="svc" data-sid="' + s.service_id + '"><span><b>' + esc(s.service_name) + '</b><br>' + esc(dur) +

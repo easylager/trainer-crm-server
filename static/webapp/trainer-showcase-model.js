@@ -497,6 +497,22 @@
     return '<b>' + money + '</b> — тренеру' + (online ? '' : ' на месте') + '.' + maybePass + ticket;
   }
 
+  /* ── Услуга и слот ──────────────────────────────────────────────────── */
+
+  /**
+   * Подходит ли услуга к формату слота — то же правило, что у сервера (`post_client_booking` → 422):
+   * онлайн-слот (`is_online` и без катка) — только онлайн-услуга, очный — только очная.
+   */
+  function serviceFitsSlot(service, slot) {
+    if (!service || !slot) return false;
+    var slotOnline = !!slot.is_online && slot.arena_id == null;
+    return !!service.is_online === slotOnline;
+  }
+
+  function servicesForSlot(services, slot) {
+    return (services || []).filter(function (s) { return serviceFitsSlot(s, slot); });
+  }
+
   /* ── Даты ───────────────────────────────────────────────────────────── */
 
   function parseIsoDate(s) {
@@ -689,6 +705,8 @@
     hintTier: hintTier,
     regularTier: regularTier,
     canAddProfile: canAddProfile,
+    serviceFitsSlot: serviceFitsSlot,
+    servicesForSlot: servicesForSlot,
     usablePass: usablePass,
     payLine: payLine,
     addDays: addDays,
