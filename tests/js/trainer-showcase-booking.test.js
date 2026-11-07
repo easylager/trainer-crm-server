@@ -360,3 +360,53 @@ describe('обрыв связи при записи', () => {
     assert.equal(h.S.view, 'sent');
   });
 });
+
+describe('«Мои записи» после записи', () => {
+  function switcherStub(active = null) {
+    const st = { active, sets: [] };
+    st.api = {
+      getActiveProfileId: () => st.active,
+      setActiveProfileId: (id) => { st.sets.push(id); st.active = id; },
+    };
+    return st;
+  }
+
+  it('записали ребёнка — «Мои записи» открываются на его профиле', async () => {
+    const sw = switcherStub(null);
+    const h = boot({ switcher: sw.api, showcase: { items: [trainer(1)] }, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(101)] }) },
+      { match: (c) => isPath(c, '/api/webapp/client/profiles') && c.method === 'POST', reply: () => resp(200, { client_id: 900 }) },
+      { match: (c) => isPath(c, '/api/webapp/client/booking'), reply: () => resp(200, { success: true }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 101 });
+    h.click({ 'data-act': 'pick', 'data-k': 'child' });
+    h.input('name', 'Соня', 'child');
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    h.click({ 'data-act': 'my-bookings' });
+    assert.deepEqual([...sw.sets], [900]);
+    assert.deepEqual([...h.ctx.navigated], ['client-bookings']);
+  });
+
+  it('записали активный профиль — переключать нечего', async () => {
+    const sw = switcherStub(10);
+    const profiles = { items: [{ client_id: 10, role: 'self', first_name: 'Мама' }], default_profile_id: 10 };
+    const h = boot({ switcher: sw.api, profiles, showcase: { items: [trainer(1)] }, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(101)] }) },
+      { match: (c) => isPath(c, '/api/webapp/client/booking'), reply: () => resp(200, { success: true }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 101 });
+    await tick();
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    assert.equal(h.S.view, 'sent');
+    h.click({ 'data-act': 'my-bookings' });
+    assert.equal(sw.sets.length, 0);
+  });
+});

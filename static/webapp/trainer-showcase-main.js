@@ -1039,7 +1039,7 @@
         var r = x.r;
         b.submitting = false;
         if (r.res.ok && r.data && r.data.success) {
-          onBooked(r.data, choice);
+          onBooked(r.data, choice, x.profileId);
           return;
         }
         var detail = r.data && typeof r.data.detail === 'string' ? r.data.detail : '';
@@ -1074,7 +1074,7 @@
           return (day.bookings || []).some(function (x) { return String(x.slot_id) === String(b.slot.id); });
         });
         if (found) {
-          onBooked({ success: true }, choice);
+          onBooked({ success: true }, choice, profileId);
           return;
         }
         b.notice = 'Запись не дошла. Нажмите ещё раз — второй записи не будет.';
@@ -1086,10 +1086,10 @@
       });
   }
 
-  function onBooked(data, choice) {
+  function onBooked(data, choice, profileId) {
     var b = S.book;
     BC.hapticSuccess();
-    S.sent = { data: data, slot: b.slot, participant: choice.participant, trainer: S.trainer, dirKey: S.dirKey };
+    S.sent = { data: data, slot: b.slot, participant: choice.participant, trainer: S.trainer, dirKey: S.dirKey, profileId: profileId != null ? profileId : null };
     S.stack = [];
     S.view = 'sent';
     render();
@@ -1407,12 +1407,20 @@
       case 'rq-send': sendRequest(); break;
       case 'sheet-close': closeSheet(); break;
       case 'sheet-dim': if (ev.target === el) closeSheet(); break;
-      case 'my-bookings': navigate('client-bookings'); break;
+      case 'my-bookings': showBookedProfile(); navigate('client-bookings'); break;
       case 'my-requests': navigate('client-requests'); break;
       case 'route': openLink(S.sent && S.sent.slot.map_link); break;
       case 'to-list': S.view = 'list'; S.stack = []; render(); window.scrollTo(0, 0); break;
       default: break;
     }
+  }
+
+  /** «Мои записи» после записи ребёнка — его профиль: иначе список открылся бы у родителя и записи «не было». */
+  function showBookedProfile() {
+    var pid = S.sent && S.sent.profileId;
+    var CPS = window.ClientProfileSwitcher;
+    if (pid == null || !CPS || typeof CPS.setActiveProfileId !== 'function') return;
+    if (Number(CPS.getActiveProfileId()) !== Number(pid)) CPS.setActiveProfileId(pid);
   }
 
   function rerenderPhoneOwner() {
