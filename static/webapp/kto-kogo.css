@@ -180,7 +180,8 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-peak.is-gold { background: var(--kk-crownbg); }
 .kk-peak__n { font: 400 26px/1 var(--kk-display); }
 .kk-peak.is-gold .kk-peak__n { color: var(--kk-gold-ink); }
-.kk-peak__l { font: 600 13px/1.2 var(--kk-text); overflow-wrap: anywhere; }
+.kk-peak__l { font: 700 14px/1.2 var(--kk-text); overflow-wrap: normal; hyphens: manual; }
+.kk-peak__w { font: 500 13px/1.2 var(--kk-text); color: var(--kk-soft); overflow-wrap: normal; hyphens: manual; }
 .kk-peak__s { font: 500 12px var(--kk-text); color: var(--kk-muted); }
 .kk-day { display: flex; flex-direction: column; gap: 6px; }
 .kk-moved { font: 600 12px/1.3 var(--kk-text); color: var(--kk-muted); }
