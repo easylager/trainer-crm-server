@@ -255,7 +255,7 @@ def contact_url(trainer_id: int, telegram_username: str | None, *, listed: bool)
 async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]]:
     """Площадки тренера, которые он показывает клиентам; у катка со страницей — ссылка на ``/p/…``."""
     from src.application.indexnow import SITEMAP_PLACE_WHERE_SQL
-    from src.shared.ice_discovery_scope import public_scope_params
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
     rows = (
         await session.execute(
@@ -268,6 +268,7 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
                 LEFT JOIN arena_profiles p ON p.arena_id = a.id
                 LEFT JOIN cities c ON c.id = a.city_id
                 WHERE ta.trainer_id = :tid AND COALESCE(ta.is_public, true) AND a.merged_into_arena_id IS NULL
+                  AND {PUBLIC_ARENA_VISIBLE_SQL}
                 ORDER BY a.sort_order NULLS LAST, a.id
                 """
             ),
@@ -380,6 +381,7 @@ async def _peers(
 ) -> list[dict[str, Any]]:
     """Другие тренеры направления в городе — по правилу каталога: услуга направления и (цена или каток)."""
     from src.application.trainer_use_cases import list_active_trainers_for_client
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
     items, _total = await list_active_trainers_for_client(session, limit=50, offset=0, city_id=int(city_id))
@@ -390,14 +392,17 @@ async def _peers(
     ids = [int(b["id"]) for b in bodies]
     rows = await session.execute(
         text(
-            """
+            f"""
             SELECT ta.trainer_id, a.name FROM trainer_arenas ta JOIN arenas a ON a.id = ta.arena_id
+            JOIN cities c ON c.id = a.city_id
+            LEFT JOIN arena_profiles p ON p.arena_id = a.id
             WHERE ta.trainer_id = ANY(:ids) AND COALESCE(ta.is_public, true) AND a.city_id = :city
               AND a.merged_into_arena_id IS NULL AND COALESCE(a.venue_type, 'ice') = 'ice'
+              AND {PUBLIC_ARENA_VISIBLE_SQL}
             ORDER BY ta.trainer_id, a.sort_order NULLS LAST, a.id
             """
         ),
-        {"ids": ids, "city": int(city_id)},
+        {"ids": ids, "city": int(city_id), **public_scope_params()},
     )
     arenas: dict[int, list[str]] = {}
     for tid, name in rows.fetchall():
