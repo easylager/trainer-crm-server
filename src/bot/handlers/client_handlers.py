@@ -107,7 +107,7 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.application.demand_signals_use_cases import record_profile_view_commit
 from src.application.trainer_use_cases import add_trainer_rating, get_trainer
-from src.application.trainer_invite_links import SHARE_REF_PREFIX, TRAINER_PREVIEW_PREFIX
+from src.application.trainer_invite_links import SHARE_REF_PREFIX, TRAINER_PREVIEW_PREFIX, parse_ref_slot
 from src.shared.catalog_visibility import trainer_is_listed
 from src.shared.catalog_entry import client_discovery_webapp_url
 from src.application.support_use_cases import create_support_message
@@ -361,6 +361,20 @@ def _trainer_book_markup(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _trainer_slot_rows(
+    base: str, trainer_id: int, slot_id: int | None, *, via: str, trainer: dict | None
+) -> list[list[InlineKeyboardButton]]:
+    """Кнопка «Открыть выбранное время» — витрина Mini App сразу на слоте (``welcome_ref_/share_ref_<id>_s_<slot>``).
+
+    Только для тренера в каталоге и на https: иначе пусто, и остаётся прежний сценарий без слота.
+    """
+    b = (base or "").rstrip("/")
+    if not slot_id or not b.startswith("https://") or not trainer_is_listed(trainer):
+        return []
+    url = f"{b}/webapp/trainers?trainer_id={int(trainer_id)}&slot_id={int(slot_id)}&via={via}"
+    return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_OPEN_CHOSEN_SLOT, web_app=WebAppInfo(url=url))]]
+
+
 def _trainer_invite_welcome_markup(
     base: str,
     trainer_id: int,
@@ -590,6 +604,18 @@ def _parse_share_ref(payload: str) -> int | None:
         return tid if tid > 0 else None
     except ValueError:
         return None
+
+
+def _parse_ref_with_slot(payload: str, prefix: str, plain_parser) -> tuple[int, int | None] | None:
+    """``(trainer_id, slot_id | None)`` для ``<prefix><id>`` и ``<prefix><id>_s_<slot>``.
+
+    Старый формат без слота разбирает прежний парсер — поведение не меняется.
+    """
+    with_slot = parse_ref_slot(payload, prefix)
+    if with_slot is not None:
+        return with_slot
+    tid = plain_parser(payload)
+    return (tid, None) if tid is not None else None
 
 
 def _parse_trainer_preview(payload: str) -> int | None:
@@ -1106,7 +1132,8 @@ async def cmd_start(message: Message) -> None:
 
     # Shared trainer profile: share_ref_<trainer_id> — friend recommendation deep link.
     # Same session setup as welcome_ref but records DEMAND_SOURCE_CLIENT_SHARE for PLG analytics.
-    trainer_id_share = _parse_share_ref(payload)
+    share_ref = _parse_ref_with_slot(payload, SHARE_REF_PREFIX, _parse_share_ref)
+    trainer_id_share, slot_id_share = share_ref if share_ref else (None, None)
     if trainer_id_share is not None:
         async with async_session_factory() as db_session:
             await get_or_create_client(db_session, telegram_id)
@@ -1128,13 +1155,13 @@ async def cmd_start(message: Message) -> None:
             )
         base = (Settings().webapp_base_url or "").rstrip("/")
         welcome_body = _welcome_pass_invite_body(trainer)
-        await message.answer(
-            welcome_body,
-            parse_mode=ParseMode.HTML,
-            reply_markup=_trainer_invite_welcome_markup(
-                base, trainer_id_share, city_id=city_id, service_id=book_url_share, via=SOURCE_SHARE
-            ),
+        share_markup = _trainer_invite_welcome_markup(
+            base, trainer_id_share, city_id=city_id, service_id=book_url_share, via=SOURCE_SHARE
         )
+        slot_rows = _trainer_slot_rows(base, trainer_id_share, slot_id_share, via=SOURCE_SHARE, trainer=trainer)
+        if slot_rows:
+            share_markup = InlineKeyboardMarkup(inline_keyboard=slot_rows + share_markup.inline_keyboard)
+        await message.answer(welcome_body, parse_mode=ParseMode.HTML, reply_markup=share_markup)
         return
 
     # Trainer preview: preview_<trainer_id> — a trainer looking at themselves through the real
@@ -1180,7 +1207,8 @@ async def cmd_start(message: Message) -> None:
 
     # Generic invite: welcome_ref_<trainer_id> — universal entry point.
     # Complete profile → bind roster + notify; missing phone or name → registration form.
-    trainer_id_ref = _parse_welcome_ref(payload)
+    welcome_ref = _parse_ref_with_slot(payload, WELCOME_REF_PREFIX, _parse_welcome_ref)
+    trainer_id_ref, slot_id_ref = welcome_ref if welcome_ref else (None, None)
     if trainer_id_ref is not None:
         async with async_session_factory() as db_session:
             needs_registration = await client_invite_needs_registration_form(
@@ -1239,6 +1267,9 @@ async def cmd_start(message: Message) -> None:
                 await set_pending_referral(telegram_id, trainer_id_ref, db_session)
             name = html.escape(_trainer_name(trainer) if trainer else "тренер")
             register_url = f"{base}/webapp/client-register?trainer_id={trainer_id_ref}&via={SOURCE_LINK}"
+            if _trainer_slot_rows(base, trainer_id_ref, slot_id_ref, via=SOURCE_LINK, trainer=trainer):
+                # После анкеты форма откроет витрину сразу на выбранном времени.
+                register_url += f"&slot_id={int(slot_id_ref)}"
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[[
                     InlineKeyboardButton(
@@ -1276,7 +1307,10 @@ async def cmd_start(message: Message) -> None:
             # ``via=link`` — источник записи «ссылка тренера» (TASK-351, booking-source.js).
             home_url = f"{base}/webapp/client-home?via={SOURCE_LINK}"
             keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
+                inline_keyboard=_trainer_slot_rows(
+                    base, trainer_id_ref, slot_id_ref, via=SOURCE_LINK, trainer=trainer
+                )
+                + [
                     [
                         InlineKeyboardButton(
                             text=msg.CLIENT_BUTTON_TRAINER_AND_BOOKING,

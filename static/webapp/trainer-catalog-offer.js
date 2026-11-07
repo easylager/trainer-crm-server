@@ -1,5 +1,5 @@
 /**
- * TASK-350: «Показать вас родителям на катках …?» — один экран по центру, один тап.
+ * TASK-350: «Показывать вас родителям на страницах катков?» — один экран по центру, один тап.
  *
  * Открывается сразу после онбординга и один раз на главной кабинета у тренера, чья карточка
  * готова, но ещё черновик (`state === 'draft'`, `can_act`, `readiness.submit_ready`). Показывает
@@ -63,13 +63,9 @@
     return !!(p && String(p.state || 'draft') === 'draft' && p.can_act && p.readiness && p.readiness.submit_ready);
   }
 
-  /** «ТЦ Замок и Чижовка» / «ТЦ Замок, Чижовка и ещё 2» / '' (онлайн, без катков). */
-  function placesPhrase(pv) {
-    var names = (pv && pv.arena_names) || [];
-    if (!names.length || pv.arena_work_format === 'online') return '';
-    if (names.length === 1) return names[0];
-    if (names.length === 2) return names[0] + ' и ' + names[1];
-    return names[0] + ', ' + names[1] + ' и ещё ' + (names.length - 2);
+  /** Тренер работает на катках (не онлайн) — родители увидят его на страницах катков. */
+  function onRinks(pv) {
+    return !!(pv && pv.arena_names && pv.arena_names.length && pv.arena_work_format !== 'online');
   }
 
   function cardHtml(pv) {
@@ -136,10 +132,10 @@
     if (back && back.parentNode) back.parentNode.removeChild(back);
   }
 
-  function renderPublished(box, back, opts, places) {
+  function renderPublished(box, back, opts, rinks) {
     box.innerHTML =
-      '<h2>Вы на странице ' + (places ? 'катков' : 'Glide') + '</h2>' +
-      '<p>' + (places ? 'Родители увидят вас на ' + esc(places) + '. ' : '') +
+      '<h2>Вы на странице ' + (rinks ? 'катков' : 'Glide') + '</h2>' +
+      '<p>' + (rinks ? 'Родители увидят вас на страницах катков. ' : '') +
       'Вот ваша страница — отправьте её ученикам, с неё они запишутся в Telegram.</p>' +
       '<span class="tco-url" data-tco-url>…</span>' +
       '<button type="button" class="tco-btn" data-tco-share disabled>Отправить родителям</button>' +
@@ -179,7 +175,7 @@
   function render(p, opts) {
     ensureStyle();
     var pv = p.preview || {};
-    var places = placesPhrase(pv);
+    var rinks = onRinks(pv);
     var back = global.document.createElement('div');
     back.className = 'tco-back';
     back.setAttribute('role', 'dialog');
@@ -187,7 +183,7 @@
     var box = global.document.createElement('div');
     box.className = 'tco';
     box.innerHTML =
-      '<h2>' + (places ? 'Показать вас родителям на ' + esc(places) + '?' : 'Показать вас родителям в Glide?') + '</h2>' +
+      '<h2>' + (rinks ? 'Показывать вас родителям на страницах катков?' : 'Показывать вас родителям в Glide?') + '</h2>' +
       '<p>Карточка бесплатная. Родители увидят её на странице катка и на вашей странице в Glide.</p>' +
       cardHtml(pv) +
       '<button type="button" class="tco-btn" data-tco-yes>Показать меня</button>' +
@@ -208,7 +204,7 @@
       yes.textContent = 'Публикуем…';
       getJson(opts, '/trainer/catalog/submit', 'POST').then(function (o) {
         if (o.ok && o.data && o.data.state === 'published') {
-          renderPublished(box, back, opts, places);
+          renderPublished(box, back, opts, rinks);
           return;
         }
         yes.disabled = false;
@@ -221,8 +217,14 @@
             : 'Не получилось — попробуйте ещё раз из раздела «Каталог».';
         }
       }, function () {
+        // Обрыв сети: кнопка снова активна и человек видит, что случилось, а не молчание.
         yes.disabled = false;
         yes.textContent = 'Показать меня';
+        var note = box.querySelector('.tco-note');
+        if (note) {
+          note.setAttribute('role', 'alert');
+          note.textContent = 'Нет связи — попробуйте ещё раз.';
+        }
       });
     };
   }
@@ -242,7 +244,7 @@
     }, function () { return false; });
   }
 
-  var api = { maybeOpen: maybeOpen, eligible: eligible, placesPhrase: placesPhrase, SEEN_KEY: SEEN_KEY };
+  var api = { maybeOpen: maybeOpen, eligible: eligible, onRinks: onRinks, render: render, SEEN_KEY: SEEN_KEY };
   global.TrainerCatalogOffer = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

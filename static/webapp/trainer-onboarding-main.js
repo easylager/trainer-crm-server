@@ -2508,7 +2508,7 @@
       el.obDonePricesBtn.onclick = goSetPrices;
     }
     loadDoneCatalogInvite();
-    /* TASK-350: сразу после настройки — один вопрос по центру «Показать вас родителям на …?».
+    /* TASK-350: сразу после настройки — один вопрос по центру «Показывать вас родителям на страницах катков?».
        Отказ оставляет блок ниже и строку на главной; публикация — тот же POST, что у блока. */
     if (window.TrainerCatalogOffer) {
       window.TrainerCatalogOffer.maybeOpen({

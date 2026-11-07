@@ -83,7 +83,8 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
     # Время — сразу запись на этот слот в Mini App (TASK-357), через учётный прокси.
     assert "Ближайшее время — записаться" in html
     assert re.search(rf"startapp=trainer_{tid}_s_[1-9][0-9]*&amp;surface=trainer_page", html)
-    assert "Всё время на неделю" in html and "нет свободного времени" in html
+    assert "Нужен Telegram — запись и переписка идут там." in html
+    assert "Всё время на неделю" in html and "нет окон" in html
     assert 'id="tp-mbar"' in html and "Записаться на " in html
     # Каток — ссылкой на страницу катка сайта, не в Telegram.
     assert f'href="https://glide.example{place["path"]}"' in html
@@ -292,7 +293,7 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
     assert "Ещё ведёт: Катание на роликах, Растяжка для фигуристов." in html
     # Первый экран: стаж, строка направлений и аудитории, оценка от 3, галочки из анкеты.
     assert "Тренирует 6 лет" in html
-    assert "С нуля, для тех, кто уже катается и фигурное катание. Дети и взрослые." in html
+    assert "Занятия с нуля, для уже катающихся и по фигурному катанию. Дети и взрослые." in html
     assert "<span>· 7 оценок</span>" in html and "7 оценок — все на 5 из 5" in html
     assert "<li>Высшее профильное образование</li>" in html and f"<li>Каток: {place['name']}</li>" in html
     # «В Glide с» — месяц первой состоявшейся записи; запись тренера к себе (40 дней назад) не в счёт.
@@ -304,12 +305,12 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
     assert f"В Glide с {_MONTHS_GEN[since.month - 1]} {since.year}" in html
     # Число занятий не показываем никогда.
     assert not re.search(r"\d+\s*заняти", html)
-    # Три ближайших времени и неделя: 4 слота, 7 дней, у пустых — «нет свободного времени».
+    # Три ближайших времени и неделя: 4 слота, 7 дней, у пустых — «нет окон».
     near = html.split('class="tp-near"', 1)[1].split("</div>", 1)[0]
     assert near.count("<a ") == 3 and "<small>" in near
     week = html.split('class="tp-week"', 1)[1].split("</section>", 1)[0]
     assert week.count('class="tp-slot"') == 4
-    assert week.count("tp-day") >= 7 and week.count("нет свободного времени") == 4
+    assert week.count("tp-day") >= 7 and week.count("нет окон") == 4
     # Цены списком: все тарифы, «на двоих» тоже; слова тренера к услуге — дословно.
     prices = html.split(">Цены</h2>", 1)[1].split("</section>", 1)[0]
     for label in ("Ребёнок", "Взрослый", "Двое детей", "Взрослый + ребёнок", "Двое взрослых"):
@@ -341,6 +342,7 @@ async def test_few_ratings_hidden_and_no_photo_shows_letter(app_use_test_db, db_
     assert "★" not in html and "Оценки учеников" not in html and "оценк" not in html.lower().replace("оценить", "")
     assert "В Glide с" not in html
     assert "Онлайн-записи нет — напишите и договоритесь о времени." in html
+    assert "Нужен Telegram — переписка идёт там." in html
 
 
 @pytest.mark.asyncio
@@ -374,3 +376,51 @@ async def test_peers_of_the_same_direction_in_city(app_use_test_db, db_session) 
     assert f"/t/{other}-" in more and "от 45 BYN" in more and place["name"] in more
     assert f"/t/{tid}-" not in more
     assert "Здесь же ещё 1 тренер" in html
+
+
+@pytest.mark.asyncio
+async def test_no_individual_windows_text_does_not_claim_no_time_at_all(app_use_test_db, db_session) -> None:
+    """Групповой слот в публичные окна не входит (семантика /client/slots) — текст не утверждает «времени нет»."""
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"], capacity=4)
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+    assert "Индивидуального свободного времени на этой неделе нет — напишите тренеру." in html
+    assert "свободного времени нет." not in html.replace("Индивидуального свободного времени на этой неделе нет", "")
+    assert 'class="tp-slot"' not in html
+
+
+@pytest.mark.asyncio
+async def test_link_and_share_pages_carry_the_slot_into_the_bot_payload(app_use_test_db, db_session) -> None:
+    """``?via=link``/``share``: время ведёт в бота со слотом (``..._s_<slot>``), основная кнопка — прежняя ссылка."""
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        sid = await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"])
+        await db_session.commit()
+        own = (await client.get(f"{trainer_path(tid, name)}?via=link")).text
+        shared = (await client.get(f"{trainer_path(tid, name)}?via=share")).text
+    assert f"start=welcome_ref_{tid}_s_{sid}" in own and f"start=share_ref_{tid}_s_{sid}" in shared
+    async with _client() as client:
+        place2, tid2, name2 = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        bare = (await client.get(f"{trainer_path(tid2, name2)}?via=link")).text
+    # Без окон слота нет — прежняя постоянная ссылка.
+    assert f'start=welcome_ref_{tid2}"' in bare
+
+
+def test_role_line_reads_as_one_grammatical_phrase_for_every_combination() -> None:
+    from src.application.catalog_directions import DIRECTIONS
+    from src.application.site_trainer_page import _role_line
+
+    by = {d.slug: d for d in DIRECTIONS}
+    zero, better, hockey, fig = by["s-nulya"], by["uzhe-katayus"], by["s-klyushkoy"], by["figurnoe"]
+    assert _role_line([zero]) == "Занятия с нуля."
+    assert _role_line([better]) == "Занятия для уже катающихся."
+    assert _role_line([fig]) == "Занятия по фигурному катанию."
+    assert _role_line([zero, fig]) == "Занятия с нуля и по фигурному катанию."
+    assert _role_line([zero, better]) == "Занятия с нуля и для уже катающихся."
+    assert _role_line([zero, better, fig]) == "Занятия с нуля, для уже катающихся и по фигурному катанию."
+    assert _role_line([zero, better, fig, hockey]) == (
+        "Занятия с нуля, для уже катающихся, по фигурному катанию и по хоккейному катанию."
+    )
+    assert _role_line([]) == ""

@@ -227,6 +227,10 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert _tab(html, "С клюшкой") == "1" and _tab(html, "Фигурное") is None
     assert f'href="{base}/s-klyushkoy"' in html
     assert "Научиться кататься на коньках с нуля" in html and "Мне 35 — не поздно начинать?" in html
+    # Лид «Все» не обещает «ставят ход»; оплата на месте остаётся в шаге записи и в meta description.
+    assert "Учат кататься с нуля и ставят технику. Есть фигурное катание и хоккей." in all_r.text
+    assert 'name="description" content="Учат кататься с нуля и ставят технику.' in all_r.text
+    assert "Оплата тренеру на месте." not in re.search(r'<p class="tcat-lead">(.*?)</p>', all_r.text).group(1)
     # Сверху — с онлайн-записью: A первая; окно — ссылка в запись Mini App через учётный прокси.
     cards = _cards(html)
     assert names["A"] in cards[0] and names["B"] in cards[1]
@@ -329,3 +333,65 @@ async def test_catalog_stylesheet_is_served() -> None:
     async with _client() as client:
         r = await client.get("/static/share/trainer-catalog.css")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/css") and ".tc-slot" in r.text
+
+
+async def _two_city_trainer(db_session, client) -> dict:
+    """Тренер работает на катках двух городов; online-запись включена."""
+    a = await _place(db_session)
+    b = await _place(db_session)
+    tid = await _trainer_on(db_session, client, a, first_name=f"Двагорода{uuid.uuid4().hex[:4]}")
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id, is_public) VALUES (:t, :a, true) ON CONFLICT DO NOTHING"),
+        {"t": tid, "a": b["arena_id"]},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_cities (trainer_id, city_id) VALUES (:t, :c) ON CONFLICT DO NOTHING"),
+        {"t": tid, "c": b["city_id"]},
+    )
+    await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+    return {"a": a, "b": b, "tid": tid}
+
+
+@pytest.mark.asyncio
+async def test_city_catalog_hides_windows_from_another_city(app_use_test_db, db_session) -> None:
+    """Единственное окно тренера — на катке города B: в каталоге города A его нет (не врём «есть время»)."""
+    async with _client() as client:
+        t = await _two_city_trainer(db_session, client)
+        await _slot(db_session, t["tid"], days=2, hour=13, arena_id=t["b"]["arena_id"])
+        await db_session.commit()
+        html_a = (await client.get(f"/c/{city_slug(t['a']['city_name'])}/trenery")).text
+        html_b = (await client.get(f"/c/{city_slug(t['b']['city_name'])}/trenery")).text
+    assert 'class="tc-slot"' not in html_a
+    assert 'class="tc-slot"' in html_b
+    # Катки в разных городах — у окна подпись, где именно.
+    assert f"· {t['b']['name']}" in html_b
+
+
+@pytest.mark.asyncio
+async def test_city_catalog_names_arena_when_trainer_has_several(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        t = await _two_city_trainer(db_session, client)
+        second = await _insert_arena(db_session, t["a"]["city_id"], name=f"Второй {uuid.uuid4().hex[:4]}")
+        await db_session.execute(
+            text("INSERT INTO trainer_arenas (trainer_id, arena_id, is_public) VALUES (:t, :a, true)"),
+            {"t": t["tid"], "a": second},
+        )
+        await _slot(db_session, t["tid"], days=2, hour=13, arena_id=t["a"]["arena_id"])
+        await _slot(db_session, t["tid"], days=2, hour=15, arena_id=t["b"]["arena_id"])
+        await db_session.commit()
+        html = (await client.get(f"/c/{city_slug(t['a']['city_name'])}/trenery")).text
+    assert len(re.findall(r'class="tc-slot"', html)) == 1
+    assert f"13:00 · {t['a']['name']}" in html
+    assert t["b"]["name"] not in html
+
+
+@pytest.mark.asyncio
+async def test_city_catalog_single_arena_has_no_arena_name_on_slot(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Один{uuid.uuid4().hex[:4]}")
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        await _slot(db_session, tid, days=2, hour=13, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(f"/c/{city_slug(place['city_name'])}/trenery")).text
+    assert 'class="tc-slot"' in html and "13:00 ·" not in html

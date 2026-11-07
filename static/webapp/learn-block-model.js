@@ -99,7 +99,7 @@
       var zero = M.visibleTrainers(items, 's-nulya', null);
       if (!zero.length) return null;
       var p1 = priceText(zero, 's-nulya');
-      return block(zero, 'Учат с нуля и тех, кто уже катается. ' + count(zero.length) + (p1 ? ', от ' + p1 : '') + '.',
+      return block(zero, 'Учат с нуля — детей и взрослых. ' + count(zero.length) + (p1 ? ', от ' + p1 : '') + '.',
         href({ tab: 's-nulya' }, cityId));
     }
 

@@ -774,7 +774,7 @@
 
       /**
        * Чип каталога, или null. «Активен» раньше зависел только от is_active, поэтому тренер,
-       * который сам выключил показ в каталоге, продолжал читать «Каталог · активен» — прямая
+       * который сам выключил показ в каталоге, продолжал читать «Вы в каталоге» — прямая
        * неправда на главном экране. «Скрыт» тоном ok, а не warn: это его решение, не поломка.
        */
       function hubCatalogStatusChip(onb) {
@@ -782,7 +782,7 @@
         var visible = !!onb.is_catalog_visible;
         /* TASK-350: чип нажимается — в «Каталоге» видно, почему вас не видно и как вернуться. */
         return {
-          text: visible ? 'Каталог · активен' : 'Каталог · скрыт',
+          text: visible ? 'Вы в каталоге' : 'Вас нет в каталоге',
           tone: 'ok',
           action: 'catalog',
           title: visible ? 'Как вас видят родители' : 'Почему вас не видно и как вернуться',
@@ -2207,7 +2207,7 @@
         openHubCatalogOffer(true);
       }
 
-      /** Окно «Показать вас родителям» (trainer-catalog-offer.js). once — разово при входе. */
+      /** Окно «Показывать вас родителям» (trainer-catalog-offer.js). once — разово при входе. */
       function openHubCatalogOffer(once) {
         if (!window.TrainerCatalogOffer) return Promise.resolve(false);
         return window.TrainerCatalogOffer.maybeOpen({

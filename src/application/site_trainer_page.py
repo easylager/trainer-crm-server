@@ -166,12 +166,16 @@ def _audience(services: Sequence[Mapping[str, Any]]) -> str:
 
 
 def _role_line(directions: Sequence[Direction]) -> str:
-    """«С нуля и для тех, кто уже катается.» — из направлений тренера, словами направления."""
+    """«Занятия с нуля и для уже катающихся.» — из направлений тренера, словами направления.
+
+    Роли однотипные («с нуля», «для уже катающихся», «по фигурному катанию»), поэтому склеиваются
+    после существительного «Занятия» без согласования падежей.
+    """
     parts = [d.role for d in directions if d.role]
     if not parts:
         return ""
     phrase = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " и " + parts[-1]
-    return phrase[:1].upper() + phrase[1:] + "."
+    return f"Занятия {phrase}."
 
 
 def _service_view(svc: Mapping[str, Any]) -> dict[str, Any]:
@@ -633,9 +637,30 @@ def slot_app_url(
 ) -> str | None:
     """Время на странице — сразу запись на этот слот (``trainer_<id>_s_<slot>``, TASK-357).
 
-    Только для тренера в каталоге и не по ссылке тренера/рекомендации: там вход через бота
-    (``app_url``), а он слот не несёт — тогда время ведёт туда же, куда «Записаться».
+    По ссылке тренера/рекомендации (``via=link``/``share``) вход через бота: слот едет в его
+    ``start`` — ``welcome_ref_<id>_s_<slot>`` / ``share_ref_<id>_s_<slot>``; бот привяжет клиента
+    к тренеру, как раньше, и откроет витрину сразу на этом времени. Только для тренера в каталоге
+    (карточка Mini App незнакомому клиенту скрытого тренера отвечает 404) — иначе время ведёт туда
+    же, куда «Записаться».
     """
+    if slot_id and page["listed"] and via in (SHARE_VIA, RECOMMEND_VIA):
+        from src.application.trainer_invite_links import build_trainer_share_link, build_trainer_universal_invite_link
+
+        if via == RECOMMEND_VIA:
+            rec, _err = build_trainer_share_link(
+                webapp_base_url=base_url,
+                client_bot_username=client_bot_username,
+                trainer_id=int(page["id"]),
+                slot_id=int(slot_id),
+            )
+            if rec is not None:
+                return rec.bot_deep_link
+        else:
+            link, _err = build_trainer_universal_invite_link(
+                client_bot_username=client_bot_username, trainer_id=int(page["id"]), slot_id=int(slot_id)
+            )
+            if link:
+                return link
     if slot_id and page["listed"] and via not in (SHARE_VIA, RECOMMEND_VIA):
         from src.application.booking_source import clean_place_via
 
@@ -865,7 +890,7 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             )
         else:
             parts.append(
-                '<p class="tp-nowin">На этой неделе свободного времени нет.</p>'
+                '<p class="tp-nowin">Индивидуального свободного времени на этой неделе нет — напишите тренеру.</p>'
                 f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></div>'
             )
         if contact:
@@ -873,14 +898,14 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
                 f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(contact)}"{_write_attrs(page, via)}>Написать в Telegram</a></div>'
             )
         parts.append(also)
-        parts.append('<span class="tp-fine">Запись в Telegram, оплата тренеру на месте.</span>')
+        parts.append('<span class="tp-fine">Нужен Telegram — запись и переписка идут там. Оплата тренеру на месте.</span>')
     else:
         if cta:
             label, href = cta
             attrs = _write_attrs(page, via) if href == contact else ' rel="nofollow"'
             parts.append(f'<div class="tp-act"><a class="tp-btn tp-btn--tg" href="{esc(href)}"{attrs}>{esc(label)}</a></div>')
         parts.append(also)
-        parts.append('<span class="tp-fine">Онлайн-записи нет — напишите и договоритесь о времени.</span>')
+        parts.append('<span class="tp-fine">Онлайн-записи нет — напишите и договоритесь о времени. Нужен Telegram — переписка идёт там.</span>')
     return f'<div class="tp-pcard" id="tp-pcard">{"".join(p for p in parts if p)}</div>'
 
 
@@ -945,7 +970,7 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
                 for w in slots
             )
             if slots
-            else '<span class="tp-no">нет свободного времени</span>'
+            else '<span class="tp-no">нет окон</span>'
         )
         cells.append(
             f'<div class="tp-day{" tp-day--today" if i == 0 else ""}{"" if slots else " tp-day--empty"}">'

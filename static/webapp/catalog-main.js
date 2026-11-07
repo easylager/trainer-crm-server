@@ -3635,7 +3635,8 @@
       function _updateNotifyChipUI(trainerId, isNotify) {
         var chip = document.getElementById('chipNotifySlots');
         if (!chip || parseInt(chip.dataset.trainerId, 10) !== trainerId) return;
-        chip.querySelector('span').textContent = isNotify ? 'Подписан' : 'Напомнить';
+        chip.querySelector('span').textContent = isNotify ? 'Подписан' : 'Сообщить';
+        chip.title = isNotify ? 'Вы подписаны на свободное время' : 'Сообщить, когда появится время';
         // Выкл — обычный колокол (приглашение включить); вкл — зачёркнутый (тап отключит).
         chip.querySelector('.chip-icon').textContent = isNotify ? '🔕' : '🔔';
         chip.classList.toggle('is-active', isNotify);
@@ -3829,7 +3830,7 @@
       }
 
       /**
-       * Dual-chip row: [🔔 Напомнить] [❤️ Сохранить].
+       * Dual-chip row: [🔔 Сообщить] [❤️ Сохранить].
        * Выкл = 🔔 (приглашение), вкл = 🔕 (тап отключит).
        * noSlots=true adds a subtle pulse to the notify chip to draw attention.
        */
@@ -3855,7 +3856,8 @@
         chipNotify.setAttribute('data-no-slots-context', noSlots ? '1' : '0');
         chipNotify.innerHTML =
           '<span class="chip-icon">' + (isNotify ? '🔕' : '🔔') + '</span>' +
-          '<span>' + (isNotify ? 'Подписан' : 'Напомнить') + '</span>';
+          '<span>' + (isNotify ? 'Подписан' : 'Сообщить') + '</span>';
+        chipNotify.title = isNotify ? 'Вы подписаны на свободное время' : 'Сообщить, когда появится время';
         chipNotify.onclick = function() { toggleNotifySlots(tid); };
 
         // ── Save chip (right) ──

@@ -93,8 +93,13 @@ def education_line(value: Any) -> str:
     return _EDUCATION_LINE.get(str(value or "").strip(), "")
 
 
-async def _ice_arenas(session: AsyncSession, trainer_ids: list[int], city_id: int) -> dict[int, list[dict[str, Any]]]:
-    """Ледовые публичные катки тренеров в этом городе (лыжероллерная трасса и т. п. — мимо)."""
+async def _ice_arenas(
+    session: AsyncSession, trainer_ids: list[int], city_id: int | None
+) -> dict[int, list[dict[str, Any]]]:
+    """Ледовые публичные катки тренеров в этом городе (лыжероллерная трасса и т. п. — мимо).
+
+    ``city_id=None`` — во всех городах (нужно только понять, есть ли у тренера катки вне этого города).
+    """
     from src.application.indexnow import SITEMAP_PLACE_WHERE_SQL
     from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
@@ -111,13 +116,13 @@ async def _ice_arenas(session: AsyncSession, trainer_ids: list[int], city_id: in
                 JOIN cities c ON c.id = a.city_id
                 LEFT JOIN arena_profiles p ON p.arena_id = a.id
                 WHERE ta.trainer_id = ANY(:tids) AND COALESCE(ta.is_public, true)
-                  AND a.city_id = :city AND a.merged_into_arena_id IS NULL
+                  AND (CAST(:city AS integer) IS NULL OR a.city_id = :city) AND a.merged_into_arena_id IS NULL
                   AND COALESCE(a.venue_type, 'ice') = 'ice'
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
                 ORDER BY ta.trainer_id, a.sort_order NULLS LAST, a.id
                 """
             ),
-            {"tids": trainer_ids, "city": int(city_id), **public_scope_params()},
+            {"tids": trainer_ids, "city": int(city_id) if city_id is not None else None, **public_scope_params()},
         )
     ).mappings().all()
     out: dict[int, list[dict[str, Any]]] = {}
@@ -169,6 +174,23 @@ def services_by_direction(services: Sequence[dict[str, Any]]) -> dict[str, list[
     return by_dir
 
 
+def city_windows(
+    windows: Sequence[Mapping[str, Any]], city_arenas: Sequence[Mapping[str, Any]], *, name_arena: bool
+) -> list[dict[str, Any]]:
+    """Окна тренера только на катках этого города (окно без катка — онлайн — остаётся).
+
+    ``name_arena`` — у тренера несколько катков или они в разных городах: окну дописываем название катка.
+    """
+    names = {int(a["id"]): str(a["name"]) for a in city_arenas}
+    out: list[dict[str, Any]] = []
+    for w in windows:
+        aid = w.get("arena_id")
+        if aid is not None and int(aid) not in names:
+            continue
+        out.append({**w, "arena_name": names.get(int(aid)) if (name_arena and aid is not None) else None})
+    return out
+
+
 async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> dict[str, Any]:
     """Все опубликованные тренеры города с тем, что нужно карточке и вкладкам."""
     from src.application.arena_media import attach_arena_media_payloads
@@ -187,6 +209,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     bodies = [sanitize_trainer_for_public_catalog(raw) for raw in items]
     ids = [int(b["id"]) for b in bodies]
     arenas = await _ice_arenas(session, ids, city_id)
+    all_arenas = await _ice_arenas(session, ids, None)
     usernames = await _usernames(session, ids) if ids else {}
     passes = await load_pass_offers(session, ids)
     can_book: dict[int, bool] = {}
@@ -218,7 +241,15 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
                 "services_by_dir": by_dir,
                 "passes": passes.get(tid, []),
                 "can_book": can_book[tid],
-                "windows": windows.get(tid, []) if can_book[tid] else [],
+                "windows": (
+                    city_windows(
+                        windows.get(tid, []),
+                        arenas.get(tid, []),
+                        name_arena=len(all_arenas.get(tid, [])) > 1,
+                    )
+                    if can_book[tid]
+                    else []
+                ),
                 "contact_url": contact_url(tid, usernames.get(tid), listed=True),
             }
         )
@@ -421,6 +452,11 @@ def _price_html(t: Mapping[str, Any], direction: Direction) -> str:
     return f'<div class="tc-price"><div><div class="tc-lbl">{esc(label)}</div>{val}</div></div>'
 
 
+def _window_label(w: Mapping[str, Any]) -> str:
+    base = f'{w["day"]}, {w["time"]}'
+    return f'{base} · {w["arena_name"]}' if w.get("arena_name") else base
+
+
 def _card_html(
     t: Mapping[str, Any], direction: Direction, *, base_url: str, city_id: int, arena_id: int | None
 ) -> str:
@@ -451,7 +487,7 @@ def _card_html(
             '<div><div class="tc-lbl">Записаться на время</div><div class="tc-slots">'
             + "".join(
                 f'<a class="tc-slot" href="{esc(booking_url(base_url, int(t["id"]), city_id=city_id, slot_id=w.get("slot_id")))}" rel="nofollow" '
-                f'aria-label="Записаться: {esc(w["day"])}, {esc(w["time"])}">{esc(w["day"])}, {esc(w["time"])}</a>'
+                f'aria-label="Записаться: {esc(_window_label(w))}">{esc(_window_label(w))}</a>'
                 for w in wins
             )
             + "</div></div>"

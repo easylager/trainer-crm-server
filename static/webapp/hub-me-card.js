@@ -525,7 +525,7 @@
   /**
    * Мой тренер. Крупного времени нет намеренно: чужое окно — ещё не моя запись.
    * Выбор времени и есть действие, поэтому заливки при живых окнах тоже нет.
-   * Окон нет — чип «Напомнить» (тот же 🔔→🔕, что в каталоге): подписка на окна.
+   * Окон нет — чип «Сообщить» (тот же 🔔→🔕, что в каталоге): подписка на окна.
    */
   function buildTrainer(input, now) {
     var t = obj(input.trainer);
@@ -833,19 +833,20 @@
   }
 
   /**
-   * Чип напоминания: выкл = 🔔 «Напомнить», вкл = 🔕 «Подписан»
+   * Чип напоминания: выкл = 🔔 «Сообщить», вкл = 🔕 «Подписан»
    * (та же семантика, что у catalog-main appendTrainerActionChips).
    */
   function notifyChipHtml(chip) {
     if (!chip || !chip.trainerId) return '';
     var active = !!chip.active;
     var icon = active ? ICON_BELL_OFF : ICON_BELL;
-    var label = active ? 'Подписан' : 'Напомнить';
+    var label = active ? 'Подписан' : 'Сообщить';
     return '<button type="button" class="me__notify' +
       (active ? ' is-active' : ' wants-attention') +
       '" data-me-action="notify-slots"' +
       attr('data-me-trainer-id', chip.trainerId) +
-      ' aria-pressed="' + (active ? 'true' : 'false') + '">' +
+      ' aria-pressed="' + (active ? 'true' : 'false') + '"' +
+      attr('title', active ? 'Вы подписаны на свободное время' : 'Сообщить, когда появится время') + '>' +
       '<span class="me__notify-ic" aria-hidden="true">' + icon + '</span>' +
       '<span>' + esc(label) + '</span></button>';
   }

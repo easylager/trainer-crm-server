@@ -59,6 +59,7 @@
   global.LearnBlock = {
     lazy: true,
     mount: function (target, spec) {
+      reserve(target, spec);
       return load().then(function (real) {
         if (real && real !== this_ && typeof real.mount === 'function') return real.mount(target, spec);
       }, function () {
@@ -80,5 +81,20 @@
     if (!host) return;
     host.hidden = true;
     host.innerHTML = '';
+    host.style.minHeight = '';
+    host.style.margin = '';
+    host.removeAttribute('data-lb-wait');
+  }
+
+  /* Место под блок, пока грузятся его файлы и данные (CSS ещё не пришёл — размеры инлайном):
+     без этого контент ниже прыгает на высоту карточки (CLS). Высота — измеренная карточка без
+     направлений-чипов (212) и с ними на «главной»/«Моих записях» (266). Пустой ответ/ошибка → hideEl. */
+  function reserve(target, spec) {
+    var host = el(target);
+    if (!host || !host.hidden) return;
+    host.hidden = false;
+    host.style.margin = '12px 16px';
+    host.style.minHeight = (spec && spec.place === 'city' ? 266 : 212) + 'px';
+    host.setAttribute('data-lb-wait', '');
   }
 })(window);

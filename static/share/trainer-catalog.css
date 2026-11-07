@@ -21,13 +21,13 @@
 /* фильтр катка и вкладки */
 .tcat-arow { display: flex; align-items: center; gap: 8px; padding: 14px 0 0; flex-wrap: wrap; }
 .tcat-arow > span { font-size: 14px; color: var(--g-muted); }
-.tcat-chip { display: inline-flex; align-items: center; min-height: 36px; border-radius: 999px; padding: 7px 14px; border: 0; cursor: pointer;
+.tcat-chip { display: inline-flex; align-items: center; min-height: 44px; border-radius: 999px; padding: 7px 14px; border: 0; cursor: pointer;
   font: 600 14px var(--g-font); background: var(--g-accent-wash); color: var(--g-accent-ink); max-width: 100%;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tcat-tabs { position: sticky; top: 0; z-index: 5; background: var(--g-bg); display: flex; gap: 8px; overflow-x: auto;
   scrollbar-width: none; padding: 10px 0; margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
 .tcat-tabs::-webkit-scrollbar { display: none; }
-.tcat-tab { flex: none; border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: 14px; white-space: nowrap;
+.tcat-tab { flex: none; display: inline-flex; align-items: center; min-height: 44px; border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: 14px; white-space: nowrap;
   background: var(--g-surface); border: 1px solid var(--g-line); }
 .tcat-tab b { font-weight: 500; color: var(--g-muted); margin-left: 5px; }
 .tcat-tab.on { background: var(--g-dark); color: #fff; border-color: var(--g-dark); }
@@ -42,7 +42,7 @@
 .tcat-dlg > div { padding: 18px; display: grid; gap: 8px; }
 .tcat-dh { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .tcat-dh b { font: 400 19px var(--g-font-display); }
-.tcat-x { flex: none; border: 0; background: var(--g-bg); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 14px; color: var(--g-ink); }
+.tcat-x { flex: none; border: 0; background: var(--g-bg); width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 14px; color: var(--g-ink); }
 .tcat-dsub { font-size: 13px; color: var(--g-muted); }
 .tcat-dlg ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
 .tcat-dlg li a { display: flex; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 14px; font: 500 15px var(--g-font); color: var(--g-ink); text-decoration: none; }
@@ -78,7 +78,7 @@
 .tc-val small { font: 500 14px var(--g-font); color: var(--g-muted); }
 .tc-no { font-size: 15px; color: var(--g-muted); }
 .tc-slots { display: flex; gap: 6px; flex-wrap: wrap; }
-.tc-slot { display: inline-flex; align-items: center; min-height: 40px; border-radius: 12px; padding: 8px 12px; font-weight: 700; font-size: 14px;
+.tc-slot { display: inline-flex; align-items: center; min-height: 44px; border-radius: 12px; padding: 8px 12px; font-weight: 700; font-size: 14px;
   background: #e8f1fa; color: var(--g-tg-btn); }
 .tc-slot:hover { background: var(--g-tg-btn); color: #fff; }
 .tc-act { display: flex; }

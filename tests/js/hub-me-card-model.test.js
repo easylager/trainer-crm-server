@@ -877,7 +877,7 @@ describe('happy path: trainer', () => {
     assert.ok(!out.includes('btn-fill'));
     assert.ok(out.includes('data-me-action="notify-slots"'));
     assert.ok(out.includes('me__notify wants-attention'));
-    assert.ok(out.includes('Напомнить'));
+    assert.ok(out.includes('Сообщить'));
     assert.ok(!out.includes('Все тренеры'));
   });
 

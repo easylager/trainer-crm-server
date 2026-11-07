@@ -130,6 +130,7 @@ CLIENT_BUTTON_BOOK = "Записаться"
 CLIENT_BUTTON_CERT_TRAINER_BOOK = "Тренер и запись"
 # Trainer invite / welcome_ref / share_ref: one CTA → catalog card (book + passes there)
 CLIENT_BUTTON_INVITE_TRAINER_PROFILE = "👤 Карточка тренера"
+CLIENT_BUTTON_OPEN_CHOSEN_SLOT = "🕒 Выбранное время"
 CLIENT_BUTTON_BACK_TO_CATALOG = "В каталог"
 CLIENT_BUTTON_ANOTHER_TRAINER = "Выбрать другого тренера"
 # Trainer preview (preview_<trainer_id>): trainer looks at their own card / the catalog as a client would

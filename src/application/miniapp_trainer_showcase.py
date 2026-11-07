@@ -66,7 +66,7 @@ async def _ice_arenas(session: AsyncSession, arena_ids: list[int]) -> dict[int, 
     rows = await session.execute(
         text(
             """
-            SELECT a.id, a.name,
+            SELECT a.id, a.name, a.city_id,
                    (SELECT MIN(i.price_rental_minor) FROM ice_sessions i
                      WHERE i.arena_id = a.id AND i.price_rental_minor IS NOT NULL
                        AND i.starts_at_utc > NOW()
@@ -84,13 +84,14 @@ async def _ice_arenas(session: AsyncSession, arena_ids: list[int]) -> dict[int, 
         {"ids": arena_ids, "days": _RENTAL_DAYS},
     )
     out: dict[int, dict[str, Any]] = {}
-    for aid, name, rental_minor, rental_currency in rows.fetchall():
+    for aid, name, arena_city, rental_minor, rental_currency in rows.fetchall():
         label = str(name or "").strip()
         if not label:
             continue
         out[int(aid)] = {
             "id": int(aid),
             "name": label,
+            "city_id": int(arena_city) if arena_city is not None else None,
             "rental_cents": int(rental_minor) if rental_minor else None,
             "rental_currency": str(rental_currency or "BYN") if rental_minor else None,
         }
@@ -132,6 +133,15 @@ def _service_out(svc: dict[str, Any], public_ids: set[int]) -> dict[str, Any]:
             for t in svc.get("price_tiers") or []
         ],
     }
+
+
+def _window_in_city(window: dict[str, Any], arenas: dict[int, dict[str, Any]], city_id: int | None) -> bool:
+    """Окно на катке другого города в витрине этого города не показываем (окно без катка — онлайн — остаётся)."""
+    aid = window.get("arena_id")
+    if city_id is None or aid is None:
+        return True
+    arena = arenas.get(int(aid))
+    return arena is not None and arena.get("city_id") == int(city_id)
 
 
 async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -> dict[str, Any]:
@@ -204,6 +214,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 "windows": [
                     {k: w.get(k) for k in ("slot_id", "arena_id", "starts_at", "ends_at", "time", "day")}
                     for w in windows.get(tid, [])
+                    if _window_in_city(w, arenas, city_id)
                 ],
             }
         )

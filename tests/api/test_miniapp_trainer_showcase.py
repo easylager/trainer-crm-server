@@ -255,3 +255,28 @@ async def test_client_passes_list_tier_scope(app_use_test_db, db_session) -> Non
         )
     items = {i["product_name"]: i["tier_kinds"] for i in await list_client_pass_instances(db_session, cid)}
     assert items == {"Детский": ["child"], "Любой": []}
+
+
+@pytest.mark.asyncio
+async def test_showcase_windows_only_on_arenas_of_this_city(app_use_test_db, db_session) -> None:
+    """Тренер на катках двух городов: окно с катка города B не попадает в витрину города A."""
+    async with _client() as client:
+        a = await _place(db_session)
+        b = await _place(db_session)
+        tid = await _trainer_on(db_session, client, a, first_name=f"Два{uuid.uuid4().hex[:4]}")
+        await db_session.execute(
+            text("INSERT INTO trainer_arenas (trainer_id, arena_id, is_public) VALUES (:t, :a, true) ON CONFLICT DO NOTHING"),
+            {"t": tid, "a": b["arena_id"]},
+        )
+        await db_session.execute(
+            text("INSERT INTO trainer_cities (trainer_id, city_id) VALUES (:t, :c) ON CONFLICT DO NOTHING"),
+            {"t": tid, "c": b["city_id"]},
+        )
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        await _slot(db_session, tid, days=2, hour=13, arena_id=b["arena_id"])
+        await db_session.commit()
+        in_a = (await client.get(f"/api/public/trainer-showcase?city_id={a['city_id']}")).json()
+        in_b = (await client.get(f"/api/public/trainer-showcase?city_id={b['city_id']}")).json()
+    assert next(t for t in in_a["items"] if t["id"] == tid)["windows"] == []
+    wins_b = next(t for t in in_b["items"] if t["id"] == tid)["windows"]
+    assert len(wins_b) == 1 and wins_b[0]["arena_id"] == b["arena_id"]
