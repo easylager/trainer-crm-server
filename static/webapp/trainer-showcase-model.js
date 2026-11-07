@@ -132,6 +132,13 @@
     return out;
   }
 
+  /** «от N» над списком: минимум `min_session_price_cents` по показанным (тот же расчёт у витрины и у блока входов). */
+  function minPriceOf(list) {
+    var mins = (list || []).map(function (t) { return Number(t.min_session_price_cents); }).filter(function (c) { return c > 0; });
+    if (!mins.length) return null;
+    return { cents: Math.min.apply(null, mins), currency: (list[0] && list[0].min_session_price_currency) || 'BYN' };
+  }
+
   /** Катки для фильтра: лёд у тренеров вкладки, с числом тренеров. */
   function arenaOptions(items, key) {
     var byId = {};
@@ -579,7 +586,6 @@
     DIRECTIONS: DIRECTIONS,
     TIER_TITLE: TIER_TITLE,
     plural: plural,
-    word: word,
     direction: direction,
     directionKeyForServiceId: directionKeyForServiceId,
     servicesInDirection: servicesInDirection,
@@ -587,6 +593,8 @@
     trainerDirections: trainerDirections,
     visibleTrainers: visibleTrainers,
     tabCounts: tabCounts,
+    minPriceOf: minPriceOf,
+    word: word,
     arenaOptions: arenaOptions,
     formatMoney: formatMoney,
     tierByKind: tierByKind,

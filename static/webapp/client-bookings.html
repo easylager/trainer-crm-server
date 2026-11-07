@@ -6,23 +6,27 @@
   <title>Записи</title>
   <!-- TASK-306: вкладка «Записи» на языке хаба. Свои шрифты, без Google. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611071" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611071" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611072" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611072" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202611071"></script>
-  <script src="mini-app-phone-field.js?v=202611071"></script>
-  <link rel="stylesheet" href="theme.css?v=202611071" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611071" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202611071" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611071" />
-  <script src="mini-app-telegram-chrome.js?v=202611071"></script>
-  <script src="client-profile-switcher.js?v=202611071"></script>
-  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202611071" />
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611071" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611071" />
-  <script src="mini-app-empty-state.js?v=202611071"></script>
-  <script src="mini-app-more-icons.js?v=202611071"></script>
-  <script src="mini-app-client-shell.js?v=202611071"></script>
+  <script src="client-mini-app-theme.js?v=202611072"></script>
+  <script src="mini-app-phone-field.js?v=202611072"></script>
+  <link rel="stylesheet" href="theme.css?v=202611072" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611072" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202611072" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611072" />
+  <script src="mini-app-telegram-chrome.js?v=202611072"></script>
+  <script src="client-profile-switcher.js?v=202611072"></script>
+  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202611072" />
+  <link rel="stylesheet" href="learn-block.css?v=202611072" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611072" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611072" />
+  <script src="mini-app-empty-state.js?v=202611072"></script>
+  <script src="mini-app-more-icons.js?v=202611072"></script>
+  <script src="mini-app-client-shell.js?v=202611072"></script>
+  <script src="trainer-showcase-model.js?v=202611072"></script>
+  <script src="learn-block-model.js?v=202611072"></script>
+  <script src="learn-block.js?v=202611072"></script>
   <script>
     (function () {
       try {
@@ -80,6 +84,8 @@
         </div>
       </div>
     </div>
+    <!-- TASK-354: «Учиться с тренером» — только в пустом списке, если записей не было никогда. -->
+    <div class="lb-learn-host" id="cbLearn" hidden></div>
   </div>
 
   <div id="screenDetail" data-screen>
@@ -868,8 +874,34 @@
         }
       }
 
+      /* TASK-354: «Учиться с тренером» — только если записей не было НИКОГДА (ни предстоящих, ни в истории,
+         включая отменённые): пустые «Предстоящие» у того, кто уже занимался, — не повод. */
+      var learnCheckGen = 0;
+      function hideBookingsLearn() {
+        learnCheckGen += 1;
+        if (window.LearnBlock) window.LearnBlock.hide('#cbLearn');
+      }
+      function showBookingsLearnIfNever() {
+        if (!window.LearnBlock) return;
+        var gen = ++learnCheckGen;
+        ensureProfilesReady()
+          .then(function () { return getJson(apiUrl('/client/bookings/history?offset=0&limit=1')); })
+          .then(function (data) {
+            var any = (data.days || []).some(function (d) { return (d.bookings || []).length > 0; });
+            if (any || gen !== learnCheckGen) return null;
+            return window.LearnBlock.clientCityId();
+          })
+          .then(function (cityId) {
+            if (!cityId || gen !== learnCheckGen) return;
+            if (state.mode !== 'upcoming' || state.days.length !== 0) return;
+            window.LearnBlock.mount('#cbLearn', { place: 'city', cityId: cityId });
+          })
+          .catch(function () { /* ошибка загрузки — блока просто нет */ });
+      }
+
       function renderEmptyBookingsList() {
         var listEl = document.getElementById('listContent');
+        showBookingsLearnIfNever();
         paintBookingsEmpty(listEl, {
           title: 'Пока пусто',
           hint: 'Найдите тренера или лёд в «Поиске»\u00a0— свободные окна видны сразу.',
@@ -882,6 +914,7 @@
       }
 
       function renderBookingsListSkeleton(count) {
+        hideBookingsLearn();
         var listEl = document.getElementById('listContent');
         if (!listEl) return;
         count = count || 2;
@@ -1023,6 +1056,7 @@
       }
 
       function renderHistoryList() {
+        hideBookingsLearn();
         var listEl = document.getElementById('listContent');
         var days = state.historyDays;
         if (!days.length) {
@@ -1142,6 +1176,7 @@
       }
 
       function renderAllBookings() {
+        hideBookingsLearn();
         var days = state.days;
         var filterId = state.trainerFilter;
         var html = '';
@@ -1278,7 +1313,7 @@
       loadBookings();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202611071"></script>
+  <script src="mini-app-client-home.js?v=202611072"></script>
   <script>
     /* TASK-303: серия недель — тихой строкой над записями, тап ведёт в «Вашу активность». */
     (function () {
@@ -1310,6 +1345,6 @@
         .catch(function () { /* без серии — просто без строки */ });
     })();
   </script>
-  <script src="/static/webapp/ga-touch.js?v=202611071"></script>
+  <script src="/static/webapp/ga-touch.js?v=202611072"></script>
 </body>
 </html>

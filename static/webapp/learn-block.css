@@ -1,0 +1,44 @@
+/* Блок «Учиться с тренером» в точках входа Mini App (TASK-354). Раскладка — из утверждённого
+   прототипа .ai/epics/trainer-catalog/design/miniapp.html (.tz); палитра — client-mini-app-theme.js
+   (CTA #45B9BB / #04262A, тёмная тема переключает html[data-app-theme="dark"]). Токены свои:
+   страницы-хозяева (главная, Поиск, каток, записи) общих --a-* не знают. */
+.lb-learn-host { margin: 12px 16px; }
+.lb-learn-host[hidden] { display: none; }
+.lb-learn {
+  --lb-bg: #0d1b26; --lb-hint: #9fb4c2; --lb-line: #c8d8e2;
+  --lb-cta: #45B9BB; --lb-cta-tx: #04262A;
+  background: var(--lb-bg); color: #fff; border-radius: 22px; padding: 14px;
+  display: grid; gap: 10px; position: relative; overflow: hidden; isolation: isolate;
+  font-family: var(--g-font-sans, 'Golos Text', -apple-system, sans-serif);
+}
+html[data-app-theme="dark"] .lb-learn { --lb-bg: #18252E; --lb-hint: #93A7B4; }
+.lb-learn::after {
+  content: ""; position: absolute; right: -60px; top: -70px; width: 180px; height: 180px;
+  border-radius: 50%; border: 2px solid rgba(69, 185, 187, .32); z-index: -1; pointer-events: none;
+}
+.lb-learn__faces { display: flex; align-items: center; }
+.lb-learn__faces img, .lb-learn__mono {
+  width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--lb-bg); margin-left: -9px; flex: none;
+}
+.lb-learn__faces > :first-child { margin-left: 0; }
+.lb-learn__faces img { object-fit: cover; background: #23343f; }
+.lb-learn__mono {
+  display: grid; place-items: center; background: #E8F5F5; color: #0B6E70;
+  font: 400 14px/1 var(--g-font-display, 'Dela Gothic One', 'Arial Black', sans-serif);
+}
+.lb-learn__faces .lb-learn__n { margin-left: 8px; font-size: 12.5px; color: var(--lb-hint); }
+.lb-learn__t {
+  margin: 0; font: 400 19px/1.05 var(--g-font-display, 'Dela Gothic One', 'Arial Black', sans-serif); color: #fff;
+}
+.lb-learn__line { margin: 0; font-size: 13px; line-height: 1.4; color: var(--lb-line); }
+.lb-learn__chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.lb-learn__chips a {
+  background: rgba(255, 255, 255, .1); border-radius: 999px; padding: 0 10px; min-height: 34px;
+  display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 700; color: #fff; text-decoration: none;
+}
+.lb-learn__go {
+  min-height: 44px; display: flex; justify-content: space-between; align-items: center;
+  background: var(--lb-cta); color: var(--lb-cta-tx); border-radius: 13px; padding: 0 12px;
+  font-weight: 700; font-size: 15px; text-decoration: none;
+}
+.lb-learn a:focus-visible { outline: 2px solid var(--lb-cta); outline-offset: 2px; }

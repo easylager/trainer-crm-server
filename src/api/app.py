@@ -2313,8 +2313,11 @@ def webapp_mini_app_client_bookings_css(request: Request):
 @app.get("/webapp/trainer-showcase-model.js")
 @app.get("/webapp/trainer-showcase-main.js")
 @app.get("/webapp/trainer-showcase.css")
+@app.get("/webapp/learn-block-model.js")
+@app.get("/webapp/learn-block.js")
+@app.get("/webapp/learn-block.css")
 def webapp_trainer_showcase_asset(request: Request):
-    """TASK-357: витрина тренеров и запись — модель, экраны, стили. Use ``?v=…`` for long cache."""
+    """TASK-357: витрина тренеров и запись — модель, экраны, стили; TASK-354: блок «Учиться с тренером» в точках входа. Use ``?v=…`` for long cache."""
     name = request.url.path.rsplit("/", 1)[-1]
     path = _WEBAPP_DIR / name
     if not path.is_file():

@@ -1695,6 +1695,8 @@
 
         var nextItem = findNextBooking(bookingDays);
         hubHasUpcomingBooking = !!nextItem;
+        /* TASK-354: «Учиться с тренером» — только в чистом состоянии (приоритет 5); дальше решает он сам. */
+        setHubLearn(false);
 
         /* ── Priority 1: Has upcoming booking ── */
         if (nextItem) {
@@ -1764,9 +1766,21 @@
         resetHubHeroLayout();
         clearNextBookingBlock();
         hideMyTrainerBlock();
+        setHubLearn(true, hubMeta && hubMeta.home && hubMeta.home.city ? hubMeta.home.city.id : null);
         /* TASK-303: личного нет — слот уже заполнил HubHome (лёд, матч).
            Без города слот — карточка клиента «выберите город» / «вы далеко». */
         return finishHubApply(Promise.resolve());
+      }
+
+      /** TASK-354: блок «Учиться с тренером» под «Ближайшим льдом»; без города его нет (цифры — по городу). */
+      function setHubLearn(on, cityId) {
+        var LB = window.LearnBlock;
+        if (!LB) return;
+        if (!on || !cityId) {
+          LB.hide('#hubLearn');
+          return;
+        }
+        LB.mount('#hubLearn', { place: 'city', cityId: Number(cityId) });
       }
 
       /** TASK-303: карточка клиента — в слоте «сейчас» или в «Моих занятиях». */
