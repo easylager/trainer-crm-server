@@ -39,6 +39,10 @@
     stack: [],
     view: 'list',
     trainer: null,
+    // Поколение открытого тренера и номер запроса слотов: поздний ответ прежнего тренера (или прежней
+    // услуги) отбрасывается — иначе карточка Б показывала бы время А и запись ушла бы к А.
+    trainerGen: 0,
+    slotsSeq: 0,
     dirKey: null,
     serviceId: null,
     slots: null,
@@ -159,41 +163,58 @@
     });
   }
 
+  /**
+   * Слоты открытого тренера. Промис → true, если ответ применён; false — ответ устарел (за это время
+   * открыли другого тренера или запросили слоты заново): `S` не тронут, вызывающий ничего не делает.
+   */
   function loadSlots() {
     var t = S.trainer;
-    if (!t) return Promise.resolve();
+    var seq = ++S.slotsSeq;
+    function fresh() { return seq === S.slotsSeq && S.trainer === t; }
+    if (!t) return Promise.resolve(true);
     if (!t.can_book) {
       S.slots = [];
-      return Promise.resolve();
+      return Promise.resolve(true);
     }
     if (!initData) {
       // Вне Telegram записи нет — показываем окна витрины, запись попросит открыть в Telegram.
-      S.slots = (t.windows || []).map(function (w) { return decorateSlot(M.windowToSlot(w)); });
-      return Promise.resolve();
+      S.slots = (t.windows || []).map(function (w) { return decorateSlot(M.windowToSlot(w), t); });
+      return Promise.resolve(true);
     }
     S.slots = null;
     S.slotsError = false;
     var svc = currentService();
     return BC.fetchClientSlots({ trainerId: t.id, serviceId: svc ? svc.service_id : null, initData: initData })
       .then(function (d) {
-        S.slots = M.sortSlots((d && d.slots) || []).map(decorateSlot);
+        if (!fresh()) return false;
+        S.slots = M.sortSlots((d && d.slots) || []).map(function (x) { return decorateSlot(x, t); });
+        return true;
       })
       .catch(function () {
+        if (!fresh()) return false;
         S.slots = [];
         S.slotsError = true;
+        return true;
       });
   }
 
-  function decorateSlot(s) {
-    var a = arenaById(s.arena_id);
+  /** Слот помечается тренером, для которого его загрузили, — запись проверяет, что это открытый тренер. */
+  function decorateSlot(s, t) {
+    t = t || S.trainer;
+    if (t && s.trainer_id == null) s.trainer_id = t.id;
+    var a = arenaOf(t, s.arena_id);
     if (a && !s.arena_name) s.arena_name = a.name;
     return s;
   }
 
-  function arenaById(id) {
-    var list = (S.trainer && S.trainer.arenas) || [];
+  function arenaOf(t, id) {
+    var list = (t && t.arenas) || [];
     for (var i = 0; i < list.length; i++) if (Number(list[i].id) === Number(id)) return list[i];
     return null;
+  }
+
+  function arenaById(id) {
+    return arenaOf(S.trainer, id);
   }
 
   function loadPasses() {
@@ -405,6 +426,7 @@
 
   function openTrainer(t, opts) {
     opts = opts || {};
+    S.trainerGen++;
     S.trainer = t;
     var dirs = M.trainerDirections(t);
     var want = opts.dirKey || (S.tab !== 'all' ? S.tab : null);
@@ -412,7 +434,10 @@
     S.serviceId = num(qs.get('service_id')) && Number(t.id) === num(qs.get('trainer_id')) ? num(qs.get('service_id')) : null;
     S.saved = false;
     if (opts.view !== false) go('trainer');
-    return loadSlots().then(render);
+    return loadSlots().then(function (fresh) {
+      if (fresh) render();
+      return fresh;
+    });
   }
 
   function renderTrainer() {
@@ -613,6 +638,8 @@
   }
 
   function openBooking(slot) {
+    // Слот другого тренера (поздний ответ) — не записываем: запись ушла бы не тому тренеру.
+    if (!S.trainer || (slot.trainer_id != null && Number(slot.trainer_id) !== Number(S.trainer.id))) return;
     var keep = S.book && S.book.slot && S.view === 'book' ? S.book : null;
     var regular = isRegular();
     var def = null;
@@ -1060,7 +1087,8 @@
     var lostId = b ? b.slot.id : null;
     var title = b ? String(b.slot.start_time).slice(0, 5) + ' только что заняли' : (missingTitle || 'Это время уже заняли');
     var who = b ? bookingChoice().participant : '';
-    loadSlots().then(function () {
+    loadSlots().then(function (fresh) {
+      if (!fresh) return;
       var alt = (S.slots || []).filter(function (s) { return String(s.id) !== String(lostId); }).slice(0, 3);
       var svc = currentService();
       var price = svc ? M.cardPriceHtml(svc).replace(/<\/?b>/g, '') : '';
@@ -1269,7 +1297,7 @@
         closeSheet();
         if (el.getAttribute('data-tid')) {
           t = trainerFromEl(el);
-          if (t) openTrainer(t).then(openWeek);
+          if (t) openTrainer(t).then(function (fresh) { if (fresh) openWeek(); });
         } else openWeek();
         break;
       case 'write':
@@ -1390,6 +1418,9 @@
 
   /** Время с витрины → тренер (для «Назад») → сразу запись; окно ушло — «Время заняли». */
   function openTrainerAndSlot(t, slotId, viaList) {
+    var gen = ++S.trainerGen;
+    var stale = {};
+    function current() { return gen === S.trainerGen && S.trainer === t; }
     S.trainer = t;
     if (viaList) noteShowcasePick();
     var dirs = M.trainerDirections(t);
@@ -1401,15 +1432,18 @@
     else S.view = 'trainer';
     render();
     return loadSlots()
-      .then(function () {
+      .then(function (fresh) {
+        if (!fresh || !current()) return stale;
         var slot = slotById(slotId);
         if (slot || !initData) return slot;
         // Список — только эта и следующая неделя; время по ссылке может быть дальше — проверяем его отдельно.
         return api('/api/webapp/client/slot/' + encodeURIComponent(slotId) + '?trainer_id=' + t.id)
-          .then(function (d) { return d && d.available && d.slot ? decorateSlot(d.slot) : null; })
+          .then(function (d) { return d && d.available && d.slot ? decorateSlot(d.slot, t) : null; })
           .catch(function () { return null; });
       })
       .then(function (slot) {
+        // Пока ждали ответ, открыли другого тренера — ответ этого уже не нужен.
+        if (slot === stale || !current()) return;
         if (slot) openBooking(slot);
         else {
           render();
@@ -1431,8 +1465,11 @@
       var tid = num(qs.get('trainer_id'));
       if (!tid) { render(); return; }
       var t = trainerById(tid);
+      var gen = S.trainerGen;
       var p = t ? Promise.resolve(t) : loadTrainerFallback(tid).catch(function () { return null; });
       return p.then(function (tr) {
+        // Пока грузили тренера по ссылке, человек уже открыл другого — не перебиваем его выбор.
+        if (gen !== S.trainerGen) return;
         if (!tr) { render(); return; }
         var sid = qs.get('slot_id');
         if (sid) return openTrainerAndSlot(tr, sid, false);
