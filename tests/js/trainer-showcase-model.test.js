@@ -214,7 +214,7 @@ describe('даты и имена', () => {
     assert.equal(M.dativeFirst('Александр', RuName), 'Александру');
     assert.equal(M.dativeFirst('Katusha', RuName), 'Katusha');
     assert.equal(M.selfBookingLine('Мария', RuName), 'Мария записывает сама — напишите и договоритесь о времени и цене.');
-    assert.match(M.selfBookingLine('Katusha', RuName), /^Онлайн-записи у Katusha нет/);
+    assert.match(M.selfBookingLine('Katusha', RuName), /^Онлайн-записи нет\. Напишите тренеру/);
   });
 
   it('номер из requestContact', () => {

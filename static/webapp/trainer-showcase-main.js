@@ -457,7 +457,7 @@
       h += '</div>';
       if (S.slots && !S.slots.length && !S.slotsError) {
         h += '<div class="card"><h4>На ближайшие 2 недели свободного времени нет</h4><p class="mut">Попросите сообщить, когда появится.</p>' +
-          (initData ? '<button type="button" class="sec2" data-act="notify">Напомнить, когда появится время</button>' : '') + '</div>';
+          (initData ? '<button type="button" class="sec2" data-act="notify">Сообщить, когда появится время</button>' : '') + '</div>';
       }
       if (S.slotsError) h += '<button type="button" class="sec2" data-act="reslots">Повторить</button>';
     }
@@ -1077,7 +1077,7 @@
           onBooked({ success: true }, choice, profileId);
           return;
         }
-        b.notice = 'Запись не дошла. Нажмите ещё раз — второй записи не будет.';
+        b.notice = 'Записи пока не видно. Нажмите ещё раз — дубль не создастся.';
         render();
       })
       .catch(function () {
@@ -1103,14 +1103,13 @@
   function showTaken(missingTitle) {
     var b = S.book;
     var lostId = b ? b.slot.id : null;
-    var title = b ? String(b.slot.start_time).slice(0, 5) + ' только что заняли' : (missingTitle || 'Это время уже заняли');
-    var who = b ? bookingChoice().participant : '';
+    var title = b ? String(b.slot.start_time).slice(0, 5) + ' уже недоступно' : (missingTitle || 'Это время уже недоступно');
     loadSlots().then(function (fresh) {
       if (!fresh) return;
       var alt = (S.slots || []).filter(function (s) { return String(s.id) !== String(lostId); }).slice(0, 3);
       var svc = currentService();
       var price = svc ? M.cardPriceHtml(svc).replace(/<\/?b>/g, '') : '';
-      var saved = b ? (who ? who + ' и телефон сохранены. ' : 'Телефон сохранён. ') : '';
+      var saved = b ? 'Данные запомнили. ' : '';
       openSheet('<div class="sh"><h4>' + esc(title) + '</h4><button type="button" class="x" data-act="sheet-close" aria-label="Закрыть">✕</button></div>' +
         '<span class="mut">' + esc(saved + (alt.length ? 'Свободное время у ' + genFirst(S.trainer.first_name) + ':' : 'Другого свободного времени пока нет.')) + '</span>' +
         '<div class="opt">' + alt.map(function (s) {
@@ -1124,8 +1123,8 @@
 
   function genFirst(first) {
     var f = String(first || '').trim().split(/\s+/)[0] || '';
-    if (!/^[А-Яа-яЁё-]+$/.test(f) || !RuName) return f || 'тренера';
-    return RuName.inflectPersonName(f, '', 'gen') || f;
+    if (!/^[А-Яа-яЁё-]+$/.test(f) || !RuName) return 'тренера';
+    return RuName.inflectPersonName(f, '', 'gen') || 'тренера';
   }
 
   /* ── 6/6б · Запись отправлена ────────────────────────────────────── */
@@ -1479,7 +1478,7 @@
         if (slot) openBooking(slot);
         else {
           render();
-          showTaken('Это время уже заняли');
+          showTaken();
         }
       });
   }
