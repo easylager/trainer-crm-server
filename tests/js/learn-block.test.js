@@ -248,9 +248,11 @@ describe('одна модель с витриной', () => {
 function fakeHost() {
   const attrs = {};
   return {
-    hidden: true, innerHTML: '', __listeners: {},
+    hidden: true, innerHTML: '', __listeners: {}, style: {},
     getAttribute: (k) => (k in attrs ? attrs[k] : null),
     setAttribute: (k, v) => { attrs[k] = String(v); },
+    removeAttribute: (k) => { delete attrs[k]; },
+    hasAttribute: (k) => k in attrs,
     addEventListener() {},
   };
 }
@@ -307,11 +309,60 @@ describe('компонент LearnBlock', () => {
     assert.equal(hosts['#b'].hidden, true);
   });
 
+  it('пока грузятся данные, держит место (CLS); готово — снимает, ошибка/пусто — прячет без дыры', async () => {
+    let done;
+    respond = () => new Promise((r) => { done = () => r({ ok: true, json: () => Promise.resolve({ items: [gaevsky, vlad] }) }); });
+    const LB = load();
+    const pending = LB.mount('#a', { place: 'city', cityId: 1 });
+    assert.equal(hosts['#a'].hidden, false);
+    assert.equal(hosts['#a'].style.minHeight, '266px');
+    assert.equal(hosts['#a'].getAttribute('data-lb-wait'), '');
+    done();
+    await pending;
+    assert.equal(hosts['#a'].style.minHeight, '');
+    assert.equal(hosts['#a'].hasAttribute('data-lb-wait'), false);
+    assert.match(hosts['#a'].innerHTML, /lb-learn/);
+
+    respond = () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+    const failed = LB.mount('#b', { place: 'arena', cityId: 2 });
+    assert.equal(hosts['#b'].style.minHeight, '212px');
+    await failed;
+    assert.equal(hosts['#b'].hidden, true);
+    assert.equal(hosts['#b'].style.minHeight, '');
+    assert.equal(hosts['#b'].hasAttribute('data-lb-wait'), false);
+  });
+
   it('нет тренеров для места — блок скрыт', async () => {
     const LB = load();
     await LB.mount('#a', { place: 'hockey', cityId: 1 });
     assert.equal(hosts['#a'].hidden, true);
     assert.equal(hosts['#a'].innerHTML, '');
+  });
+});
+
+describe('загрузчик learn-block.js', () => {
+  it('держит место до загрузки файлов; не загрузились — прячет без дыры', async () => {
+    const host = fakeHost();
+    const doc = {
+      currentScript: { getAttribute: () => 'learn-block.js?v=1' },
+      head: { appendChild(node) { setImmediate(() => (node.onerror ? node.onerror() : null)); } },
+      createElement: () => ({}),
+      querySelector: () => host,
+    };
+    const prev = { LearnBlock: globalThis.LearnBlock, window: globalThis.window };
+    delete globalThis.LearnBlock;
+    globalThis.document = doc;
+    delete require.cache[require.resolve(path.join(WEBAPP, 'learn-block.js'))];
+    const code = fs.readFileSync(path.join(WEBAPP, 'learn-block.js'), 'utf8');
+    new Function('window', code)(Object.assign(globalThis, {}));
+    const pending = globalThis.LearnBlock.mount('#hubLearn', { place: 'city', cityId: 1 });
+    assert.equal(host.hidden, false);
+    assert.equal(host.style.minHeight, '266px');
+    await pending;
+    assert.equal(host.hidden, true);
+    assert.equal(host.style.minHeight, '');
+    assert.equal(host.hasAttribute('data-lb-wait'), false);
+    if (prev.LearnBlock) globalThis.LearnBlock = prev.LearnBlock; else delete globalThis.LearnBlock;
   });
 });
 

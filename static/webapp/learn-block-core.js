@@ -81,11 +81,27 @@
     return typeof target === 'string' ? global.document.querySelector(target) : target;
   }
 
+  function release(host) {
+    host.style.minHeight = '';
+    host.style.margin = '';
+    host.removeAttribute('data-lb-wait');
+  }
+
   function hide(target) {
     var host = el(target);
     if (!host) return;
     host.hidden = true;
     host.innerHTML = '';
+    release(host);
+  }
+
+  /** Место под блок на время запроса (см. learn-block.js): без прыжка контента; пустой ответ/ошибка → hide. */
+  function reserve(host, place) {
+    if (!host || !host.hidden) return;
+    host.hidden = false;
+    host.style.margin = '12px 16px';
+    host.style.minHeight = (place === 'city' ? 266 : 212) + 'px';
+    host.setAttribute('data-lb-wait', '');
   }
 
   function render(b) {
@@ -144,6 +160,7 @@
       host.innerHTML = html;
       host.setAttribute('data-lb-sig', html);
     }
+    release(host);
     host.hidden = false;
     bind(host);
     return true;
@@ -160,6 +177,7 @@
       paint(target, have, spec);
       return Promise.resolve();
     }
+    reserve(el(target), spec.place);
     return load(spec.cityId).then(function (items) {
       paint(target, items, spec);
     }, function () {
