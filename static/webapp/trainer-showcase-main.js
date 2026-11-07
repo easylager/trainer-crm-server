@@ -340,7 +340,7 @@
       }).join('') + '</div>';
     }
     h += '<span class="mut">' + esc(dir.lead) + '</span>';
-    var minPrice = M.minPriceOf(list);
+    var minPrice = M.minPriceOf(list, key);
     var facts = [M.word(list.length, 'тренер', 'тренера', 'тренеров')];
     if (minPrice) facts.push('от ' + M.formatMoney(minPrice.cents, minPrice.currency));
     facts.push('оплата на месте');
