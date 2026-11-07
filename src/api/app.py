@@ -2313,6 +2313,19 @@ def webapp_booking_client_js(request: Request):
     )
 
 
+@app.get("/webapp/booking-source.js")
+def webapp_booking_source_js(request: Request):
+    """Источник записи на сеанс Mini App (TASK-351). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "booking-source.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/booking-client.css")
 def webapp_booking_client_css(request: Request):
     """Shared client booking styles (success, skeleton, sticky CTA). Use ``?v=…`` for long cache."""

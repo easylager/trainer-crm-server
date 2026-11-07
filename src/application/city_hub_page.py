@@ -1185,13 +1185,16 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
 def _b_trainers(view: Mapping[str, Any], *, base_url: str, coach_href: str) -> str:
     """Тренеры города лицами (TASK-265) — тап на страницу тренера ``/t/…`` (TASK-350);
     больше, чем показали, — «Все тренеры» в Telegram."""
+    from src.application.booking_source import place_via
     from src.application.site_trainer_page import trainer_page_url
     from src.application.style_b import section, trainer_rows_html
 
     trainers = list(view.get("trainers") or [])
+    # ``?via=c<город>`` — источник записи и «Написать» на странице тренера (TASK-351).
+    via = place_via(city_id=int(view["city"]["id"]))
 
     def href_for(trainer: Mapping[str, Any]) -> str | None:
-        return trainer_page_url(base_url, int(trainer["id"]), str(trainer.get("name") or ""))
+        return f'{trainer_page_url(base_url, int(trainer["id"]), str(trainer.get("name") or ""))}?via={via}'
 
     body = trainer_rows_html(trainers, href_for=href_for) if trainers else ""
     total = int(view.get("trainer_count") or 0)

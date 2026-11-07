@@ -3204,8 +3204,16 @@
         });
       }
 
+      /** TASK-351: тренера выбрали в самом Mini App — источник записи «miniapp», если сеанс начался без другого. */
+      function noteInAppBookingSource(arenaId) {
+        try {
+          if (window.GlideBookingSource) window.GlideBookingSource.noteInApp({ arenaId: arenaId, cityId: state.cityId });
+        } catch (eSrc) { /* учёт не мешает записи */ }
+      }
+
       function openTrainerDetailFromTrainerObject(t, prefetchPhotos) {
         if (!t || !t.id) return;
+        noteInAppBookingSource(null);
         state.trainerId = t.id;
         state.trainerName = trainerName(t);
         if (prefetchPhotos) {
@@ -7818,6 +7826,8 @@
           var deepTrainerFromUrl = !isNaN(deepTidParsed) && deepTidParsed > 0 ? deepTidParsed : null;
           var primaryTid = resolveCatalogAutoTrainerIdFromEdges();
           if (deepTrainerFromUrl != null) {
+            // Тап по тренеру на карточке катка в Mini App (catalog?from=arena&arena_id=…).
+            if (arenaOriginId()) noteInAppBookingSource(arenaOriginId());
             state.deepLinkTrainerId = deepTrainerFromUrl;
             state.trainerId = deepTrainerFromUrl;
             state.activeTab = 'my_trainer';

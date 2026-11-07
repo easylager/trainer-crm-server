@@ -2034,6 +2034,7 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str, school_html: str = ""
     Одна карточка везде: подпись справа — «Записаться» / «Написать» по ``can_book``, как на
     странице тренера и в городе. Нет тренеров — нет блока: вход для тренера тогда в «Ещё на катке».
     """
+    from src.application.booking_source import place_via
     from src.application.site_trainer_page import trainer_page_url
     from src.application.style_b import section, trainer_rows_html
 
@@ -2042,9 +2043,11 @@ def _b_trainers(view: Mapping[str, Any], *, base_url: str, school_html: str = ""
         return ""
     card = view["card"]
     coach = _b_coach_entry(card, first=False) if _ice(card) else ""
+    # ``?via=p<каток>`` — источник записи и «Написать» на странице тренера (TASK-351).
+    via = place_via(arena_id=int(card["id"]))
 
     def href_for(trainer: Mapping[str, Any]) -> str | None:
-        return trainer_page_url(base_url, int(trainer["id"]), str(trainer.get("name") or ""))
+        return f'{trainer_page_url(base_url, int(trainer["id"]), str(trainer.get("name") or ""))}?via={via}'
 
     return section(
         t("place.trainers"),

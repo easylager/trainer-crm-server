@@ -1871,6 +1871,11 @@ class ClientBookingBody(BaseModel):
     service_price_variant_id: int | None = None  # required when trainer has multiple tiers for this service
     first_name: str | None = None  # required when client has no saved first_name (unless present in initData user)
     last_name: str | None = None
+    # TASK-351: откуда пришёл человек (booking-source.js). Необязательно: старые клиенты шлют без него,
+    # неизвестный код не роняет запись — см. booking_source.resolve_booking_source.
+    source: str | None = None
+    source_arena_id: int | None = None
+    source_city_id: int | None = None
 
 
 class FamilyAccessRevokeBody(BaseModel):
@@ -2071,6 +2076,15 @@ async def post_client_booking(
             else:
                 arena_for_booking = resolved
 
+    from src.application.booking_source import resolve_booking_source
+    from src.application.catalog_consumer_events import telegram_launch_context
+
+    booking_source = resolve_booking_source(
+        body_source=body.source,
+        body_arena_id=body.source_arena_id,
+        body_city_id=body.source_city_id,
+        signed_start_param=telegram_launch_context(raw).get("start_param"),
+    )
     try:
         booking_id, _ = await create_booking(
             session,
@@ -2084,6 +2098,7 @@ async def post_client_booking(
             arena_id=arena_for_booking,
             service_price_variant_id=body.service_price_variant_id,
             strict_service_price_variant=True,
+            source=booking_source,
         )
     except ServicePriceVariantRequired:
         raise HTTPException(

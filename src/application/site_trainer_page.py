@@ -274,8 +274,13 @@ def app_url(
         if rec is not None:
             return rec.bot_deep_link
     if page["listed"] and via != SHARE_VIA:
+        from src.application.booking_source import clean_place_via
+
+        # Метка места (``?via=p3``) едет в ``startapp`` — источник записи (TASK-351).
         return public_telegram_cta_url(
-            base_url, start_param=trainer_start_param(int(page["id"])), surface=TRAINER_SURFACE
+            base_url,
+            start_param=trainer_start_param(int(page["id"]), via=clean_place_via(via)),
+            surface=TRAINER_SURFACE,
         )
     from src.application.trainer_invite_links import build_trainer_universal_invite_link
 
@@ -395,14 +400,34 @@ def _hero(page: Mapping[str, Any]) -> str:
     )
 
 
-def _cta_html(cta: tuple[str, str] | None, *, note: str = "") -> str:
+def _cta_html(cta: tuple[str, str] | None, *, note: str = "", beacon: str | None = None) -> str:
     if not cta:
         return ""
     label, href = cta
     note_html = f'<p class="tp-note">{esc(note)}</p>' if note else ""
+    beacon_attr = f' data-catalog-phone-beacon="{esc(beacon)}"' if beacon else ""
     return (
-        f'<div class="tp-cta"><a class="b-tgbtn tp-cta__btn" href="{esc(href)}" rel="nofollow">{esc(label)}</a>'
-        f"{note_html}</div>"
+        f'<div class="tp-cta"><a class="b-tgbtn tp-cta__btn" href="{esc(href)}" rel="nofollow"{beacon_attr}>'
+        f"{esc(label)}</a>{note_html}</div>"
+    )
+
+
+def write_beacon_url(page: Mapping[str, Any], *, via: str | None = None) -> str:
+    """Учёт «Написать в Telegram» (TASK-351): тренер и место, откуда пришли на страницу.
+
+    Маяк, а не редирект: у тренера вне каталога ``/r/tg`` нет, ссылка ведёт прямо в ``t.me``.
+    """
+    from src.application.booking_source import clean_place_via, source_from_via
+    from src.application.public_web_cta import CONTACT_ACTION_TELEGRAM, contact_click_beacon_url
+
+    src = source_from_via(via)
+    return contact_click_beacon_url(
+        action=CONTACT_ACTION_TELEGRAM,
+        surface=TRAINER_SURFACE,
+        arena_id=src.arena_id if src else None,
+        city_id=src.city_id if src else None,
+        trainer_id=int(page["id"]),
+        via=clean_place_via(via) or (src.code if src else None),
     )
 
 
@@ -471,7 +496,7 @@ def render_trainer_page(
     from src.application.place_links import breadcrumb_script
     from src.application.public_analytics import public_analytics_head_html_from_settings
     from src.application.public_site_footer import render_site_footer_html
-    from src.application.public_web_cta import public_page_view_beacon_script
+    from src.application.public_web_cta import phone_beacon_script, public_page_view_beacon_script
     from src.application.catalog_list_share import catalog_list_share_tail
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
@@ -479,10 +504,11 @@ def render_trainer_page(
     cta = primary_cta(base_url, page, client_bot_username=client_bot_username, via=via)
     app = app_url(base_url, page, client_bot_username=client_bot_username, via=via)
     note = "Откроется Glide в Telegram — ничего устанавливать не нужно." if page["can_book"] else ""
+    writes = bool(cta and page.get("contact_url") and cta[1] == page["contact_url"])
     body = (
         _hero(page)
         + '<main class="tp-body">'
-        + _cta_html(cta, note=note)
+        + _cta_html(cta, note=note, beacon=write_beacon_url(page, via=via) if writes else None)
         + (_windows_html(page, app) if page["can_book"] else "")
         + _services_html(page)
         + _arenas_html(page, base_url)
@@ -495,6 +521,7 @@ def render_trainer_page(
         crumbs.append((str(page["city_name"]), f"{(base_url or '').rstrip('/')}/c/{city_slug(str(page['city_name']))}"))
     crumbs.append((str(page["name"]), canonical))
     body += breadcrumb_script(canonical, crumbs)
+    body += phone_beacon_script(body)
     og_image = _absolute(base_url, str(page["photo_url"])) if page.get("photo_url") else catalog_home_og_image_url(base_url)
     tail = catalog_list_share_tail(scripts=False)
     tail["__PLACE_SHARE_BAR__"] = ""
