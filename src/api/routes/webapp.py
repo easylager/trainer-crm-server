@@ -136,6 +136,7 @@ from src.application.family_access_use_cases import (
 )
 from src.application.client_profile_use_cases import (
     create_guardian_profile,
+    find_guardian_profile_by_name,
     list_accessible_profiles,
     resolve_acting_client_id,
     set_default_profile,
@@ -2973,8 +2974,16 @@ async def post_client_profiles(
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
-    """Add an independent profile (e.g. a second child) under this account."""
+    """Add an independent profile (e.g. a second child) under this account.
+
+    Ребёнок с тем же именем у этого аккаунта уже есть — возвращается он, второй профиль не создаётся.
+    """
     telegram_id = client_catalog_telegram_key(principal)
+    existing_id = await find_guardian_profile_by_name(
+        session, telegram_id, first_name=body.first_name, last_name=body.last_name
+    )
+    if existing_id is not None:
+        return {"client_id": existing_id}
     phone = await get_client_phone_for_webapp(session, telegram_id)
     try:
         new_client_id = await create_guardian_profile(

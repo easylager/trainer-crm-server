@@ -36,6 +36,9 @@
     knownChildIds: {},
     // Тариф прошлой записи по профилю у тренера: { trainerId: { profileId: { sid, vid } } }.
     profileHints: {},
+    // Ребёнок, созданный здесь для записи: имя (lower) → client_id. Живёт дольше формы: повтор записи
+    // («время заняли» → другое время, вторая запись подряд) не создаёт второй профиль того же ребёнка.
+    childIds: {},
     stack: [],
     view: 'list',
     trainer: null,
@@ -650,7 +653,8 @@
     }
     S.book = {
       slot: slot,
-      regular: regular,
+      // Форма нового ученика остаётся ею при смене времени, даже если профиль ребёнка уже создан.
+      regular: keep ? keep.regular : regular,
       kind: keep ? keep.kind : null,
       duoOpen: keep ? keep.duoOpen : false,
       names: keep ? keep.names : { self: tgFirstName() },
@@ -663,7 +667,6 @@
       phone: keep ? keep.phone : String((S.session && S.session.client_phone) || ''),
       phoneEdit: keep ? keep.phoneEdit : false,
       phoneManual: keep ? keep.phoneManual : false,
-      childIds: keep ? keep.childIds : {},
       idem: BC.newIdempotencyKey(),
       submitting: false,
       notice: '',
@@ -950,19 +953,37 @@
     });
   }
 
+  function childNameKey(name) {
+    return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
   function ensureChildProfile(name) {
-    var b = S.book;
-    var key = name.toLowerCase();
-    if (b.childIds[key]) return Promise.resolve(b.childIds[key]);
-    var existing = S.profiles.filter(function (p) { return p.role !== 'self' && String(p.first_name || '').trim().toLowerCase() === key; })[0];
+    var key = childNameKey(name);
+    if (S.childIds[key]) return Promise.resolve(S.childIds[key]);
+    var existing = S.profiles.filter(function (p) { return p.role !== 'self' && childNameKey(p.first_name) === key; })[0];
     if (existing) {
       S.knownChildIds[existing.client_id] = true;
       return Promise.resolve(existing.client_id);
     }
     return api('/api/webapp/client/profiles', { method: 'POST', body: { first_name: name } }).then(function (d) {
-      b.childIds[key] = d.client_id;
+      S.childIds[key] = d.client_id;
       S.knownChildIds[d.client_id] = true;
+      // Как «+ Добавить ребёнка»: профиль сразу в списке — следующая запись найдёт его, а не создаст второй.
+      if (!S.profiles.some(function (p) { return Number(p.client_id) === Number(d.client_id); })) {
+        S.profiles.push({ client_id: d.client_id, role: 'guardian', first_name: name });
+        S.passes[d.client_id] = S.passes[d.client_id] || [];
+      }
       return d.client_id;
+    });
+  }
+
+  /** После записи — профили с сервера (новый «я»/ребёнок), их абонементы и тарифы прошлой записи заново. */
+  function refreshProfiles() {
+    return loadProfiles().then(function (list) {
+      if (!list.length) return;
+      S.profiles = list;
+      S.profileHints = {};
+      return loadPasses();
     });
   }
 
@@ -1085,6 +1106,7 @@
     render();
     window.scrollTo(0, 0);
     S.book = null;
+    refreshProfiles();
   }
 
   /* ── 7 · Время заняли ────────────────────────────────────────────── */
@@ -1371,13 +1393,18 @@
         el.disabled = true;
         api('/api/webapp/client/profiles', { method: 'POST', body: { first_name: name } })
           .then(function (d) {
-            var prof = { client_id: d.client_id, role: 'guardian', first_name: name };
-            S.profiles.push(prof);
-            S.passes[d.client_id] = [];
+            // Сервер отдаёт уже существующего ребёнка с тем же именем — второй строки в списке не будет.
+            var prof = S.profiles.filter(function (x) { return Number(x.client_id) === Number(d.client_id); })[0];
+            if (!prof) {
+              prof = { client_id: d.client_id, role: 'guardian', first_name: name };
+              S.profiles.push(prof);
+              S.passes[d.client_id] = [];
+            }
             S.knownChildIds[d.client_id] = true; // добавлен как ребёнок — детский тариф
             b.addChild = false;
             b.override = null;
-            if (M.canAddProfile(bookingService(), b.selected, prof, regularOpts(bookingService()))) b.selected = b.selected.concat([prof]);
+            var already = b.selected.some(function (x) { return Number(x.client_id) === Number(prof.client_id); });
+            if (!already && M.canAddProfile(bookingService(), b.selected, prof, regularOpts(bookingService()))) b.selected = b.selected.concat([prof]);
             render();
           })
           .catch(function (e) { b.notice = (e && e.message) || 'Не удалось добавить.'; render(); });

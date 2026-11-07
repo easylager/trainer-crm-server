@@ -145,3 +145,103 @@ describe('групповой слот: одно место — один учас
     assert.ok(!h.app.innerHTML.includes('data-k="two_children"'));
   });
 });
+
+describe('профиль ребёнка не дублируется', () => {
+  function profilesServer() {
+    // Сервер: профили аккаунта = созданные через POST /client/profiles (как list_accessible_profiles).
+    const items = [];
+    let pid = 500;
+    return {
+      items,
+      routes: [
+        { match: (c) => isPath(c, '/api/webapp/client/profiles') && c.method === 'POST', reply: (c) => {
+          const id = ++pid;
+          items.push({ client_id: id, role: 'guardian', first_name: c.body.first_name });
+          return resp(200, { client_id: id });
+        } },
+        { match: (c) => isPath(c, '/api/webapp/client/profiles') && c.method === 'GET', reply: () => resp(200, { items: items.slice(), default_profile_id: null }) },
+      ],
+    };
+  }
+
+  it('две записи Сони подряд — один профиль, вторая запись идёт формой постоянного', async () => {
+    const srv = profilesServer();
+    const h = boot({ showcase: { items: [trainer(1)] }, session: PHONE, routes: [
+      ...srv.routes,
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(101), slot(102, { start_time: '11:00' })] }) },
+      { match: (c) => isPath(c, '/api/webapp/client/booking'), reply: () => resp(200, { success: true, booking_id: 1 }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 101 });
+    h.click({ 'data-act': 'pick', 'data-k': 'child' });
+    h.input('name', 'Соня', 'child');
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    assert.equal(h.S.view, 'sent');
+    h.click({ 'data-act': 'back' });
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 102 });
+    assert.equal(h.S.book.regular, true);
+    assert.deepEqual([...h.S.book.selected.map((p) => p.client_id)], [501]);
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    assert.equal(h.posts('/api/webapp/client/profiles').length, 1);
+    assert.deepEqual(h.posts('/api/webapp/client/booking').map((c) => c.headers['X-Profile-Id']), ['501', '501']);
+  });
+
+  it('«время заняли» → время из шторки: форма нового ученика, профиль тот же', async () => {
+    const srv = profilesServer();
+    let n = 0;
+    const h = boot({ showcase: { items: [trainer(1)] }, session: PHONE, routes: [
+      ...srv.routes,
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(101), slot(102, { start_time: '11:00' })] }) },
+      { match: (c) => isPath(c, '/api/webapp/client/booking'), reply: () => (++n === 1 ? resp(400, { detail: 'Slot not available' }) : resp(200, { success: true })) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 101 });
+    h.click({ 'data-act': 'pick', 'data-k': 'child' });
+    h.input('name', 'Соня', 'child');
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    h.sheetClick({ 'data-act': 'slot', 'data-slot': 102 });
+    assert.equal(h.S.book.regular, false, 'форма нового ученика остаётся ею');
+    assert.equal(h.S.book.kind, 'child');
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    assert.equal(h.S.view, 'sent');
+    assert.equal(h.posts('/api/webapp/client/profiles').length, 1);
+    assert.deepEqual(h.posts('/api/webapp/client/booking').map((c) => c.headers['X-Profile-Id']), ['501', '501']);
+  });
+
+  it('«время заняли» → другое время: профиль ребёнка тот же', async () => {
+    const srv = profilesServer();
+    let n = 0;
+    const h = boot({ showcase: { items: [trainer(1)] }, session: PHONE, routes: [
+      ...srv.routes,
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(101), slot(102, { start_time: '11:00' })] }) },
+      { match: (c) => isPath(c, '/api/webapp/client/booking'), reply: () => (++n === 1 ? resp(400, { detail: 'Slot not available' }) : resp(200, { success: true })) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 101 });
+    h.click({ 'data-act': 'pick', 'data-k': 'child' });
+    h.input('name', 'Соня', 'child');
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    h.sheetClick({ 'data-act': 'week' });
+    h.click({ 'data-act': 'slot', 'data-slot': 102 });
+    // Соня уже есть в профилях — форма постоянного с ней отмеченной; имя заново не вводится.
+    assert.deepEqual([...h.S.book.selected.map((p) => p.first_name)], ['Соня']);
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    assert.equal(h.S.view, 'sent');
+    assert.equal(h.posts('/api/webapp/client/profiles').length, 1);
+    assert.deepEqual(h.posts('/api/webapp/client/booking').map((c) => c.headers['X-Profile-Id']), ['501', '501']);
+  });
+});
