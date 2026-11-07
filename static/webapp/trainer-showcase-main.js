@@ -53,6 +53,9 @@
     weekStart: null,
     day: null,
     saved: false,
+    notify: false,
+    waBlock: '',
+    saveNote: '',
     book: null,
     sent: null,
     req: null,
@@ -404,6 +407,20 @@
     if (B && typeof B.noteInApp === 'function') B.noteInApp({ arenaId: S.arenaId, cityId: S.cityId });
   }
 
+  /** Сохранён ли тренер и подписан ли человек на время — состояние с сервера, не догадка. */
+  function loadEdge(t) {
+    if (!initData) return;
+    var gen = S.trainerGen;
+    api('/api/webapp/client/trainer-edges').then(function (d) {
+      if (gen !== S.trainerGen) return;
+      var e = ((d && d.all) || []).filter(function (x) { return Number(x.trainer_id) === Number(t.id); })[0];
+      if (!e) return;
+      S.saved = !!e.is_saved;
+      S.notify = !!e.notify_when_slots;
+      if (S.view === 'trainer' && S.trainer === t) render();
+    }).catch(function () { /* не критично: кнопки останутся в исходном состоянии */ });
+  }
+
   function openTrainer(t, opts) {
     opts = opts || {};
     S.trainerGen++;
@@ -413,6 +430,10 @@
     S.dirKey = dirs.some(function (d) { return d.key === want; }) ? want : dirs.length ? dirs[0].key : null;
     S.serviceId = num(qs.get('service_id')) && Number(t.id) === num(qs.get('trainer_id')) ? num(qs.get('service_id')) : null;
     S.saved = false;
+    S.notify = false;
+    S.waBlock = '';
+    S.saveNote = '';
+    loadEdge(t);
     if (opts.view !== false) go('trainer');
     return loadSlots().then(function (fresh) {
       if (fresh) render();
@@ -457,7 +478,9 @@
       h += '</div>';
       if (S.slots && !S.slots.length && !S.slotsError) {
         h += '<div class="card"><h4>На ближайшие 2 недели свободного времени нет</h4><p class="mut">Попросите сообщить, когда появится.</p>' +
-          (initData ? '<button type="button" class="sec2" data-act="notify">Сообщить, когда появится время</button>' : '') + '</div>';
+          (initData ? '<button type="button" class="sec2" data-act="notify"' + (S.notify ? ' disabled' : '') + '>' +
+            (S.notify ? 'Сообщим, когда появится время' : 'Сообщить, когда появится время') + '</button>' : '') +
+          (S.waBlock ? '<div class="warn">' + BC.writeAccessBlockHtml(S.waBlock) + '</div>' : '') + '</div>';
       }
       if (S.slotsError) h += '<button type="button" class="sec2" data-act="reslots">Повторить</button>';
     }
@@ -473,7 +496,10 @@
         return '<div class="kv"><span>' + esc(r.title) + '</span><b>' + esc(M.formatMoney(r.priceCents, svc.currency_code)) + '</b></div>';
       }).join('') + '</div>';
     }
-    if (initData) h += '<button type="button" class="more" data-act="save">' + (S.saved ? '♥ Тренер сохранён' : '♡ Сохранить тренера') + '</button>';
+    if (initData) {
+      h += '<button type="button" class="more" data-act="save" aria-pressed="' + !!S.saved + '">' + (S.saved ? '♥ Тренер сохранён · убрать' : '♡ Сохранить тренера') + '</button>';
+      if (S.saveNote) h += '<span class="mut" role="alert">' + esc(S.saveNote) + '</span>';
+    }
     h += '</div>';
     if (!t.can_book) {
       h += '<div class="ft col">' + (t.contact_url ? '<button type="button" class="cta" data-act="write">Написать тренеру</button>' : '') +
@@ -1226,14 +1252,142 @@
 
   /* ── Шторки ──────────────────────────────────────────────────────── */
 
+  /** Подписка обещает сообщение — оформляем её, только когда боту разрешено писать. */
+  function subscribeNotify(el) {
+    var tid = S.trainer.id;
+    var WA = window.GlideWriteAccess;
+    el.disabled = true;
+    function mine() { return S.trainer && S.trainer.id === tid; }
+    function failed() {
+      if (!mine()) return;
+      el.disabled = false;
+      el.textContent = 'Не получилось — попробовать ещё раз';
+    }
+    function post() {
+      return api('/api/webapp/client/trainer-edges/notify-slots', { method: 'POST', body: { trainer_id: tid } })
+        .then(function () {
+          if (!mine()) return;
+          S.notify = true;
+          S.waBlock = '';
+          render();
+        })
+        .catch(failed);
+    }
+    if (!WA || !tg) { post(); return; }
+    WA.gate(tg, { surface: 'slot_wait', trainerId: tid }).then(
+      function (res) {
+        if (res === 'proceed') { post(); return; }
+        if (!mine()) return;
+        S.waBlock = BC.unreachableState() || '';
+        render();
+      },
+      post
+    );
+  }
+
+  /** «Сохранить тренера» — тумблер: состояние берём с сервера, ошибку показываем. */
+  function toggleSaved(el) {
+    var tid = S.trainer.id;
+    var next = !S.saved;
+    el.disabled = true;
+    S.saveNote = '';
+    var req = next
+      ? api('/api/webapp/client/trainer-edges/save', { method: 'POST', body: { trainer_id: tid } })
+      : api('/api/webapp/client/trainer-edges/save/' + encodeURIComponent(tid), { method: 'DELETE' });
+    req.then(function () {
+      if (!S.trainer || S.trainer.id !== tid) return;
+      S.saved = next;
+      render();
+    }).catch(function () {
+      if (!S.trainer || S.trainer.id !== tid) return;
+      S.saveNote = 'Не получилось — попробуйте ещё раз.';
+      render();
+    });
+  }
+
+  var SHEET_FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+  var sheetOpener = null;
+  var sheetOpenerAct = null;
+
+  function sheetFocusables() {
+    return Array.prototype.slice.call(sheetEl.querySelectorAll(SHEET_FOCUSABLE));
+  }
+
+  function setBackgroundInert(on) {
+    if (on) {
+      appEl.setAttribute('inert', '');
+      appEl.setAttribute('aria-hidden', 'true');
+    } else {
+      appEl.removeAttribute('inert');
+      appEl.removeAttribute('aria-hidden');
+    }
+  }
+
+  /** Шторка — модальное окно: имя, фокус внутри, фон недоступен, возврат фокуса при закрытии (Esc и Tab — в onSheetKey). */
   function openSheet(inner) {
-    sheetEl.innerHTML = '<div class="dim" data-act="sheet-dim"><div class="sheet" role="dialog" aria-modal="true">' + inner + '</div></div>';
+    var reopen = !sheetEl.hidden;
+    var active = document.activeElement;
+    var keepIdx = -1;
+    var keepSel = null;
+    if (reopen && active && sheetEl.contains(active)) {
+      // Перерисовка той же шторки (заявка): фокус и курсор остаются на месте.
+      keepIdx = sheetFocusables().indexOf(active);
+      if (typeof active.selectionStart === 'number') keepSel = [active.selectionStart, active.selectionEnd];
+    } else if (!reopen) {
+      sheetOpener = active && active !== document.body ? active : null;
+      sheetOpenerAct = sheetOpener && sheetOpener.getAttribute ? sheetOpener.getAttribute('data-act') : null;
+    }
+    sheetEl.innerHTML = '<div class="dim" data-act="sheet-dim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1">' +
+      inner.replace('<h4>', '<h4 id="sheetTitle">') + '</div></div>';
     sheetEl.hidden = false;
+    setBackgroundInert(true);
+    var target = null;
+    if (keepIdx >= 0) target = sheetFocusables()[keepIdx] || null;
+    if (!target) target = sheetEl.querySelector('.sheet');
+    if (target && typeof target.focus === 'function') {
+      target.focus();
+      if (keepSel && keepIdx >= 0 && typeof target.setSelectionRange === 'function') {
+        try { target.setSelectionRange(keepSel[0], keepSel[1]); } catch (e) { /* не текстовое поле */ }
+      }
+    }
   }
 
   function closeSheet() {
+    var wasOpen = !sheetEl.hidden;
     sheetEl.hidden = true;
     sheetEl.innerHTML = '';
+    setBackgroundInert(false);
+    var back = sheetOpener;
+    sheetOpener = null;
+    // Экран под шторкой мог перерисоваться — тогда ищем такую же кнопку заново.
+    if (wasOpen && back && back.isConnected === false && sheetOpenerAct) back = appEl.querySelector('[data-act="' + sheetOpenerAct + '"]');
+    if (wasOpen && back && typeof back.focus === 'function') back.focus();
+  }
+
+  function onSheetKey(ev) {
+    if (sheetEl.hidden) return;
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      closeSheet();
+      return;
+    }
+    if (ev.key !== 'Tab') return;
+    var list = sheetFocusables();
+    if (!list.length) { ev.preventDefault(); return; }
+    var first = list[0];
+    var last = list[list.length - 1];
+    var cur = document.activeElement;
+    var dlg = sheetEl.querySelector('.sheet');
+    if (!cur || !sheetEl.contains(cur)) {
+      ev.preventDefault();
+      (ev.shiftKey ? last : first).focus();
+    } else if (ev.shiftKey && (cur === first || cur === dlg)) {
+      ev.preventDefault();
+      last.focus();
+    } else if (!ev.shiftKey && cur === last) {
+      ev.preventDefault();
+      first.focus();
+    }
   }
 
   function openArenaSheet() {
@@ -1272,7 +1426,7 @@
     else html = renderList();
     appEl.innerHTML = '<div class="tsw-view">' + html + '</div>';
     if (S.view === 'book' && S.book) wirePhone(S.book);
-    if (S.view === 'sent') BC.bindWriteAccessBlock(appEl);
+    if (S.view === 'sent' || (S.view === 'trainer' && S.waBlock)) BC.bindWriteAccessBlock(appEl);
   }
 
   function syncUrl() {
@@ -1345,16 +1499,10 @@
       case 'wk-next': S.weekStart = M.addDays(S.weekStart, 7); S.day = S.weekStart; render(); break;
       case 'day': S.day = el.getAttribute('data-day'); render(); break;
       case 'notify':
-        el.disabled = true;
-        api('/api/webapp/client/trainer-edges/notify-slots', { method: 'POST', body: { trainer_id: S.trainer.id } })
-          .then(function () { el.textContent = 'Сообщим, когда появится время'; })
-          .catch(function () { el.disabled = false; el.textContent = 'Не получилось — попробовать ещё раз'; });
+        subscribeNotify(el);
         break;
       case 'save':
-        el.disabled = true;
-        api('/api/webapp/client/trainer-edges/save', { method: 'POST', body: { trainer_id: S.trainer.id } })
-          .then(function () { S.saved = true; render(); })
-          .catch(function () { el.disabled = false; });
+        toggleSaved(el);
         break;
       case 'pick': {
         var k = el.getAttribute('data-k');
@@ -1444,6 +1592,7 @@
 
   appEl.addEventListener('click', onClick);
   sheetEl.addEventListener('click', onClick);
+  document.addEventListener('keydown', onSheetKey);
   appEl.addEventListener('input', onInput);
   sheetEl.addEventListener('input', onInput);
 
