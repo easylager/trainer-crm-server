@@ -1,19 +1,147 @@
-/* Страница тренера /t/{id}-{slug} — на токенах glide-tokens.css и рядах .b-row стиля B. */
-.tp-hero { background: var(--g-surface); border-bottom: 1px solid var(--g-line); padding: 12px 16px 20px; }
-.tp-bar { display: flex; align-items: center; min-height: 40px; margin-bottom: 12px; }
-.tp-head { display: flex; gap: 16px; align-items: center; max-width: 720px; margin: 0 auto; }
-.tp-ava { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; flex: 0 0 80px; background: var(--g-chip); }
-.tp-ava--mono { display: inline-flex; align-items: center; justify-content: center; font: 600 32px/1 var(--g-font-display); color: var(--g-accent-ink); background: var(--g-accent-wash); }
-.tp-kicker { margin: 0 0 4px; color: var(--g-muted); font-size: 14px; }
-.tp-name { margin: 0; font: 600 26px/1.15 var(--g-font-display); color: var(--g-ink); letter-spacing: -0.01em; overflow-wrap: anywhere; }
-.tp-facts { margin: 6px 0 0; color: var(--g-ink-2); font-size: 15px; }
-.tp-body { max-width: 720px; margin: 0 auto; padding: 0 16px 32px; }
-.tp-cta { padding: 16px 0 4px; }
-.tp-cta__btn { display: flex; width: 100%; justify-content: center; box-sizing: border-box; }
-.tp-note { margin: 8px 0 0; color: var(--g-muted); font-size: 14px; text-align: center; }
-.tp-price { white-space: nowrap; color: var(--g-ink); font-weight: 600; }
-.tp-about { margin: 0; color: var(--g-ink-2); line-height: 1.5; white-space: pre-line; }
-.tp-hook { margin: 28px 0 0; font-size: 14px; }
-.tp-hook a { color: var(--g-accent-ink); font-weight: 600; text-decoration: none; }
-/* Шапка без фото: знак сайта тёмным, а не белым поверх героя. */
-.tp-bar .b-brand { color: var(--g-ink); text-shadow: none; }
+/* Страница тренера /t/{id}-{slug} (TASK-356, дизайн PDEC-033 trainer.html) — на токенах glide-tokens.css.
+   Сайт всегда светлый; ширина — колонка стиля B (640 px), на телефоне 360–390 px без горизонтальной прокрутки. */
+.tp { padding: 0 16px; display: grid; min-width: 0; }
+.tp * { min-width: 0; }
+.tp a { color: inherit; text-decoration: none; }
+.tp-bar { display: flex; align-items: center; min-height: 48px; }
+/* .b-brand в стиле B — белый с !important (для фото героя); у нас светлый фон. */
+.tp-bar .b-brand { color: var(--g-ink) !important; text-shadow: none; }
+.tp-crumbs { font-size: 13px; color: var(--g-muted); overflow-wrap: anywhere; }
+.tp-crumbs a { color: var(--g-accent-ink) !important; font-weight: 600; }
+
+/* первый экран */
+.tp-th { display: grid; gap: 16px; padding-top: 14px; }
+.tp-photo { border-radius: 24px; overflow: hidden; aspect-ratio: 4 / 3; max-height: 300px; background: var(--g-chip); }
+.tp-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (min-width: 560px) { .tp-photo { max-height: 380px; } }
+.tp-top { display: flex; gap: 14px; align-items: flex-start; }
+.tp-ava { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: var(--g-chip); }
+.tp-ava--mono { display: inline-grid; place-items: center; font: 400 30px/1 var(--g-font-display); color: var(--g-accent-ink); background: var(--g-accent-wash); }
+.tp-head { display: grid; gap: 10px; justify-items: start; }
+.tp-badge { background: var(--g-dark); color: #fff; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 9px; letter-spacing: .02em; }
+.tp-name { margin: 0; font: 400 clamp(30px, 8.6vw, 44px)/1 var(--g-font-display); letter-spacing: -.015em; color: var(--g-ink); overflow-wrap: anywhere; }
+.tp-role { margin: -2px 0 0; font-size: 17px; line-height: 1.4; color: var(--g-ink-2); }
+.tp-rate { margin: 0; font-size: 16px; font-weight: 600; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.tp-rate i { font-style: normal; color: #f2b84b; }
+.tp-rate span { color: var(--g-muted); font-weight: 500; }
+.tp-since { margin: -4px 0 0; font-size: 14px; color: var(--g-muted); }
+.tp-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tp-checks li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; font-size: 14.5px; color: var(--g-ink-2); }
+.tp-checks li::before { content: "✓"; width: 22px; height: 22px; border-radius: 50%; background: var(--g-accent-wash); color: var(--g-accent-ink);
+  display: grid; place-items: center; font-size: 12px; font-weight: 800; }
+
+/* тёмная карточка цены */
+.tp-pcard { position: relative; overflow: hidden; isolation: isolate; background: var(--g-dark); color: #fff; border-radius: 24px; padding: 20px; display: grid; gap: 14px; }
+.tp-pcard::after { content: ""; position: absolute; z-index: -1; width: 240px; height: 240px; border-radius: 50%; border: 2px solid rgba(69, 185, 187, .28); right: -90px; top: -120px; }
+.tp-dsw { display: flex; gap: 6px; flex-wrap: wrap; }
+.tp-dsw button { border: 1px solid rgba(255, 255, 255, .2); background: transparent; color: var(--g-on-dark-muted); border-radius: 999px;
+  min-height: 36px; padding: 6px 13px; font: 600 14px var(--g-font); cursor: pointer; }
+.tp-dsw button[aria-pressed="true"] { background: #fff; color: var(--g-dark); border-color: #fff; }
+.tp-panel[hidden] { display: none; }
+.tp-panel { display: grid; gap: 12px; }
+.tp-svc { display: grid; gap: 4px; }
+.tp-svc__name { font-size: 13px; font-weight: 600; color: var(--g-on-dark-muted); margin: 0; }
+.tp-tiers { display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.tp-tiers div { display: grid; }
+.tp-tiers span { font-size: 12px; color: #9fb4c2; font-weight: 600; }
+.tp-tiers b { font: 400 24px/1.1 var(--g-font-display); font-weight: 400; }
+.tp-noprice { margin: 0; font-size: 16px; color: var(--g-on-dark-muted); }
+.tp-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: #9fb4c2; font-weight: 700; margin-bottom: 8px; }
+.tp-near { display: flex; gap: 8px; flex-wrap: wrap; }
+.tp-near a { background: var(--g-accent); color: var(--g-dark) !important; border-radius: 14px; padding: 10px 14px; font-weight: 800; font-size: 15px; line-height: 1.25; }
+.tp-near a small { display: block; font-weight: 600; font-size: 11px; opacity: .75; }
+.tp-nowin { margin: 0; color: var(--g-on-dark-muted); }
+.tp-act { display: flex; gap: 10px; flex-wrap: wrap; }
+.tp-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 12px 18px; border-radius: 16px;
+  font-weight: 700; font-size: 15px; text-align: center; }
+.tp-btn--teal { background: var(--g-accent); color: var(--g-dark) !important; }
+.tp-btn--tg { background: var(--g-tg-btn); color: #fff !important; }
+.tp-btn--ghost { background: transparent; color: var(--g-accent-ink) !important; border: 1.5px solid var(--g-line); }
+.tp-pcard .tp-btn--ghost { background: rgba(255, 255, 255, .08); color: #fff !important; border: 0; }
+.tp-also { margin: 0; font-size: 14px; color: var(--g-on-dark-muted); }
+.tp-fine { font-size: 13px; color: #9fb4c2; }
+.tp-near a:focus-visible, .tp-btn:focus-visible, .tp-dsw button:focus-visible, .tp-slot:focus-visible { outline: 3px solid var(--g-accent); outline-offset: 2px; }
+
+/* секции */
+.tp-sec { padding-top: 36px; display: grid; gap: 14px; }
+.tp-h2 { font-size: 24px; margin: 0; }
+.tp-muted { margin: 0; color: var(--g-muted); font-size: 14px; }
+.tp-words { margin: 0; color: var(--g-ink-2); line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+.tp-link { color: var(--g-accent-ink) !important; font-weight: 700; }
+
+/* неделя: семь дней, на телефоне — лента внутри блока */
+.tp-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 600px) {
+  .tp-week { grid-template-columns: repeat(7, 84px); overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px 4px; scroll-padding: 0 16px; }
+  .tp-week::-webkit-scrollbar { display: none; }
+}
+.tp-day { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 18px; padding: 12px 6px; display: grid; gap: 6px;
+  align-content: start; justify-items: center; min-height: 116px; }
+.tp-day--today { outline: 2px solid var(--g-accent); outline-offset: -1px; }
+.tp-day--empty { background: transparent; }
+.tp-day b { font-size: 13px; color: var(--g-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.tp-d { font: 400 22px var(--g-font-display); }
+.tp-slot { width: 100%; text-align: center; border-radius: 12px; padding: 8px 4px; font-weight: 700; font-size: 14px; background: #e8f1fa; color: var(--g-tg-btn) !important; }
+.tp-slot:hover { background: var(--g-tg-btn); color: #fff !important; }
+.tp-no { font-size: 12px; line-height: 1.3; text-align: center; color: var(--g-muted); }
+.tp-request { background: var(--g-surface); border: 1.5px dashed var(--g-line); border-radius: 20px; padding: 16px; display: flex;
+  justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+.tp-request > div { display: grid; gap: 2px; }
+.tp-request span { color: var(--g-ink-2); }
+.tp-request .tp-btn { flex: 0 0 auto; }
+
+/* цены и карточки */
+.tp-plist { display: grid; gap: 12px; }
+.tp-card { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 22px; padding: 20px; display: grid; gap: 10px; align-content: start; }
+.tp-card h3 { margin: 0; font: 400 21px/1.1 var(--g-font-display); }
+.tp-card .tp-svc__name { color: var(--g-ink); font-size: 14px; font-weight: 700; }
+.tp-card dl { margin: 0; display: grid; }
+.tp-card dl div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--g-line); font-size: 15px; }
+.tp-card dl div:first-child { border-top: 0; }
+.tp-card dt { color: var(--g-ink-2); }
+.tp-card dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tp-two { display: grid; gap: 12px; }
+.tp-score { display: flex; align-items: center; gap: 14px; }
+.tp-score b { font: 400 48px/1 var(--g-font-display); }
+.tp-score i { font-style: normal; color: #f2b84b; font-size: 20px; letter-spacing: 2px; }
+.tp-score span { display: block; color: var(--g-muted); font-size: 14px; }
+.tp-after { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px; }
+.tp-after > div { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 18px; padding: 16px; display: grid; gap: 5px; align-content: start; }
+.tp-after i { font-style: normal; width: 34px; height: 34px; border-radius: 12px; background: var(--g-accent-wash); color: var(--g-accent-ink); display: grid; place-items: center; font-weight: 800; }
+.tp-after span { color: var(--g-ink-2); font-size: 14.5px; }
+.tp-faq { display: grid; gap: 8px; }
+.tp-faq details { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 16px; padding: 14px 16px; }
+.tp-faq summary { font-weight: 700; cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.tp-faq summary::-webkit-details-marker { display: none; }
+.tp-faq summary::after { content: "+"; font: 400 20px/1 var(--g-font-display); color: var(--g-accent-ink); }
+.tp-faq details[open] summary::after { content: "−"; }
+.tp-faq p { margin: 8px 0 0; color: var(--g-ink-2); }
+.tp-faq p a { color: var(--g-accent-ink); font-weight: 600; text-decoration: underline; }
+.tp-arenas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 10px; }
+.tp-ar { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 18px; overflow: hidden; display: grid; }
+.tp-ar img { width: 100%; height: 130px; object-fit: cover; background: var(--g-chip); display: block; }
+.tp-ar > div { padding: 12px 14px; display: grid; gap: 2px; }
+.tp-ar span { font-size: 14px; color: var(--g-muted); }
+.tp-ar em { font-style: normal; color: var(--g-accent-ink); font-weight: 600; font-size: 14px; margin-top: 2px; }
+.tp-more { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 4px; }
+.tp-more::-webkit-scrollbar { display: none; }
+.tp-mini { flex: 0 0 200px; background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 20px; overflow: hidden; display: grid; grid-template-rows: 150px auto; }
+.tp-mini img, .tp-mini__mono { width: 100%; height: 150px; object-fit: cover; display: block; }
+.tp-mini__mono { display: grid; place-items: center; font: 400 44px/1 var(--g-font-display); color: var(--g-accent-ink); background: var(--g-accent-wash); }
+.tp-mini > div { padding: 12px 14px; display: grid; gap: 2px; }
+.tp-mini span { font-size: 13.5px; color: var(--g-muted); }
+.tp-band { margin-top: 36px; background: var(--g-accent-wash); border-radius: 22px; padding: 20px; display: grid; gap: 12px; }
+.tp-band b { display: block; font: 400 20px/1.15 var(--g-font-display); }
+.tp-band span { color: var(--g-ink-2); }
+
+/* «Записаться на …» внизу экрана телефона — пока карточка цены не видна (скрипт страницы) */
+.tp-mbar { display: none; }
+.tp-mbar[hidden] { display: none !important; }
+@media (max-width: 700px) {
+  .tp-mbar { display: grid; gap: 4px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+    padding: 18px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, var(--g-bg) 34%); }
+  .tp-mbar small { text-align: center; color: var(--g-muted); font-size: 12px; }
+  body:has(.tp-mbar) .b-page { padding-bottom: 96px; }
+  /* Пока видна «Записаться на …», общая «Приложение» не нужна: обе ведут в Telegram и легли бы друг на друга. */
+  body:has(.tp-mbar:not([hidden])) #appButton { display: none; }
+}

@@ -5,7 +5,13 @@
 
 * кто виден людям — ``trainer_is_listed`` / ``CATALOG_LISTED_SQL`` (как ``/api/public/trainers/{id}``);
 * «Записаться» — только при ``can_book`` (подписка с онлайн-записью, PDEC-025); без неё — «Написать»;
-* окна — те же, что «Ближайшие окна» на карточке катка (``_trainer_windows_on_arena``), по всем площадкам.
+* время — те же свободные слоты, что «Ближайшие окна» на карточке катка (``_trainer_windows_on_arena``),
+  по всем площадкам, на неделю с сегодняшнего дня;
+* направления (вкладки карточки цены) — ``catalog_directions``, цены — только тарифы услуг.
+
+Дизайн — PDEC-033, ``.ai/epics/trainer-catalog/design/trainer.html`` (TASK-356): первый экран —
+фото, имя, галочки из анкеты и тёмная карточка цены с ближайшим временем. Число занятий не
+показываем никогда, оценку — от 3 оценок, слова тренера — дословно, нет данных — нет блока.
 
 Тренер не в каталоге (черновик, снят, пауза) — страница по его прямой ссылке открывается, но
 ``noindex``, её нет в sitemap и на страницах катков: «запись по вашей ссылке работает как обычно».
@@ -18,17 +24,28 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
+from src.application.catalog_directions import (
+    DIRECTIONS,
+    Direction,
+    catalog_path,
+    direction_by_key,
+    load_service_directions,
+    service_direction,
+)
+from src.application.ice_city_day import city_slug, format_price_minor, human_date, plural_ru
 from src.application.place_links import place_page_url, public_telegram_cta_url, trainer_start_param
 from src.application.site_trainers import trainer_initial, trainer_line, trainer_name, trainer_photo_url
-from src.application.style_b import esc, section
+from src.application.style_b import esc
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL, trainer_is_listed
+from src.shared.city_locative import city_locative
 from src.shared.html_template import fill_placeholders
 
 TRAINER_PREFIX = "/t"
@@ -37,8 +54,20 @@ _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b
 _TELEGRAM_USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
 TITLE_LIMIT = 60
 DESCRIPTION_LIMIT = 155
-#: Сколько окон показываем на странице — дальше «все окна» в Telegram.
-WINDOWS_SHOWN = 6
+#: Ближайшее время в карточке цены — дальше «Всё время на неделю».
+NEAR_SHOWN = 3
+#: Слотов на неделю с запасом: у тренера с плотным расписанием их бывает десятки.
+WEEK_WINDOWS_LIMIT = 60
+WEEK_DAYS = 7
+#: Оценку показываем, когда оценок хотя бы столько (решение владельца).
+RATING_MIN_COUNT = 3
+#: Сколько других тренеров направления показываем внизу.
+PEERS_SHOWN = 6
+_WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+_MONTHS_GEN = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
 
 
 # ── Адрес ────────────────────────────────────────────────────────────
@@ -63,19 +92,150 @@ def parse_trainer_ref(ref: str) -> int | None:
     return int(head) if head.isdigit() and 0 < int(head) < 2**31 else None
 
 
+
+
+# ── Цены — только тарифы услуги ──────────────────────────────────────
+
+#: Подписи тарифов для людей (вид тарифа — ``price_tier_kind``, их ровно пять) в порядке прототипа.
+_TIER_LABELS: tuple[tuple[str, str], ...] = (
+    ("child", "Ребёнок"),
+    ("adult", "Взрослый"),
+    ("two_children", "Двое детей"),
+    ("adult_and_child", "Взрослый + ребёнок"),
+    ("two_adults", "Двое взрослых"),
+)
+_KID_KINDS = frozenset({"child", "two_children", "adult_and_child"})
+_ADULT_KINDS = frozenset({"adult", "two_adults", "adult_and_child"})
+
+
+def _money(cents: int, currency: str) -> str:
+    return format_price_minor(int(cents), currency).replace(" ", " ")
+
+
+def _tier_cents(svc: Mapping[str, Any]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for t in svc.get("price_tiers") or []:
+        try:
+            cents = int(t.get("price_cents") or 0)
+        except (TypeError, ValueError):
+            continue
+        if cents > 0 and t.get("tier_kind"):
+            out.setdefault(str(t["tier_kind"]), cents)
+    return out
+
+
+def service_prices(svc: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Все тарифы услуги строками «Цены»: [(подпись, сумма)]. Без тарифов — цена услуги «Занятие»."""
+    cur = str(svc.get("currency_code") or "BYN")
+    tiers = _tier_cents(svc)
+    if tiers:
+        return [(label, _money(tiers[kind], cur)) for kind, label in _TIER_LABELS if kind in tiers]
+    try:
+        cents = int(svc.get("price_cents") or 0)
+    except (TypeError, ValueError):
+        cents = 0
+    return [("Занятие", _money(cents, cur))] if cents > 0 else []
+
+
+def card_prices(svc: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Цена в карточке: ребёнок и взрослый (равны — одной строкой); «на двоих» — в «Ценах».
+
+    Только тарифы «на двоих» — показываем их, иначе карточка соврала бы «цену уточните».
+    """
+    cur = str(svc.get("currency_code") or "BYN")
+    tiers = _tier_cents(svc)
+    child, adult = tiers.get("child"), tiers.get("adult")
+    if child and adult and child == adult:
+        return [("Дети и взрослые", _money(child, cur))]
+    single = [(label, _money(tiers[k], cur)) for k, label in _TIER_LABELS[:2] if k in tiers]
+    return single or service_prices(svc)
+
+
+def _audience(services: Sequence[Mapping[str, Any]]) -> str:
+    """«Дети и взрослые.» — только когда в тарифах есть и детский, и взрослый вид.
+
+    Один «Взрослый» ничего не говорит: это вид тарифа по умолчанию у старых цен.
+    """
+    kinds = {k for s in services for k in _tier_cents(s)}
+    kids, adults = bool(kinds & _KID_KINDS), bool(kinds & _ADULT_KINDS)
+    if kids and adults:
+        return "Дети и взрослые."
+    if kids and not adults:
+        return "Дети."
+    return ""
+
+
+def _role_line(directions: Sequence[Direction]) -> str:
+    """«С нуля и для тех, кто уже катается.» — из направлений тренера, словами направления."""
+    parts = [d.role for d in directions if d.role]
+    if not parts:
+        return ""
+    phrase = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " и " + parts[-1]
+    return phrase[:1].upper() + phrase[1:] + "."
+
+
+def _service_view(svc: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "name": str(svc.get("service_name") or "").strip(),
+        "description": str(svc.get("description") or "").strip(),
+        "prices": service_prices(svc),
+        "card_prices": card_prices(svc),
+        "pair": "adult_and_child" in _tier_cents(svc),
+        "min": _min_cents(svc),
+    }
+
+
+def _min_cents(svc: Mapping[str, Any]) -> int | None:
+    from src.application.trainer_min_price import trainer_min_session_price
+
+    found = trainer_min_session_price({"services": [svc]})
+    return found[0] if found else None
+
+
+def group_services(services: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(направления тренера по порядку вкладок, «Ещё ведёт» — услуги без вкладки).
+
+    Услуги внутри направления — в порядке ``service_ids`` направления, своя услуга — после них.
+    """
+    by_dir: dict[str, list[Mapping[str, Any]]] = {}
+    other: list[dict[str, Any]] = []
+    for svc in services:
+        if not str(svc.get("service_name") or "").strip():
+            continue
+        key = service_direction(svc)
+        if key:
+            by_dir.setdefault(key, []).append(svc)
+        else:
+            other.append(_service_view(svc))
+    dirs: list[dict[str, Any]] = []
+    for d in DIRECTIONS:
+        svcs = by_dir.get(d.key)
+        if not svcs:
+            continue
+        order = d.service_ids
+        svcs = sorted(svcs, key=lambda s: order.index(int(s["service_id"])) if int(s["service_id"]) in order else 99)
+        views = [_service_view(s) for s in svcs]
+        for v, s in zip(views, svcs):
+            # Своя услуга во вкладке — со своим названием: это слова тренера, не наше направление.
+            v["own"] = int(s["service_id"]) not in order
+        dirs.append({"key": d.key, "tab": d.tab, "services": views, "raw": svcs})
+    return dirs, other
+
+
 # ── Данные ───────────────────────────────────────────────────────────
 
+_EDUCATION_LINE = {
+    "Среднее специальное": "Среднее специальное образование",
+    "Высшее профильное": "Высшее профильное образование",
+    "Высшее непрофильное": "Высшее непрофильное образование",
+    "Курсы и сертификация": "Курсы и сертификация",
+    "Ученая степень": "Учёная степень",
+}
 
-def _service_price(svc: Mapping[str, Any]) -> str:
-    """«от 50 BYN» / «50 BYN» / пусто — как цена услуги на карточке Mini App."""
-    cur = str(svc.get("currency_code") or "BYN")
-    lo, hi = svc.get("price_byn_min"), svc.get("price_byn_max")
-    if lo is None:
-        lo = hi = svc.get("price_byn")
-    if lo is None:
-        return ""
-    price = format_price_minor(int(round(float(lo) * 100)), cur).replace(" ", " ")
-    return price if hi is None or float(hi) == float(lo) else "от " + price
+
+def education_line(value: Any) -> str:
+    """Категория из анкеты строкой галочки; «Другое» и свободный текст на карточку не выносим."""
+    return _EDUCATION_LINE.get(str(value or "").strip(), "")
 
 
 def contact_url(trainer_id: int, telegram_username: str | None, *, listed: bool) -> str | None:
@@ -90,6 +250,8 @@ def contact_url(trainer_id: int, telegram_username: str | None, *, listed: bool)
     return f"/r/tg/{int(trainer_id)}" if listed else f"https://t.me/{handle}"
 
 
+
+
 async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]]:
     """Площадки тренера, которые он показывает клиентам; у катка со страницей — ссылка на ``/p/…``."""
     from src.application.indexnow import SITEMAP_PLACE_WHERE_SQL
@@ -99,7 +261,7 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
         await session.execute(
             text(
                 f"""
-                SELECT a.id, a.name, c.name AS city_name,
+                SELECT a.id, a.name, a.city_id, c.name AS city_name, COALESCE(a.venue_type, 'ice') AS venue_type,
                        CASE WHEN {SITEMAP_PLACE_WHERE_SQL} THEN p.slug END AS slug
                 FROM trainer_arenas ta
                 JOIN arenas a ON a.id = ta.arena_id
@@ -116,7 +278,9 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
         {
             "id": int(r["id"]),
             "name": str(r["name"] or "").strip(),
+            "city_id": int(r["city_id"]) if r["city_id"] is not None else None,
             "city_name": str(r["city_name"] or "").strip(),
+            "is_ice": str(r["venue_type"]) == "ice",
             "slug": r["slug"],
         }
         for r in rows
@@ -124,16 +288,157 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
     ]
 
 
-async def _city_name(session: AsyncSession, city_id: Any) -> str:
-    if not city_id:
-        return ""
-    row = (await session.execute(text("SELECT name FROM cities WHERE id = :id"), {"id": int(city_id)})).first()
-    return str(row[0]) if row and row[0] else ""
+async def _catalog_city(session: AsyncSession, trainer_id: int, profile_city_id: Any) -> dict[str, Any] | None:
+    """Город каталога тренера (``trainer_cities`` — по нему его находит ``/c/{city}/trenery``).
+
+    Городов несколько — тот, где его катки; нет ни одного — город из анкеты.
+    """
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT c.id, c.name FROM trainer_cities tc JOIN cities c ON c.id = tc.city_id
+                WHERE tc.trainer_id = :tid
+                ORDER BY EXISTS (
+                    SELECT 1 FROM trainer_arenas ta JOIN arenas a ON a.id = ta.arena_id
+                    WHERE ta.trainer_id = :tid AND a.city_id = c.id AND COALESCE(ta.is_public, true)
+                ) DESC, c.id
+                LIMIT 1
+                """
+            ),
+            {"tid": int(trainer_id)},
+        )
+    ).first()
+    if row is None and profile_city_id:
+        row = (
+            await session.execute(text("SELECT id, name FROM cities WHERE id = :id"), {"id": int(profile_city_id)})
+        ).first()
+    if row is None or not row[1]:
+        return None
+    return {"id": int(row[0]), "name": str(row[1])}
+
+
+async def _glide_since(session: AsyncSession, trainer_id: int) -> date | None:
+    """Месяц первой состоявшейся записи (``completed``), без песочницы и записи тренера к себе."""
+    from src.application.trainer_client_invite_tracking import sql_booking_not_self
+
+    first = (
+        await session.execute(
+            text(
+                f"""
+                SELECT MIN(s.slot_date) FROM bookings b JOIN slots s ON s.id = b.slot_id
+                WHERE b.trainer_id = :tid AND b.status = 'completed' AND NOT COALESCE(b.is_sandbox, false)
+                  AND {sql_booking_not_self(trainer_id_expr=":tid")}
+                """
+            ),
+            {"tid": int(trainer_id)},
+        )
+    ).scalar()
+    return first if isinstance(first, date) else None
+
+
+async def _rentals(session: AsyncSession, arena_ids: Sequence[int]) -> dict[int, int]:
+    """Прокат коньков по катку — минимум ближайших сеансов, как «Прокат» на странице катка."""
+    if not arena_ids:
+        return {}
+    rows = await session.execute(
+        text(
+            """
+            SELECT arena_id, MIN(price_rental_minor)
+            FROM ice_sessions
+            WHERE arena_id = ANY(:ids) AND status = 'active' AND price_rental_minor > 0
+              AND ends_at_utc > NOW() AND starts_at_utc < NOW() + INTERVAL '14 days'
+            GROUP BY arena_id
+            """
+        ),
+        {"ids": list(arena_ids)},
+    )
+    return {int(a): int(m) for a, m in rows.fetchall() if m is not None}
+
+
+async def _arena_peer_counts(session: AsyncSession, trainer_id: int, arena_ids: Sequence[int]) -> dict[int, int]:
+    """«Здесь же ещё N тренеров»: другие тренеры каталога на катке."""
+    if not arena_ids:
+        return {}
+    rows = await session.execute(
+        text(
+            f"""
+            SELECT ta.arena_id, COUNT(DISTINCT t.id)
+            FROM trainer_arenas ta JOIN trainers t ON t.id = ta.trainer_id
+            WHERE ta.arena_id = ANY(:ids) AND COALESCE(ta.is_public, true) AND t.id <> :tid
+              AND t.status::text <> 'deactivated' AND {CATALOG_LISTED_SQL}
+            GROUP BY ta.arena_id
+            """
+        ),
+        {"ids": list(arena_ids), "tid": int(trainer_id)},
+    )
+    return {int(a): int(n) for a, n in rows.fetchall()}
+
+
+async def _peers(
+    session: AsyncSession, trainer_id: int, city_id: int, direction: Direction
+) -> list[dict[str, Any]]:
+    """Другие тренеры направления в городе — по правилу каталога: услуга направления и (цена или каток)."""
+    from src.application.trainer_use_cases import list_active_trainers_for_client
+    from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
+
+    items, _total = await list_active_trainers_for_client(session, limit=50, offset=0, city_id=int(city_id))
+    bodies = [sanitize_trainer_for_public_catalog(raw) for raw in items if int(raw["id"]) != int(trainer_id)]
+    if not bodies:
+        return []
+    await load_service_directions(session, [s for b in bodies for s in b.get("services") or []])
+    ids = [int(b["id"]) for b in bodies]
+    rows = await session.execute(
+        text(
+            """
+            SELECT ta.trainer_id, a.name FROM trainer_arenas ta JOIN arenas a ON a.id = ta.arena_id
+            WHERE ta.trainer_id = ANY(:ids) AND COALESCE(ta.is_public, true) AND a.city_id = :city
+              AND a.merged_into_arena_id IS NULL AND COALESCE(a.venue_type, 'ice') = 'ice'
+            ORDER BY ta.trainer_id, a.sort_order NULLS LAST, a.id
+            """
+        ),
+        {"ids": ids, "city": int(city_id)},
+    )
+    arenas: dict[int, list[str]] = {}
+    for tid, name in rows.fetchall():
+        if str(name or "").strip():
+            arenas.setdefault(int(tid), []).append(str(name).strip())
+    out: list[dict[str, Any]] = []
+    for body in bodies:
+        svcs = [s for s in body.get("services") or [] if service_direction(s) == direction.key]
+        if not svcs:
+            continue
+        tid = int(body["id"])
+        cents = sorted({c for s in svcs for c in ([*_tier_cents(s).values()] or [_min_cents(s) or 0]) if c > 0})
+        cur = str(svcs[0].get("currency_code") or "BYN")
+        where = arenas.get(tid, [])
+        if not cents and not where:
+            continue
+        name = trainer_name(body)
+        out.append(
+            {
+                "name": name,
+                "initial": trainer_initial(name),
+                "photo_url": trainer_photo_url(body),
+                "path": trainer_path(tid, name),
+                "price": (("" if len(cents) == 1 else "от\u00a0") + _money(cents[0], cur)) if cents else "цену уточните",
+                "where": (
+                    where[0] if len(where) == 1 else f"{len(where)} {plural_ru(len(where), 'каток', 'катка', 'катков')}"
+                )
+                if where
+                else "",
+            }
+        )
+        if len(out) >= PEERS_SHOWN:
+            break
+    return out
 
 
 async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:
     """Всё для ``/t/…`` или ``None`` (нет такого тренера или он деактивирован)."""
+    from src.application.arena_media import attach_arena_media_payloads
     from src.application.arena_public_use_cases import _trainer_windows_on_arena
+    from src.application.style_b import b_photo_url, media_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
     from src.application.trainer_min_price import enrich_min_session_price
     from src.application.trainer_use_cases import get_trainer
@@ -149,36 +454,64 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
     ).scalar()
     body = sanitize_trainer_for_public_catalog(raw)
     await enrich_min_session_price(session, [body])
+    services = [dict(s) for s in body.get("services") or []]
+    await load_service_directions(session, services)
+    directions, other = group_services(services)
     availability = await get_trainer_booking_availability(session, int(trainer_id))
     can_book = bool(availability.get("can_book"))
     profile = body.get("profile") or {}
+    tz = ZoneInfo(NOTIFICATION_TZ)
+    today = datetime.now(tz).date()
     windows: list[dict[str, Any]] = []
     if can_book:
         windows = (
-            await _trainer_windows_on_arena(session, None, [int(trainer_id)], timezone_name=NOTIFICATION_TZ)
+            await _trainer_windows_on_arena(
+                session, None, [int(trainer_id)], timezone_name=NOTIFICATION_TZ, limit=WEEK_WINDOWS_LIMIT
+            )
         ).get(int(trainer_id), [])
+        windows = [w for w in windows if (datetime.fromisoformat(w["starts_at"]).date() - today).days < WEEK_DAYS]
     name = trainer_name(body)
+    arenas = await _arenas(session, int(trainer_id))
+    await attach_arena_media_payloads(session, arenas)
+    rentals = await _rentals(session, [a["id"] for a in arenas])
+    peer_counts = await _arena_peer_counts(session, int(trainer_id), [a["id"] for a in arenas])
+    for a in arenas:
+        a["photo_url"] = media_url(a.pop("hero", None), size="card")
+        a.pop("gallery", None)
+        a["rental_minor"] = rentals.get(a["id"])
+        a["peers"] = peer_counts.get(a["id"], 0)
+    city = await _catalog_city(session, int(trainer_id), profile.get("city_id"))
+    primary = direction_by_key(directions[0]["key"]) if directions else None
+    peers = await _peers(session, int(trainer_id), city["id"], primary) if city and primary and listed else []
+    photos = body.get("photos") or []
+    big_photo = b_photo_url((photos[0] or {}).get("file_key")) if photos else None
+    first_name = str(profile.get("first_name") or "").strip()
     return {
         "id": int(trainer_id),
         "name": name,
+        "first_name": first_name if any(ch.isalpha() for ch in first_name) else "",
         "initial": trainer_initial(name),
-        "photo_url": trainer_photo_url(body),
+        "photo_url": big_photo or trainer_photo_url(body),
         "line": trainer_line(body),
         "listed": listed,
         "can_book": can_book,
         "contact_url": contact_url(int(trainer_id), username, listed=listed),
-        "city_name": await _city_name(session, profile.get("city_id")),
+        "city": city,
+        "city_name": city["name"] if city else "",
         "experience_years": profile.get("experience_years"),
         "description": str(profile.get("description") or "").strip(),
+        "education": education_line(profile.get("education")),
         "rating_avg": profile.get("rating_avg"),
         "rating_count": int(profile.get("rating_count") or 0),
-        "services": [
-            {"name": str(s.get("service_name") or "").strip(), "price": _service_price(s)}
-            for s in body.get("services") or []
-            if str(s.get("service_name") or "").strip()
-        ],
-        "arenas": await _arenas(session, int(trainer_id)),
-        "windows": windows[:WINDOWS_SHOWN],
+        "glide_since": await _glide_since(session, int(trainer_id)),
+        "directions": directions,
+        "other_services": other,
+        "audience": _audience([s for d in directions for s in d["raw"]]),
+        "services": [{"name": str(s.get("service_name") or "").strip()} for s in services if str(s.get("service_name") or "").strip()],
+        "arenas": arenas,
+        "peers": peers,
+        "today": today,
+        "windows": windows,
         "path": trainer_path(int(trainer_id), name),
     }
 
@@ -304,22 +637,8 @@ def primary_cta(
     return None
 
 
-# ── Вёрстка ──────────────────────────────────────────────────────────
 
-
-def _rating_text(page: Mapping[str, Any]) -> str:
-    avg, n = page.get("rating_avg"), int(page.get("rating_count") or 0)
-    if not avg or n <= 0:
-        return ""
-    return f"★ {float(avg):.1f}".replace(".", ",") + f" · {n} {plural_ru(n, 'отзыв', 'отзыва', 'отзывов')}"
-
-
-def _experience_text(page: Mapping[str, Any]) -> str:
-    years = page.get("experience_years")
-    if not years or int(years) <= 0:
-        return ""
-    y = int(years)
-    return f"опыт {y} {plural_ru(y, 'год', 'года', 'лет')}"
+# ── SEO ──────────────────────────────────────────────────────────────
 
 
 def page_title(page: Mapping[str, Any]) -> str:
@@ -374,42 +693,13 @@ def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:
     if places:
         person["workLocation"] = places
     payload = json.dumps(person, ensure_ascii=False).replace("</", "<\\/")
-    return f'<script type="application/ld+json">{payload}</script>'
+    # Тег <script> уже в шаблоне b.html — здесь только JSON (раньше выходил тег в теге).
+    return payload
 
 
 def _absolute(base_url: str, url: str) -> str:
     return url if url.startswith("http") else f"{(base_url or '').rstrip('/')}{url}"
 
-
-def _hero(page: Mapping[str, Any]) -> str:
-    photo = page.get("photo_url")
-    ava = (
-        f'<img class="tp-ava" src="{esc(photo)}" alt="" width="96" height="96" decoding="async" />'
-        if photo
-        else f'<span class="tp-ava tp-ava--mono" aria-hidden="true">{esc(page["initial"])}</span>'
-    )
-    facts = [f for f in (_experience_text(page), _rating_text(page)) if f]
-    city = str(page.get("city_name") or "")
-    kicker = "Тренер" + (f" · {city}" if city else "")
-    facts_html = f'<p class="tp-facts">{esc(" · ".join(facts))}</p>' if facts else ""
-    return (
-        '<header class="tp-hero">'
-        '<div class="tp-bar"><a class="b-brand" href="/">Glideclub</a></div>'
-        f'<div class="tp-head">{ava}<div><p class="tp-kicker">{esc(kicker)}</p>'
-        f'<h1 class="tp-name">{esc(page["name"])}</h1>{facts_html}</div></div></header>'
-    )
-
-
-def _cta_html(cta: tuple[str, str] | None, *, note: str = "", beacon: str | None = None) -> str:
-    if not cta:
-        return ""
-    label, href = cta
-    note_html = f'<p class="tp-note">{esc(note)}</p>' if note else ""
-    beacon_attr = f' data-catalog-phone-beacon="{esc(beacon)}"' if beacon else ""
-    return (
-        f'<div class="tp-cta"><a class="b-tgbtn tp-cta__btn" href="{esc(href)}" rel="nofollow"{beacon_attr}>'
-        f"{esc(label)}</a>{note_html}</div>"
-    )
 
 
 def write_beacon_url(page: Mapping[str, Any], *, via: str | None = None) -> str:
@@ -431,94 +721,454 @@ def write_beacon_url(page: Mapping[str, Any], *, via: str | None = None) -> str:
     )
 
 
-def _arena_names(page: Mapping[str, Any]) -> dict[int, str]:
-    return {int(a["id"]): str(a["name"]) for a in page.get("arenas") or []}
 
 
-def _windows_html(page: Mapping[str, Any], href: str | None) -> str:
-    wins = page.get("windows") or []
-    if not wins or not href:
+# ── Вёрстка ──────────────────────────────────────────────────────────
+
+
+def _rating_ok(page: Mapping[str, Any]) -> bool:
+    return bool(page.get("rating_avg")) and int(page.get("rating_count") or 0) >= RATING_MIN_COUNT
+
+
+def _n_ratings(n: int) -> str:
+    return f"{n} {plural_ru(n, 'оценка', 'оценки', 'оценок')}"
+
+
+def _avg(page: Mapping[str, Any]) -> str:
+    return f"{float(page['rating_avg']):.1f}".replace(".", ",")
+
+
+def _years(page: Mapping[str, Any]) -> int:
+    try:
+        return max(0, int(page.get("experience_years") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _since_text(page: Mapping[str, Any]) -> str:
+    since = page.get("glide_since")
+    return f"В Glide с {_MONTHS_GEN[since.month - 1]} {since.year}" if isinstance(since, date) else ""
+
+
+def _arenas_check(page: Mapping[str, Any]) -> str:
+    """Галочка «Каток: …» — ледовые катки из анкеты (лыжероллерная трасса — не каток)."""
+    names = [str(a["name"]) for a in page.get("arenas") or [] if a.get("is_ice")]
+    if not names:
         return ""
-    names = _arena_names(page)
-    rows = []
-    for w in wins:
-        where = names.get(int(w["arena_id"])) if w.get("arena_id") is not None else ""
-        rows.append(
-            f'<a class="b-row tp-win" href="{esc(href)}" rel="nofollow">'
-            f'<span class="b-row__body"><span class="b-row__title">{esc(w["day"])}, {esc(w["time"])}</span>'
-            + (f'<span class="b-row__line">{esc(where)}</span>' if where else "")
-            + '</span><span class="b-row__cta">Записаться</span></a>'
-        )
-    return section("Свободные окна", f'<div class="b-list">{"".join(rows)}</div>', nosnippet=True)
+    if len(names) > 2:
+        rest = len(names) - 2
+        return f"Каток: {names[0]}, {names[1]} и ещё {rest} {plural_ru(rest, 'каток', 'катка', 'катков')}"
+    return "Каток: " + ", ".join(names)
 
 
-def _services_html(page: Mapping[str, Any]) -> str:
-    rows = [
-        f'<div class="b-row"><span class="b-row__body"><span class="b-row__title">{esc(s["name"])}</span></span>'
-        + (f'<span class="b-row__cta tp-price">{esc(s["price"])}</span>' if s.get("price") else "")
+def _win_label(w: Mapping[str, Any]) -> str:
+    """«сб, 17:15» — день недели всегда, и сегодня тоже: подпись «сегодня» — строкой ниже."""
+    starts = datetime.fromisoformat(str(w["starts_at"]))
+    return f"{_WEEKDAYS[starts.weekday()]}, {w['time']}"
+
+
+def _near_label(w: Mapping[str, Any], today: date) -> tuple[str, str]:
+    """(«сб, 17:15», «сегодня» / «завтра» / «10 ноября»)."""
+    return _win_label(w), human_date(datetime.fromisoformat(str(w["starts_at"])).date(), today=today)
+
+
+def _write_attrs(page: Mapping[str, Any], via: str | None) -> str:
+    return f' rel="nofollow" data-catalog-phone-beacon="{esc(write_beacon_url(page, via=via))}"'
+
+
+def _tiers_html(prices: Sequence[tuple[str, str]]) -> str:
+    if not prices:
+        return '<p class="tp-noprice">Цену уточните у тренера</p>'
+    return (
+        '<div class="tp-tiers">'
+        + "".join(f"<div><span>{esc(label)}</span><b>{esc(val)}</b></div>" for label, val in prices)
         + "</div>"
-        for s in page.get("services") or []
+    )
+
+
+def _panel_html(services: Sequence[Mapping[str, Any]]) -> str:
+    """Цена направления в карточке; услуг в направлении несколько — у каждой своя подпись."""
+    if len(services) == 1 and not services[0].get("own"):
+        return _tiers_html(services[0]["card_prices"])
+    return "".join(
+        f'<div class="tp-svc"><span class="tp-svc__name">{esc(s["name"])}</span>{_tiers_html(s["card_prices"])}</div>'
+        for s in services
+    )
+
+
+def _also_line(page: Mapping[str, Any]) -> str:
+    names = [s["name"] for s in page.get("other_services") or [] if s.get("name")]
+    return f'<p class="tp-also">Ещё ведёт: {esc(", ".join(names))}.</p>' if names else ""
+
+
+def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str] | None, via: str | None) -> str:
+    dirs = page.get("directions") or []
+    panels = [(d["key"], d["tab"], d["services"]) for d in dirs]
+    also = _also_line(page)
+    if not panels and page.get("other_services"):
+        # Своих вкладок нет (только ролики, ОФП, своя услуга) — карточка показывает их цены.
+        panels = [("other", "", page["other_services"])]
+        also = ""
+    parts: list[str] = []
+    if len(panels) > 1:
+        parts.append(
+            '<div class="tp-dsw" role="group" aria-label="Занятие">'
+            + "".join(
+                f'<button type="button" data-dir="{esc(k)}" aria-pressed="{"true" if i == 0 else "false"}">{esc(tab)}</button>'
+                for i, (k, tab, _s) in enumerate(panels)
+            )
+            + "</div>"
+        )
+    for i, (k, _tab, svcs) in enumerate(panels):
+        parts.append(f'<div class="tp-panel" data-dir-panel="{esc(k)}"{"" if i == 0 else " hidden"}>{_panel_html(svcs)}</div>')
+    if not panels:
+        parts.append(_tiers_html([]))
+    wins = page.get("windows") or []
+    contact = page.get("contact_url")
+    if page.get("can_book") and app:
+        if wins:
+            today = page["today"]
+            near = []
+            for w in wins[:NEAR_SHOWN]:
+                label, sub = _near_label(w, today)
+                near.append(
+                    f'<a href="{esc(app)}" rel="nofollow" aria-label="Записаться: {esc(label)}, {esc(sub)}">'
+                    f"{esc(label)}<small>{esc(sub)}</small></a>"
+                )
+            parts.append(
+                '<div><div class="tp-lbl">Ближайшее время — записаться</div>'
+                f'<div class="tp-near">{"".join(near)}</div></div>'
+            )
+        else:
+            parts.append(
+                '<p class="tp-nowin">На этой неделе свободного времени нет.</p>'
+                f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></div>'
+            )
+        if contact:
+            parts.append(
+                f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(contact)}"{_write_attrs(page, via)}>Написать в Telegram</a></div>'
+            )
+        parts.append(also)
+        parts.append('<span class="tp-fine">Запись в Telegram, оплата тренеру на месте.</span>')
+    else:
+        if cta:
+            label, href = cta
+            attrs = _write_attrs(page, via) if href == contact else ' rel="nofollow"'
+            parts.append(f'<div class="tp-act"><a class="tp-btn tp-btn--tg" href="{esc(href)}"{attrs}>{esc(label)}</a></div>')
+        parts.append(also)
+        parts.append('<span class="tp-fine">Онлайн-записи нет — напишите и договоритесь о времени.</span>')
+    return f'<div class="tp-pcard" id="tp-pcard">{"".join(p for p in parts if p)}</div>'
+
+
+def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
+    photo = page.get("photo_url")
+    if photo and not compact:
+        media = f'<div class="tp-photo"><img src="{esc(photo)}" alt="{esc(page["name"])}" decoding="async" fetchpriority="high" /></div>'
+    elif photo:
+        media = f'<img class="tp-ava" src="{esc(photo)}" alt="" width="72" height="72" decoding="async" />'
+    else:
+        media = f'<span class="tp-ava tp-ava--mono" aria-hidden="true">{esc(page["initial"])}</span>'
+    years = _years(page)
+    badge = f'<span class="tp-badge">Тренирует {years} {plural_ru(years, "год", "года", "лет")}</span>' if years else ""
+    head = f'{badge}<h1 class="tp-name">{esc(page["name"])}</h1>'
+    if not compact:
+        dirs = [direction_by_key(d["key"]) for d in page.get("directions") or []]
+        role = " ".join(x for x in (_role_line(dirs), str(page.get("audience") or "")) if x)
+        if role:
+            head += f'<p class="tp-role">{esc(role)}</p>'
+        if _rating_ok(page):
+            head += (
+                f'<p class="tp-rate"><i aria-hidden="true">★</i>{esc(_avg(page))} '
+                f"<span>· {esc(_n_ratings(int(page['rating_count'])))}</span></p>"
+            )
+        since = _since_text(page)
+        if since:
+            head += f'<p class="tp-since">{esc(since)}</p>'
+        checks = [c for c in (page.get("education"), _arenas_check(page)) if c]
+        if checks:
+            head += '<ul class="tp-checks">' + "".join(f"<li>{esc(c)}</li>" for c in checks) + "</ul>"
+    if photo and not compact:
+        top = media + f'<div class="tp-head">{head}</div>'
+    else:
+        top = f'<div class="tp-top">{media}<div class="tp-head">{head}</div></div>'
+    return f'<section class="tp-th">{top}{card}</section>'
+
+
+def _sec(title: str, body: str, *, sec_id: str = "", nosnippet: bool = False) -> str:
+    if not body:
+        return ""
+    id_attr = f' id="{esc(sec_id)}"' if sec_id else ""
+    snip = " data-nosnippet" if nosnippet else ""
+    return f'<section class="tp-sec"{id_attr}{snip}><h2 class="b-h2 tp-h2">{esc(title)}</h2>{body}</section>'
+
+
+def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str:
+    wins = page.get("windows") or []
+    if not (page.get("can_book") and app and wins):
+        return ""
+    today: date = page["today"]
+    by_day: dict[date, list[Mapping[str, Any]]] = {}
+    for w in wins:
+        by_day.setdefault(datetime.fromisoformat(str(w["starts_at"])).date(), []).append(w)
+    cells = []
+    for i in range(WEEK_DAYS):
+        day = today + timedelta(days=i)
+        slots = by_day.get(day, [])
+        inner = (
+            "".join(
+                f'<a class="tp-slot" href="{esc(app)}" rel="nofollow" '
+                f'aria-label="Записаться: {esc(_WEEKDAYS[day.weekday()])}, {day.day}, {esc(w["time"])}">{esc(w["time"])}</a>'
+                for w in slots
+            )
+            if slots
+            else '<span class="tp-no">нет свободного времени</span>'
+        )
+        cells.append(
+            f'<div class="tp-day{" tp-day--today" if i == 0 else ""}{"" if slots else " tp-day--empty"}">'
+            f'<b>{esc(_WEEKDAYS[day.weekday()])}</b><span class="tp-d">{day.day}</span>{inner}</div>'
+        )
+    body = f'<div class="tp-week">{"".join(cells)}</div>'
+    if page.get("contact_url"):
+        body += (
+            '<div class="tp-request"><div><b>Не подходит время?</b>'
+            "<span>Напишите тренеру — он предложит своё.</span></div>"
+            f'<a class="tp-btn tp-btn--ghost" href="{esc(page["contact_url"])}"{_write_attrs(page, via)}>Написать</a></div>'
+        )
+    return _sec("Всё время на неделю", body, sec_id="time", nosnippet=True)
+
+
+def _prices_html(page: Mapping[str, Any]) -> str:
+    cards = []
+    groups = [(d["tab"], d["services"]) for d in page.get("directions") or []]
+    groups += [(s["name"], [s]) for s in page.get("other_services") or [] if s.get("prices")]
+    if not any(s.get("prices") for _t, svcs in groups for s in svcs):
+        return ""
+    for title, svcs in groups:
+        inner = ""
+        for s in svcs:
+            if len(svcs) > 1 or s.get("own"):
+                inner += f'<p class="tp-svc__name">{esc(s["name"])}</p>'
+            if s.get("prices"):
+                inner += (
+                    "<dl>"
+                    + "".join(f"<div><dt>{esc(label)}</dt><dd>{esc(val)}</dd></div>" for label, val in s["prices"])
+                    + "</dl>"
+                )
+            else:
+                inner += '<p class="tp-muted">Цену уточните у тренера</p>'
+            if s.get("description"):
+                inner += f'<p class="tp-words">{esc(s["description"])}</p>'
+        cards.append(f'<div class="tp-card"><h3>{esc(title)}</h3>{inner}</div>')
+    body = (
+        f'<div class="tp-plist">{"".join(cards)}</div>'
+        '<p class="tp-muted">Цена за одно занятие. Билет на каток покупается отдельно, на кассе.</p>'
+    )
+    return _sec("Цены", body)
+
+
+def _about_html(page: Mapping[str, Any], *, ratings: bool) -> str:
+    cards = []
+    desc = str(page.get("description") or "")
+    if desc:
+        cards.append(f'<div class="tp-card"><h3>О тренере</h3><p class="tp-words">{esc(desc)}</p></div>')
+    if ratings and _rating_ok(page):
+        n = int(page["rating_count"])
+        avg = float(page["rating_avg"])
+        stars = "★" * max(1, min(5, round(avg)))
+        what = f"{_n_ratings(n)} — все на 5 из 5" if avg >= 5 else f"{_n_ratings(n)}, в среднем {_avg(page)} из 5"
+        cards.append(
+            '<div class="tp-card"><h3>Оценки учеников</h3>'
+            f'<div class="tp-score"><b>{esc(_avg(page))}</b><div><i aria-hidden="true">{stars}</i><span>{esc(what)}</span></div></div>'
+            '<p class="tp-muted">Оценить занятие можно только после того, как оно состоялось.</p></div>'
+        )
+    return f'<section class="tp-sec"><div class="tp-two">{"".join(cards)}</div></section>' if cards else ""
+
+
+def _after_html(page: Mapping[str, Any]) -> str:
+    if not page.get("can_book"):
+        return ""
+    who = str(page.get("first_name") or "") or "Тренер"
+    steps = (
+        ("Откроется Telegram", "Устанавливать ничего не нужно."),
+        (f"{who} подтвердит", "Подтверждение придёт сообщением в Telegram."),
+        ("Оплата на месте", "Платите при встрече. Билет на каток — на кассе."),
+        ("Планы поменялись", "Отмените запись в «Мои записи»."),
+    )
+    body = '<div class="tp-after">' + "".join(
+        f"<div><i>{i}</i><b>{esc(b)}</b><span>{esc(s)}</span></div>" for i, (b, s) in enumerate(steps, 1)
+    ) + "</div>"
+    return _sec("Что будет после записи", body)
+
+
+def _faq_html(page: Mapping[str, Any]) -> str:
+    """«Перед первым занятием»: три вопроса главного направления, ответы из данных — или вопроса нет."""
+    dirs = page.get("directions") or []
+    if not dirs:
+        return ""
+    d = direction_by_key(dirs[0]["key"])
+    rents = [
+        (str(a["name"]), _money(int(a["rental_minor"]), "BYN"))
+        for a in page.get("arenas") or []
+        if a.get("rental_minor")
     ]
-    return section("Занятия и цены", f'<div class="b-list">{"".join(rows)}</div>') if rows else ""
+    pair = any(s.get("pair") for s in dirs[0]["services"])
+    city = page.get("city")
+    items: list[tuple[str, str]] = []
+    for q, a in d.faq:
+        if a is not None:
+            ans = esc(a)
+        elif q == "Своих коньков нет" and rents:
+            ans = esc("Возьмите в прокате: " + ", ".join(f"в {n} — {p}" for n, p in rents[:3]) + ".")
+        elif q == "Можно заниматься вместе с ребёнком?" and pair:
+            ans = esc("Да, у тренера есть цена «взрослый + ребёнок» — она в ценах выше.")
+        elif q == "Где потом поиграть?" and city:
+            ans = f'Расписание ОХМ — в разделе «С клюшкой» на <a href="/c/{esc(city_slug(city["name"]))}">странице города</a>.'
+        else:
+            continue
+        items.append((q, ans))
+        if len(items) >= 3:
+            break
+    if not items:
+        return ""
+    body = '<div class="tp-faq">' + "".join(
+        f'<details{" open" if i == 0 else ""}><summary>{esc(q)}</summary><p>{a}</p></details>'
+        for i, (q, a) in enumerate(items)
+    ) + "</div>"
+    if city:
+        body += f'<a class="tp-link" href="{esc(catalog_path(city["name"], d))}">Все вопросы о занятиях «{esc(d.tab)}» →</a>'
+    return _sec("Перед первым занятием", body)
 
 
 def _arenas_html(page: Mapping[str, Any], base_url: str) -> str:
-    rows = []
+    cards = []
     for a in page.get("arenas") or []:
-        if a.get("slug") and a.get("city_name"):
-            href = place_page_url(base_url=base_url, city_name=a["city_name"], slug=a["slug"])
-            rows.append(
-                f'<a class="b-row" href="{esc(href)}"><span class="b-row__body"><span class="b-row__title">{esc(a["name"])}</span>'
-                '<span class="b-row__line">Расписание катка и тренеры</span></span><span class="b-row__cta">›</span></a>'
-            )
-        else:
-            rows.append(f'<div class="b-row"><span class="b-row__body"><span class="b-row__title">{esc(a["name"])}</span></span></div>')
-    return section("Где занимается", f'<div class="b-list">{"".join(rows)}</div>') if rows else ""
+        img = f'<img src="{esc(a["photo_url"])}" alt="" loading="lazy" decoding="async" />' if a.get("photo_url") else ""
+        peers = int(a.get("peers") or 0)
+        lines = f"<b>{esc(a['name'])}</b>"
+        if peers:
+            lines += f"<span>Здесь же ещё {peers} {plural_ru(peers, 'тренер', 'тренера', 'тренеров')}</span>"
+        rent = f"Прокат — {_money(int(a['rental_minor']), 'BYN')}" if a.get("rental_minor") else ""
+        href = (
+            place_page_url(base_url=base_url, city_name=a["city_name"], slug=a["slug"])
+            if a.get("slug") and a.get("city_name")
+            else ""
+        )
+        tail = " · ".join(x for x in (rent, "расписание ›" if href else "") if x)
+        if tail:
+            lines += f"<em>{esc(tail)}</em>"
+        klass = "tp-ar" + ("" if img else " tp-ar--noimg")
+        inner = f"{img}<div>{lines}</div>"
+        cards.append(f'<a class="{klass}" href="{esc(href)}">{inner}</a>' if href else f'<div class="{klass}">{inner}</div>')
+    return _sec("Где занимается", f'<div class="tp-arenas">{"".join(cards)}</div>') if cards else ""
 
 
-def _about_html(page: Mapping[str, Any]) -> str:
-    desc = str(page.get("description") or "")
-    return section("О тренере", f'<p class="tp-about">{esc(desc)}</p>') if desc else ""
+def _in_city(page: Mapping[str, Any]) -> str:
+    name = str(page.get("city_name") or "")
+    loc = city_locative(name) if name else None
+    return f"в {loc}" if loc else ""
 
 
-def _trainer_hook() -> str:
+def _peers_html(page: Mapping[str, Any]) -> str:
+    peers = page.get("peers") or []
+    dirs = page.get("directions") or []
+    if not peers or not dirs:
+        return ""
+    d = direction_by_key(dirs[0]["key"])
+    minis = []
+    for p in peers:
+        img = (
+            f'<img src="{esc(p["photo_url"])}" alt="" loading="lazy" decoding="async" />'
+            if p.get("photo_url")
+            else f'<span class="tp-mini__mono" aria-hidden="true">{esc(p["initial"])}</span>'
+        )
+        sub = " · ".join(x for x in (p.get("price"), p.get("where")) if x)
+        minis.append(f'<a class="tp-mini" href="{esc(p["path"])}">{img}<div><b>{esc(p["name"])}</b><span>{esc(sub)}</span></div></a>')
+    title = " ".join(x for x in (f"Ещё тренеры «{d.tab}»", _in_city(page)) if x)
+    return _sec(title, f'<div class="tp-more">{"".join(minis)}</div>')
+
+
+def _band_html(page: Mapping[str, Any]) -> str:
     """Тренер среди родителей — тоже вход в Glide (trainer-acquisition, канал 3)."""
+    where = _in_city(page)
     return (
-        '<p class="tp-hook"><a href="/trainers?utm_source=glide&amp;utm_medium=trainer_page">'
-        "Вы тренер? Ведите запись так же — бесплатная страница и ссылка для учеников ›</a></p>"
+        f'<div class="tp-band"><div><b>{esc("Тренируете " + where + "?" if where else "Тренируете?")}</b>'
+        "<span>Бесплатная страница тренера и ссылка для ваших учеников.</span></div>"
+        '<a class="tp-btn tp-btn--tg" href="/trainers?utm_source=glide&amp;utm_medium=trainer_page">Создать страницу</a></div>'
     )
+
+
+def _mbar_html(page: Mapping[str, Any], app: str | None) -> str:
+    """Закреплённая «Записаться на …» на телефоне — пока карточка цены не на экране."""
+    wins = page.get("windows") or []
+    if not (page.get("can_book") and app and wins):
+        return ""
+    label = _win_label(wins[0])
+    return (
+        f'<div class="tp-mbar" id="tp-mbar" hidden><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">'
+        f"Записаться на {esc(label)}</a><small>Запись в Telegram · оплата на месте</small></div>"
+    )
+
+
+_PAGE_SCRIPT = (
+    "<script>(function(){"
+    "var card=document.getElementById('tp-pcard');if(!card)return;"
+    "var tabs=card.querySelectorAll('[data-dir]');"
+    "function pick(k){for(var i=0;i<tabs.length;i++){tabs[i].setAttribute('aria-pressed',tabs[i].getAttribute('data-dir')===k?'true':'false');}"
+    "var ps=card.querySelectorAll('[data-dir-panel]');for(var j=0;j<ps.length;j++){ps[j].hidden=ps[j].getAttribute('data-dir-panel')!==k;}}"
+    "for(var i=0;i<tabs.length;i++){tabs[i].addEventListener('click',function(e){pick(e.currentTarget.getAttribute('data-dir'));});}"
+    "var bar=document.getElementById('tp-mbar');"
+    "if(bar&&typeof IntersectionObserver==='function'){"
+    "new IntersectionObserver(function(es){bar.hidden=es[es.length-1].isIntersecting;}).observe(card);}"
+    "})();</script>"
+)
 
 
 def render_trainer_page(
     page: Mapping[str, Any], *, base_url: str, client_bot_username: str | None, via: str | None = None
 ) -> str:
     from src.application.catalog_home_page import catalog_home_og_image_url
+    from src.application.catalog_list_share import catalog_list_share_tail
     from src.application.place_links import breadcrumb_script
     from src.application.public_analytics import public_analytics_head_html_from_settings
     from src.application.public_site_footer import render_site_footer_html
     from src.application.public_web_cta import phone_beacon_script, public_page_view_beacon_script
-    from src.application.catalog_list_share import catalog_list_share_tail
     from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, public_fonts_head_html
 
-    canonical = f"{(base_url or '').rstrip('/')}{page['path']}"
-    cta = primary_cta(base_url, page, client_bot_username=client_bot_username, via=via)
+    base = (base_url or "").rstrip("/")
+    canonical = f"{base}{page['path']}"
     app = app_url(base_url, page, client_bot_username=client_bot_username, via=via)
-    note = "Откроется Glide в Telegram — ничего устанавливать не нужно." if page["can_book"] else ""
-    writes = bool(cta and page.get("contact_url") and cta[1] == page["contact_url"])
+    cta = primary_cta(base_url, page, client_bot_username=client_bot_username, via=via)
+    # Пришли по ссылке самого тренера (свои ученики): время сверху, без продающих блоков.
+    own = via == SHARE_VIA
+    city = page.get("city")
+    crumbs_html = ""
+    if city:
+        crumbs_html = (
+            '<nav class="tp-crumbs" aria-label="Навигация">'
+            f'<a href="/c/{esc(city_slug(city["name"]))}">{esc(city["name"])}</a> › '
+            f'<a href="{esc(catalog_path(city["name"]))}">Тренеры</a> › <span>{esc(page["name"])}</span></nav>'
+        )
+    card = _price_card(page, app=app, cta=cta, via=via)
     body = (
-        _hero(page)
-        + '<main class="tp-body">'
-        + _cta_html(cta, note=note, beacon=write_beacon_url(page, via=via) if writes else None)
-        + (_windows_html(page, app) if page["can_book"] else "")
-        + _services_html(page)
+        '<div class="tp">'
+        '<div class="tp-bar"><a class="b-brand" href="/">Glideclub</a></div>'
+        + crumbs_html
+        + _hero(page, card, compact=own)
+        + _week_html(page, app, via)
+        + _prices_html(page)
+        + _about_html(page, ratings=not own)
+        + _after_html(page)
+        + _faq_html(page)
         + _arenas_html(page, base_url)
-        + _about_html(page)
-        + _trainer_hook()
-        + "</main>"
+        + ("" if own else _peers_html(page) + _band_html(page))
+        + "</div>"
+        + _mbar_html(page, app)
+        + _PAGE_SCRIPT
     )
-    crumbs = [("Glideclub", f"{(base_url or '').rstrip('/')}/")]
-    if page.get("city_name"):
-        crumbs.append((str(page["city_name"]), f"{(base_url or '').rstrip('/')}/c/{city_slug(str(page['city_name']))}"))
+    crumbs = [("Glideclub", f"{base}/")]
+    if city:
+        crumbs.append((str(city["name"]), f"{base}/c/{city_slug(str(city['name']))}"))
+        crumbs.append(("Тренеры", f"{base}{catalog_path(str(city['name']))}"))
     crumbs.append((str(page["name"]), canonical))
     body += breadcrumb_script(canonical, crumbs)
     body += phone_beacon_script(body)
@@ -540,7 +1190,7 @@ def render_trainer_page(
             "__OG_LOCALE__": "ru_RU",
             "__ROBOTS__": "index, follow" if page["listed"] else "noindex, follow",
             "__HEAD_EXTRA__": f'<link rel="stylesheet" href="/static/share/trainer-page.css?v={TRAINER_PAGE_STYLE_VERSION}" />',
-            "__JSONLD__": jsonld(page, canonical=canonical, base_url=base_url) if page["listed"] else "",
+            "__JSONLD__": jsonld(page, canonical=canonical, base_url=base_url) if page["listed"] else "{}",
             "__PUBLIC_FONTS_HEAD__": public_fonts_head_html(),
             "__PUBLIC_ANALYTICS_HEAD__": public_analytics_head_html_from_settings(),
             "__TOKENS_V__": TOKENS_VERSION,
@@ -557,4 +1207,4 @@ def render_trainer_page(
     )
 
 
-TRAINER_PAGE_STYLE_VERSION = "2026110602"
+TRAINER_PAGE_STYLE_VERSION = "2026110701"
