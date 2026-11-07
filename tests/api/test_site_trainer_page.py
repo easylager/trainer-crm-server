@@ -77,7 +77,8 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
     assert "Свободные окна" in html
     # Каток — ссылкой на страницу катка сайта, не в Telegram.
     assert f'href="https://glide.example{place["path"]}"' in html
-    assert "55 BYN" in html
+    # Тарифы фикстуры 45/50 — услуга на странице «от 45», цена из тарифов.
+    assert "от\u00a045\u00a0BYN" in html
 
 
 @pytest.mark.asyncio
