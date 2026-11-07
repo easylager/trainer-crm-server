@@ -166,12 +166,16 @@ def _audience(services: Sequence[Mapping[str, Any]]) -> str:
 
 
 def _role_line(directions: Sequence[Direction]) -> str:
-    """«С нуля и для тех, кто уже катается.» — из направлений тренера, словами направления."""
+    """«Занятия с нуля и для уже катающихся.» — из направлений тренера, словами направления.
+
+    Роли однотипные («с нуля», «для уже катающихся», «по фигурному катанию»), поэтому склеиваются
+    после существительного «Занятия» без согласования падежей.
+    """
     parts = [d.role for d in directions if d.role]
     if not parts:
         return ""
     phrase = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " и " + parts[-1]
-    return phrase[:1].upper() + phrase[1:] + "."
+    return f"Занятия {phrase}."
 
 
 def _service_view(svc: Mapping[str, Any]) -> dict[str, Any]:

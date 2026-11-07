@@ -293,7 +293,7 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
     assert "Ещё ведёт: Катание на роликах, Растяжка для фигуристов." in html
     # Первый экран: стаж, строка направлений и аудитории, оценка от 3, галочки из анкеты.
     assert "Тренирует 6 лет" in html
-    assert "С нуля, для тех, кто уже катается и фигурное катание. Дети и взрослые." in html
+    assert "Занятия с нуля, для уже катающихся и по фигурному катанию. Дети и взрослые." in html
     assert "<span>· 7 оценок</span>" in html and "7 оценок — все на 5 из 5" in html
     assert "<li>Высшее профильное образование</li>" in html and f"<li>Каток: {place['name']}</li>" in html
     # «В Glide с» — месяц первой состоявшейся записи; запись тренера к себе (40 дней назад) не в счёт.
@@ -406,3 +406,21 @@ async def test_link_and_share_pages_carry_the_slot_into_the_bot_payload(app_use_
         bare = (await client.get(f"{trainer_path(tid2, name2)}?via=link")).text
     # Без окон слота нет — прежняя постоянная ссылка.
     assert f'start=welcome_ref_{tid2}"' in bare
+
+
+def test_role_line_reads_as_one_grammatical_phrase_for_every_combination() -> None:
+    from src.application.catalog_directions import DIRECTIONS
+    from src.application.site_trainer_page import _role_line
+
+    by = {d.slug: d for d in DIRECTIONS}
+    zero, better, hockey, fig = by["s-nulya"], by["uzhe-katayus"], by["s-klyushkoy"], by["figurnoe"]
+    assert _role_line([zero]) == "Занятия с нуля."
+    assert _role_line([better]) == "Занятия для уже катающихся."
+    assert _role_line([fig]) == "Занятия по фигурному катанию."
+    assert _role_line([zero, fig]) == "Занятия с нуля и по фигурному катанию."
+    assert _role_line([zero, better]) == "Занятия с нуля и для уже катающихся."
+    assert _role_line([zero, better, fig]) == "Занятия с нуля, для уже катающихся и по фигурному катанию."
+    assert _role_line([zero, better, fig, hockey]) == (
+        "Занятия с нуля, для уже катающихся, по фигурному катанию и по хоккейному катанию."
+    )
+    assert _role_line([]) == ""

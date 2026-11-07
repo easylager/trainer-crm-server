@@ -227,6 +227,10 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert _tab(html, "С клюшкой") == "1" and _tab(html, "Фигурное") is None
     assert f'href="{base}/s-klyushkoy"' in html
     assert "Научиться кататься на коньках с нуля" in html and "Мне 35 — не поздно начинать?" in html
+    # Лид «Все» не обещает «ставят ход»; оплата на месте остаётся в шаге записи и в meta description.
+    assert "Учат кататься с нуля и ставят технику. Есть фигурное катание и хоккей." in all_r.text
+    assert 'name="description" content="Учат кататься с нуля и ставят технику.' in all_r.text
+    assert "Оплата тренеру на месте." not in re.search(r'<p class="tcat-lead">(.*?)</p>', all_r.text).group(1)
     # Сверху — с онлайн-записью: A первая; окно — ссылка в запись Mini App через учётный прокси.
     cards = _cards(html)
     assert names["A"] in cards[0] and names["B"] in cards[1]
