@@ -11,10 +11,55 @@ const webapp = path.resolve(__dirname, '../../../static/webapp');
 
 function makeEl(id) {
   return {
-    id, innerHTML: '', hidden: true, handlers: {},
+    id, innerHTML: '', hidden: true, handlers: {}, attrs: {},
     addEventListener(t, fn) { this.handlers[t] = fn; },
     querySelector() { return null; },
+    setAttribute(k, v) { this.attrs[k] = String(v); },
+    removeAttribute(k) { delete this.attrs[k]; },
   };
+}
+
+/**
+ * Шторка с «живым» фокусом: из innerHTML вытаскиваем кнопки и поля как фокусируемые узлы, а .sheet — как окно.
+ * Настоящего DOM нет — этого хватает, чтобы проверять порядок фокуса, ловушку Tab и возврат фокуса.
+ */
+function makeSheet(doc) {
+  const el = makeEl('sheet');
+  let html = '';
+  let nodes = [];
+  let dlg = null;
+  const mk = (tag, attrStr) => {
+    const attrs = {};
+    String(attrStr).replace(/([\w-]+)="([^"]*)"/g, (_, k, v) => { attrs[k] = v; return ''; });
+    const n = {
+      tag, attrs, isConnected: true, selectionStart: 0, selectionEnd: 0,
+      getAttribute: (k) => (k in attrs ? attrs[k] : null),
+      focus() { doc.activeElement = n; },
+      setSelectionRange(a, b) { n.selectionStart = a; n.selectionEnd = b; },
+    };
+    return n;
+  };
+  Object.defineProperty(el, 'innerHTML', {
+    get: () => html,
+    set(v) {
+      html = v;
+      nodes = [];
+      dlg = null;
+      if (!v) return;
+      const dm = /<div class="sheet"([^>]*)>/.exec(v);
+      if (dm) dlg = mk('div', dm[1]);
+      const re = /<(button|input|textarea)\b([^>]*)>/g;
+      let m;
+      while ((m = re.exec(v))) {
+        if (/\bdisabled\b/.test(m[2])) continue;
+        nodes.push(mk(m[1], m[2]));
+      }
+    },
+  });
+  el.querySelectorAll = () => nodes.slice();
+  el.querySelector = (sel) => (sel === '.sheet' ? dlg : null);
+  el.contains = (n) => !!n && (n === dlg || nodes.includes(n));
+  return el;
 }
 
 function resp(status, data, delay = 0) {
@@ -32,21 +77,24 @@ const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
  * routes: [{ match(call) → bool, reply(call) → Promise<Response> }]; первые совпавшие выигрывают.
  * profiles: ответ GET /client/profiles (можно функцией — на каждый вызов).
  */
-function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null } = {}) {
+function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null } = {}) {
   const calls = [];
   const app = makeEl('app');
-  const sheet = makeEl('sheet');
+  const doc = { activeElement: null, body: { tag: 'body' }, keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
+  doc.activeElement = doc.body;
+  const sheet = makeSheet(doc);
   const store = {};
   const ctx = {
     console, setTimeout, clearTimeout, Promise, URL, URLSearchParams, Intl, Date, JSON, Math, Number, String, Object, Array, Error, TypeError, isFinite,
     location: { search, href: 'https://x/static/webapp/trainers' + search, pathname: '/static/webapp/trainers' },
     history: { state: null, pushState() {}, replaceState() {}, back() {} },
     localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
-    document: { getElementById: (id) => (id === 'app' ? app : id === 'sheet' ? sheet : null), querySelector: () => null },
+    document: doc,
     scrollTo() {}, scrollY: 0,
     addEventListener() {},
     navigated: [],
   };
+  doc.getElementById = (id) => (id === 'app' ? app : id === 'sheet' ? sheet : null);
   ctx.window = ctx;
   ctx.globalThis = ctx;
   ctx.ClientShell = { navigate: (p) => ctx.navigated.push(p) };
@@ -85,6 +133,16 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
     hapticSuccess() {}, unreachableState: () => null, writeAccessBlockHtml: () => '', bindWriteAccessBlock() {},
   };
   vm.createContext(ctx);
+  if (tg) {
+    // Настоящий write-access.js на подменённом Telegram: ворота и состояние — как в продакшене.
+    ctx.Telegram = { WebApp: tg };
+    vm.runInContext(fs.readFileSync(path.join(webapp, 'write-access.js'), 'utf8'), ctx, { filename: 'write-access.js' });
+    ctx.BookingClient.unreachableState = () => {
+      const st = ctx.GlideWriteAccess.writeAccessState(tg);
+      return st === 'askable' || st === 'unsupported' ? st : '';
+    };
+    ctx.BookingClient.writeAccessBlockHtml = (st) => (st ? '<div data-wa-block="' + st + '">Разрешите сообщения</div>' : '');
+  }
   for (const f of ['trainer-showcase-model.js', 'ru-person-name.js', 'trainer-showcase-main.js']) {
     vm.runInContext(fs.readFileSync(path.join(webapp, f), 'utf8'), ctx, { filename: f });
   }
@@ -103,6 +161,12 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
     sheetInput(field, value) {
       sheet.handlers.input({ target: { value, getAttribute: (k) => (k === 'data-field' ? field : null) } });
     },
+    key(k, shiftKey = false) {
+      const ev = { key: k, shiftKey, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+      doc.keyHandlers.forEach((fn) => fn(ev));
+      return ev;
+    },
+    doc,
     posts: (prefix) => calls.filter((c) => c.method === 'POST' && c.url.split('?')[0] === prefix),
   };
 }
