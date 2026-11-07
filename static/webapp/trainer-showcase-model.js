@@ -1,0 +1,615 @@
+/**
+ * Витрина тренеров и запись в Mini App (TASK-357, PDEC-033) — чистая логика без DOM.
+ *
+ * Три слоя текста (эпик trainer-catalog): направления пишем мы (здесь), слова тренера — дословно
+ * (описание, «О себе»), цифры — из данных (`/api/public/trainer-showcase`, `/client/slots`).
+ * Браузер: window.TrainerShowcaseModel. Node-тесты: module.exports.
+ */
+(function (root, factory) {
+  'use strict';
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  if (root) root.TrainerShowcaseModel = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  /* ── Направления = вкладки. «С клюшкой» = Хоккейное катание (4) + ОХМ (6). Ролики (5) и ОФП/СФП (7)
+     вкладками не бывают — только на карточке тренера. Своя услуга (is_public=false) во вкладки не идёт. */
+  var DIRECTIONS = [
+    { key: 'all', title: 'Все', ids: null,
+      lead: 'Учат с нуля, ставят ход, фигурное катание и хоккей.' },
+    { key: 's-nulya', title: 'С нуля', ids: [1],
+      lead: 'Для детей и взрослых, которые ни разу не стояли на коньках или стояли пару раз.' },
+    { key: 'uzhe-katayus', title: 'Уже катаюсь', ids: [2],
+      lead: 'Ровный ход, повороты, торможение и катание назад — для детей и взрослых.' },
+    { key: 'figurnoe', title: 'Фигурное катание', ids: [3],
+      lead: 'Прыжки, вращения, дорожки шагов и программы — для детей и взрослых.' },
+    { key: 's-klyushkoy', title: 'С клюшкой', ids: [4, 6],
+      lead: 'Стойка, ход, повороты и торможение — чтобы на площадке думать об игре, а не о коньках.' },
+  ];
+  var TAB_SERVICE_IDS = [1, 2, 3, 4, 6];
+
+  var TIER_TITLE = {
+    child: 'Ребёнок',
+    adult: 'Взрослый',
+    two_children: 'Двое детей',
+    adult_and_child: 'Взрослый и ребёнок',
+    two_adults: 'Двое взрослых',
+  };
+  var SINGLE_KINDS = ['child', 'adult'];
+  var DUO_KINDS = ['two_children', 'adult_and_child', 'two_adults'];
+
+  var MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+    'сентября', 'октября', 'ноября', 'декабря'];
+  var WEEKDAY_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+  function plural(n, one, few, many) {
+    var m = n % 10;
+    var h = n % 100;
+    if (m === 1 && h !== 11) return one;
+    if (m >= 2 && m <= 4 && (h < 12 || h > 14)) return few;
+    return many;
+  }
+
+  function word(n, one, few, many) {
+    return n + ' ' + plural(n, one, few, many);
+  }
+
+  function direction(key) {
+    for (var i = 0; i < DIRECTIONS.length; i++) if (DIRECTIONS[i].key === key) return DIRECTIONS[i];
+    return null;
+  }
+
+  function directionKeyForServiceId(sid) {
+    var n = Number(sid);
+    for (var i = 1; i < DIRECTIONS.length; i++) if (DIRECTIONS[i].ids.indexOf(n) >= 0) return DIRECTIONS[i].key;
+    return null;
+  }
+
+  /** Услуги тренера во вкладке: публичные и из её списка. «Все» — любая вкладочная. */
+  function servicesInDirection(trainer, key) {
+    var dir = direction(key) || DIRECTIONS[0];
+    var ids = dir.ids || TAB_SERVICE_IDS;
+    return (trainer.services || []).filter(function (s) {
+      return s.is_public !== false && ids.indexOf(Number(s.service_id)) >= 0;
+    });
+  }
+
+  function serviceHasPrice(s) {
+    if ((s.price_tiers || []).some(function (t) { return Number(t.price_cents) > 0; })) return true;
+    return Number(s.price_cents) > 0;
+  }
+
+  /** Правило показа (эпик): услуга направления **и** (цена **или** каток). */
+  function trainerInDirection(trainer, key) {
+    var svcs = servicesInDirection(trainer, key);
+    if (!svcs.length) return false;
+    return svcs.some(serviceHasPrice) || (trainer.arenas || []).length > 0;
+  }
+
+  function trainerOnArena(trainer, arenaId) {
+    if (arenaId == null) return true;
+    return (trainer.arenas || []).some(function (a) { return Number(a.id) === Number(arenaId); });
+  }
+
+  /** Направления, где тренер виден (для переключателя на его экране). */
+  function trainerDirections(trainer) {
+    return DIRECTIONS.slice(1).filter(function (d) { return trainerInDirection(trainer, d.key); });
+  }
+
+  /** Сортировка (подпись на витрине): с онлайн-записью — по ближайшему окну; дальше — как пришли (рейтинг). */
+  function sortForShowcase(items) {
+    return items
+      .map(function (t, i) { return { t: t, i: i }; })
+      .sort(function (a, b) {
+        var ra = rank(a.t);
+        var rb = rank(b.t);
+        if (ra !== rb) return ra - rb;
+        if (ra === 0) {
+          var sa = a.t.windows[0].starts_at;
+          var sb = b.t.windows[0].starts_at;
+          if (sa !== sb) return sa < sb ? -1 : 1;
+        }
+        return a.i - b.i;
+      })
+      .map(function (x) { return x.t; });
+    function rank(t) {
+      if (t.can_book && (t.windows || []).length) return 0;
+      if (t.can_book) return 1;
+      return 2;
+    }
+  }
+
+  function visibleTrainers(items, key, arenaId) {
+    return sortForShowcase(
+      (items || []).filter(function (t) { return trainerInDirection(t, key) && trainerOnArena(t, arenaId); })
+    );
+  }
+
+  function tabCounts(items, arenaId) {
+    var out = {};
+    DIRECTIONS.forEach(function (d) { out[d.key] = visibleTrainers(items, d.key, arenaId).length; });
+    return out;
+  }
+
+  /** Катки для фильтра: лёд у тренеров вкладки, с числом тренеров. */
+  function arenaOptions(items, key) {
+    var byId = {};
+    (items || []).forEach(function (t) {
+      if (!trainerInDirection(t, key)) return;
+      (t.arenas || []).forEach(function (a) {
+        if (!byId[a.id]) byId[a.id] = { id: a.id, name: a.name, count: 0 };
+        byId[a.id].count += 1;
+      });
+    });
+    return Object.keys(byId)
+      .map(function (k) { return byId[k]; })
+      .sort(function (a, b) { return b.count - a.count || (a.name < b.name ? -1 : 1); });
+  }
+
+  /* ── Цены ───────────────────────────────────────────────────────────── */
+
+  function formatMoney(cents, currency) {
+    var n = Number(cents) / 100;
+    var num = n === Math.floor(n) ? String(n) : n.toFixed(2).replace('.', ',');
+    return num + ' ' + (currency === 'RUB' ? 'руб.' : 'BYN');
+  }
+
+  function tierByKind(service, kind) {
+    var tiers = (service && service.price_tiers) || [];
+    for (var i = 0; i < tiers.length; i++) if (tiers[i].tier_kind === kind) return tiers[i];
+    return null;
+  }
+
+  /** «Ребёнок — 50 BYN · взрослый — 55 BYN» / «Дети и взрослые — 50 BYN» / «55 BYN за занятие» / «Цену уточните у тренера». */
+  function cardPriceHtml(service) {
+    if (!service) return 'Цену уточните у тренера';
+    var cur = service.currency_code || 'BYN';
+    var child = tierByKind(service, 'child');
+    var adult = tierByKind(service, 'adult');
+    var b = function (c) { return '<b>' + formatMoney(c, cur) + '</b>'; };
+    if (child && adult) {
+      if (Number(child.price_cents) === Number(adult.price_cents)) return 'Дети и взрослые — ' + b(child.price_cents);
+      return 'Ребёнок — ' + b(child.price_cents) + ' · взрослый — ' + b(adult.price_cents);
+    }
+    if (child) return 'Ребёнок — ' + b(child.price_cents);
+    if (adult) return 'Взрослый — ' + b(adult.price_cents);
+    var tiers = service.price_tiers || [];
+    if (tiers.length) {
+      var min = Math.min.apply(null, tiers.map(function (t) { return Number(t.price_cents); }));
+      return 'от ' + b(min) + ' за занятие';
+    }
+    if (Number(service.price_cents) > 0) return b(service.price_cents) + ' за занятие';
+    return 'Цену уточните у тренера';
+  }
+
+  /** «Кого учит»: из тарифов; тарифов нет — строки нет. */
+  function whoTeaches(services) {
+    var kids = false;
+    var adults = false;
+    (services || []).forEach(function (s) {
+      (s.price_tiers || []).forEach(function (t) {
+        if (t.tier_kind === 'child' || t.tier_kind === 'two_children' || t.tier_kind === 'adult_and_child') kids = true;
+        if (t.tier_kind === 'adult' || t.tier_kind === 'two_adults' || t.tier_kind === 'adult_and_child') adults = true;
+      });
+    });
+    if (kids && adults) return 'детей и взрослых';
+    if (kids) return 'детей';
+    if (adults) return 'взрослых';
+    return '';
+  }
+
+  function experienceBadge(years) {
+    var n = Number(years);
+    if (!isFinite(n) || n < 1) return '';
+    n = Math.floor(n);
+    return 'Тренирует ' + word(n, 'год', 'года', 'лет');
+  }
+
+  /** Оценка — только при 3+ оценках (дизайн). */
+  function ratingLine(avg, count) {
+    var c = Number(count) || 0;
+    var a = Number(avg);
+    if (c < 3 || !isFinite(a) || a <= 0) return '';
+    return '★ ' + a.toFixed(1).replace('.', ',') + ' · ' + word(c, 'оценка', 'оценки', 'оценок');
+  }
+
+  /** «В Glide с апреля 2026» из «2026-04». Число занятий не показываем никогда (решение владельца). */
+  function glideSince(ym) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+    if (!m) return '';
+    var mi = Number(m[2]) - 1;
+    if (mi < 0 || mi > 11) return '';
+    return 'В Glide с ' + MONTHS_GEN[mi] + ' ' + m[1];
+  }
+
+  function whereLine(arenas) {
+    var list = arenas || [];
+    if (!list.length) return '';
+    if (list.length === 1) return list[0].name;
+    return 'на ' + word(list.length, 'катке', 'катках', 'катках');
+  }
+
+  function lessonLine(minutes) {
+    var n = Number(minutes);
+    if (!isFinite(n) || n <= 0) return '';
+    return n + ' мин, индивидуально';
+  }
+
+  /** Строки каркаса карточки; пустые не показываем. */
+  function cardFacts(trainer, key) {
+    var svcs = servicesInDirection(trainer, key);
+    var rows = [];
+    var who = whoTeaches(svcs);
+    if (who) rows.push(['Кого учит', who]);
+    // «45 мин, индивидуально» — про онлайн-запись (окна на одного); без неё длительность и формат решает тренер.
+    var lesson = trainer.can_book ? lessonLine(trainer.session_duration_minutes) : '';
+    if (lesson) rows.push(['Занятие', lesson]);
+    if (!who && trainer.description) rows.unshift(['О себе', '«' + truncate(trainer.description, 90) + '»']);
+    var online = svcs.length > 0 && svcs.every(function (s) { return s.is_online; });
+    var where = online ? 'онлайн' : whereLine(trainer.arenas);
+    if (where) rows.push(['Где', where]);
+    return rows;
+  }
+
+  function truncate(s, n) {
+    var t = String(s || '').replace(/\s+/g, ' ').trim();
+    return t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : t;
+  }
+
+  /* ── «Кто будет заниматься?» ─────────────────────────────────────────── */
+
+  /**
+   * Строки нового ученика из тарифов услуги. Ответ = тариф. Нет тарифа — нет строки;
+   * цены в группе равны — без цены справа. Тарифов нет совсем — Ребёнок/Взрослый без цены, тариф null.
+   */
+  function whoOptions(service, opts) {
+    opts = opts || {};
+    var tiers = (service && service.price_tiers) || [];
+    var cur = (service && service.currency_code) || 'BYN';
+    if (opts.group || !tiers.length) {
+      return {
+        single: SINGLE_KINDS.map(function (k) { return { kind: k, title: TIER_TITLE[k], variantId: null, priceCents: null, price: '' }; }),
+        duo: [],
+      };
+    }
+    function rows(kinds) {
+      var list = kinds
+        .map(function (k) {
+          var t = tierByKind(service, k);
+          return t ? { kind: k, title: TIER_TITLE[k], variantId: Number(t.id), priceCents: Number(t.price_cents), price: formatMoney(t.price_cents, cur) } : null;
+        })
+        .filter(Boolean);
+      var same = list.length > 1 && list.every(function (r) { return r.priceCents === list[0].priceCents; });
+      if (same) list.forEach(function (r) { r.price = ''; });
+      return list;
+    }
+    return { single: rows(SINGLE_KINDS), duo: rows(DUO_KINDS) };
+  }
+
+  /** Поля имён на выбранный тариф: каждому участнику — своё. Взрослому — имя из Telegram. */
+  function nameFields(kind, tgName) {
+    var me = { key: 'self', label: 'Ваше имя', value: tgName || '', placeholder: '' };
+    var kid = { key: 'child', label: 'Имя ребёнка', value: '', placeholder: 'Например, Соня' };
+    switch (kind) {
+      case 'child': return [kid];
+      case 'adult': return [me];
+      case 'two_children':
+        return [
+          { key: 'child', label: 'Имя первого ребёнка', value: '', placeholder: 'Например, Соня' },
+          { key: 'child2', label: 'Имя второго ребёнка', value: '', placeholder: 'Например, Миша' },
+        ];
+      case 'adult_and_child': return [me, kid];
+      case 'two_adults': return [me, { key: 'adult2', label: 'Имя второго взрослого', value: '', placeholder: '' }];
+      default: return [];
+    }
+  }
+
+  /**
+   * Как записать выбор нового ученика при модели «одна запись = один профиль»
+   * (`bookings.client_id` один; второго участника бэкенд не хранит):
+   * профиль записи — первый участник; ребёнок — свой профиль (POST /client/profiles);
+   * второй участник — строкой в комментарии тренеру.
+   */
+  function newClientBookingPlan(kind, names) {
+    names = names || {};
+    var second = '';
+    if (kind === 'two_children') second = names.child2;
+    if (kind === 'adult_and_child') second = names.child;
+    if (kind === 'two_adults') second = names.adult2;
+    var childFirst = kind === 'child' || kind === 'two_children';
+    return {
+      profile: childFirst ? 'child' : 'self',
+      childName: childFirst ? String(names.child || '').trim() : '',
+      selfName: childFirst ? '' : String(names.self || '').trim(),
+      participant: childFirst ? String(names.child || '').trim() : String(names.self || '').trim(),
+      secondName: String(second || '').trim(),
+    };
+  }
+
+  /** Комментарий тренеру: второй участник (если есть) + текст человека. */
+  function bookingComment(secondName, userComment) {
+    var lines = [];
+    if (secondName) lines.push('Второй участник: ' + secondName);
+    var c = String(userComment || '').trim();
+    if (c) lines.push(c);
+    return lines.join('\n');
+  }
+
+  /* ── Постоянный ученик ──────────────────────────────────────────────── */
+
+  function profileKind(p) {
+    return p && p.role === 'self' ? 'adult' : 'child';
+  }
+
+  function duoKindFor(kinds) {
+    var k = kinds.slice().sort().join('+');
+    if (k === 'child+child') return 'two_children';
+    if (k === 'adult+adult') return 'two_adults';
+    if (k === 'adult+child') return 'adult_and_child';
+    return null;
+  }
+
+  /**
+   * Тариф по выбранным профилям. Один профиль — тариф прошлой записи (`lastVariantId`, как
+   * `BookingClient.priceVariantHint`), иначе по виду профиля; двое — тариф на двоих.
+   * `override` — явный «Другой тариф».
+   */
+  function regularTier(service, selected, opts) {
+    opts = opts || {};
+    var tiers = (service && service.price_tiers) || [];
+    if (opts.override != null) {
+      var o = tiers.filter(function (t) { return Number(t.id) === Number(opts.override); })[0];
+      if (o) return o;
+    }
+    if (!selected.length) return null;
+    if (selected.length === 2) return tierByKind(service, duoKindFor(selected.map(profileKind)));
+    var p = selected[0];
+    if (opts.lastVariantId != null && opts.lastProfileId != null && Number(p.client_id) === Number(opts.lastProfileId)) {
+      var last = tiers.filter(function (t) { return Number(t.id) === Number(opts.lastVariantId); })[0];
+      if (last && SINGLE_KINDS.indexOf(last.tier_kind) >= 0) return last;
+    }
+    return tierByKind(service, profileKind(p)) || (tiers.length === 1 ? tiers[0] : null);
+  }
+
+  /** Можно ли отметить ещё одного: до двоих и только если есть тариф на эту пару. */
+  function canAddProfile(service, selected, candidate) {
+    if (selected.length >= 2) return false;
+    if (!selected.length) return true;
+    if (!(service && (service.price_tiers || []).length)) return true;
+    return !!tierByKind(service, duoKindFor([profileKind(selected[0]), profileKind(candidate)]));
+  }
+
+  /** Абонемент профиля у этого тренера, который покроет занятие (списание — после занятия). */
+  function usablePass(passes, trainerId, serviceId) {
+    var now = Date.now();
+    return (passes || []).filter(function (p) {
+      if (Number(p.trainer_id) !== Number(trainerId)) return false;
+      if (p.status !== 'active' || !(Number(p.sessions_remaining) > 0) || p.is_expired) return false;
+      if (p.expires_at && Date.parse(p.expires_at) < now) return false;
+      var ids = p.service_ids || [];
+      return !ids.length || ids.indexOf(Number(serviceId)) >= 0;
+    })[0] || null;
+  }
+
+  /** Строка оплаты под формой. До отправки видна вся цена: занятие, билет, прокат. */
+  function payLine(opts) {
+    var tier = opts.tier;
+    var cur = opts.currency || 'BYN';
+    var online = !!opts.online;
+    var rental = opts.rentalCents ? formatMoney(opts.rentalCents, opts.rentalCurrency || cur) : '';
+    var ticket = online ? '' : rental
+      ? ' Билет на сеанс — в кассе катка, прокат коньков — ' + rental + ', если нужен.'
+      : ' Билет на сеанс — в кассе катка.';
+    if (opts.pass && !opts.duo) {
+      var left = Number(opts.pass.sessions_remaining) - 1;
+      return '<b>Абонемент «' + esc(opts.pass.product_name) + '»</b>: спишем 1, останется ' + left + '.' + ticket;
+    }
+    var priceCents = tier ? tier.price_cents : opts.fallbackCents;
+    if (!(Number(priceCents) > 0)) return 'Цену уточните у тренера.' + ticket;
+    var money = formatMoney(priceCents, cur);
+    if (opts.duo) {
+      return '<b>' + esc(TIER_TITLE[tier.tier_kind] || tier.label) + ' — ' + money + '</b> за двоих тренеру' + (online ? '' : ' на месте') + '.' +
+        (opts.pass ? ' Вместо оплаты тренер может списать занятие с абонемента.' : '') + ticket;
+    }
+    return '<b>' + money + '</b> — тренеру' + (online ? '' : ' на месте') + '.' + ticket;
+  }
+
+  /* ── Даты ───────────────────────────────────────────────────────────── */
+
+  function parseIsoDate(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  }
+
+  function isoOf(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  function addDays(iso, n) {
+    var d = parseIsoDate(iso);
+    d.setUTCDate(d.getUTCDate() + n);
+    return isoOf(d);
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((parseIsoDate(b) - parseIsoDate(a)) / 86400000);
+  }
+
+  /** «Сегодня» / «Завтра» / «Вт, 10 ноября». */
+  function dayLabel(iso, todayIso) {
+    var diff = daysBetween(todayIso, iso);
+    if (diff === 0) return 'Сегодня';
+    if (diff === 1) return 'Завтра';
+    var d = parseIsoDate(iso);
+    var wd = WEEKDAY_SHORT[d.getUTCDay()];
+    return wd.charAt(0).toUpperCase() + wd.slice(1) + ', ' + d.getUTCDate() + ' ' + MONTHS_GEN[d.getUTCMonth()];
+  }
+
+  /** Подпись под временем: «сегодня» / «завтра» / «вт, 10 ноября». */
+  function daySmall(iso, todayIso) {
+    return dayLabel(iso, todayIso).toLowerCase();
+  }
+
+  /** «Сегодня, 17:15–18:00» — конец занятия вместо длительности. */
+  function slotWhen(slot, todayIso) {
+    var t = String(slot.start_time || '').slice(0, 5);
+    var e = String(slot.end_time || '').slice(0, 5);
+    return dayLabel(slot.slot_date, todayIso) + ', ' + t + (e ? '–' + e : '');
+  }
+
+  function slotMinutes(slot) {
+    var a = String(slot.start_time || '').split(':');
+    var b = String(slot.end_time || '').split(':');
+    if (a.length < 2 || b.length < 2) return 0;
+    var m = (+b[0] * 60 + +b[1]) - (+a[0] * 60 + +a[1]);
+    return m > 0 ? m : 0;
+  }
+
+  /** «7–13 ноября» / «28 ноября – 4 декабря». */
+  function weekRange(startIso) {
+    var a = parseIsoDate(startIso);
+    var b = parseIsoDate(addDays(startIso, 6));
+    if (a.getUTCMonth() === b.getUTCMonth()) return a.getUTCDate() + '–' + b.getUTCDate() + ' ' + MONTHS_GEN[b.getUTCMonth()];
+    return a.getUTCDate() + ' ' + MONTHS_GEN[a.getUTCMonth()] + ' – ' + b.getUTCDate() + ' ' + MONTHS_GEN[b.getUTCMonth()];
+  }
+
+  function weekDays(startIso, slots) {
+    var has = {};
+    (slots || []).forEach(function (s) { has[s.slot_date] = true; });
+    var out = [];
+    for (var i = 0; i < 7; i++) {
+      var iso = addDays(startIso, i);
+      var d = parseIsoDate(iso);
+      out.push({ iso: iso, wd: WEEKDAY_SHORT[d.getUTCDay()], day: d.getUTCDate(), off: !has[iso] });
+    }
+    return out;
+  }
+
+  function sortSlots(slots) {
+    return (slots || []).slice().sort(function (a, b) {
+      var ka = a.slot_date + ' ' + a.start_time;
+      var kb = b.slot_date + ' ' + b.start_time;
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+  }
+
+  /** Окно витрины (`windows[]`) → форма слота клиентского API. */
+  function windowToSlot(w) {
+    var s = String(w.starts_at || '');
+    var e = String(w.ends_at || '');
+    return {
+      id: w.slot_id,
+      slot_date: s.slice(0, 10),
+      start_time: s.slice(11, 16),
+      end_time: e ? e.slice(11, 16) : '',
+      arena_id: w.arena_id,
+      capacity: 1,
+    };
+  }
+
+  /* ── Имена ──────────────────────────────────────────────────────────── */
+
+  function isCyrillic(s) {
+    return /^[А-Яа-яЁё-]+$/.test(String(s || ''));
+  }
+
+  /** Дательный падеж имени тренера — тем же склонятелем, что заявки (RuPersonName). Латиница — как есть. */
+  function dativeFirst(first, ruName) {
+    var f = String(first || '').trim().split(/\s+/)[0] || '';
+    if (!f) return 'тренеру';
+    if (!isCyrillic(f) || !ruName || typeof ruName.inflectPersonName !== 'function') return f;
+    return ruName.inflectPersonName(f, '', 'dat') || f;
+  }
+
+  /** «Katusha записывает сама — …». Пол угадываем только по кириллице; иначе — без глагола в роде. */
+  function selfBookingLine(first, ruName) {
+    var f = String(first || '').trim().split(/\s+/)[0] || 'Тренер';
+    if (isCyrillic(f) && ruName && typeof ruName.guessGender === 'function') {
+      return f + ' записывает ' + (ruName.guessGender(f) === 'f' ? 'сама' : 'сам') + ' — напишите и договоритесь о времени и цене.';
+    }
+    return 'Онлайн-записи у ' + f + ' нет — напишите и договоритесь о времени и цене.';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Номер из `requestContact` (ответ разных версий клиента) → E.164 или ''. */
+  function phoneFromContact(res) {
+    if (!res) return '';
+    var c = (res.responseUnsafe && res.responseUnsafe.contact) || res.contact || null;
+    var raw = c && c.phone_number;
+    if (!raw && typeof res.response === 'string') {
+      try {
+        var q = new URLSearchParams(res.response);
+        var cj = JSON.parse(q.get('contact') || 'null');
+        raw = cj && cj.phone_number;
+      } catch (e) { raw = ''; }
+    }
+    var d = String(raw || '').replace(/\D/g, '');
+    return d.length >= 9 ? '+' + d : '';
+  }
+
+  /** Что взять с собой: слой «пишем мы», по направлению; прокат — цифра катка. */
+  function takeWithYou(dirKey, arena) {
+    var base = dirKey === 's-klyushkoy'
+      ? 'Шлем, перчатки и клюшку — как минимум.'
+      : 'Тёплую одежду, в которой удобно двигаться, и перчатки.';
+    if (arena && arena.rental_cents) {
+      base += ' Нет коньков — прокат в ' + arena.name + ', ' + formatMoney(arena.rental_cents, arena.rental_currency) + '.';
+    }
+    return base + ' Билет на сеанс — в кассе.';
+  }
+
+  return {
+    DIRECTIONS: DIRECTIONS,
+    TIER_TITLE: TIER_TITLE,
+    plural: plural,
+    word: word,
+    direction: direction,
+    directionKeyForServiceId: directionKeyForServiceId,
+    servicesInDirection: servicesInDirection,
+    trainerInDirection: trainerInDirection,
+    trainerDirections: trainerDirections,
+    visibleTrainers: visibleTrainers,
+    tabCounts: tabCounts,
+    arenaOptions: arenaOptions,
+    formatMoney: formatMoney,
+    tierByKind: tierByKind,
+    cardPriceHtml: cardPriceHtml,
+    whoTeaches: whoTeaches,
+    experienceBadge: experienceBadge,
+    ratingLine: ratingLine,
+    glideSince: glideSince,
+    cardFacts: cardFacts,
+    whoOptions: whoOptions,
+    nameFields: nameFields,
+    newClientBookingPlan: newClientBookingPlan,
+    bookingComment: bookingComment,
+    profileKind: profileKind,
+    regularTier: regularTier,
+    canAddProfile: canAddProfile,
+    usablePass: usablePass,
+    payLine: payLine,
+    addDays: addDays,
+    daysBetween: daysBetween,
+    dayLabel: dayLabel,
+    daySmall: daySmall,
+    slotWhen: slotWhen,
+    slotMinutes: slotMinutes,
+    weekRange: weekRange,
+    weekDays: weekDays,
+    sortSlots: sortSlots,
+    windowToSlot: windowToSlot,
+    dativeFirst: dativeFirst,
+    selfBookingLine: selfBookingLine,
+    phoneFromContact: phoneFromContact,
+    takeWithYou: takeWithYou,
+    esc: esc,
+  };
+});
