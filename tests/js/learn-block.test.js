@@ -126,7 +126,7 @@ describe('главная и «Мои записи» (city)', () => {
 describe('Поиск → массовое катание (skate)', () => {
   it('«С нуля»: дословно из прототипа, ведёт на вкладку', () => {
     const b = L.build([gaevsky, vlad, klimas, hockey], 'skate', { cityId: 1 });
-    assert.equal(b.line, 'Учат с нуля и тех, кто уже катается. 3 тренера, от 45 BYN.');
+    assert.equal(b.line, 'Учат с нуля — детей и взрослых. 3 тренера, от 45 BYN.');
     assert.equal(b.href, 'trainers?tab=s-nulya&city_id=1');
     assert.deepEqual(b.chips, []);
   });
