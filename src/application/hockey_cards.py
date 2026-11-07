@@ -133,7 +133,7 @@ def render_result_card(*, home: str, away: str, home_score: int, away_score: int
     width, height = CARD_SIZE
     inner = width - 2 * _PAD
 
-    draw.text((_PAD, 70), "кто кого", font=_display(40), fill=(197, 210, 238))
+    draw.text((_PAD, 70), "КТО КОГО?", font=_display(40), fill=(197, 210, 238))
 
     head_font = _largest(draw, head, _display, (150, 132, 116, 104, 92, 84), inner)
     draw.text((_PAD, 190), head, font=head_font, fill=_WHITE)
@@ -182,7 +182,7 @@ def render_crown_card(*, title: str, where: str, winners: Sequence[str], points:
     draw = ImageDraw.Draw(image)
     width, height = CARD_SIZE
     inner = width - 2 * _PAD
-    draw.text((_PAD, 70), "кто кого · " + where, font=_text(40, 800), fill=(197, 210, 238))
+    draw.text((_PAD, 70), "КТО КОГО? · " + where, font=_text(40, 800), fill=(197, 210, 238))
     tile = _crown(170)
     image.paste(tile, (width - _PAD - tile.width + 10, 40), tile)
     head = crown_head(title, winners)
@@ -261,7 +261,7 @@ def render_match_card(*, home: str, away: str, starts_at: datetime, invite: bool
 
     if story:
         head_font = _largest(draw, head, _display, (150, 132, 116, 104, 92), inner)
-        draw.text((pad, 180), "кто кого", font=_display(46), fill=(197, 210, 238))
+        draw.text((pad, 180), "КТО КОГО?", font=_display(46), fill=(197, 210, 238))
         draw.text((pad, 270), head, font=head_font, fill=_YELLOW)
         badge, centers = 340, (650, 1230)
         draw.text((width // 2, (centers[0] + centers[1]) // 2 + 10), "—", font=_display(90), fill=_WHITE, anchor="mm")
@@ -455,7 +455,7 @@ def render_league_card(*, name: str, members: int, names: Sequence[str], next_ma
     top_h = 460
     draw.rectangle((0, 0, width, top_h), fill=_NAVY)
 
-    draw.text((_PAD, 62), "кто кого · лига", font=_display(34), fill=_YELLOW)
+    draw.text((_PAD, 62), "КТО КОГО? · ЛИГА", font=_display(34), fill=_YELLOW)
 
     # Название — крупно: сначала в одну строку, не влезло — в две, кеглем помельче, чтобы
     # обе строки встали над кружками. Ни пустого поля справа, ни обрезанного слова.

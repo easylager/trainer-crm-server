@@ -176,7 +176,7 @@
     send: ['M21 4L3 11l6 2 2 6 3-4 5 4z'],
     plus: ['M12 5v14', 'M5 12h14'],
     bell: ['M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.9 1.9 0 0 0 3.4 0'],
-    globe: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M3 12h18', 'M12 3a14 14 0 0 1 0 18', 'M12 3a14 14 0 0 0 0 18'],
+    globe: ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M3 12h18', 'M12 3c3 2.5 4.5 5.6 4.5 9s-1.5 6.5-4.5 9c-3-2.5-4.5-5.6-4.5-9S9 5.5 12 3z'],
     invite: ['M16 11a4 4 0 1 0-8 0', 'M4 20c1.5-3 4.5-4.5 8-4.5s6.5 1.5 8 4.5', 'M19 3v4', 'M17 5h4'],
   };
 
@@ -208,7 +208,10 @@
   }
 
   function worldDisc(size) {
-    return h('span', { class: 'kk-disc kk-disc--world', style: 'width:' + size + 'px;height:' + size + 'px', 'aria-hidden': 'true' }, [icon(I.globe, Math.round(size * 0.58))]);
+    var globe = icon(I.globe, Math.round(size * 0.58));
+    // Тонкий штрих: в иконке 16–20 px меридианы при 2.2 сливаются в крест.
+    globe.setAttribute('stroke-width', '1.7');
+    return h('span', { class: 'kk-disc kk-disc--world', style: 'width:' + size + 'px;height:' + size + 'px', 'aria-hidden': 'true' }, [globe]);
   }
 
   function ava(name, size, cls) {
@@ -308,41 +311,46 @@
     }, ms);
   }
 
-  function enter() {
+  function showStack(stack) {
+    state.stack = stack;
+    render();
+  }
+
+  /**
+   * Открыть стек next. Экран не нарисовался — стек и экран остаются прежними, игрок видит «попробуй ещё раз»
+   * (а не мёртвые «Назад» и «Таблицу» поверх невидимых экранов). true — экран открыт.
+   */
+  function enter(next) {
+    var prev = state.stack;
+    stopPoll();
+    if (!M.commitNav(prev, next || prev.slice(), showStack)) {
+      try { toast('Не получилось открыть — попробуй ещё раз'); } catch (e) { /* */ }
+      return false;
+    }
     var c = current();
     var sc = screens[c.name];
-    stopPoll();
-    render();
     if (sc && sc.enter) sc.enter(c.args);
+    return true;
   }
 
   function go(name, args) {
     state.sheet = null;
-    state.stack.push({ name: name, args: args || {} });
-    enter();
-    window.scrollTo(0, 0);
+    if (enter(state.stack.concat([{ name: name, args: args || {} }]))) window.scrollTo(0, 0);
   }
 
   function replace(name, args) {
     state.sheet = null;
-    state.stack[Math.max(0, state.stack.length - 1)] = { name: name, args: args || {} };
-    enter();
-    window.scrollTo(0, 0);
+    if (enter(state.stack.slice(0, -1).concat([{ name: name, args: args || {} }]))) window.scrollTo(0, 0);
   }
 
   function reset(name, args) {
     state.sheet = null;
-    state.stack = [{ name: name, args: args || {} }];
-    enter();
-    window.scrollTo(0, 0);
+    if (enter([{ name: name, args: args || {} }])) window.scrollTo(0, 0);
   }
 
   function back() {
     if (state.sheet) return closeSheet();
-    if (state.stack.length > 1) {
-      state.stack.pop();
-      return enter();
-    }
+    if (state.stack.length > 1) return enter(state.stack.slice(0, -1));
     location.href = '/webapp/client-home' + (initData && !(tg && tg.initData) ? '?init_data=' + encodeURIComponent(initData) : '');
   }
 
@@ -652,7 +660,11 @@
         tg.expand();
       } catch (e) { /* */ }
       if (tg.onEvent) tg.onEvent('themeChanged', function () { applyTheme(); render(); });
-      if (tg.BackButton && tg.BackButton.onClick) tg.BackButton.onClick(back);
+      if (tg.BackButton && tg.BackButton.onClick) {
+        // Один обработчик на страницу, даже если boot позовут ещё раз.
+        if (tg.BackButton.offClick) tg.BackButton.offClick(back);
+        tg.BackButton.onClick(back);
+      }
     }
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && state.sheet) return closeSheet();
@@ -690,7 +702,7 @@
     if (params.get('remind') === 'off') {
       api('PUT', '/client/hockey/remind', { on: false }).then(function () {
         state.remind = false;
-        toast('Напоминания выключены');
+        toast('Сообщения в чате выключены');
       }, function () {});
     }
     var loadError = null;

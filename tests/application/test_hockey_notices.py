@@ -116,8 +116,8 @@ async def test_no_move_reminder_three_hours_before_fan_club_match(db_session, fa
     notices = await due_notices(db_session, now=at(16, 5))
     assert [(n.kind, n.player_key, n.match_id) for n in notices] == [("nomove", SASHA, mine)]
     n = notices[0]
-    assert n.text == "<b>Юность — Шахтер</b> сегодня в 19:00. Хода ещё нет — тапни прямо здесь."
-    assert [b["text"] for b in n.buttons[0]] == ["Юность", "Шахтер"]
+    assert n.text == "<b>Юность — Шахтёр</b> сегодня в 19:00. Хода ещё нет — тапни прямо здесь."
+    assert [b["text"] for b in n.buttons[0]] == ["Юность", "Шахтёр"]
     assert n.buttons[0][0]["callback_data"] == f"kk:p:{mine}:h"
     assert n.buttons[0][1]["callback_data"] == f"kk:p:{mine}:a"
     assert other not in [x.match_id for x in notices]
@@ -186,9 +186,10 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     by_player = {n.player_key: n for n in await due_notices(db_session, now=done)}
     sasha = by_player[SASHA]
     assert sasha.kind == "result"
-    assert sasha.text.startswith("<b>Юность — Шахтер 3:2.</b> В точку: +50.\nТвоё место: 1-е из 4 · ")
-    assert by_player[KATYA].text.startswith("<b>Юность — Шахтер 3:2.</b> +20 очков.")
-    assert by_player[VOVA].text.startswith("<b>Юность — Шахтер 3:2.</b> Мимо. Бывает.")
+    assert sasha.text.startswith("<b>Юность — Шахтёр 3:2.</b> В точку! +50.\nТвоё место в «")
+    assert sasha.text.endswith("»: 1-е из 4.")
+    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Угадал победителя: +20.")
+    assert by_player[VOVA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Мимо. Бывает.")
     labels = [b["text"] for row in sasha.buttons for b in row]
     assert "Следующий ход" in labels and "Таблица" in labels
     assert sasha.buttons[0][0]["callback_data"] == "kk:n"
@@ -268,7 +269,7 @@ async def test_a_day_with_three_matches_sends_at_most_reminder_plus_summary(db_s
     await deliver(factory, now=at(13, 10), send=out)
     await deliver(factory, now=at(17, 10), send=out)
     assert [text for _, text, _ in out.sent] == [
-        "<b>Юность — Шахтер</b> сегодня в 12:00. Хода ещё нет — тапни прямо здесь."
+        "<b>Юность — Шахтёр</b> сегодня в 12:00. Хода ещё нет — тапни прямо здесь."
     ]
     # Он сделал ходы и дождался итогов всех трёх.
     for m in ms:
@@ -366,7 +367,7 @@ async def test_month_final_message_at_noon_for_top_players(db_session, factory) 
     by_player = {n.player_key: n for n in notices}
     assert set(by_player) == {SASHA, KATYA, LESHA}  # у Вовы очков нет, он вне тройки
     assert by_player[SASHA].text.startswith(
-        "<b>Корона ноября решится сегодня:</b> Юность — Гомель, 19:00, последний матч месяца. "
+        "<b>Корона за ноябрь решится сегодня:</b> Юность — Гомель, 19:00, последний матч месяца. "
         "Ты на 1-м месте, Лёша позади на 20 очков."
     )
     assert "до короны 30 очков" in by_player[KATYA].text
@@ -411,7 +412,7 @@ async def test_failed_send_is_not_retried(db_session, factory) -> None:
 async def test_chat_pick_equals_mini_app_pick_and_closes_with_the_match(db_session) -> None:
     m = await _match(db_session, "c1", at(19))
     got = await chat_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="h", now=at(16))
-    assert (got.status, got.side, got.home, got.away) == ("ok", "home", "Юность", "Шахтер")
+    assert (got.status, got.side, got.home, got.away) == ("ok", "home", "Юность", "Шахтёр")
     chat_row = (
         await db_session.execute(
             text("SELECT side, home_score, doubled FROM hockey_picks WHERE player_key = :p"), {"p": SASHA}

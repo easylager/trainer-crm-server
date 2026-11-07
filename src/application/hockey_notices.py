@@ -4,7 +4,7 @@
 
 * ``result`` — итог хода: очки и место. Единственный, что не считается в дневной бюджет;
   если за один проход итогов несколько, уходит одно сообщение-сводка.
-* ``mfinal`` — финал месяца: «корона решится сегодня» (клуб игрока, последний матч месяца, 12:00 по Минску).
+* ``mfinal`` — последний матч месяца: «корона решится сегодня» (клуб игрока, последний матч месяца, 12:00 по Минску).
 * ``overtook`` — тебя обошли в лиге.
 * ``nomove`` — нет хода за 3 часа до матча «своей» команды.
 
@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.hockey_game import (
     DEFAULT_PLAYER_NAME,
+    MONTHS,
     POINTS_EXACT,
     PICK_CLOSES_BEFORE,
     PicksClosed,
@@ -50,6 +51,7 @@ from src.application.hockey_slices import (
     slice_rows,
 )
 from src.application.hockey_slices_sql import SCOPE_SQL
+from src.application.hockey_teams import display_name as club_name
 from src.ingestion.hockey_sources import MINSK_TZ
 
 logger = logging.getLogger(__name__)
@@ -76,7 +78,7 @@ TYPE_TITLES = {
     KIND_NOMOVE: "напоминания о ходе",
     KIND_RESULT: "итоги ходов",
     KIND_OVERTOOK: "«тебя обошли»",
-    KIND_MFINAL: "финал месяца",
+    KIND_MFINAL: "«последний матч месяца»",
 }
 
 NOMOVE_AHEAD = timedelta(hours=3)
@@ -391,8 +393,8 @@ def url_button(label: str, start_param: str) -> dict | None:
 def pick_buttons(match_id: int, home: str, away: str) -> list[dict]:
     """Ход в один тап: за хозяев или за гостей. Ту же запись делает Mini App."""
     return [
-        {"text": home, "callback_data": f"{CB_PICK}:{match_id}:h"},
-        {"text": away, "callback_data": f"{CB_PICK}:{match_id}:a"},
+        {"text": club_name(home), "callback_data": f"{CB_PICK}:{match_id}:h"},
+        {"text": club_name(away), "callback_data": f"{CB_PICK}:{match_id}:a"},
     ]
 
 
@@ -435,7 +437,7 @@ def _ordinal(n: int) -> str:
 
 def nomove_text(*, home: str, away: str, starts_at: datetime, now: datetime) -> str:
     return (
-        f"<b>{html.escape(home)} — {html.escape(away)}</b> {_day_word(starts_at, now)} в {_hhmm(starts_at)}. "
+        f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))}</b> {_day_word(starts_at, now)} в {_hhmm(starts_at)}. "
         "Хода ещё нет — тапни прямо здесь."
     )
 
@@ -453,13 +455,15 @@ def result_text(
     """``points`` — базовые очки хода; ``place`` — готовая строка про место, если есть где его назвать."""
     total = points * (2 if doubled else 1)
     x2 = " с козырем" if doubled else ""
-    if points == POINTS_EXACT:
-        verdict = f"В точку: +{total}{x2}."
-    elif points:
-        verdict = f"+{total} {_points_word(total)}{x2}."
-    else:
+    # Слова вердикта те же, что ``verdict`` в kto-kogo-model.js: бот и Mini App называют исход одинаково.
+    head = {POINTS_EXACT: "В точку!", 30: "Почти в точку", 20: "Угадал победителя", 10: "Угадал шайбы"}.get(points)
+    if head is None:
         verdict = "Мимо. Бывает."
-    out = f"<b>{html.escape(home)} — {html.escape(away)} {final_home}:{final_away}.</b> {verdict}"
+    elif points == POINTS_EXACT:
+        verdict = f"{head} +{total}{x2}."
+    else:
+        verdict = f"{head}: +{total}{x2}."
+    out = f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))} {final_home}:{final_away}.</b> {verdict}"
     return out + ("\n" + place if place else "")
 
 
@@ -468,7 +472,9 @@ def summary_text(lines: list[str]) -> str:
 
 
 def _slice_title(club: str | None, period: Period) -> str:
-    return f"{club or 'общая таблица'} · {period.title}"
+    """Подпись среза как в Mini App: «Юность · ноябрь», «Все · сезон»."""
+    when = "сезон" if period.title.startswith("сезон") else period.title
+    return f"{club_name(club) if club else 'Все'} · {when}"
 
 
 async def _rows_cached(session: AsyncSession, cache: dict, club: str | None, period: Period):
@@ -497,7 +503,7 @@ async def best_place_line(
     if best is None:
         return None
     _, neg_size, rank, title = best
-    return f"Твоё место: {_ordinal(rank)} из {-neg_size} · {title}."
+    return f"Твоё место в «{title}»: {_ordinal(rank)} из {-neg_size}."
 
 
 async def _next_for(session: AsyncSession, player_key: int, *, now: datetime, club: str | None) -> dict | None:
@@ -651,7 +657,7 @@ async def _overtook_notice(session: AsyncSession, o: Overtake, *, now: datetime)
     rows: list[list[dict | None]] = []
     if nxt is not None:
         body += (
-            f"\n{html.escape(nxt.home_team)} — {html.escape(nxt.away_team)}, "
+            f"\n{html.escape(club_name(nxt.home_team))} — {html.escape(club_name(nxt.away_team))}, "
             f"{_day_word(nxt.starts_at, now)} в {_hhmm(nxt.starts_at)} — шанс вернуть."
         )
         if not (await session.execute(_HAS_PICK, {"match_id": nxt.match_id, "player_key": o.player_key})).first():
@@ -757,8 +763,8 @@ async def _mfinal_candidates(session: AsyncSession, *, now: datetime, cache: dic
             continue
         rivals = [r for r in rows if r.player_key != fan.player_key]
         body = (
-            f"<b>Корона {MONTHS_GEN[local.month - 1]} решится сегодня:</b> "
-            f"{html.escape(final.home_team)} — {html.escape(final.away_team)}, {_hhmm(final.starts_at)}, "
+            f"<b>Корона за {MONTHS[local.month - 1]} решится сегодня:</b> "
+            f"{html.escape(club_name(final.home_team))} — {html.escape(club_name(final.away_team))}, {_hhmm(final.starts_at)}, "
             "последний матч месяца. "
         )
         if mine.rank == 1:
@@ -859,14 +865,14 @@ async def _moved_notices(session: AsyncSession, *, now: datetime) -> list[Notice
         when = f"{_day_word(r.starts_at, now)} в {_hhmm(r.starts_at)}"
         if r.kind == KIND_MOVED:
             body = (
-                f"{html.escape(r.home_team)} — {html.escape(r.away_team)} перенесли: теперь {when}. "
-                "Твой ход был сделан уже после нового закрытия приёма ходов и не прошёл — сделай его заново. "
-                "Если на нём стоял козырь, он тоже свободен."
+                f"{html.escape(club_name(r.home_team))} — {html.escape(club_name(r.away_team))} перенесли: теперь {when}. "
+                "Твой ход сделан позже нового закрытия, поэтому сброшен — сделай его заново. "
+                "Если на нём стоял козырь, он снова свободен."
             )
         else:
             body = (
-                f"{html.escape(r.home_team)} — {html.escape(r.away_team)} перенесли на другую неделю, "
-                f"где козырь у тебя уже занят — этот козырь вернулся. Матч теперь {when}."
+                f"{html.escape(club_name(r.home_team))} — {html.escape(club_name(r.away_team))} перенесли на другую неделю, "
+                f"и там твой козырь уже стоит на другом матче, поэтому с этого он снят. Матч теперь {when}."
             )
         buttons = _rows(
             list(pick_buttons(r.match_id, r.home_team, r.away_team)),
@@ -968,11 +974,11 @@ async def chat_pick(
             session, player_key=player_key, display_name=display_name, match_id=match_id, side=full, now=now
         )
     except PicksClosed:
-        return ChatPick("closed", match_id, teams.home_team, teams.away_team)
+        return ChatPick("closed", match_id, club_name(teams.home_team), club_name(teams.away_team))
     except LookupError:
         return ChatPick("missing", match_id)
     await clear_blocked(session, player_key)
-    return ChatPick("ok", match_id, teams.home_team, teams.away_team, full)
+    return ChatPick("ok", match_id, club_name(teams.home_team), club_name(teams.away_team), full)
 
 
 async def next_move(session: AsyncSession, *, player_key: int, now: datetime) -> Notice | None:
@@ -984,7 +990,7 @@ async def next_move(session: AsyncSession, *, player_key: int, now: datetime) ->
     if nxt is None:
         return None
     body = (
-        f"<b>{html.escape(nxt['home_team'])} — {html.escape(nxt['away_team'])}</b> "
+        f"<b>{html.escape(club_name(nxt['home_team']))} — {html.escape(club_name(nxt['away_team']))}</b> "
         f"{_day_word(nxt['starts_at'], now)} в {_hhmm(nxt['starts_at'])}. Твой ход?"
     )
     return Notice(
@@ -1001,8 +1007,8 @@ def picked_buttons(match_id: int, home: str, away: str, side: str) -> list[list[
     mark = "✓ "
     return [
         [
-            {"text": (mark if side == "home" else "") + home, "callback_data": f"{CB_PICK}:{match_id}:h"},
-            {"text": (mark if side == "away" else "") + away, "callback_data": f"{CB_PICK}:{match_id}:a"},
+            {"text": (mark if side == "home" else "") + club_name(home), "callback_data": f"{CB_PICK}:{match_id}:h"},
+            {"text": (mark if side == "away" else "") + club_name(away), "callback_data": f"{CB_PICK}:{match_id}:a"},
         ]
     ]
 

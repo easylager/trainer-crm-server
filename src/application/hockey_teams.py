@@ -104,6 +104,15 @@ TEAMS: dict[str, Team] = {
 }
 
 
+# В базе «Шахтер» и «Могилев» без ё (по ним ищут матчи), на экране и в сообщениях — с ё.
+_SPELL = {"Шахтер": "Шахтёр", "Могилев": "Могилёв"}
+
+
+def display_name(name: str) -> str:
+    """Имя клуба для глаз: тот же словарь, что ``clubName`` в kto-kogo-model.js. В запросы уходит имя из базы."""
+    return _SPELL.get(name, name)
+
+
 def short_from_name(name: str) -> str:
     """Первые буквы слов; у одного слова — две первые буквы."""
     words = [word for word in re.split(r"[\s\-]+", (name or "").strip()) if word]
