@@ -333,8 +333,8 @@ describe('Mini App public URL recovery', () => {
       ['/c/orsha?when=tomorrow&init_data=signed', '/webapp/ice?city_id=18&when=tomorrow&init_data=signed'],
       ['/m/5-dinamo?c=ABCD&init_data=signed', '/webapp/client-match?id=5&c=ABCD&init_data=signed'],
       // TASK-350: страница тренера сайта → его карточка в Mini App.
-      ['/t/9-aleksandr-gaevskiy?init_data=signed', '/webapp/catalog?trainer_id=9&init_data=signed'],
-      ['/t/9?init_data=signed', '/webapp/catalog?trainer_id=9&init_data=signed'],
+      ['/t/9-aleksandr-gaevskiy?init_data=signed', '/webapp/trainers?trainer_id=9&init_data=signed'],
+      ['/t/9?init_data=signed', '/webapp/trainers?trainer_id=9&init_data=signed'],
     ]) {
       const ctx = browser('https://app.test' + url, { initData: '' });
       assert.equal(G.maybePublicRedirect(ctx), true);
