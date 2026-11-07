@@ -74,6 +74,7 @@ class ClientSessionRepository:
                 text("""
                     INSERT INTO client_sessions (telegram_id, state, city_id, selected_service_id, selected_trainer_id, selected_arena_id, payload)
                     VALUES (:tid, :state, :city_id, :service_id, :trainer_id, :arena_id, :payload)
+                    ON CONFLICT (telegram_id) DO NOTHING
                 """),
                 {
                     "tid": telegram_id,
