@@ -444,7 +444,7 @@
       $('cmWhoLine').textContent = 'Карточка в чате. Кто нажмёт «Иду» — появится здесь.';
       return;
     }
-    $('cmWhoTitle').textContent = 'Кто из твоих';
+    $('cmWhoTitle').textContent = 'Кто из ваших';
     if (!w) return;
     $('cmWhoCount').textContent = w.count;
     $('cmWhoLine').textContent = w.line;
