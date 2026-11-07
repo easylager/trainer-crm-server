@@ -69,8 +69,13 @@ async def test_showcase_has_from_price_glide_since_windows_and_ice_arenas(app_us
     item = next(t for t in body["items"] if t["id"] == tid)
     first = date.today() - timedelta(days=40)
     assert item["glide_since"] == f"{first.year:04d}-{first.month:02d}"
-    # Тарифы фикстуры 45/50 → «от 45» из trainer_min_price.
-    assert item["min_session_price_cents"] == 4500
+    # Тарифы фикстуры 45/50, групповая 25, абонемент 41,87 → «от 25» из trainer_min_price.
+    assert item["min_session_price_cents"] == 2500
+    # «от» по вкладкам считает сервер (``direction_min_price``); ключи — вкладки Mini App.
+    assert item["min_price_by_direction"] == {
+        "all": {"cents": 2500, "currency": "BYN"},
+        "s-nulya": {"cents": 2500, "currency": "BYN"},
+    }
     assert item["can_book"] is True
     assert len(item["windows"]) == 1 and item["windows"][0]["slot_id"]
     assert [a["id"] for a in item["arenas"]] == [place["arena_id"]]

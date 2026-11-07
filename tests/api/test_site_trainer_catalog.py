@@ -15,7 +15,10 @@ from src.application.site_trainer_catalog import (
     booking_url,
     ALL,
     direction_by_slug,
+    direction_min_price,
     education_line,
+    is_listed,
+    min_price_by_direction,
     price_tiers,
     service_direction,
 )
@@ -82,6 +85,41 @@ def test_price_tiers_by_tariffs() -> None:
     assert price_tiers([svc()]) is None
 
 
+def test_direction_min_price_takes_group_and_covering_passes() -> None:
+    def svc(sid, *tiers, group=None):
+        return {
+            "service_id": sid,
+            "currency_code": "BYN",
+            "price_cents": None,
+            "group_price_cents": group,
+            "price_tiers": [{"tier_kind": k, "price_cents": c} for k, c in tiers],
+        }
+
+    zero, hock, better = direction_by_slug("s-nulya"), direction_by_slug("s-klyushkoy"), direction_by_slug("uzhe-katayus")
+    t = {
+        "services_by_dir": {"zero": [svc(1, ("child", 4500), ("adult", 5000), group=2500)], "hock": [svc(4, ("adult", 5500))]},
+        "passes": [{"per_session_cents": 4187, "service_ids": (4,)}],
+    }
+    # Групповая 25 у «С нуля»; абонемент только на «Хоккейное» — у «С клюшкой», не у «С нуля».
+    assert direction_min_price(t, zero) == (2500, "BYN")
+    assert direction_min_price(t, hock) == (4187, "BYN")
+    assert direction_min_price(t, better) is None
+    only_hockey_pass = {**t, "services_by_dir": {"zero": [svc(1, ("adult", 5000))], "hock": [svc(4, ("adult", 5500))]}}
+    assert direction_min_price(only_hockey_pass, zero) == (5000, "BYN")
+    assert direction_min_price(only_hockey_pass, ALL) == (4187, "BYN")
+    # Абонемент без услуг — на все услуги тренера.
+    every = {"services_by_dir": {"zero": [svc(1, ("adult", 5000))]}, "passes": [{"per_session_cents": 4187, "service_ids": None}]}
+    assert direction_min_price(every, zero) == (4187, "BYN")
+    # Ключи — как у вкладок Mini App.
+    assert min_price_by_direction(t) == {
+        "all": {"cents": 2500, "currency": "BYN"},
+        "s-nulya": {"cents": 2500, "currency": "BYN"},
+        "s-klyushkoy": {"cents": 4187, "currency": "BYN"},
+    }
+    # Правило показа не изменилось: абонемент без цены услуги и без катка в каталог не выводит.
+    assert not is_listed({**every, "services_by_dir": {"zero": [svc(1)]}, "arenas": []}, zero)
+
+
 def test_education_line_only_known_categories() -> None:
     assert education_line("Высшее профильное") == "Высшее профильное образование"
     assert education_line("Другое") == ""
@@ -111,7 +149,7 @@ async def _set_services(db_session, tid: int, services: dict[int, list[tuple[str
 
 
 async def _city(db_session, client) -> dict:
-    """Город: A — с нуля + хоккей, цены, онлайн-запись, окно; B — с нуля + уже катаюсь без цен, но с катками;
+    """Город: A — с нуля + хоккей, цены, абонемент 41,87 только на хоккей, онлайн-запись, окно; B — с нуля + уже катаюсь без цен, но с катками;
     C — фигурное без цены и без катка (не показывается); D — только ролики (не вкладка)."""
     place = await _place(db_session)
     other_arena = await _insert_arena(db_session, place["city_id"], name=f"Второй каток {uuid.uuid4().hex[:4]}")
@@ -129,6 +167,17 @@ async def _city(db_session, client) -> dict:
     await _set_services(db_session, ids["B"], {1: None, 2: None})
     await _set_services(db_session, ids["C"], {3: None})
     await _set_services(db_session, ids["D"], {5: [("adult", 4000)]})
+    # Абонемент 670/16 (41,87) из фикстуры: у A — только на «Хоккейное» (4), у остальных нет.
+    await db_session.execute(
+        text("DELETE FROM trainer_pass_products WHERE trainer_id = ANY(:t)"), {"t": [ids["B"], ids["C"], ids["D"]]}
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_pass_product_services (pass_product_id, service_id) "
+            "SELECT id, 4 FROM trainer_pass_products WHERE trainer_id = :t"
+        ),
+        {"t": ids["A"]},
+    )
     await db_session.execute(text("DELETE FROM trainer_arenas WHERE trainer_id = :t"), {"t": ids["C"]})
     await db_session.execute(
         text("INSERT INTO trainer_arenas (trainer_id, arena_id, is_public) VALUES (:t, :a, true)"),
@@ -188,6 +237,7 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     # Цена — по тарифам направления; без цены — честно.
     assert "45 BYN <small>ребёнок</small>" in cards[0] and "50 BYN <small>взрослый</small>" in cards[0]
     assert "Цену уточните у тренера" in cards[1]
+    # Абонемент A только на «Хоккейное» не трогает «от» вкладки «С нуля».
     assert "от <b>45 BYN</b> за занятие" in html
     # Оценка — только от 3 оценок; стаж и образование — из полей; числа занятий нет.
     assert "оценили" not in cards[0] and "3 ученика оценили занятия" in cards[1]
@@ -201,6 +251,8 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     hcards = _cards(hock.text)
     assert len(hcards) == 1 and "50 BYN <small>ребёнок</small>" in hcards[0]
     assert "Хоккейное катание" in hock.text and "Мне 35" not in hock.text
+    # «от» вкладки и «Все» — с абонементом на занятие, дробь как есть.
+    assert "от <b>41,87 BYN</b> за занятие" in hock.text and "от <b>41,87 BYN</b> за занятие" in all_r.text
     # Пустое направление — страница есть, но не в индексе.
     assert 'content="noindex, follow"' in fig.text and not _cards(fig.text)
     assert 'content="index, follow"' in zero.text

@@ -5,6 +5,9 @@
 невозможен:
 
 * ``min_session_price_cents`` — «от N BYN», единственный источник — ``trainer_min_price``;
+* ``min_price_by_direction`` — «от» по вкладкам (``{"all" | slug: {cents, currency}}``): тарифы,
+  групповые и абонементы, покрывающие услуги вкладки (``site_trainer_catalog.direction_min_price``,
+  та же цифра, что на сайте). Клиент берёт минимум по показанным тренерам, сам не считает;
 * ``glide_since`` — «В Glide с <месяц год>»: месяц первого завершённого занятия у тренера, без
   записей тренера к самому себе и без песочницы. Число занятий не отдаём — решение владельца;
 * ``windows`` — ближайшие свободные окна на одного (те же, что у страницы тренера ``/t/…``);
@@ -134,6 +137,7 @@ def _service_out(svc: dict[str, Any], public_ids: set[int]) -> dict[str, Any]:
 async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -> dict[str, Any]:
     """Тренеры города для витрины. Фильтр катка и вкладки клиент считает сам — по этим данным."""
     from src.application.arena_public_use_cases import _trainer_windows_on_arena
+    from src.application.site_trainer_catalog import min_price_by_direction, services_by_direction
     from src.application.site_trainer_page import contact_url
     from src.application.site_trainers import trainer_initial, trainer_name, trainer_photo_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
@@ -146,7 +150,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
         session, limit=SHOWCASE_LIMIT, offset=0, city_id=city_id, order_by="rating"
     )
     items = [sanitize_trainer_for_public_catalog(t) for t in raw_items]
-    await enrich_min_session_price(session, items)
+    passes = await enrich_min_session_price(session, items)
     ids = [int(t["id"]) for t in items]
     since = await _glide_since(session, ids)
     arena_ids = sorted({int(a) for t in items for a in (t.get("arena_ids") or [])})
@@ -192,6 +196,9 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 "contact_url": contact_url(tid, usernames.get(tid), listed=True),
                 "min_session_price_cents": t.get("min_session_price_cents"),
                 "min_session_price_currency": t.get("min_session_price_currency"),
+                "min_price_by_direction": min_price_by_direction(
+                    {"services_by_dir": services_by_direction(t.get("services") or []), "passes": passes.get(tid, [])}
+                ),
                 "services": [_service_out(s, public_ids) for s in t.get("services") or []],
                 "arenas": [arenas[a] for a in (t.get("arena_ids") or []) if a in arenas],
                 "windows": [
