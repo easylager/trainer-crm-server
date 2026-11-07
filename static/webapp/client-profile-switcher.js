@@ -85,6 +85,16 @@
   // Always attach X-Profile-Id for the acting profile (active ?? default), including when
   // that profile is the account default. Omitting the header when active === default made
   // the server resolve self (telegram) instead of a default child — silent wrong bookings.
+  function hasExplicitProfileHeader(init) {
+    var h = init && init.headers;
+    if (!h) return false;
+    if (typeof h.has === 'function') return h.has('X-Profile-Id');
+    for (var k in h) {
+      if (Object.prototype.hasOwnProperty.call(h, k) && k.toLowerCase() === 'x-profile-id' && h[k] != null && h[k] !== '') return true;
+    }
+    return false;
+  }
+
   var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
   if (nativeFetch) {
     window.fetch = function (input, init) {
@@ -92,7 +102,9 @@
         if (typeof input === 'string' && input.indexOf('/api/webapp/client/') !== -1) {
           var actingId =
             state.activeProfileId != null ? state.activeProfileId : state.defaultProfileId;
-          if (actingId != null) {
+          // Явный X-Profile-Id вызывающего — выбор в форме («Кого записываем?», TASK-357) — главнее
+          // активного профиля: иначе запись ребёнка уходила на маму, а абонементы читались чужие.
+          if (actingId != null && !hasExplicitProfileHeader(init)) {
             init = init || {};
             var headers = init.headers ? Object.assign({}, init.headers) : {};
             headers['X-Profile-Id'] = String(actingId);
