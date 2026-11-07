@@ -366,6 +366,55 @@ describe('загрузчик learn-block.js', () => {
   });
 });
 
+describe('загрузчик learn-block.js: кеш пустого города', () => {
+  function run(stored, spec) {
+    const host = fakeHost();
+    const doc = {
+      currentScript: { getAttribute: () => 'learn-block.js?v=1' },
+      head: { appendChild(node) { setImmediate(() => (node.onerror ? node.onerror() : null)); } },
+      createElement: () => ({}),
+      querySelector: () => host,
+    };
+    const prev = { LearnBlock: globalThis.LearnBlock, ss: globalThis.sessionStorage };
+    delete globalThis.LearnBlock;
+    globalThis.document = doc;
+    globalThis.sessionStorage = { getItem: (k) => (k in stored ? stored[k] : null), setItem() {} };
+    new Function('window', fs.readFileSync(path.join(WEBAPP, 'learn-block.js'), 'utf8'))(globalThis);
+    const pending = globalThis.LearnBlock.mount('#hubLearn', spec);
+    const reserved = host.hidden === false;
+    const out = { host, reserved, pending, restore() {
+      if (prev.LearnBlock) globalThis.LearnBlock = prev.LearnBlock; else delete globalThis.LearnBlock;
+      if (prev.ss === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = prev.ss;
+    } };
+    return out;
+  }
+  const rec = (items, at = Date.now()) => JSON.stringify({ at, items });
+
+  it('в кеше города пустой список — место не резервируем', async () => {
+    const r = run({ 'glide_learn_showcase_v1:7': rec([]) }, { place: 'city', cityId: 7 });
+    assert.equal(r.reserved, false);
+    assert.equal(r.host.style.minHeight, undefined);
+    await r.pending;
+    r.restore();
+  });
+
+  it('кеш непустой, устарел, чужого города или его нет — резервируем как раньше', async () => {
+    const cases = [
+      [{ 'glide_learn_showcase_v1:7': rec([{ id: 1 }]) }, 266],
+      [{ 'glide_learn_showcase_v1:7': rec([], Date.now() - 11 * 60 * 1000) }, 266],
+      [{ 'glide_learn_showcase_v1:8': rec([]) }, 266],
+      [{}, 266],
+    ];
+    for (const [stored, h] of cases) {
+      const r = run(stored, { place: 'city', cityId: 7 });
+      assert.equal(r.reserved, true);
+      assert.equal(r.host.style.minHeight, h + 'px');
+      await r.pending;
+      r.restore();
+    }
+  });
+});
+
 /* ── Подключение на экранах ────────────────────────────────────────────── */
 
 const read = (f) => fs.readFileSync(path.join(WEBAPP, f), 'utf8');
