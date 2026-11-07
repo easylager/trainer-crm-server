@@ -47,6 +47,23 @@ describe('TrainerCatalogOffer', () => {
   });
 });
 
+describe('подсказка после ошибки', () => {
+  it('следующее нажатие возвращает исходную подсказку', async () => {
+    let n = 0;
+    const ui = openWith({ preview: { arena_names: ['Чижовка'] } }, () => (++n === 1
+      ? Promise.reject(new TypeError('Failed to fetch'))
+      : new Promise(() => {})));
+    const yes = ui.el('[data-tco-yes]');
+    const note = ui.el('.tco-note');
+    yes.onclick();
+    await new Promise((r) => setImmediate(r));
+    assert.equal(note.textContent, 'Нет связи — попробуйте ещё раз.');
+    yes.onclick();
+    assert.match(note.textContent, /^Дополнить или поправить карточку/);
+    assert.equal(note.attrs.role, undefined);
+  });
+});
+
 /** Минимальный DOM: ровно то, что трогает окно (data-tco-* и .tco-note из innerHTML). */
 function openWith(profile, fetchImpl) {
   const found = {};
