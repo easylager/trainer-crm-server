@@ -1,14 +1,11 @@
 """
 Сказать админам, что тренер вписал услугу, которой у нас не было.
 
-Без этого своя услуга живёт вслепую: клиент её на карточке видит, а мы — нет,
-и «поднять» удачную формулировку в общий список каталога (``is_public=true``)
-некому. Зеркалит ``admin_arena_notify``: тот же тихий режим — упавшее
-уведомление не роняет запрос тренера, он уже работает.
-
-Кнопок модерации намеренно нет. Услуга уже работает у автора, и решение
-«годится ли она всем» не срочное — делается руками в админке, когда таких
-формулировок накопится достаточно, чтобы увидеть повторы.
+Без этого своя услуга живёт вслепую: клиент её на карточке видит, а мы — нет.
+Под сообщением кнопки направлений каталога: нажатие привязывает услугу к
+направлению (или прячет из каталога), см. ``handlers/admin_handlers.py``.
+Зеркалит ``admin_arena_notify``: тот же тихий режим — упавшее уведомление
+не роняет запрос тренера, он уже работает.
 """
 from __future__ import annotations
 
@@ -20,7 +17,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from sqlalchemy import text
 
+from src.bot.admin_service_direction_card import direction_keyboard
 from src.infrastructure.db import async_session_factory
+from src.infrastructure.repositories.service_direction_repository import list_directions
 from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -49,6 +48,7 @@ async def notify_admins_new_custom_service(
                 {"tid": trainer_id},
             )
         ).fetchone()
+        directions = await list_directions(session)
 
     trainer_name = ""
     username = ""
@@ -65,15 +65,16 @@ async def notify_admins_new_custom_service(
         f"Название: {html.escape(name)}\n"
         f"Формат: {format_label}\n"
         f"Добавил: {who}\n\n"
-        "Видна только на карточке автора. Чтобы пустить её в общий фильтр каталога — "
-        f"<code>UPDATE services SET is_public = true WHERE id = {service_id};</code>"
+        "Видна только на карточке автора. Выберите направление каталога, где показать её "
+        "словами тренера, или «Не показывать»."
     )
+    keyboard = direction_keyboard(service_id, directions)
 
     bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     try:
         for chat_id in admin_ids:
             try:
-                await bot.send_message(chat_id=chat_id, text=caption)
+                await bot.send_message(chat_id=chat_id, text=caption, reply_markup=keyboard)
             except Exception:  # noqa: BLE001
                 logger.exception(
                     "custom service admin notify failed chat_id=%s service_id=%s",

@@ -32,6 +32,21 @@ from src.application.admin_arena_moderation import (
     set_arena_coordinates,
 )
 from src.bot.admin_arena_card import format_admin_arena_pending_caption
+from src.bot.admin_service_direction_card import (
+    CHANGE_TOKEN,
+    DECISION_MARK,
+    HIDE_TOKEN,
+    SERVICE_DIRECTION_PREFIX,
+    change_keyboard,
+    decision_line,
+    direction_keyboard,
+    strip_decision,
+)
+from src.infrastructure.repositories.service_direction_repository import (
+    get_service_direction,
+    list_directions,
+    set_service_direction,
+)
 from src.application.booking_problem_admin_use_cases import (
     count_booking_problem_reports_for_admin,
     list_booking_problem_reports_for_admin,
@@ -736,6 +751,64 @@ async def on_place_suggestion_approve(callback: CallbackQuery) -> None:
     await _drop_place_suggestion_buttons(callback, sid)
     await callback.message.answer(reply, parse_mode=ParseMode.HTML)
     await callback.answer()
+
+
+def _admin_label(user) -> str:
+    if user.username:
+        return f"@{user.username}"
+    return user.full_name or str(user.id)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(SERVICE_DIRECTION_PREFIX))
+async def on_service_direction(callback: CallbackQuery) -> None:
+    """«Своя услуга #N»: привязать к направлению каталога, «Не показывать» или «Сменить»."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    sid_raw, _, action = callback.data[len(SERVICE_DIRECTION_PREFIX):].partition(":")
+    sid = safe_parse_id(sid_raw)
+    direction_id = None if action == HIDE_TOKEN else safe_parse_id(action)
+    if sid is None or not action or (action not in (HIDE_TOKEN, CHANGE_TOKEN) and direction_id is None):
+        await callback.answer()
+        return
+    message = callback.message if isinstance(callback.message, Message) else None
+    base = strip_decision(message.html_text) if message else ""
+    try:
+        async with async_session_factory() as session:
+            if action == CHANGE_TOKEN:
+                directions = await list_directions(session)
+            else:
+                result = await set_service_direction(session, sid, direction_id, admin_id=user_id)
+                state = await get_service_direction(session, sid)
+    except Exception:  # noqa: BLE001
+        logger.exception("service direction failed sid=%s action=%s", sid, action)
+        await callback.answer("Не удалось сохранить, см. логи", show_alert=True)
+        return
+    if action == CHANGE_TOKEN:
+        if message:
+            await message.edit_text(
+                base, parse_mode=ParseMode.HTML, reply_markup=direction_keyboard(sid, directions)
+            )
+        await callback.answer()
+        return
+    if result in ("not_found", "not_custom", "bad_direction"):
+        await callback.answer(
+            "Услуга или направление уже недоступны" if result != "not_custom" else "Это не своя услуга тренера",
+            show_alert=True,
+        )
+        return
+    if result == "changed":
+        audit_log("service.direction_set", ACTOR_ADMIN_BOT, user_id, {"service_id": sid, "direction_id": direction_id})
+    if message:
+        # Повтор того же выбора показывает реальное решение (его автора), а не нажавшего вторым.
+        label = _admin_label(callback.from_user)
+        if result == "unchanged" and state and state["decided_by"] not in (None, user_id):
+            label = f"id {state['decided_by']}"
+        text = base + DECISION_MARK + decision_line(state["direction_name"] if state else None, label)
+        if text != message.html_text:
+            await message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=change_keyboard(sid))
+    await callback.answer("Готово" if result == "changed" else "Уже выбрано")
 
 
 @router.message(Command("ice_sources"))
