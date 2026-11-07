@@ -179,6 +179,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 "photo_url": trainer_photo_url(t),
                 "experience_years": profile.get("experience_years"),
                 "description": str(profile.get("description") or "").strip(),
+                "education": str(profile.get("education") or "").strip(),
                 "rating_avg": profile.get("rating_avg"),
                 "rating_count": int(profile.get("rating_count") or 0),
                 "session_duration_minutes": profile.get("session_duration_minutes"),

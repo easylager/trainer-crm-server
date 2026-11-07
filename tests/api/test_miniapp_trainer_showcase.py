@@ -141,3 +141,29 @@ async def test_new_client_child_booking_puts_phone_on_child_profile(app_use_test
     ).one()
     assert row[0] == child_id and row[1] == "Соня"
     assert row[2] == phone
+
+
+@pytest.mark.asyncio
+async def test_request_sheet_phone_is_saved_for_trainer(app_use_test_db, db_session) -> None:
+    """Шторка «Оставить заявку»: телефон для тренера сохраняется у клиента; без телефона — как раньше."""
+    async with _client() as client:
+        place = await _place(db_session)
+        trainer_id = await _trainer_on(db_session, client, place, first_name=f"Катя{uuid.uuid4().hex[:4]}")
+    service_id = (
+        await db_session.execute(text("SELECT service_id FROM trainer_services WHERE trainer_id = :t"), {"t": trainer_id})
+    ).scalar_one()
+    await db_session.commit()
+    ctg = _fresh_client_telegram_id()
+    phone, _norm = belarus_test_phone(ctg)
+    headers = {"X-Telegram-Init-Data": "mock"}
+    body = {"city_id": place["city_id"], "service_id": service_id, "trainer_id": trainer_id, "first_name": "Анна"}
+    with patch_client_init_auth(ctg):
+        async with _client() as client:
+            bad = await client.post("/api/webapp/client/request", json={**body, "phone": "12"}, headers=headers)
+            ok = await client.post("/api/webapp/client/request", json={**body, "phone": phone}, headers=headers)
+    assert bad.status_code == 400
+    assert ok.status_code == 200, ok.text
+    saved = (
+        await db_session.execute(text("SELECT phone FROM clients WHERE telegram_id = :tg"), {"tg": ctg})
+    ).scalar_one()
+    assert saved == phone

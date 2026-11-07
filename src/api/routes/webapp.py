@@ -2427,6 +2427,8 @@ class ClientRequestCreateBody(BaseModel):
     trainer_id: int | None = None
     first_name: str | None = None
     last_name: str | None = None
+    #: Телефон для тренера из шторки заявки (TASK-357); пусто — как раньше, без телефона.
+    phone: str | None = None
 
 
 @router.post("/client/request")
@@ -2439,11 +2441,19 @@ async def post_client_request(
 ):
     """Create a client request (from catalog Mini App). Auth: client initData. Returns request_id so UI can show success before closing."""
     telegram_id = client_catalog_telegram_key(principal)
+    phone: str | None = None
+    if (body.phone or "").strip():
+        from src.shared.profile_phone import normalize_phone_input, validate_phone_non_empty
+
+        phone_ok, phone_err = validate_phone_non_empty(normalize_phone_input(body.phone.strip()))
+        if phone_err or not phone_ok:
+            raise HTTPException(status_code=400, detail=phone_err or "Некорректный номер телефона.")
+        phone = phone_ok
     client_id = await _ensure_client_for_webapp_miniapp(
         session,
         principal,
         cred.raw,
-        phone=None,
+        phone=phone,
         first_name=body.first_name,
         last_name=body.last_name,
         requested_profile_id=_parse_profile_id_header(x_profile_id),
