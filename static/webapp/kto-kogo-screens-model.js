@@ -599,8 +599,9 @@
     return spaced(n) + NBSP + Base.plural(n, 'игрок', 'игрока', 'игроков') + ' · ' + what;
   }
 
-  /** Плашка про корону под фильтрами. */
+  /** Плашка про корону под фильтрами. Период не задан — это сезон, как у таблицы по умолчанию. */
   function tableCrownLine(view, club, periodKey, seasonTitle) {
+    periodKey = periodKey || 'season';
     var team = club ? ' по матчам ' + clubGen(club) : '';
     if (periodKey === 'season') {
       return club
@@ -618,6 +619,7 @@
   /** Мало игроков с очками: таблица честная, короны нет. Позвать болельщиков клуба. */
   function fewPlayers(view, club, periodKey) {
     if (!view || view.players_with_points >= 3) return null;
+    periodKey = periodKey || 'season';
     var n = view.players_with_points || 0;
     var label = sliceLabel(club, periodLabel(periodKey, '').toLowerCase());
     return {
