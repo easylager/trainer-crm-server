@@ -1403,7 +1403,7 @@ def webapp_trainer_first_students_js(request: Request):
 
 @app.get("/webapp/trainer-catalog-offer.js")
 def webapp_trainer_catalog_offer_js(request: Request):
-    """Окно «Показать вас родителям на …?» после онбординга и на главной (TASK-350)."""
+    """Окно «Показывать вас родителям на страницах катков?» после онбординга и на главной (TASK-350)."""
     path = _WEBAPP_DIR / "trainer-catalog-offer.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")

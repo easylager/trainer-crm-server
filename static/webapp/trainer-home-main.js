@@ -2207,7 +2207,7 @@
         openHubCatalogOffer(true);
       }
 
-      /** Окно «Показать вас родителям» (trainer-catalog-offer.js). once — разово при входе. */
+      /** Окно «Показывать вас родителям» (trainer-catalog-offer.js). once — разово при входе. */
       function openHubCatalogOffer(once) {
         if (!window.TrainerCatalogOffer) return Promise.resolve(false);
         return window.TrainerCatalogOffer.maybeOpen({
