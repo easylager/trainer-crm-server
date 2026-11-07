@@ -1162,12 +1162,22 @@
     }
     // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
     if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
-    var coach = /^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?$/i.exec(sp);
+    // Запасной разбор, если glide-deeplink.js не загрузился: trainer_<id> + хвосты _a_/_s_/_v_ в любом порядке.
+    var coach = /^trainer_([1-9][0-9]*)((?:_[a-z]+_[A-Za-z0-9]+)*)$/i.exec(sp);
     if (coach) {
+      var tail = coach[2] || '';
+      var arenaTail = /_a_([1-9][0-9]*)(?=_|$)/i.exec(tail);
+      var slotTail = /_s_([1-9][0-9]*)(?=_|$)/i.exec(tail);
+      if (slotTail) {
+        return {
+          key: 'trainers',
+          path: 'trainers?trainer_id=' + coach[1] + '&slot_id=' + slotTail[1] + (arenaTail ? '&arena_id=' + arenaTail[1] : ''),
+        };
+      }
       return {
         key: 'catalog',
-        path: coach[2]
-          ? 'catalog?from=arena&trainer_id=' + coach[1] + '&arena_id=' + coach[2]
+        path: arenaTail
+          ? 'catalog?from=arena&trainer_id=' + coach[1] + '&arena_id=' + arenaTail[1]
           : 'catalog?trainer_id=' + coach[1],
       };
     }

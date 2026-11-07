@@ -60,6 +60,17 @@ describe('GlideDeepLink.readStartParam', () => {
     assert.equal(G.deepLinkTarget('trainer_7_a_'), null);
   });
 
+  it('trainer_<id>_s_<slot> — сразу запись на это время; хвосты _a_/_s_/_v_ в любом порядке (TASK-357)', () => {
+    assert.deepEqual(G.deepLinkTarget('trainer_7_s_55'), { key: 'trainers', path: 'trainers?trainer_id=7&slot_id=55' });
+    const want = { key: 'trainers', path: 'trainers?trainer_id=7&slot_id=55&arena_id=3&via=p3' };
+    assert.deepEqual(G.deepLinkTarget('trainer_7_a_3_s_55_v_p3'), want);
+    assert.deepEqual(G.deepLinkTarget('trainer_7_v_p3_s_55_a_3'), want);
+    // Незнакомый хвост и via без слота — карточка тренера, как раньше.
+    assert.deepEqual(G.deepLinkTarget('trainer_7_v_c1'), { key: 'catalog', path: 'catalog?trainer_id=7' });
+    assert.deepEqual(G.deepLinkTarget('trainer_7_zz_1_a_3'), { key: 'catalog', path: 'catalog?from=arena&trainer_id=7&arena_id=3' });
+    assert.deepEqual(G.parseTrainerDeepLink('trainer_7_s_0'), { trainerId: 7, arenaId: null, slotId: null, via: null });
+  });
+
   it('читает initDataUnsafe, hash и query', () => {
     assert.equal(
       G.readStartParam({

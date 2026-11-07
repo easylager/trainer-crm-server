@@ -15,6 +15,7 @@ WhatsApp она вообще не открывается без Telegram. Поэ
 from __future__ import annotations
 
 import re
+from typing import Any
 from urllib.parse import urlencode
 
 from src.application.ice_city_day import city_slug
@@ -227,11 +228,15 @@ def match_start_param(match_id: int, company_code: str | None = None) -> str:
     return param
 
 
-def trainer_start_param(trainer_id: int, arena_id: int | None = None) -> str:
-    """``trainer_7`` или ``trainer_7_a_3`` — карточка тренера в мини-аппе, как тап по тренеру на катке."""
+def trainer_start_param(trainer_id: int, arena_id: int | None = None, slot_id: int | None = None) -> str:
+    """``trainer_7`` / ``trainer_7_a_3`` — карточка тренера в мини-аппе, как тап по тренеру на катке;
+    ``trainer_7_s_55`` (``…_a_3_s_55``) — сразу запись на это время (TASK-357). Хвосты — в
+    ``parse_trainer_start_param``; Telegram ограничивает start_param 64 символами ``[A-Za-z0-9_-]``."""
     param = f"{TRAINER_START_PREFIX}{int(trainer_id)}"
     if arena_id is not None and int(arena_id) > 0:
         param += f"_a_{int(arena_id)}"
+    if slot_id is not None and int(slot_id) > 0:
+        param += f"_s_{int(slot_id)}"
     return param
 
 
@@ -295,16 +300,43 @@ def parse_catalog_start_param(value: str | None) -> tuple[int | None, str | None
 _PLACE_DEEP_RE = re.compile(r"^arena_([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$")
 
 
-_TRAINER_DEEP_RE = re.compile(r"^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?$")
+_TRAINER_DEEP_RE = re.compile(r"^trainer_([1-9][0-9]*)((?:_[a-z]+_[A-Za-z0-9]+)*)$", re.IGNORECASE)
+_TRAINER_TAIL_RE = re.compile(r"_([a-z]+)_([A-Za-z0-9]+)", re.IGNORECASE)
+_POSITIVE_INT_RE = re.compile(r"^[1-9][0-9]*$")
 
 
-def parse_trainer_deep_link(value: str | None) -> tuple[int, int | None] | None:
-    """``trainer_7`` → ``(7, None)``; ``trainer_7_a_3`` → ``(7, 3)``."""
+def parse_trainer_start_param(value: str | None) -> dict[str, Any] | None:
+    """``trainer_<id>`` + хвосты ``_<ключ>_<значение>`` в любом порядке после id.
+
+    * ``_a_<arena_id>`` — пришли с катка;
+    * ``_s_<slot_id>`` — запись сразу на это время (TASK-357);
+    * ``_v_<via>`` — откуда пришли (TASK-351), например ``_v_p3``.
+
+    Незнакомые хвосты игнорируются; повтор ключа — берётся первый. Кривой хвост
+    (``trainer_7_a_``) — не ссылка тренера. → ``{"trainer_id", "arena_id", "slot_id", "via"}``.
+    """
     match = _TRAINER_DEEP_RE.match((value or "").strip())
     if match is None:
         return None
-    arena_id = int(match.group(2)) if match.group(2) else None
-    return int(match.group(1)), arena_id
+    out: dict[str, Any] = {"trainer_id": int(match.group(1)), "arena_id": None, "slot_id": None, "via": None}
+    for key, val in _TRAINER_TAIL_RE.findall(match.group(2) or ""):
+        key = key.lower()
+        num = int(val) if _POSITIVE_INT_RE.match(val) else None
+        if key == "a" and num and out["arena_id"] is None:
+            out["arena_id"] = num
+        elif key == "s" and num and out["slot_id"] is None:
+            out["slot_id"] = num
+        elif key == "v" and out["via"] is None:
+            out["via"] = val.lower()
+    return out
+
+
+def parse_trainer_deep_link(value: str | None) -> tuple[int, int | None] | None:
+    """``trainer_7`` → ``(7, None)``; ``trainer_7_a_3`` / ``trainer_7_s_9_a_3`` → ``(7, 3)``."""
+    parsed = parse_trainer_start_param(value)
+    if parsed is None:
+        return None
+    return int(parsed["trainer_id"]), parsed["arena_id"]
 
 
 def parse_place_deep_link(value: str | None) -> tuple[int, int | None] | None:
