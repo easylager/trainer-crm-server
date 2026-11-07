@@ -1119,6 +1119,14 @@ class Service(Base):
     #: false — услуга видна только на карточке автора и в его расписании, но не в общем
     #: фильтре каталога. Админ «поднимает» удачную формулировку в общий список, выставив true.
     is_public: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    #: Направление каталога (публичная услуга справочника), в котором показывается своя услуга.
+    #: ``direction_decided_at`` NULL — админ ещё не разбирал; задано при NULL направлении —
+    #: «не показывать»; заданы оба — привязана. Автор решения — ``direction_decided_by`` (Telegram id).
+    direction_service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("services.id", ondelete="SET NULL"), nullable=True
+    )
+    direction_decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    direction_decided_by: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
 
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary="trainer_services", back_populates="services", lazy="raise"
