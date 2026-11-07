@@ -45,7 +45,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-sub--tight { margin-top: -4px; font-size: 12px; }
 .kk-lbl { font: 600 12px var(--kk-text); letter-spacing: 0.06em; color: var(--kk-muted); }
 .kk-lbl--gold { color: var(--kk-gold-ink); }
-.kk-lbl--on { color: inherit; opacity: 0.85; }
+.kk-lbl--on { color: inherit; }
 .kk-tx { font: 500 14px/1.4 var(--kk-text); color: var(--kk-soft); }
 .kk-tx--err { color: var(--kk-danger); }
 .kk-tx--warn { color: var(--kk-gold-ink); }
@@ -65,7 +65,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-tag { position: absolute; right: 16px; top: -12px; height: 26px; padding: 0 9px; border-radius: 8px; background: var(--kk-gold); color: var(--kk-on-gold); font: 400 11px/26px var(--kk-display); transform: rotate(-3deg); pointer-events: none; }
 .kk-tag--soft { background: var(--kk-soft); color: var(--kk-bg); }
 .kk-big { font: 400 44px/1 var(--kk-display); }
-.kk-hero-tx { font: 500 14px/1.35 var(--kk-text); opacity: 0.92; }
+.kk-hero-tx { font: 500 14px/1.35 var(--kk-text); }
 
 .kk-skel { border-radius: 16px; background: var(--kk-chip); min-height: 120px; opacity: 0.6; }
 .kk-skel--line { min-height: 20px; height: 20px; }
@@ -84,7 +84,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-hero__score { font: 400 30px/1 var(--kk-display); font-variant-numeric: tabular-nums; }
 /* Время «17:00» крупно: без tabular-nums и разрядки — у display-шрифта «1» в табличной ширине отрывается от «7». */
 .kk-hero__time { font: 400 30px/1 var(--kk-display); font-variant-numeric: normal; font-feature-settings: normal; letter-spacing: normal; white-space: nowrap; }
-.kk-hero__day { font: 600 13px var(--kk-text); opacity: 0.9; }
+.kk-hero__day { font: 600 13px var(--kk-text); }
 .kk-meta { font: 500 15px var(--kk-text); color: var(--kk-soft); }
 .kk-disc { border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; flex: none; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); color: #0d1424; }
 .kk-disc img { object-fit: contain; }
@@ -169,7 +169,7 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-fan { display: flex; align-items: center; gap: 12px; }
 .kk-fan__t { font: 400 19px/1.1 var(--kk-display); overflow-wrap: anywhere; }
 .kk-fan__name { font: 400 28px/1 var(--kk-display); overflow-wrap: anywhere; }
-.kk-fan__s { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font: 600 13px var(--kk-text); opacity: 0.95; }
+.kk-fan__s { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font: 600 13px var(--kk-text); }
 .kk-fan__bolt { display: inline-flex; align-items: center; gap: 3px; }
 .kk-fan__line { font: 600 15px/1.3 var(--kk-text); }
 .kk-crownw { display: inline-flex; align-items: center; gap: 1px; font: 700 11px var(--kk-text); color: var(--kk-gold-ink); flex: none; }
@@ -202,28 +202,28 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 
 /* Хаб v2: «Твоя команда», матчи дня, очки (холст SpMeyNMs2GoG29akhF2o6a). Цвет задаёт клуб, остальное — токены. */
 .kk-yc { border-radius: 28px; padding: 18px 16px 16px; gap: 14px; color: #fff; margin-top: 8px; }
-.kk-hm { align-self: flex-start; min-height: 44px; margin: -10px 0 -10px; padding: 0; border: 0; background: none; color: rgba(255, 255, 255, 0.85); font: 700 12px/1.3 var(--kk-text); letter-spacing: 0.06em; text-align: left; }
+.kk-hm { align-self: flex-start; min-height: 44px; margin: -10px 0 -10px; padding: 0; border: 0; background: none; color: #fff; font: 700 12px/1.3 var(--kk-text); letter-spacing: 0.06em; text-align: left; }
 .kk-two--hero { gap: 10px; }
-.kk-ht { min-height: 104px; border-radius: 18px; border: 0; background: rgba(255, 255, 255, 0.12); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px 6px; min-width: 0; }
+.kk-ht { min-height: 104px; border-radius: 18px; border: 0; background: rgba(0, 0, 0, 0.18); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px 6px; min-width: 0; }
 .kk-ht.is-on { background: #fff; color: #0d1424; }
 .kk-ht__n { font: 700 15px/1.2 var(--kk-text); text-align: center; overflow-wrap: anywhere; }
-.kk-hh { font: 500 14px/1.35 var(--kk-text); color: rgba(255, 255, 255, 0.9); text-align: center; }
+.kk-hh { font: 500 14px/1.35 var(--kk-text); color: #fff; text-align: center; }
 .kk-hbox { display: flex; flex-direction: column; gap: 12px; padding: 14px 12px; border-radius: 18px; background: rgba(0, 0, 0, 0.22); }
 .kk-hbox__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .kk-hbox__t { font: 700 15px/1.2 var(--kk-text); }
-.kk-hbox__s { font: 600 13px/1.2 var(--kk-text); color: rgba(255, 255, 255, 0.8); }
+.kk-hbox__s { font: 600 13px/1.2 var(--kk-text); color: #fff; }
 .kk-hsr { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .kk-hsr__v { min-width: 28px; text-align: center; font: 400 34px/1 var(--kk-display); font-variant-numeric: normal; }
 .kk-hsr__c { font: 400 28px/1 var(--kk-display); color: rgba(255, 255, 255, 0.75); }
-.kk-hs { flex: none; width: 44px; height: 44px; border-radius: 12px; border: 0; background: rgba(255, 255, 255, 0.14); color: #fff; font: 600 22px/1 var(--kk-text); }
-.kk-htr { min-height: 48px; border-radius: 14px; border: 0; background: rgba(255, 255, 255, 0.14); color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; font: 700 15px/1.2 var(--kk-text); padding: 0 12px; }
+.kk-hs { flex: none; width: 44px; height: 44px; border-radius: 12px; border: 0; background: rgba(0, 0, 0, 0.18); color: #fff; font: 600 22px/1 var(--kk-text); }
+.kk-htr { min-height: 48px; border-radius: 14px; border: 0; background: rgba(0, 0, 0, 0.18); color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; font: 700 15px/1.2 var(--kk-text); padding: 0 12px; }
 .kk-htr.is-on { background: var(--kk-gold); color: var(--kk-on-gold); }
 .kk-htr.is-off { opacity: 0.6; }
-.kk-htr__note { font: 500 12px/1.3 var(--kk-text); color: rgba(255, 255, 255, 0.8); text-align: center; margin-top: -4px; }
+.kk-htr__note { font: 500 12px/1.3 var(--kk-text); color: #fff; text-align: center; margin-top: -4px; }
 .kk-hsum { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .kk-hsum__t { font: 600 14px/1.3 var(--kk-text); }
 .kk-hsum__m { font: 400 20px/1 var(--kk-display); color: var(--kk-gold); white-space: nowrap; }
-.kk-hnote { font: 500 13px/1.3 var(--kk-text); color: rgba(255, 255, 255, 0.8); }
+.kk-hnote { font: 500 13px/1.3 var(--kk-text); color: #fff; }
 
 .kk-dr { border-radius: 18px; background: var(--kk-card); padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
 .kk-dh { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; border: 0; background: none; color: inherit; text-align: left; }
@@ -243,6 +243,13 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-hsr--sm .kk-hsr__v { min-width: 22px; font-size: 24px; }
 .kk-hsr--sm .kk-hsr__c { font-size: 20px; color: var(--kk-muted); }
 .kk-hsr--sm .kk-hs { background: var(--kk-chip); color: var(--kk-ink); font-size: 20px; }
+/* ≤375 px: ряд «± счёт : счёт ±» должен влезать в 264 px карточки (окно 360). Высота кнопок остаётся 44. */
+@media (max-width: 375px) {
+  .kk-hsr--lg { gap: 4px; }
+  .kk-hsr--lg .kk-hs { width: 40px; }
+  .kk-hsr--lg .kk-hsr__v { min-width: 26px; font-size: 30px; }
+  .kk-hsr--lg .kk-hsr__c { font-size: 24px; }
+}
 
 /* Таблица */
 .kk-chip { height: 44px; padding: 0 12px 0 8px; border-radius: 999px; border: 0; display: flex; align-items: center; gap: 8px; font: 600 15px var(--kk-text); background: var(--kk-card); color: var(--kk-ink); min-width: 0; }
@@ -282,8 +289,7 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .kk-stat { display: flex; flex-direction: column; gap: 2px; }
 .kk-stat__v { font: 400 22px/1 var(--kk-display); }
-.kk-stat__l { font: 500 12px var(--kk-text); opacity: 0.85; }
-.kk-stat__l--sub { opacity: 0.7; }
+.kk-stat__l { font: 500 12px var(--kk-text); }
 .kk-cr { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 12px; background: var(--kk-row); font: 600 14px var(--kk-text); }
 .kk-cr--empty { background: none; border: 1px dashed var(--kk-line); color: var(--kk-muted); }
 .kk-cr--c { justify-content: center; gap: 6px; }
@@ -366,13 +372,13 @@ body:not(.kk-dark) .kk-puck { box-shadow: inset 0 -3px 0 #3a4756; }
 
 /* «В точку!»: главный момент игры */
 .kk-cel { position: relative; overflow: hidden; border-radius: 28px; padding: 28px 16px 20px; min-height: 400px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
-.kk-cel__d { font: 700 12px/1.2 var(--kk-text); letter-spacing: 0.06em; opacity: 0.85; }
+.kk-cel__d { font: 700 12px/1.2 var(--kk-text); letter-spacing: 0.06em; }
 .kk-cel__s { display: flex; align-items: center; gap: 16px; }
 .kk-cel__n { font: 400 48px/1 var(--kk-display); letter-spacing: -0.02em; }
 .kk-pop { margin-top: 6px; padding: 8px 16px; border-radius: 12px; background: var(--kk-gold); color: var(--kk-on-gold); font: 400 30px/1 var(--kk-display); transform: rotate(-3deg); display: inline-block; animation: kk-pop 0.6s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
 .kk-cel__l { font: 600 16px/1.35 var(--kk-text); text-align: center; }
 .kk-cel__c { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.kk-chipx { height: 34px; padding: 0 12px; border-radius: 17px; background: rgba(255, 255, 255, 0.16); display: inline-flex; align-items: center; font: 700 15px/1 var(--kk-text); }
+.kk-chipx { height: 34px; padding: 0 12px; border-radius: 17px; background: rgba(0, 0, 0, 0.18); display: inline-flex; align-items: center; font: 700 15px/1 var(--kk-text); }
 .kk-c { position: absolute; left: 50%; top: 150px; width: 10px; height: 16px; border-radius: 3px; opacity: 0; animation: kk-burst 1.6s cubic-bezier(0.2, 0.7, 0.3, 1) 2 both; pointer-events: none; }
 @keyframes kk-burst { 0% { transform: translate(0, 0) scale(0.2); opacity: 0; } 15% { opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r)); opacity: 0; } }
 @keyframes kk-pop { 0% { transform: rotate(-3deg) scale(0.4); } 60% { transform: rotate(-6deg) scale(1.12); } 100% { transform: rotate(-3deg) scale(1); } }
