@@ -311,41 +311,46 @@
     }, ms);
   }
 
-  function enter() {
+  function showStack(stack) {
+    state.stack = stack;
+    render();
+  }
+
+  /**
+   * Открыть стек next. Экран не нарисовался — стек и экран остаются прежними, игрок видит «попробуй ещё раз»
+   * (а не мёртвые «Назад» и «Таблицу» поверх невидимых экранов). true — экран открыт.
+   */
+  function enter(next) {
+    var prev = state.stack;
+    stopPoll();
+    if (!M.commitNav(prev, next || prev.slice(), showStack)) {
+      try { toast('Не получилось открыть — попробуй ещё раз'); } catch (e) { /* */ }
+      return false;
+    }
     var c = current();
     var sc = screens[c.name];
-    stopPoll();
-    render();
     if (sc && sc.enter) sc.enter(c.args);
+    return true;
   }
 
   function go(name, args) {
     state.sheet = null;
-    state.stack.push({ name: name, args: args || {} });
-    enter();
-    window.scrollTo(0, 0);
+    if (enter(state.stack.concat([{ name: name, args: args || {} }]))) window.scrollTo(0, 0);
   }
 
   function replace(name, args) {
     state.sheet = null;
-    state.stack[Math.max(0, state.stack.length - 1)] = { name: name, args: args || {} };
-    enter();
-    window.scrollTo(0, 0);
+    if (enter(state.stack.slice(0, -1).concat([{ name: name, args: args || {} }]))) window.scrollTo(0, 0);
   }
 
   function reset(name, args) {
     state.sheet = null;
-    state.stack = [{ name: name, args: args || {} }];
-    enter();
-    window.scrollTo(0, 0);
+    if (enter([{ name: name, args: args || {} }])) window.scrollTo(0, 0);
   }
 
   function back() {
     if (state.sheet) return closeSheet();
-    if (state.stack.length > 1) {
-      state.stack.pop();
-      return enter();
-    }
+    if (state.stack.length > 1) return enter(state.stack.slice(0, -1));
     location.href = '/webapp/client-home' + (initData && !(tg && tg.initData) ? '?init_data=' + encodeURIComponent(initData) : '');
   }
 
@@ -655,7 +660,11 @@
         tg.expand();
       } catch (e) { /* */ }
       if (tg.onEvent) tg.onEvent('themeChanged', function () { applyTheme(); render(); });
-      if (tg.BackButton && tg.BackButton.onClick) tg.BackButton.onClick(back);
+      if (tg.BackButton && tg.BackButton.onClick) {
+        // Один обработчик на страницу, даже если boot позовут ещё раз.
+        if (tg.BackButton.offClick) tg.BackButton.offClick(back);
+        tg.BackButton.onClick(back);
+      }
     }
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && state.sheet) return closeSheet();

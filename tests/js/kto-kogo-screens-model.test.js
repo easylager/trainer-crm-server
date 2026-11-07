@@ -460,3 +460,13 @@ describe('шторка «Как считаются очки»', () => {
     assert.match(r.foot, /до минуты перед стартом матча/);
   });
 });
+
+describe('таблица без периода в аргументах (повторное открытие «Таблицы» из хаба)', () => {
+  // Первый кадр экрана рисуется до enter, где ставятся умолчания: period ещё undefined, а таблица уже в кеше.
+  // Раньше здесь было TypeError на toLowerCase — стек и экран расходились, «Назад» и «Таблица» молчали.
+  it('плашка про корону и «мало игроков» считают пустой период сезоном', () => {
+    const view = { players_with_points: 1, me: { rank: 1 }, to_crown: 0 };
+    assert.equal(S.tableCrownLine(view, null, undefined, 'сезон 2026/27'), S.tableCrownLine(view, null, 'season', 'сезон 2026/27'));
+    assert.deepEqual(S.fewPlayers(view, null, undefined), S.fewPlayers(view, null, 'season'));
+  });
+});

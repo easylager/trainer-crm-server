@@ -404,6 +404,22 @@
     return 'без счёта';
   }
 
+  /**
+   * Переход между экранами без фантомов в стеке: show(next) ставит стек и рисует экран.
+   * Бросил рендер — возвращаем прежний стек и перерисовываем его; иначе «Назад» снимал бы невидимые экраны,
+   * а кнопки переходов молчали бы (DOM остаётся старым, стек уже новый). true — переход состоялся.
+   */
+  function commitNav(prev, next, show) {
+    try {
+      show(next);
+      return true;
+    } catch (e) {
+      if (typeof console !== 'undefined' && console.error) console.error(e);
+      try { show(prev); } catch (e2) { /* прежний экран тоже не рисуется: стек всё равно прежний */ }
+      return false;
+    }
+  }
+
   var api = {
     NEUTRAL: NEUTRAL,
     clubName: clubName,
@@ -447,6 +463,7 @@
     totalPoints: totalPoints,
     crowd: crowd,
     friendMove: friendMove,
+    commitNav: commitNav,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

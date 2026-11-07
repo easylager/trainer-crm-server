@@ -201,3 +201,34 @@ describe('строка хода с козырем (TASK-335)', () => {
     assert.match(M.stakeLine({ side: 'home', home_score: null, away_score: null, doubled: true }, names, 'open'), /с козырем$/);
   });
 });
+
+describe('commitNav', () => {
+  function harness(broken) {
+    const shown = [];
+    let stack = null;
+    const show = (s) => {
+      stack = s;
+      if (s[s.length - 1] === broken) throw new Error('render failed');
+      shown.push(s[s.length - 1]);
+    };
+    return { shown, show, stack: () => stack };
+  }
+  it('экран нарисовался — стек новый', () => {
+    const h = harness(null);
+    assert.equal(M.commitNav(['hub'], ['hub', 'table'], h.show), true);
+    assert.deepEqual(h.stack(), ['hub', 'table']);
+  });
+  it('рендер бросил — стек и экран прежние, фантомов нет', () => {
+    const h = harness('table');
+    const origError = console.error;
+    console.error = () => {};
+    try {
+      assert.equal(M.commitNav(['hub'], ['hub', 'table'], h.show), false);
+      assert.equal(M.commitNav(['hub'], ['hub', 'table'], h.show), false);
+    } finally {
+      console.error = origError;
+    }
+    assert.deepEqual(h.stack(), ['hub']);
+    assert.deepEqual(h.shown, ['hub', 'hub']);
+  });
+});

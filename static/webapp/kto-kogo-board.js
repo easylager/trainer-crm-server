@@ -221,6 +221,9 @@
       Promise.all([loadTable(a), K.loadClubs().catch(function () {}), K.loadPeaks(), K.loadProfile()]).then(K.render, function (e) { a.failed = true; K.render(); K.fail(e); });
     },
     render: function (a) {
+      // Первый кадр рисуется до enter: без умолчаний закешированная таблица падала на period === undefined.
+      a.club = a.club || null;
+      a.period = a.period || 'season';
       var view = state.tables[tableKey(a)];
       var seasonTitle = state.seasonTitle || S.seasonTitleFor(nowIso());
       var peaks = (state.peaks || []).map(function (p) {
