@@ -365,7 +365,8 @@ async def find_guardian_profile_by_name(
 
     Повторное «добавить Соню» (запись подряд, повтор после «время заняли», второй экран) не должно
     заводить второй профиль: история, абонементы и тариф прошлой записи разошлись бы по двум.
-    Фамилия различает только когда указана у обоих. Сравнение в Python, не ``lower()`` в SQL:
+    Фамилия: совпадают, либо у обоих не указана. «Саша» без фамилии и новый «Саша Иванова» — разные дети
+    (близнецы/тёзки), склеивать их нельзя. Сравнение в Python, не ``lower()`` в SQL:
     кириллица не должна зависеть от локали базы.
     """
     fn_key = _profile_name_key(first_name)
@@ -390,7 +391,7 @@ async def find_guardian_profile_by_name(
         if _profile_name_key(fn) != fn_key:
             continue
         existing_ln = _profile_name_key(ln)
-        if ln_key and existing_ln and ln_key != existing_ln:
+        if ln_key != existing_ln:
             continue
         return int(cid)
     return None

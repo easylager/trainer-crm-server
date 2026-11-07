@@ -165,10 +165,30 @@ async def test_post_profiles_same_child_name_returns_existing_profile(app_use_te
     assert first.status_code == again.status_code == other.status_code == 200
     sonya = first.json()["client_id"]
     assert again.json()["client_id"] == sonya
-    assert same_with_surname.json()["client_id"] == sonya
+    # «Соня» без фамилии и «Соня Иванова» — разные дети (L1): не склеиваем.
+    assert same_with_surname.json()["client_id"] not in (sonya, parent_id)
     assert other.json()["client_id"] not in (sonya, parent_id)
     ids = sorted(p["client_id"] for p in r_list.json()["items"])
-    assert ids == sorted([parent_id, sonya, other.json()["client_id"]])
+    assert ids == sorted([parent_id, sonya, other.json()["client_id"], same_with_surname.json()["client_id"]])
+
+
+@pytest.mark.asyncio
+async def test_post_profiles_surname_must_match_or_be_absent_on_both(app_use_test_db, db_session) -> None:
+    tid = _fresh_client_telegram_id()
+    await _insert_client(db_session, telegram_id=tid, first_name="Мама")
+
+    async def post(client, **body):
+        r = await client.post("/api/webapp/client/profiles", json=body, headers=_client_auth_headers())
+        assert r.status_code == 200, r.text
+        return r.json()["client_id"]
+
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            full = await post(client, first_name="Саша", last_name="Иванова")
+            again = await post(client, first_name=" саша ", last_name="  иванова")
+            bare = await post(client, first_name="Саша")  # у существующей есть фамилия, у нового нет
+    assert again == full
+    assert bare != full
 
 
 @pytest.mark.asyncio
