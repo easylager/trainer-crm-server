@@ -203,11 +203,11 @@ def direction_by_slug(slug: str | None) -> Direction | None:
 def own_service_direction(service: Mapping[str, Any]) -> str | None:
     """Вкладка своей услуги тренера (``created_by_trainer_id``, не публичная).
 
-    TASK-353 добавит ``services.direction_service_id`` (привязку админом к публичной услуге): тогда
-    здесь — ``_BY_SERVICE.get(service["direction_service_id"])``, а репозиторий отдаст это поле в
-    ``services``. До этого своя услуга в каталог не попадает — только на страницу тренера.
+    Привязку к публичной услуге ставит админ (TASK-353, ``services.direction_service_id``); без неё
+    своя услуга в каталог не попадает — только на страницу тренера.
     """
-    return None
+    target = service.get("direction_service_id")
+    return _BY_SERVICE.get(int(target)) if target is not None else None
 
 
 def service_direction(service: Mapping[str, Any]) -> str | None:
@@ -232,13 +232,15 @@ def booking_url(base_url: str, trainer_id: int, *, city_id: int | None = None) -
 
     Как на ``/t/``: карточка тренера в Mini App через учётный ``/open-telegram`` (``trainer_{id}``).
     Ссылки на конкретный слот у Mini App нет (прежний ``book?slot_id`` зависал на «Готовим форму»),
-    поэтому окно ведёт к тренеру, где это время первое. TASK-351: код источника «каталог сайта»
-    добавляется здесь — одним параметром для всех ссылок каталога.
+    поэтому окно ведёт к тренеру, где это время первое. Источник записи (TASK-351) — «каталог сайта»
+    ``k<city_id>`` хвостом ``start_param``.
     """
+    from src.application.booking_source import place_via
     from src.application.place_links import public_telegram_cta_url, trainer_start_param
 
+    via = place_via(city_id=city_id, catalog=True)
     return public_telegram_cta_url(
-        base_url, start_param=trainer_start_param(int(trainer_id)), surface=CATALOG_SURFACE, city_id=city_id
+        base_url, start_param=trainer_start_param(int(trainer_id), via=via), surface=CATALOG_SURFACE, city_id=city_id
     )
 
 
@@ -325,6 +327,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     """Все опубликованные тренеры города с тем, что нужно карточке и вкладкам."""
     from src.application.arena_media import attach_arena_media_payloads
     from src.application.arena_public_use_cases import _trainer_windows_on_arena
+    from src.application.booking_source import place_via
     from src.application.site_trainer_page import contact_url, trainer_path
     from src.application.site_trainers import trainer_initial, trainer_name, trainer_photo_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
@@ -364,7 +367,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
                 "name": name,
                 "initial": trainer_initial(name),
                 "photo_url": trainer_photo_url(body),
-                "path": trainer_path(tid, name),
+                "path": f"{trainer_path(tid, name)}?via={place_via(city_id=city_id, catalog=True)}",
                 "experience_years": profile.get("experience_years"),
                 "rating_avg": profile.get("rating_avg"),
                 "rating_count": int(profile.get("rating_count") or 0),
@@ -607,7 +610,7 @@ def _card_html(
         f'<a class="tc-stretch" href="{esc(t["path"])}" aria-label="{esc(t["name"])} — страница тренера"></a>'
         f'<div class="tc-top">{ph}<div class="tc-head">{badge}<h3 class="tc-name">{esc(t["name"])}</h3>{dirs_html}{_rating_html(t)}</div></div>'
         f"{checks_html}{about}{_price_html(t, direction)}{act}"
-        '<span class="tc-more">Все окна и цены →</span>'
+        '<span class="tc-more">Расписание и цены →</span>'
         "</article>"
     )
 

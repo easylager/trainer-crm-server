@@ -12,6 +12,7 @@ from sqlalchemy import text
 from src.api.app import app
 from src.application.ice_city_day import city_slug
 from src.application.site_trainer_catalog import (
+    booking_url,
     ALL,
     direction_by_slug,
     education_line,
@@ -48,10 +49,22 @@ def test_directions_map_public_services_hockey_is_two_services() -> None:
     assert direction_by_slug("s-klyushkoy").service_ids == (4, 6)
     assert direction_by_slug("roliki") is None
     assert service_direction({"service_id": 6}) == "hock"
-    # Ролики, ОФП/СФП и своя услуга тренера (до TASK-353) — не вкладки.
+    # Ролики, ОФП/СФП и своя услуга тренера без привязки — не вкладки.
     assert service_direction({"service_id": 5}) is None
     assert service_direction({"service_id": 7}) is None
     assert service_direction({"service_id": 11}) is None
+    assert service_direction({"service_id": 11, "direction_service_id": None}) is None
+    # TASK-353: админ привязал свою услугу к «Фигурному» — она во вкладке направления.
+    assert service_direction({"service_id": 11, "direction_service_id": 3}) == direction_by_slug("figurnoe").key
+    assert service_direction({"service_id": 11, "direction_service_id": 5}) is None
+
+
+def test_catalog_links_carry_site_catalog_source() -> None:
+    from src.application.booking_source import source_from_via
+
+    url = booking_url("https://glideclub.by", 7, city_id=1)
+    assert "trainer_7_v_k1" in url
+    assert source_from_via("k1").code == "site_catalog"
 
 
 def test_price_tiers_by_tariffs() -> None:
@@ -168,8 +181,8 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     # Сверху — с онлайн-записью: A первая; окно — ссылка в запись Mini App через учётный прокси.
     cards = _cards(html)
     assert names["A"] in cards[0] and names["B"] in cards[1]
-    assert f'href="{trainer_path(ids["A"], names["A"])}"' in cards[0]
-    assert f"startapp=trainer_{ids['A']}&amp;surface=trainer_catalog" in cards[0]
+    assert f'href="{trainer_path(ids["A"], names["A"])}?via=k' in cards[0]
+    assert f"startapp=trainer_{ids['A']}_v_k" in cards[0] and "surface=trainer_catalog" in cards[0]
     assert 'class="tc-slot"' in cards[0]
     # Цена — по тарифам направления; без цены — честно.
     assert "45 BYN <small>ребёнок</small>" in cards[0] and "50 BYN <small>взрослый</small>" in cards[0]
