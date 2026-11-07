@@ -134,36 +134,7 @@
   /** Тренер не из выдачи города (личная ссылка, другой город) — та же форма из карточки каталога. */
   function loadTrainerFallback(id) {
     var url = initData ? '/api/webapp/client/catalog-trainer/' + id : '/api/public/trainers/' + id;
-    return api(url).then(function (t) {
-      var p = t.profile || {};
-      var name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Тренер';
-      var photo = (t.photos || [])[0] || {};
-      return {
-        id: t.id,
-        name: name,
-        first_name: (p.first_name || '').trim() || name,
-        initial: (name.match(/\p{L}/u) || ['Т'])[0].toUpperCase(),
-        photo_url: photo.url || photo.list_url || null,
-        experience_years: p.experience_years,
-        description: (p.description || '').trim(),
-        education: (p.education || '').trim(),
-        rating_avg: p.rating_avg,
-        rating_count: p.rating_count || 0,
-        session_duration_minutes: p.session_duration_minutes,
-        glide_since: null,
-        can_book: !!t.can_book,
-        contact_url: t.contact_telegram_url || null,
-        services: (t.services || []).map(function (s) {
-          return {
-            service_id: s.service_id, service_name: s.service_name, is_public: true, is_online: !!s.is_online,
-            price_cents: s.price_cents, currency_code: s.currency_code || 'BYN', description: s.description,
-            price_tiers: s.price_tiers || [],
-          };
-        }),
-        arenas: (t.arena_ids || []).map(function (id, i) { return { id: id, name: (t.arena_names || [])[i] || '' }; }).filter(function (a) { return a.name; }),
-        windows: [],
-      };
-    });
+    return api(url).then(M.trainerFromCatalogCard);
   }
 
   /**

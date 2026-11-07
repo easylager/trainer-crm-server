@@ -513,6 +513,46 @@
     return (services || []).filter(function (s) { return serviceFitsSlot(s, slot); });
   }
 
+  /**
+   * Карточка каталога (`/client/catalog-trainer/{id}`, `/public/trainers/{id}`) → тренер витрины.
+   * Тренер не из выдачи города (личная ссылка) — та же форма, те же поля услуги, что у `_service_out`
+   * (в т.ч. `group_price_cents`: сервер записывает в группу COALESCE(group_price_cents, price_cents)).
+   */
+  function trainerFromCatalogCard(t) {
+    var p = t.profile || {};
+    var name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Тренер';
+    var photo = (t.photos || [])[0] || {};
+    var initial = (name.match(/\p{L}/u) || ['Т'])[0].toUpperCase();
+    return {
+      id: t.id,
+      name: name,
+      first_name: (p.first_name || '').trim() || name,
+      initial: initial,
+      photo_url: photo.url || photo.list_url || null,
+      experience_years: p.experience_years,
+      description: (p.description || '').trim(),
+      education: (p.education || '').trim(),
+      rating_avg: p.rating_avg,
+      rating_count: p.rating_count || 0,
+      session_duration_minutes: p.session_duration_minutes,
+      glide_since: null,
+      can_book: !!t.can_book,
+      contact_url: t.contact_telegram_url || null,
+      services: (t.services || []).map(function (s) {
+        return {
+          service_id: s.service_id, service_name: s.service_name,
+          is_public: s.is_public !== false, direction_service_id: s.direction_service_id != null ? s.direction_service_id : null,
+          is_online: !!s.is_online,
+          price_cents: s.price_cents, group_price_cents: s.group_price_cents != null ? s.group_price_cents : null,
+          currency_code: s.currency_code || 'BYN', description: s.description,
+          price_tiers: s.price_tiers || [],
+        };
+      }),
+      arenas: (t.arena_ids || []).map(function (id, i) { return { id: id, name: (t.arena_names || [])[i] || '' }; }).filter(function (a) { return a.name; }),
+      windows: [],
+    };
+  }
+
   /* ── Даты ───────────────────────────────────────────────────────────── */
 
   function parseIsoDate(s) {
@@ -707,6 +747,7 @@
     canAddProfile: canAddProfile,
     serviceFitsSlot: serviceFitsSlot,
     servicesForSlot: servicesForSlot,
+    trainerFromCatalogCard: trainerFromCatalogCard,
     usablePass: usablePass,
     payLine: payLine,
     addDays: addDays,

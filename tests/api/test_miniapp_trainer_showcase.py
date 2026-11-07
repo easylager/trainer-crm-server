@@ -255,3 +255,43 @@ async def test_client_passes_list_tier_scope(app_use_test_db, db_session) -> Non
         )
     items = {i["product_name"]: i["tier_kinds"] for i in await list_client_pass_instances(db_session, cid)}
     assert items == {"Детский": ["child"], "Любой": []}
+
+
+@pytest.mark.asyncio
+async def test_group_price_by_personal_link_matches_booked_price(app_use_test_db, db_session) -> None:
+    """PR #236: тренер по личной ссылке (карточка каталога) — групповая цена та же, что запишет сервер.
+
+    Форма записи (``trainerFromCatalogCard`` → ``payHtml``) берёт ``group_price_cents`` карточки;
+    сервер пишет в группу ``COALESCE(group_price_cents, price_cents)``. Здесь — что обе стороны равны.
+    """
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Оля{uuid.uuid4().hex[:4]}")
+    await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+    service_id = (
+        await db_session.execute(text("SELECT service_id FROM trainer_services WHERE trainer_id = :t"), {"t": tid})
+    ).scalar_one()
+    slot_id = await _slot(db_session, tid, days=3, hour=12, arena_id=place["arena_id"], capacity=6)
+    await db_session.execute(text("UPDATE slots SET service_id = :s WHERE id = :id"), {"s": service_id, "id": slot_id})
+    await db_session.commit()
+    ctg = _fresh_client_telegram_id()
+    phone, _norm = belarus_test_phone(ctg)
+    headers = {"X-Telegram-Init-Data": "mock"}
+    with patch_client_init_auth(ctg):
+        async with _client() as client:
+            card = (await client.get(f"/api/webapp/client/catalog-trainer/{tid}", headers=headers)).json()
+            showcase = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+            book = await client.post(
+                "/api/webapp/client/booking",
+                json={"slot_id": slot_id, "phone": phone, "service_id": service_id, "first_name": "Анна"},
+                headers=headers,
+            )
+    assert book.status_code == 200, book.text
+    booked = (
+        await db_session.execute(
+            text("SELECT booking_price_cents FROM bookings WHERE id = :b"), {"b": book.json()["booking_id"]}
+        )
+    ).scalar_one()
+    card_svc = next(s for s in card["services"] if s["service_id"] == service_id)
+    showcase_svc = next(s for s in next(t for t in showcase["items"] if t["id"] == tid)["services"] if s["service_id"] == service_id)
+    assert card_svc["group_price_cents"] == showcase_svc["group_price_cents"] == booked == 2500

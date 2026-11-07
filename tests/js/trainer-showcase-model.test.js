@@ -272,3 +272,19 @@ describe('услуга подходит к слоту — как проверя�
     assert.deepEqual(M.servicesForSlot([live, web], { is_online: false, arena_id: 3 }).map((s) => s.service_id), [1]);
   });
 });
+
+describe('карточка каталога → тренер витрины (личная ссылка)', () => {
+  it('переносит групповую цену и привязку своей услуги', () => {
+    const t = M.trainerFromCatalogCard({
+      id: 7, can_book: true, profile: { first_name: 'Ольга', last_name: 'К' }, arena_ids: [3], arena_names: ['Каток'],
+      services: [{ service_id: 1, service_name: 'С нуля', price_cents: 5000, group_price_cents: 2500, price_tiers: [] },
+        { service_id: 42, service_name: 'Своя', price_cents: 3000, direction_service_id: 2, price_tiers: [] }],
+    });
+    assert.equal(t.name, 'Ольга К');
+    assert.equal(t.initial, 'О');
+    assert.equal(t.services[0].group_price_cents, 2500);
+    assert.equal(t.services[1].group_price_cents, null);
+    assert.equal(t.services[1].direction_service_id, 2);
+    assert.deepEqual([...t.arenas.map((a) => a.id)], [3]);
+  });
+});

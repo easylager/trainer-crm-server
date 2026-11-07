@@ -301,3 +301,38 @@ describe('услуга и формат слота (онлайн/очно)', () =
     assert.ok(!h.app.innerHTML.includes('Какое занятие?'));
   });
 });
+
+describe('групповая цена в форме = цена, которую запишет сервер', () => {
+  // Сервер: COALESCE(group_price_cents, price_cents) — тарифы в группе не применяются.
+  const serverGroupPrice = (s) => (s.group_price_cents != null ? s.group_price_cents : s.price_cents);
+  const groupSlot = slot(701, { capacity: 6, spots_left: 3, service_id: 1 });
+  const payLine = (html) => (html.match(/<p class="payl">(.*?)<\/p>/) || [])[1] || '';
+
+  it('из выдачи', async () => {
+    const T = trainer(7, { services: [svc(1, [], { price_cents: 5000, group_price_cents: 2500 })] });
+    const h = boot({ showcase: { items: [T] }, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [groupSlot] }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 7 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 701 });
+    h.click({ 'data-act': 'pick', 'data-k': 'child' });
+    assert.match(payLine(h.app.innerHTML), new RegExp('<b>' + serverGroupPrice(T.services[0]) / 100 + ' BYN</b>'));
+  });
+
+  it('по личной ссылке (тренер не в выдаче — карточка каталога)', async () => {
+    const card = { id: 7, can_book: true, profile: { first_name: 'Ольга', last_name: 'К' }, photos: [], arena_ids: [3], arena_names: ['Каток'],
+      services: [{ service_id: 1, service_name: 'С нуля', is_online: false, price_cents: 5000, group_price_cents: 2500, currency_code: 'BYN', price_tiers: [] }] };
+    const h = boot({ search: '?trainer_id=7&slot_id=701', session: PHONE, routes: [
+      { match: (c) => c.url.startsWith('/api/webapp/client/catalog-trainer/7'), reply: () => resp(200, card) },
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [] }) },
+      { match: (c) => c.url.startsWith('/api/webapp/client/slot/701'), reply: () => resp(200, { available: true, slot: groupSlot }) },
+    ] });
+    await tick(80);
+    assert.equal(h.S.view, 'book');
+    assert.equal(h.S.trainer.services[0].group_price_cents, 2500);
+    h.click({ 'data-act': 'pick', 'data-k': 'child' });
+    assert.match(payLine(h.app.innerHTML), new RegExp('<b>' + serverGroupPrice(card.services[0]) / 100 + ' BYN</b>'));
+  });
+});
