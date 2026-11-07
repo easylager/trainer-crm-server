@@ -84,3 +84,64 @@ describe('гонка ответов при переключении тренер
     assert.deepEqual(h.S.slots.map((s) => s.id), [222]);
   });
 });
+
+describe('групповой слот: одно место — один участник', () => {
+  const family = { items: [
+    { client_id: 10, role: 'self', first_name: 'Мама' },
+    { client_id: 11, role: 'guardian', first_name: 'Соня' },
+    { client_id: 12, role: 'guardian', first_name: 'Маша' },
+  ], default_profile_id: 10 };
+  const groupTrainer = () => trainer(1, { services: [svc(1, tiers([['child', 5000], ['adult', 5500], ['two_children', 8000]]), { group_price_cents: 2500 })] });
+
+  it('постоянный: второго ребёнка не отметить, «Можно двоих» не показываем, запись — на одного', async () => {
+    const h = boot({ showcase: { items: [groupTrainer()] }, profiles: family, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(301, { capacity: 6, spots_left: 1, service_id: 1 })] }) },
+      { match: (c) => isPath(c, '/api/webapp/client/booking'), reply: () => resp(200, { success: true }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 301 });
+    await tick();
+    h.click({ 'data-act': 'pick', 'data-k': 10 }); // снять маму
+    h.click({ 'data-act': 'pick', 'data-k': 11 });
+    assert.ok(!h.app.innerHTML.includes('Можно двоих'));
+    assert.match(h.app.innerHTML, /data-k="12" aria-checked="false" disabled/);
+    assert.match(h.app.innerHTML, /<b>25 BYN<\/b>/);
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    const b = h.posts('/api/webapp/client/booking');
+    assert.equal(b.length, 1);
+    assert.equal(b[0].headers['X-Profile-Id'], '11');
+    assert.equal(b[0].body.comment, null);
+  });
+
+  it('двое, отмеченные на индивидуальном слоте, в группе не уходят одной записью', async () => {
+    const T = groupTrainer();
+    const h = boot({ showcase: { items: [T] }, profiles: family, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(201), slot(301, { capacity: 6, spots_left: 2, service_id: 1 })] }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 201 });
+    h.click({ 'data-act': 'pick', 'data-k': 10 });
+    h.click({ 'data-act': 'pick', 'data-k': 11 });
+    h.click({ 'data-act': 'pick', 'data-k': 12 });
+    assert.equal(h.S.book.selected.length, 2);
+    h.click({ 'data-act': 'slot', 'data-slot': 301 }); // из формы — на групповой слот
+    assert.equal(h.S.book.selected.length, 1);
+  });
+
+  it('новый ученик: в группе нет «Двое на одном занятии»', async () => {
+    const h = boot({ showcase: { items: [groupTrainer()] }, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(301, { capacity: 6, spots_left: 3, service_id: 1 })] }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 301 });
+    assert.ok(!h.app.innerHTML.includes('data-act="duo"'));
+    assert.ok(!h.app.innerHTML.includes('data-k="two_children"'));
+  });
+});

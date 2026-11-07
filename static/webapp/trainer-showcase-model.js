@@ -431,10 +431,12 @@
   /**
    * Можно ли отметить ещё одного: до двоих и только если у услуги есть тариф на двоих (на эту пару,
    * когда вид обоих известен). Нет тарифов на двоих — второго не выбрать.
+   * Групповой слот (`opts.group`): одна запись = одно место = один участник — второго не отметить.
    */
   function canAddProfile(service, selected, candidate, opts) {
     if (selected.length >= 2) return false;
     if (!selected.length) return true;
+    if (opts && opts.group) return false;
     var duo = tierChoices(service, 2);
     if (!duo.length) return false;
     var k1 = profileKind(selected[0], opts);

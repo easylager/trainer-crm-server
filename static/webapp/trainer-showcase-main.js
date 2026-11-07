@@ -669,6 +669,8 @@
       notice: '',
     };
     if (slot.capacity > 1 && slot.service_id) S.serviceId = slot.service_id;
+    // В группу — одно место на запись: из двоих, отмеченных на прошлом слоте, остаётся первый.
+    if (slot.capacity > 1 && S.book.selected.length > 1) S.book.selected = S.book.selected.slice(0, 1);
     BC.emitBookingAnalytics('booking_step_viewed', { step: 'form', host: 'trainers' });
     if (S.view === 'book') render();
     else go('book');
@@ -683,6 +685,11 @@
     return currentService();
   }
 
+  /** Групповой слот: одна запись = одно место = один участник (второй профиль и «двое» недоступны). */
+  function isGroupBooking() {
+    return !!(S.book && S.book.slot && S.book.slot.capacity > 1);
+  }
+
   /** Опции тарифа постоянного: подсказки только этого тренера и этой услуги, известные дети, явный выбор. */
   function regularOpts(svc) {
     var hints = {};
@@ -690,7 +697,7 @@
     Object.keys(map).forEach(function (pid) {
       if (svc && map[pid].sid === Number(svc.service_id)) hints[pid] = map[pid].vid;
     });
-    return { hints: hints, knownChildIds: S.knownChildIds, override: S.book ? S.book.override : null };
+    return { hints: hints, knownChildIds: S.knownChildIds, override: S.book ? S.book.override : null, group: isGroupBooking() };
   }
 
   /** Тариф и участники текущего выбора: { tier, duo, ready, participant, kindTitle }. */
@@ -706,7 +713,7 @@
       var hasTiers = (svc.price_tiers || []).length > 0;
       return {
         // Тариф не определился (вид профиля неизвестен) — форма просит выбрать его явно.
-        ready: group || (!hasTiers && b.selected.length === 1) || !!tier,
+        ready: group ? b.selected.length === 1 : (!hasTiers && b.selected.length === 1) || !!tier,
         needsTier: !group && hasTiers && !tier,
         tier: tier,
         duo: !!(tier && M.isDuoKind(tier.tier_kind)) || b.selected.length === 2,
@@ -829,11 +836,11 @@
   function regularFormHtml(svc) {
     var b = S.book;
     var opts = regularOpts(svc);
-    var hasDuo = M.tierChoices(svc, 2).length > 0;
+    var hasDuo = !opts.group && M.tierChoices(svc, 2).length > 0;
     var h = '<div class="fl"><span class="lbl">Кого записываем?' + (hasDuo ? ' <span class="mut" style="font-weight:500">Можно двоих</span>' : '') + '</span><div class="pick multi">';
     h += S.profiles.map(function (p) {
       var on = b.selected.some(function (x) { return Number(x.client_id) === Number(p.client_id); });
-      var single = { hints: opts.hints, knownChildIds: opts.knownChildIds };
+      var single = { hints: opts.hints, knownChildIds: opts.knownChildIds, group: opts.group };
       var tier = M.regularTier(svc, [p], single);
       var last = !!M.hintTier(svc, p, single);
       var sub = last ? 'как в прошлый раз' : tier ? (tier.tier_kind === 'child' ? 'детский' : 'взрослый') : '';

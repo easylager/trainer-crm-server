@@ -157,6 +157,13 @@ describe('постоянный ученик', () => {
     assert.equal(M.canAddProfile(noTwoAdults, [me], { client_id: 9, role: 'self' }), false);
   });
 
+  it('групповой слот: одно место на запись — второго не отметить, даже если у услуги есть тариф на двоих', () => {
+    assert.equal(M.canAddProfile(s, [sonya], misha, { ...kids, group: true }), false);
+    assert.equal(M.canAddProfile(s, [], sonya, { ...kids, group: true }), true);
+    assert.equal(M.canAddProfile(s, [sonya], misha, kids), true);
+    assert.equal(M.whoOptions(s, { group: true }).duo.length, 0);
+  });
+
   it('«спишем 1» — только если абонемент точно покрывает тариф', () => {
     const base = { trainer_id: 9, status: 'active', sessions_remaining: 4, service_ids: [], product_name: '8 занятий' };
     const any = { ...base, tier_kinds: [] };
