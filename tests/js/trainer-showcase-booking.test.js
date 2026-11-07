@@ -336,3 +336,27 @@ describe('групповая цена в форме = цена, которую �
     assert.match(payLine(h.app.innerHTML), new RegExp('<b>' + serverGroupPrice(card.services[0]) / 100 + ' BYN</b>'));
   });
 });
+
+describe('обрыв связи при записи', () => {
+  it('запись проверяется у профиля, на который уходила (ребёнок), а не у родителя', async () => {
+    const h = boot({ showcase: { items: [trainer(1)] }, session: PHONE, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(101)] }) },
+      { match: (c) => isPath(c, '/api/webapp/client/profiles') && c.method === 'POST', reply: () => resp(200, { client_id: 900 }) },
+      { match: (c) => isPath(c, '/api/webapp/client/booking'), reply: () => Promise.reject(new TypeError('Failed to fetch')) },
+      // Сервер: запись создана на профиль 900; у родителя (без заголовка) — пусто.
+      { match: (c) => isPath(c, '/api/webapp/client/bookings'), reply: (c) => resp(200, { days: c.headers['X-Profile-Id'] === '900' ? [{ bookings: [{ slot_id: 101 }] }] : [] }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 101 });
+    h.click({ 'data-act': 'pick', 'data-k': 'child' });
+    h.input('name', 'Соня', 'child');
+    h.click({ 'data-act': 'submit' });
+    await tick();
+    const check = h.calls.filter((c) => isPath(c, '/api/webapp/client/bookings'));
+    assert.equal(check.length, 1);
+    assert.equal(check[0].headers['X-Profile-Id'], '900');
+    assert.equal(h.S.view, 'sent');
+  });
+});

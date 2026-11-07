@@ -1014,9 +1014,12 @@
     }
     b.submitting = true;
     b.notice = '';
+    b.sentProfileId = null;
     render();
     profilePromise
       .then(function (profileId) {
+        // Профиль, на который уходит запись: при обрыве связи проверяем записи именно у него.
+        b.sentProfileId = profileId;
         var isSelf = !b.regular ? plan.profile === 'self' : (b.selected[0].role === 'self');
         var body = buildBookingBody({
           slot: b.slot,
@@ -1058,7 +1061,7 @@
           render();
           return;
         }
-        verifyUnknown(null, choice);
+        verifyUnknown(b.sentProfileId, choice);
       });
   }
 
