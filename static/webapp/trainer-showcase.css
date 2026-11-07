@@ -22,7 +22,7 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 
 .tsw-view { display: flex; flex-direction: column; min-height: 100vh; }
 .bd { padding: 12px 16px 16px; display: grid; gap: 12px; align-content: start; flex: 1; max-width: 560px; width: 100%; margin: 0 auto; }
-.back { all: unset; cursor: pointer; color: var(--a-soft-tx); font-weight: 700; font-size: 14px; min-height: 40px; display: inline-flex; align-items: center; justify-self: start; }
+.back { all: unset; cursor: pointer; color: var(--a-soft-tx); font-weight: 700; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; justify-self: start; }
 .ft { position: sticky; bottom: 0; z-index: 5; padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(180deg, transparent, var(--a-bg) 30%); display: flex; gap: 8px; align-items: center; max-width: 560px; width: 100%; margin: 0 auto; }
 .ft.col { flex-direction: column; align-items: stretch; }
 .cta { all: unset; box-sizing: border-box; cursor: pointer; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 14px; background: var(--a-cta); color: var(--a-cta-tx); font-weight: 800; font-size: 15px; text-align: center; padding: 0 12px; }
@@ -34,12 +34,12 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 .mut { color: var(--a-hint); font-size: 13px; }
 .tabsA { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
 .tabsA::-webkit-scrollbar { display: none; }
-.tabsA button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 40px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 14px; background: var(--a-sf); border: 1px solid var(--a-line); font-weight: 700; font-size: 13.5px; }
+.tabsA button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 14px; background: var(--a-sf); border: 1px solid var(--a-line); font-weight: 700; font-size: 13.5px; }
 .tabsA button[aria-selected="true"] { background: var(--a-tx); color: var(--a-bg); border-color: var(--a-tx); }
 .tabsA button b { font-weight: 500; opacity: .6; margin-left: 4px; }
 .facts { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .facts > span { font-size: 13px; font-weight: 700; color: var(--a-soft-tx); }
-.facts .f2 { all: unset; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--a-soft-tx); min-height: 40px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.facts .f2 { all: unset; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--a-soft-tx); min-height: 44px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
 
 .vc { background: var(--a-sf); border-radius: 22px; overflow: hidden; border: 1px solid var(--a-line); display: grid; cursor: pointer; }
 .vc .im { position: relative; height: 180px; background: var(--a-hero); }
@@ -76,7 +76,7 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 .pc .lb { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--a-hero-hint); font-weight: 700; }
 .seg { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .seg::-webkit-scrollbar { display: none; }
-.seg button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 36px; display: inline-flex; align-items: center; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 0 12px; font-size: 13px; font-weight: 700; color: var(--a-hero-hint); }
+.seg button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 0 12px; font-size: 13px; font-weight: 700; color: var(--a-hero-hint); }
 .seg button[aria-pressed="true"] { background: #fff; color: #0d1b26; border-color: #fff; }
 .svcs { display: grid; gap: 6px; }
 .svcs button { all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; align-items: center; min-height: 44px; padding: 6px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.22); font-size: 13.5px; }
@@ -90,7 +90,7 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 .card p { margin: 0; font-size: 13.5px; white-space: pre-line; }
 .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; padding: 7px 0; border-top: 1px solid var(--a-line); }
 .kv:first-of-type { border-top: 0; } .kv span { color: var(--a-hint); } .kv b { font-variant-numeric: tabular-nums; text-align: right; }
-.more { all: unset; cursor: pointer; color: var(--a-soft-tx); font-weight: 700; font-size: 13.5px; min-height: 40px; display: inline-flex; align-items: center; justify-self: start; }
+.more { all: unset; cursor: pointer; color: var(--a-soft-tx); font-weight: 700; font-size: 13.5px; min-height: 44px; display: inline-flex; align-items: center; justify-self: start; }
 .more.c { justify-self: center; }
 .wk { display: flex; justify-content: space-between; align-items: center; } .wk b { font-size: 14px; }
 .wk button { all: unset; cursor: pointer; width: 44px; height: 44px; border-radius: 12px; background: var(--a-sf); border: 1px solid var(--a-line); display: grid; place-items: center; color: var(--a-soft-tx); font-weight: 800; }
@@ -135,7 +135,7 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 .pick button[disabled] { opacity: .4; cursor: default; }
 .pick b { font-weight: 800; font-size: 15px; } .pick small { display: block; color: var(--a-hint); font-size: 12px; font-weight: 500; margin-top: 1px; }
 .pick em { font-style: normal; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.duo { all: unset; cursor: pointer; color: var(--a-soft-tx); font-weight: 700; font-size: 13.5px; min-height: 40px; display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
+.duo { all: unset; cursor: pointer; color: var(--a-soft-tx); font-weight: 700; font-size: 13.5px; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
 .inpx { min-height: 48px; width: 100%; border: 1.5px solid var(--a-line); border-radius: 14px; padding: 0 12px; background: var(--a-sf); color: var(--a-tx); font: inherit; font-size: 16px; }
 textarea.inpx { padding: 12px; min-height: 76px; resize: vertical; }
 .inpx:focus { outline: none; border-color: var(--a-cta); }
