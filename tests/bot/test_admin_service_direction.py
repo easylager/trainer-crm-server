@@ -23,7 +23,7 @@ def _env(monkeypatch, _test_db_core):
 async def _seed(db_session):
     """Своя услуга + две публичные ice-услуги (id, direction_a, direction_b)."""
     ids = []
-    for name, public, vk, owner in (("T353-prygki", False, None, 1), ("T353-A", True, "ice", None), ("T353-B", True, "ice", None)):
+    for name, public, vk, _owner in (("T353-prygki", False, None, 1), ("T353-A", True, "ice", None), ("T353-B", True, "ice", None)):
         r = await db_session.execute(
             text(
                 "INSERT INTO services (name, sort_order, vertical_key, is_public, created_by_trainer_id) "
