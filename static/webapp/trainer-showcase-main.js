@@ -338,12 +338,12 @@
     var arenas = M.arenaOptions(S.items, key);
     var arenaName = '';
     if (arenaId) {
-      var found = arenas.filter(function (a) { return Number(a.id) === Number(arenaId); })[0];
+      var found = M.arenaOptions(S.items, 'all').filter(function (a) { return Number(a.id) === Number(arenaId); })[0];
       arenaName = found ? found.name : 'Каток';
     }
     var arenaBtn = solo || (arenas.length < 2 && !arenaId) ? '' :
       '<button type="button" class="f2" data-act="arena-sheet">' + (arenaId ? esc(arenaName) + ' ✕' : 'Все катки ▾') + '</button>';
-    h += '<div class="facts"><span>' + esc(facts.join(' · ')) + '</span>' + arenaBtn + '</div>';
+    h += '<div class="facts"><span>' + (list.length ? esc(facts.join(' · ')) : '') + '</span>' + arenaBtn + '</div>';
     if (!list.length) {
       h += '<div class="card"><p>' + esc((arenaName || 'Здесь') + ': тренеров «' + dir.title + '» здесь пока нет') + '</p>' +
         (key !== 'all' && arenaId ? '<button type="button" class="sec2" data-act="tab" data-key="all">Все тренеры этого катка</button>' : '') +
@@ -425,18 +425,19 @@
       if (svc) h += tiersHtml(svc);
       var where = svc && svc.is_online ? 'онлайн' : ((t.arenas || []).length === 1 ? t.arenas[0].name : '');
       var lb = [t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '', where, 'ближайшее время'].filter(Boolean).join(' · ');
-      h += '<span class="lb">' + esc(lb) + '</span>';
+      var noTime = S.slots && !S.slots.length && !S.slotsError;
+      if (!noTime) h += '<span class="lb">' + esc(lb) + '</span>';
       if (S.slots === null) h += '<span style="color:var(--a-hero-hint)">Загружаем время…</span>';
       else if (S.slots.length) {
         h += '<div class="times">' + S.slots.slice(0, 3).map(function (s) { return slotLabel(s, (t.arenas || []).length > 1); }).join('') +
           '<button type="button" class="alt" data-act="week">Другое время</button></div>';
-      } else {
-        h += '<span style="color:var(--a-hero-hint)">' + (S.slotsError ? 'Не удалось загрузить время.' : 'Свободного времени пока нет.') + '</span>';
+      } else if (S.slotsError) {
+        h += '<span style="color:var(--a-hero-hint)">Не удалось загрузить время.</span>';
       }
       h += '</div>';
       if (S.slots && !S.slots.length && !S.slotsError) {
         h += '<div class="card"><h4>На ближайшие 2 недели свободного времени нет</h4><p class="mut">Попросите сообщить, когда появится.</p>' +
-          (initData ? '<button type="button" class="sec2" data-act="notify">🔔 Напомнить, когда появится время</button>' : '') + '</div>';
+          (initData ? '<button type="button" class="sec2" data-act="notify">Напомнить, когда появится время</button>' : '') + '</div>';
       }
       if (S.slotsError) h += '<button type="button" class="sec2" data-act="reslots">Повторить</button>';
     }
@@ -460,8 +461,8 @@
     } else if (S.slots && S.slots.length) {
       var first = S.slots[0];
       h += '<div class="ft"><button type="button" class="cta" data-act="slot" data-slot="' + esc(first.id) + '">Записаться на ' +
-        esc(M.daySmall(first.slot_date, S.todayIso) + ', ' + String(first.start_time).slice(0, 5)) + '</button>' +
-        (t.contact_url ? '<button type="button" class="ico" data-act="write" aria-label="Написать тренеру">✉</button>' : '') + '</div>';
+        esc(M.ctaDay(first.slot_date, S.todayIso) + ', ' + String(first.start_time).slice(0, 5)) + '</button>' +
+        (t.contact_url ? '<button type="button" class="ico" data-act="write" aria-label="Написать тренеру"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></button>' : '') + '</div>';
     } else if (t.contact_url) {
       h += '<div class="ft"><button type="button" class="sec2" style="flex:1" data-act="write">Написать тренеру</button></div>';
     }
@@ -1174,6 +1175,8 @@
     var q = new URLSearchParams(location.search);
     if (S.tab && S.tab !== 'all') q.set('tab', S.tab); else q.delete('tab');
     if (S.arenaId) q.set('arena_id', String(S.arenaId)); else q.delete('arena_id');
+    // Фильтры витрины — в адресе; вход в тренера/время одноразовый и при перезагрузке не повторяется.
+    ['trainer_id', 'slot_id', 'service_id', 'via'].forEach(function (k) { q.delete(k); });
     try { history.replaceState(history.state, '', location.pathname + '?' + q.toString()); } catch (e) { /* */ }
   }
 
@@ -1336,14 +1339,22 @@
     if (viaList) go('trainer');
     else S.view = 'trainer';
     render();
-    return loadSlots().then(function () {
-      var slot = slotById(slotId);
-      if (slot) openBooking(slot);
-      else {
-        render();
-        showTaken('Это время уже заняли');
-      }
-    });
+    return loadSlots()
+      .then(function () {
+        var slot = slotById(slotId);
+        if (slot || !initData) return slot;
+        // Список — только эта и следующая неделя; время по ссылке может быть дальше — проверяем его отдельно.
+        return api('/api/webapp/client/slot/' + encodeURIComponent(slotId) + '?trainer_id=' + t.id)
+          .then(function (d) { return d && d.available && d.slot ? decorateSlot(d.slot) : null; })
+          .catch(function () { return null; });
+      })
+      .then(function (slot) {
+        if (slot) openBooking(slot);
+        else {
+          render();
+          showTaken('Это время уже заняли');
+        }
+      });
   }
 
   function boot() {

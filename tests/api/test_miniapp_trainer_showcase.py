@@ -167,3 +167,25 @@ async def test_request_sheet_phone_is_saved_for_trainer(app_use_test_db, db_sess
         await db_session.execute(text("SELECT phone FROM clients WHERE telegram_id = :tg"), {"tg": ctg})
     ).scalar_one()
     assert saved == phone
+
+
+@pytest.mark.asyncio
+async def test_single_slot_link_beyond_two_weeks_and_taken(app_use_test_db, db_session) -> None:
+    """Ссылка ``trainer_<id>_s_<slot>``: время за пределами /client/slots открывается; занятое — нет."""
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Ира{uuid.uuid4().hex[:4]}")
+    await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+    far = await _slot(db_session, tid, days=20, hour=12, arena_id=place["arena_id"])
+    taken = await _slot(db_session, tid, days=4, hour=12, arena_id=place["arena_id"], status="booked")
+    await db_session.commit()
+    headers = {"X-Telegram-Init-Data": "mock"}
+    with patch_client_init_auth(_fresh_client_telegram_id()):
+        async with _client() as client:
+            ok = (await client.get(f"/api/webapp/client/slot/{far}?trainer_id={tid}", headers=headers)).json()
+            busy = (await client.get(f"/api/webapp/client/slot/{taken}?trainer_id={tid}", headers=headers)).json()
+            alien = (await client.get(f"/api/webapp/client/slot/{far}?trainer_id={tid + 100000}", headers=headers)).json()
+    assert ok["available"] is True
+    assert ok["slot"]["id"] == far and ok["slot"]["arena_id"] == place["arena_id"] and ok["slot"]["start_time"] == "12:00"
+    assert busy == {"available": False, "slot": None}
+    assert alien["available"] is False

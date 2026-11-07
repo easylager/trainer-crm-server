@@ -451,6 +451,15 @@
     return dayLabel(iso, todayIso).toLowerCase();
   }
 
+  /** Кнопка «Записаться на …»: «сегодня» / «завтра» / «10 ноября» — без дня недели, чтобы влезть в строку. */
+  function ctaDay(iso, todayIso) {
+    var diff = daysBetween(todayIso, iso);
+    if (diff === 0) return 'сегодня';
+    if (diff === 1) return 'завтра';
+    var d = parseIsoDate(iso);
+    return d.getUTCDate() + ' ' + MONTHS_GEN[d.getUTCMonth()];
+  }
+
   /** «Сегодня, 17:15–18:00» — конец занятия вместо длительности. */
   function slotWhen(slot, todayIso) {
     var t = String(slot.start_time || '').slice(0, 5);
@@ -600,6 +609,7 @@
     daysBetween: daysBetween,
     dayLabel: dayLabel,
     daySmall: daySmall,
+    ctaDay: ctaDay,
     slotWhen: slotWhen,
     slotMinutes: slotMinutes,
     weekRange: weekRange,

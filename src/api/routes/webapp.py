@@ -1869,6 +1869,73 @@ async def get_client_slots(
     }
 
 
+@router.get("/client/slot/{slot_id:int}")
+async def get_client_slot(
+    slot_id: int,
+    trainer_id: int = Query(..., description="Trainer from the link — slot must belong to them"),
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Одно время по ссылке «записаться на это время» (TASK-357, ``trainer_<id>_s_<slot>``).
+
+    ``/client/slots`` отдаёт только эту и следующую неделю; ссылка с сайта может вести дальше.
+    Свободно и доступно для записи — те же правила, что у списка: ``available``, без активной
+    записи на одного, не раньше ``min_hours_before_booking`` рабочих часов, онлайн-запись у тренера.
+    Иначе ``{"available": false}`` — клиент показывает «Время заняли».
+    """
+    del principal
+    slot = await get_slot(session, slot_id)
+    unavailable = {"available": False, "slot": None}
+    if not slot or int(slot["trainer_id"]) != int(trainer_id) or slot.get("status") != "available":
+        return unavailable
+    if not await trainer_allows_online_booking(session, trainer_id):
+        return unavailable
+    cap = max(1, int(slot.get("capacity") or 1))
+    active = int(
+        (
+            await session.execute(
+                text("SELECT COUNT(*) FROM bookings WHERE slot_id = :s AND status IN ('pending', 'confirmed')"),
+                {"s": int(slot_id)},
+            )
+        ).scalar()
+        or 0
+    )
+    if active >= cap:
+        return unavailable
+    min_hours = (
+        await session.execute(
+            text("SELECT COALESCE(min_hours_before_booking, 3) FROM trainer_profiles WHERE trainer_id = :t"),
+            {"t": int(trainer_id)},
+        )
+    ).scalar()
+    now_minsk = datetime.now(ZoneInfo(NOTIFICATION_TZ))
+    if working_hours_between(now_minsk, slot["slot_date"], slot["start_time"]) < int(min_hours if min_hours is not None else 3):
+        return unavailable
+    arena_id = slot.get("arena_id")
+    if arena_id is None and not slot.get("is_online"):
+        arena_id = await trainer_default_slot_arena_id(session, trainer_id)
+    arena_name = None
+    if arena_id is not None:
+        arena_name = (
+            await session.execute(text("SELECT name FROM arenas WHERE id = :a"), {"a": int(arena_id)})
+        ).scalar()
+    return {
+        "available": True,
+        "slot": {
+            "id": int(slot["id"]),
+            "slot_date": slot["slot_date"].isoformat(),
+            "start_time": slot["start_time"].strftime("%H:%M"),
+            "end_time": slot["end_time"].strftime("%H:%M") if slot.get("end_time") else "",
+            "capacity": cap,
+            "spots_left": max(0, cap - active),
+            "service_id": slot.get("service_id"),
+            "arena_id": arena_id,
+            "arena_name": (str(arena_name).strip() or None) if arena_name else ("Онлайн" if slot.get("is_online") else None),
+            "is_online": bool(slot.get("is_online")),
+        },
+    }
+
+
 def _this_week_monday() -> date:
     today = date.today()
     return today - timedelta(days=today.weekday())

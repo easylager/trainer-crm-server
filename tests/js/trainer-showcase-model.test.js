@@ -148,6 +148,8 @@ describe('даты и имена', () => {
     assert.equal(M.slotWhen({ slot_date: '2026-11-07', start_time: '17:15', end_time: '18:00' }, '2026-11-07'), 'Сегодня, 17:15–18:00');
     assert.equal(M.dayLabel('2026-11-10', '2026-11-07'), 'Вт, 10 ноября');
     assert.equal(M.weekRange('2026-11-07'), '7–13 ноября');
+    assert.equal(M.ctaDay('2026-11-07', '2026-11-07'), 'сегодня');
+    assert.equal(M.ctaDay('2026-11-10', '2026-11-07'), '10 ноября');
     assert.equal(M.weekRange('2026-11-28'), '28 ноября – 4 декабря');
     const days = M.weekDays('2026-11-07', [{ slot_date: '2026-11-08' }]);
     assert.deepEqual(days.slice(0, 2).map((d) => [d.wd, d.day, d.off]), [['сб', 7, true], ['вс', 8, false]]);
