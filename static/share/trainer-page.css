@@ -35,7 +35,7 @@
 .tp-pcard::after { content: ""; position: absolute; z-index: -1; width: 240px; height: 240px; border-radius: 50%; border: 2px solid rgba(69, 185, 187, .28); right: -90px; top: -120px; }
 .tp-dsw { display: flex; gap: 6px; flex-wrap: wrap; }
 .tp-dsw button { border: 1px solid rgba(255, 255, 255, .2); background: transparent; color: var(--g-on-dark-muted); border-radius: 999px;
-  min-height: 36px; padding: 6px 13px; font: 600 14px var(--g-font); cursor: pointer; }
+  min-height: 44px; padding: 6px 13px; font: 600 14px var(--g-font); cursor: pointer; }
 .tp-dsw button[aria-pressed="true"] { background: #fff; color: var(--g-dark); border-color: #fff; }
 .tp-panel[hidden] { display: none; }
 .tp-panel { display: grid; gap: 12px; }
@@ -81,7 +81,7 @@
 .tp-day--empty { background: transparent; }
 .tp-day b { font-size: 13px; color: var(--g-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
 .tp-d { font: 400 22px var(--g-font-display); }
-.tp-slot { width: 100%; text-align: center; border-radius: 12px; padding: 8px 4px; font-weight: 700; font-size: 14px; background: #e8f1fa; color: var(--g-tg-btn) !important; }
+.tp-slot { display: flex; align-items: center; justify-content: center; min-height: 44px; width: 100%; text-align: center; border-radius: 12px; padding: 8px 4px; font-weight: 700; font-size: 14px; background: #e8f1fa; color: var(--g-tg-btn) !important; }
 .tp-slot:hover { background: var(--g-tg-btn); color: #fff !important; }
 .tp-no { font-size: 12px; line-height: 1.3; text-align: center; color: var(--g-muted); }
 .tp-request { background: var(--g-surface); border: 1.5px dashed var(--g-line); border-radius: 20px; padding: 16px; display: flex;

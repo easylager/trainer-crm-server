@@ -1003,7 +1003,7 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-learn__line { margin: 0; font-size: 14.5px; line-height: 1.4; color: var(--g-on-dark-muted); overflow-wrap: anywhere; }
 .b-learn__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .b-learn .b-learn__chips a {
-  background: rgba(255, 255, 255, .1); border-radius: 999px; padding: 7px 12px; min-height: 32px; box-sizing: border-box;
+  background: rgba(255, 255, 255, .1); border-radius: 999px; padding: 7px 12px; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center;
   font-size: 13px; font-weight: 600; color: #fff; text-decoration: none;
 }
 .b-learn .b-learn__go {
