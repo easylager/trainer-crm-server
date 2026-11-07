@@ -18,8 +18,23 @@ const tiers = (pairs) => pairs.map(([kind, cents], i) => ({ id: 100 + i, tier_ki
 const svc = (id, t, extra = {}) => ({ service_id: id, is_public: true, currency_code: 'BYN', price_cents: null, price_tiers: t, ...extra });
 const win = (slot, arena, startsAt, day, time) => ({ slot_id: slot, arena_id: arena, starts_at: startsAt, day, time });
 
+/** Что отдал бы сервер в `min_price_by_direction` для фикстуры без групповых и абонементов: тарифы/цена услуг вкладки. */
+function serverMins(services) {
+  const out = {};
+  M.DIRECTIONS.forEach((d) => {
+    let best = null;
+    M.servicesInDirection({ services }, d.key).forEach((s) => {
+      const ps = (s.price_tiers || []).map((t) => t.price_cents).filter((c) => c > 0);
+      const c = ps.length ? Math.min(...ps) : (s.price_cents > 0 ? s.price_cents : null);
+      if (c && (!best || c < best.cents)) best = { cents: c, currency: 'BYN' };
+    });
+    if (best) out[d.key] = best;
+  });
+  return out;
+}
+
 function trainer(id, over = {}) {
-  return {
+  const t = {
     id, name: 'Тренер ' + id, initial: 'Т', photo_url: null, can_book: true,
     min_session_price_cents: 5000, min_session_price_currency: 'BYN',
     services: [svc(1, tiers([['adult', 5000]]))],
@@ -27,6 +42,8 @@ function trainer(id, over = {}) {
     windows: [],
     ...over,
   };
+  if (!('min_price_by_direction' in over)) t.min_price_by_direction = serverMins(t.services);
+  return t;
 }
 
 const gaevsky = trainer(9, {
@@ -164,8 +181,7 @@ describe('карточка катка (arena)', () => {
 });
 
 describe('«от» — по услугам направления, а не по всем услугам тренера', () => {
-  const group = svc(1, tiers([['adult', 5000]]), { price_group_cents: 2000 });
-  const k = trainer(77, { min_session_price_cents: 3000, services: [group, svc(6, tiers([['adult', 5000]])), svc(7, tiers([['adult', 3000]]))] });
+  const k = trainer(77, { min_session_price_cents: 3000, services: [svc(1, tiers([['adult', 5000]])), svc(6, tiers([['adult', 5000]])), svc(7, tiers([['adult', 3000]]))] });
   const v = trainer(11, { services: [svc(1, tiers([['child', 4500], ['adult', 5000]]))] });
 
   it('ОФП (30) в «от» не входит: «С нуля» 45, «Все» 45, «С клюшкой» 50', () => {
@@ -176,10 +192,9 @@ describe('«от» — по услугам направления, а не по 
     assert.equal(show('s-klyushkoy'), 5000);
   });
 
-  it('нет тарифов — цена услуги; нет цен — null', () => {
-    const plain = trainer(1, { services: [svc(1, [], { price_cents: 4800 })] });
-    assert.equal(M.minPriceOf([plain], 's-nulya').cents, 4800);
+  it('у вкладки нет цены — null', () => {
     assert.equal(M.minPriceOf([trainer(2, { services: [svc(1, [])] })], 'all'), null);
+    assert.equal(M.minPriceOf([trainer(3, { min_price_by_direction: undefined })], 'all'), null);
   });
 
   it('блок входов считает так же: главная, «С нуля», «С клюшкой»', () => {
@@ -187,6 +202,33 @@ describe('«от» — по услугам направления, а не по 
     assert.match(L.build(items, 'city', { cityId: 1 }).line, /^От 45 BYN за занятие/);
     assert.match(L.build(items, 'skate', { cityId: 1 }).line, /2 тренера, от 45 BYN\.$/);
     assert.match(L.build(items, 'hockey', { cityId: 1 }).line, /1 тренер, от 50 BYN\.$/);
+  });
+});
+
+describe('«от» с групповой и абонементом (решение владельца 2026-11-07)', () => {
+  // Сервер посчитал: Влад — групповая 25 на «С нуля»; Гаевский — абонемент 670/16 = 41,87 только на «Хоккейное».
+  const vlad25 = trainer(11, {
+    services: [svc(1, tiers([['child', 4500], ['adult', 5000]]), { group_price_cents: 2500 })],
+    min_price_by_direction: { all: { cents: 2500, currency: 'BYN' }, 's-nulya': { cents: 2500, currency: 'BYN' } },
+  });
+  const gaev = trainer(9, {
+    services: [svc(1, tiers([['child', 5000], ['adult', 5500]])), svc(4, tiers([['adult', 5500]]))],
+    min_price_by_direction: {
+      all: { cents: 4187, currency: 'BYN' },
+      's-nulya': { cents: 5000, currency: 'BYN' },
+      's-klyushkoy': { cents: 4187, currency: 'BYN' },
+    },
+  });
+
+  it('групповая 25 → «С нуля» и главная «от 25»', () => {
+    assert.match(L.build([vlad25, gaev], 'city', { cityId: 1 }).line, /^От 25 BYN за занятие/);
+    assert.match(L.build([vlad25, gaev], 'skate', { cityId: 1 }).line, /2 тренера, от 25 BYN\.$/);
+  });
+
+  it('абонемент на «Хоккейное» — «С клюшкой» «от 41,87», «С нуля» не трогает', () => {
+    assert.match(L.build([gaev], 'hockey', { cityId: 1 }).line, /1 тренер, от 41,87 BYN\.$/);
+    assert.match(L.build([gaev], 'skate', { cityId: 1 }).line, /1 тренер, от 50 BYN\.$/);
+    assert.match(L.build([gaev], 'city', { cityId: 1 }).line, /^От 41,87 BYN за занятие/);
   });
 });
 

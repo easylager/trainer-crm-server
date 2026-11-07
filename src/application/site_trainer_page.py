@@ -186,10 +186,10 @@ def _service_view(svc: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _min_cents(svc: Mapping[str, Any]) -> int | None:
-    from src.application.trainer_min_price import trainer_min_session_price
+    """Цена услуги «от» в её карточке: тарифы, без тарифов — цена услуги (групповая и абонементы — нет)."""
+    from src.application.trainer_min_price import service_price_from
 
-    found = trainer_min_session_price({"services": [svc]})
-    return found[0] if found else None
+    return service_price_from(svc)
 
 
 def group_services(services: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

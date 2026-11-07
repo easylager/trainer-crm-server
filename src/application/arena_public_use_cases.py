@@ -2680,7 +2680,7 @@ async def list_public_arena_trainers(
     )
     for body in out:
         body["windows"] = windows.get(int(body["id"]), [])
-    # «от N за занятие» — та же цифра, что на сайте (минимум тарифов услуг).
+    # «от N за занятие» — та же цифра, что на сайте (тарифы, групповые, абонементы).
     from src.application.trainer_min_price import enrich_min_session_price
 
     await enrich_min_session_price(session, out)

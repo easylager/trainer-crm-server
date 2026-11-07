@@ -5,7 +5,7 @@ vertical ice): таблица направлений и их тексты — ``
 
 * Кто виден — тот же предикат каталога, что у Mini App (``list_active_trainers_for_client``).
 * Тренер во вкладке: есть услуга направления **и** (есть цена **или** ледовый каток в этом городе).
-* Цена и «от» — только тарифы услуги и ``trainer_min_price``.
+* Цена в карточке — тарифы услуги; «от» — ``trainer_min_price`` (тарифы, групповая, абонементы).
 * Окна — те же, что на ``/t/`` (``_trainer_windows_on_arena``), запись — ``booking_url``.
 * Число занятий тренера не показываем (решение владельца 2026-11-07); оценку — от 3 оценок.
 
@@ -156,6 +156,19 @@ async def _usernames(session: AsyncSession, trainer_ids: list[int]) -> dict[int,
     return {int(i): u for i, u in rows.fetchall()}
 
 
+def services_by_direction(services: Sequence[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Услуги тренера по вкладкам (ключ направления), в порядке ``service_ids`` направления."""
+    by_dir: dict[str, list[dict[str, Any]]] = {}
+    for svc in services:
+        key = service_direction(svc)
+        if key:
+            by_dir.setdefault(key, []).append(svc)
+    for key, svcs in by_dir.items():
+        ids_order = _BY_KEY[key].service_ids
+        svcs.sort(key=lambda s: ids_order.index(int(s["service_id"])) if int(s["service_id"]) in ids_order else 99)
+    return by_dir
+
+
 async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> dict[str, Any]:
     """Все опубликованные тренеры города с тем, что нужно карточке и вкладкам."""
     from src.application.arena_media import attach_arena_media_payloads
@@ -164,6 +177,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     from src.application.site_trainer_page import contact_url, trainer_path
     from src.application.site_trainers import trainer_initial, trainer_name, trainer_photo_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
+    from src.application.trainer_min_price import load_pass_offers
     from src.application.trainer_use_cases import list_active_trainers_for_client
     from src.shared.notification_hours import NOTIFICATION_TZ
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
@@ -174,6 +188,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     ids = [int(b["id"]) for b in bodies]
     arenas = await _ice_arenas(session, ids, city_id)
     usernames = await _usernames(session, ids) if ids else {}
+    passes = await load_pass_offers(session, ids)
     can_book: dict[int, bool] = {}
     for tid in ids:
         can_book[tid] = bool((await get_trainer_booking_availability(session, tid)).get("can_book"))
@@ -185,14 +200,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
         tid = int(body["id"])
         profile = body.get("profile") or {}
         name = trainer_name(body)
-        by_dir: dict[str, list[dict[str, Any]]] = {}
-        for svc in body.get("services") or []:
-            key = service_direction(svc)
-            if key:
-                by_dir.setdefault(key, []).append(svc)
-        for key, svcs in by_dir.items():
-            ids_order = _BY_KEY[key].service_ids
-            svcs.sort(key=lambda s: ids_order.index(int(s["service_id"])) if int(s["service_id"]) in ids_order else 99)
+        by_dir = services_by_direction(body.get("services") or [])
         trainers.append(
             {
                 "id": tid,
@@ -208,6 +216,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
                 "about": str(profile.get("description") or "").strip(),
                 "arenas": arenas.get(tid, []),
                 "services_by_dir": by_dir,
+                "passes": passes.get(tid, []),
                 "can_book": can_book[tid],
                 "windows": windows.get(tid, []) if can_book[tid] else [],
                 "contact_url": contact_url(tid, usernames.get(tid), listed=True),
@@ -229,21 +238,41 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
 
 
 def direction_min_price(trainer: Mapping[str, Any], direction: Direction) -> tuple[int, str] | None:
-    """«от» тренера в направлении (во «Всех» — по всем направлениям) — ``trainer_min_price``."""
+    """«от» тренера в направлении (во «Всех» — по всем направлениям) — ``trainer_min_price``.
+
+    Кандидаты — услуги направления (тарифы/цена, групповая) и абонементы тренера, покрывающие
+    хоть одну из них. Ролики и ОФП/СФП — не направления, в «от» не входят.
+    """
     from src.application.trainer_min_price import trainer_min_session_price
 
     by_dir = trainer["services_by_dir"]
     svcs = [s for k in ([direction.key] if direction is not ALL else list(by_dir)) for s in by_dir.get(k, [])]
-    return trainer_min_session_price({"services": svcs})
+    return trainer_min_session_price({"services": svcs, "passes": trainer.get("passes") or []})
+
+
+def min_price_by_direction(trainer: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """``{"all" | slug: {"cents", "currency"}}`` — «от» по вкладкам для витрины Mini App (ключи — её)."""
+    out: dict[str, dict[str, Any]] = {}
+    for direction in (ALL, *DIRECTIONS):
+        found = direction_min_price(trainer, direction)
+        if found:
+            out[direction.slug or "all"] = {"cents": found[0], "currency": found[1]}
+    return out
 
 
 def is_listed(trainer: Mapping[str, Any], direction: Direction) -> bool:
-    """Правило показа: услуга направления и (цена или каток). «Все» — хотя бы одно направление."""
+    """Правило показа: услуга направления и (цена услуги или каток). «Все» — хотя бы одно направление.
+
+    «Цена» здесь — тариф или цена самой услуги, как ``serviceHasPrice`` витрины Mini App.
+    """
+    from src.application.trainer_min_price import service_price_from
+
     keys = list(trainer["services_by_dir"]) if direction is ALL else [direction.key]
     for key in keys:
-        if key not in trainer["services_by_dir"]:
+        svcs = trainer["services_by_dir"].get(key)
+        if not svcs:
             continue
-        if trainer["arenas"] or direction_min_price(trainer, _BY_KEY[key]) is not None:
+        if trainer["arenas"] or any(service_price_from(s) is not None for s in svcs):
             return True
     return False
 

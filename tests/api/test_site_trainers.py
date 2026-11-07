@@ -13,7 +13,7 @@ from src.api.app import app
 from src.application.ice_city_day import city_slug
 from src.application.place_links import parse_trainer_deep_link, trainer_start_param
 from src.application.site_trainers import trainer_initial, trainer_line
-from src.application.trainer_min_price import trainer_min_session_price
+from src.application.trainer_min_price import load_pass_offers, trainer_min_session_price
 from tests.api.test_public_arenas import _insert_arena
 from tests.api.test_public_catalog_integration import _create_active_trainer_via_api
 from tests.api.test_public_place_page import _place
@@ -33,20 +33,32 @@ def test_trainer_start_param_round_trip() -> None:
     assert parse_trainer_deep_link("arena_7") is None
 
 
-def test_min_session_price_is_cheapest_tariff_not_group_or_pass() -> None:
-    # TASK-352: Влад (#11) — тарифы 45/50, групповая цена 25; «от» = 45, не 25.
-    services = [
-        {
-            "service_name": "Обучение катанию «с нуля»",
-            "price_cents": 5000,
-            "currency_code": "BYN",
-            "group_price_cents": 2500,
-            "price_tiers": [{"tier_kind": "child", "price_cents": 4500}, {"tier_kind": "adult", "price_cents": 5000}],
-        }
-    ]
-    assert trainer_min_session_price({"services": services}) == (4500, "BYN")
-    # Нет тарифов — цена услуги.
-    assert trainer_min_session_price({"services": [{**services[0], "price_tiers": []}]}) == (5000, "BYN")
+def test_min_session_price_takes_tariffs_group_and_pass() -> None:
+    # Решение владельца 2026-11-07: «от» — и групповая, и абонемент на занятие (правило TASK-265).
+    vlad = {
+        "service_id": 1,
+        "service_name": "Обучение катанию «с нуля»",
+        "price_cents": 5000,
+        "currency_code": "BYN",
+        "group_price_cents": 2500,
+        "price_tiers": [{"tier_kind": "child", "price_cents": 4500}, {"tier_kind": "adult", "price_cents": 5000}],
+    }
+    # Влад (#11): тарифы 45/50, групповая 25 → «от 25».
+    assert trainer_min_session_price({"services": [vlad]}) == (2500, "BYN")
+    no_group = {**vlad, "group_price_cents": None}
+    # TASK-352: есть тарифы — берём их; цена услуги поверх тарифов не минимум.
+    assert trainer_min_session_price({"services": [{**no_group, "price_cents": 3000}]}) == (4500, "BYN")
+    assert trainer_min_session_price({"services": [{**no_group, "price_tiers": []}]}) == (5000, "BYN")
+    # Гаевский: тарифы 50/55, абонемент 670/16 = 41,87 на все услуги → «от 41,87».
+    gaev = {**no_group, "price_tiers": [{"tier_kind": "child", "price_cents": 5000}, {"tier_kind": "adult", "price_cents": 5500}]}
+    every = {"per_session_cents": 4187, "service_ids": None}
+    assert trainer_min_session_price({"services": [gaev], "passes": [every]}) == (4187, "BYN")
+    # Абонемент только на другую услугу (Хоккейное, 4) эти услуги не покрывает.
+    hockey_only = {"per_session_cents": 4187, "service_ids": (4,)}
+    assert trainer_min_session_price({"services": [gaev], "passes": [hockey_only]}) == (5000, "BYN")
+    assert trainer_min_session_price({"services": [gaev, {**gaev, "service_id": 4}], "passes": [hockey_only]}) == (4187, "BYN")
+    # Нет услуг — абонементу нечего покрывать.
+    assert trainer_min_session_price({"services": [], "passes": [every]}) is None
     assert trainer_min_session_price({"services": [{"service_name": "ОФП", "price_cents": None}]}) is None
     assert trainer_min_session_price({"services": [{"price_cents": 150000, "currency_code": "RUB"}]}) == (150000, "RUB")
 
@@ -54,10 +66,11 @@ def test_min_session_price_is_cheapest_tariff_not_group_or_pass() -> None:
 def test_trainer_line_shows_cheapest_session() -> None:
     trainer = {
         "services": [{"service_name": "Обучение катанию «с нуля»", "price_cents": 5500}],
-        "min_session_price_cents": 5000,
+        "min_session_price_cents": 4187,
         "min_session_price_currency": "BYN",
     }
-    assert trainer_line(trainer) == "Обучение катанию «с нуля» · от\u00a050\u00a0BYN за\u00a0занятие"
+    # Дробная цена абонемента — как есть (решение владельца).
+    assert trainer_line(trainer) == "Обучение катанию «с нуля» · от\u00a041,87\u00a0BYN за\u00a0занятие"
     assert trainer_line({"services": [{"service_name": "Фигурное катание"}], "min_session_price_cents": None}) == "Фигурное катание"
     assert trainer_line({}) == ""
 
@@ -67,7 +80,16 @@ def test_trainer_initial_skips_emoji() -> None:
     assert trainer_initial("") == "Т"
 
 
-async def _trainer_on(db_session, client: AsyncClient, place: dict, *, first_name: str) -> int:
+async def _trainer_on(
+    db_session,
+    client: AsyncClient,
+    place: dict,
+    *,
+    first_name: str,
+    group_price_cents: int | None = 2500,
+    tariffs: tuple[int, int] = (4500, 5000),
+) -> int:
+    """Тренер на катке: тарифы ``tariffs`` (детский, взрослый), групповая, абонемент 670/16 (41,87)."""
     sid = await require_seed_service_id(db_session)
     tid = await _create_active_trainer_via_api(
         client,
@@ -92,18 +114,18 @@ async def _trainer_on(db_session, client: AsyncClient, place: dict, *, first_nam
     await db_session.execute(
         text("UPDATE trainer_services SET price_cents = 5500 WHERE trainer_id = :t"), {"t": tid}
     )
-    # TASK-352: «от» — минимум тарифов (45/50), а не групповая цена и не абонемент (41,87 за занятие).
     await db_session.execute(
-        text("UPDATE trainer_services SET group_price_cents = 2500 WHERE trainer_id = :t"), {"t": tid}
+        text("UPDATE trainer_services SET group_price_cents = CAST(:g AS INTEGER) WHERE trainer_id = :t"),
+        {"t": tid, "g": group_price_cents},
     )
     await db_session.execute(text("DELETE FROM trainer_service_price_variants WHERE trainer_id = :t"), {"t": tid})
     await db_session.execute(
         text(
             "INSERT INTO trainer_service_price_variants (trainer_id, service_id, label, price_cents, sort_order, tier_kind) "
-            "SELECT :t, service_id, 'Детский', 4500, 0, 'child' FROM trainer_services WHERE trainer_id = :t "
-            "UNION ALL SELECT :t, service_id, 'Взрослый', 5000, 1, 'adult' FROM trainer_services WHERE trainer_id = :t"
+            "SELECT :t, service_id, 'Детский', CAST(:c AS INTEGER), 0, 'child' FROM trainer_services WHERE trainer_id = :t "
+            "UNION ALL SELECT :t, service_id, 'Взрослый', CAST(:a AS INTEGER), 1, 'adult' FROM trainer_services WHERE trainer_id = :t"
         ),
-        {"t": tid},
+        {"t": tid, "c": tariffs[0], "a": tariffs[1]},
     )
     await db_session.execute(
         text(
@@ -178,8 +200,35 @@ async def test_city_page_has_no_trainer_list_only_learn_block_and_coach_entry(ap
 async def test_arena_trainers_api_carries_the_same_price(app_use_test_db, db_session) -> None:
     place = await _place(db_session)
     async with _client() as client:
-        tid = await _trainer_on(db_session, client, place, first_name=f"Гена{uuid.uuid4().hex[:4]}")
+        # Влад: тарифы 45/50, групповая 25 → «от 25».
+        vlad = await _trainer_on(db_session, client, place, first_name=f"Влад{uuid.uuid4().hex[:4]}")
+        # Гаевский: тарифы 50/55, без групповой, абонемент 670/16 → 41,87 (вниз); неактивный (2,50) не считается.
+        gaev = await _trainer_on(
+            db_session, client, place, first_name=f"Саша{uuid.uuid4().hex[:4]}", group_price_cents=None, tariffs=(5000, 5500)
+        )
         data = (await client.get(f"/api/public/arenas/{place['arena_id']}/trainers")).json()
-    item = next(t for t in data["items"] if t["id"] == tid)
-    assert item["min_session_price_cents"] == 4500
-    assert item["min_session_price_currency"] == "BYN"
+    by_id = {t["id"]: t for t in data["items"]}
+    assert by_id[vlad]["min_session_price_cents"] == 2500
+    assert by_id[gaev]["min_session_price_cents"] == 4187
+    assert by_id[gaev]["min_session_price_currency"] == "BYN"
+
+
+@pytest.mark.asyncio
+async def test_pass_offers_floor_scope_and_skip_inactive(app_use_test_db, db_session) -> None:
+    place = await _place(db_session)
+    async with _client() as client:
+        tid = await _trainer_on(db_session, client, place, first_name=f"Вера{uuid.uuid4().hex[:4]}")
+    sid = await require_seed_service_id(db_session)
+    await db_session.execute(
+        text(
+            "WITH p AS (INSERT INTO trainer_pass_products (trainer_id, name, sessions_total, price_cents, is_active) "
+            "VALUES (:t, 'Узкий', 3, 10000, true) RETURNING id) "
+            "INSERT INTO trainer_pass_product_services (pass_product_id, service_id) SELECT id, :s FROM p"
+        ),
+        {"t": tid, "s": sid},
+    )
+    await db_session.commit()
+    assert await load_pass_offers(db_session, [tid]) == {
+        tid: [{"per_session_cents": 4187, "service_ids": None}, {"per_session_cents": 3333, "service_ids": (sid,)}]
+    }
+    assert await load_pass_offers(db_session, []) == {}

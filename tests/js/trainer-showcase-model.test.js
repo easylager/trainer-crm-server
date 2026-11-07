@@ -232,3 +232,23 @@ describe('своя услуга тренера во вкладке (TASK-353)', 
     assert.equal(Mo.servicesInDirection({ id: 3, services: [own(7)] }, 'all').length, 0);
   });
 });
+
+describe('«от» вкладки — с сервера (min_price_by_direction)', () => {
+  const Mo = require('../../static/webapp/trainer-showcase-model.js');
+  const t = (id, mins) => ({ id, services: [], arenas: [], min_price_by_direction: mins });
+  const p = (cents) => ({ cents, currency: 'BYN' });
+
+  it('минимум по показанным тренерам для ключа вкладки; дробная цена абонемента — как есть', () => {
+    const list = [t(1, { all: p(4187), 's-nulya': p(5000), 's-klyushkoy': p(4187) }), t(2, { all: p(2500), 's-nulya': p(2500) })];
+    assert.deepEqual(Mo.minPriceOf(list, 'all'), p(2500));
+    assert.deepEqual(Mo.minPriceOf(list, 's-klyushkoy'), p(4187));
+    assert.equal(Mo.formatMoney(4187, 'BYN'), '41,87 BYN');
+    assert.equal(Mo.minPriceOf([list[0]], 's-nulya').cents, 5000);
+  });
+
+  it('нет цены во вкладке — null; без ключа — «Все»', () => {
+    assert.equal(Mo.minPriceOf([t(1, { all: p(4500) })], 'figurnoe'), null);
+    assert.equal(Mo.minPriceOf([t(1, undefined)], 'all'), null);
+    assert.deepEqual(Mo.minPriceOf([t(1, { all: p(4500) })]), p(4500));
+  });
+});

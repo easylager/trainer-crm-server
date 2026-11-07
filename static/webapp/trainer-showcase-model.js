@@ -139,24 +139,18 @@
     return out;
   }
 
-  /** Цена услуги «от»: минимум индивидуальных тарифов; тарифов нет — цена услуги. Групповая и абонемент сюда не входят. */
-  function servicePriceFrom(s) {
-    var prices = (s.price_tiers || []).map(function (t) { return Number(t.price_cents); }).filter(function (c) { return c > 0; });
-    if (!prices.length && Number(s.price_cents) > 0) prices = [Number(s.price_cents)];
-    return prices.length ? Math.min.apply(null, prices) : null;
-  }
-
   /**
-   * «от N» для вкладки: минимум по услугам ЭТОГО направления у показанных тренеров (как `direction_min_price`
-   * на сайте). «Все» — по услугам всех вкладок (без роликов и ОФП/СФП). Один расчёт для витрины и блока входов.
+   * «от N» для вкладки: минимум `min_price_by_direction[key]` показанных тренеров. Сервер считает его
+   * так же, как `direction_min_price` сайта: тарифы/цена услуг вкладки, их групповая цена и абонементы
+   * тренера, покрывающие эти услуги. «Все» — по всем вкладкам (без роликов и ОФП/СФП). Один расчёт для
+   * витрины и блока входов; здесь цены не пересчитываем.
    */
   function minPriceOf(list, key) {
     var best = null;
     (list || []).forEach(function (t) {
-      servicesInDirection(t, key || 'all').forEach(function (s) {
-        var c = servicePriceFrom(s);
-        if (c != null && (!best || c < best.cents)) best = { cents: c, currency: s.currency_code || 'BYN' };
-      });
+      var p = (t.min_price_by_direction || {})[key || 'all'];
+      var c = p ? Number(p.cents) : 0;
+      if (c > 0 && (!best || c < best.cents)) best = { cents: c, currency: p.currency || 'BYN' };
     });
     return best;
   }
