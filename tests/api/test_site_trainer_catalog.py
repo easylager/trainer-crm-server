@@ -182,7 +182,8 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     cards = _cards(html)
     assert names["A"] in cards[0] and names["B"] in cards[1]
     assert f'href="{trainer_path(ids["A"], names["A"])}?via=k' in cards[0]
-    assert f"startapp=trainer_{ids['A']}_v_k" in cards[0] and "surface=trainer_catalog" in cards[0]
+    # Время — сразу запись на этот слот (TASK-357), источник — «каталог сайта».
+    assert re.search(rf"startapp=trainer_{ids['A']}_s_[1-9][0-9]*_v_k[1-9]", cards[0]) and "surface=trainer_catalog" in cards[0]
     assert 'class="tc-slot"' in cards[0]
     # Цена — по тарифам направления; без цены — честно.
     assert "45 BYN <small>ребёнок</small>" in cards[0] and "50 BYN <small>взрослый</small>" in cards[0]

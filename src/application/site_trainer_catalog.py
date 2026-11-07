@@ -1,8 +1,7 @@
 """Каталог тренеров на сайте ``/c/{city}/trenery[/{направление}]`` (TASK-355, PDEC-033).
 
 Вкладка-направление — наш слой над публичными услугами справочника (``services.is_public``,
-vertical ice): ``DIRECTIONS`` ниже — единственное место, где услуга превращается во вкладку, и
-единственное место текстов направления (лид, шаги, вопросы). Город и цифры подставляются из данных.
+vertical ice): таблица направлений и их тексты — ``catalog_directions`` (общая с ``/t/``). Город и цифры подставляются из данных.
 
 * Кто виден — тот же предикат каталога, что у Mini App (``list_active_trainers_for_client``).
 * Тренер во вкладке: есть услуга направления **и** (есть цена **или** ледовый каток в этом городе).
@@ -17,20 +16,35 @@ vertical ice): ``DIRECTIONS`` ниже — единственное место, 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.catalog_directions import (  # noqa: F401 — реэкспорт для вызывающих и тестов
+    _BY_KEY,
+    _BY_SERVICE,
+    _BY_SLUG,
+    _Q_PAIR,
+    _Q_PLAY,
+    _Q_RENT,
+    ALL,
+    CATALOG_SEGMENT,
+    DIRECTIONS,
+    Direction,
+    catalog_path,
+    direction_by_key,
+    direction_by_slug,
+    own_service_direction,
+    service_direction,
+)
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.style_b import esc
 from src.shared.city_locative import city_locative
 from src.shared.html_template import fill_placeholders, json_for_script
 
 CATALOG_SURFACE = "trainer_catalog"
-CATALOG_SEGMENT = "trenery"
 _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
 TRAINER_CATALOG_STYLE_VERSION = "2026110701"
 #: Сколько окон в карточке — дальше «Все окна и цены» на странице тренера.
@@ -41,206 +55,25 @@ ARENAS_SHOWN = 6
 RATING_MIN_COUNT = 3
 
 
-# ── Направления — наш слой ───────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class Direction:
-    key: str
-    slug: str  # "" — «Все»
-    tab: str
-    crumb: str
-    short: str
-    h1: str
-    lead: str
-    steps: tuple[tuple[str, str], ...]
-    faq: tuple[tuple[str, str | None], ...]
-    #: Публичные услуги справочника, из которых состоит вкладка, по порядку (цена — с первой с ценой).
-    service_ids: tuple[int, ...] = ()
-
-
-_FIRST = ("Выберите тренера и время", "Запись — в Telegram, оплата тренеру на месте.")
-_ARRIVE = ("Приезжайте за 15–20 минут", "Нет своих коньков — возьмите в прокате. Билет на сеанс покупают на кассе.")
-_TICKET = ("Билет на каток входит в цену?", "Обычно нет: билет на сеанс покупают отдельно, на кассе. Уточните у тренера.")
-#: Ответ из данных: ``None`` в FAQ — подставляем при рендере или убираем вопрос.
-_Q_RENT = "Своих коньков нет"
-_Q_PAIR = "Можно заниматься вместе с ребёнком?"
-_Q_PLAY = "Где потом поиграть?"
-
-ALL = Direction(
-    key="all",
-    slug="",
-    tab="Все",
-    crumb="",
-    short="",
-    h1="Тренеры по катанию на коньках",
-    lead="Учат с нуля, ставят ход, фигурное катание и хоккей. Оплата тренеру на месте.",
-    steps=(
-        _FIRST,
-        _ARRIVE,
-        ("Начните с тренером", "Он посмотрит, что вы уже умеете, и скажет, с чего начать."),
-    ),
-    faq=(
-        ("С чего начать, если ни разу не катался?", "С занятий «С нуля» — там учат и детей, и взрослых."),
-        (_Q_RENT, None),
-        _TICKET,
-    ),
-)
-
-#: Номера — сид справочника (миграция 0028): slug у услуг на проде пуст (проверено 2026-11-07),
-#: а id сида одинаков во всех базах. Ролики (5) и ОФП/СФП (7) — не вкладки.
-DIRECTIONS: tuple[Direction, ...] = (
-    Direction(
-        key="zero",
-        slug="s-nulya",
-        tab="С нуля",
-        crumb="С нуля",
-        short="с нуля",
-        h1="Научиться кататься на коньках с нуля",
-        lead=(
-            "Для детей и взрослых, которые ни разу не стояли на коньках или стояли пару раз. "
-            "Равновесие, падения без страха и первые шаги."
-        ),
-        steps=(
-            _FIRST,
-            _ARRIVE,
-            ("Начнёте с основ", "Обычно сначала учатся стоять, падать и вставать. Потом — первые шаги."),
-        ),
-        faq=(
-            ("Мне 35 — не поздно начинать?", "Нет. Взрослые учатся кататься с нуля так же, как дети."),
-            (
-                "Боюсь упасть — это опасно?",
-                "Падают все, кто учится. Обычно тренер в начале показывает, как падать и вставать. "
-                "Ребёнку стоит надеть шлем.",
-            ),
-            (_Q_RENT, None),
-            ("Во что одеться?", "В тёплую одежду, в которой удобно двигаться, и перчатки."),
-            (_Q_PAIR, None),
-            _TICKET,
-        ),
-        service_ids=(1,),
-    ),
-    Direction(
-        key="better",
-        slug="uzhe-katayus",
-        tab="Уже катаюсь",
-        crumb="Уже катаюсь",
-        short="уже катающиеся",
-        h1="Уроки катания для тех, кто уже стоит на коньках",
-        lead="Ровный ход, повороты, торможение и катание назад — для детей и взрослых.",
-        steps=(
-            _FIRST,
-            ("Покажите, что умеете", "Тренер посмотрит, как вы катаетесь."),
-            ("Получите план", "И скажет, над чем работать: ход, торможение или повороты."),
-        ),
-        faq=(
-            ("Мне сюда или в «С нуля»?", "Если едете вперёд сами и не держитесь за бортик — вам сюда."),
-            ("Нужны свои коньки?", "Для начала подойдут прокатные. Свои удобнее, когда занимаетесь регулярно."),
-            ("Сколько нужно занятий?", "Зависит от цели. Спросите тренера после первого занятия."),
-        ),
-        service_ids=(2,),
-    ),
-    Direction(
-        key="fig",
-        slug="figurnoe",
-        tab="Фигурное",
-        crumb="Фигурное катание",
-        short="фигурное",
-        h1="Фигурное катание с тренером",
-        lead="Прыжки, вращения, дорожки шагов и программы — для детей и взрослых.",
-        steps=(
-            _FIRST,
-            ("Знакомство", "Тренер посмотрит, что вы уже умеете."),
-            ("Первые элементы", "И предложит, с каких элементов начать."),
-        ),
-        faq=(
-            ("Можно прийти в фигурное с нуля?", "Да. Если ни разу не стояли на коньках, начните с занятий «С нуля»."),
-            (
-                "Нужны фигурные коньки?",
-                "Для первых занятий подойдут прокатные. Когда дойдёте до прыжков, тренер подскажет, какие купить.",
-            ),
-            ("Можно подготовиться к соревнованиям?", "Да, если тренер ставит программы — это написано у него на странице."),
-        ),
-        service_ids=(3,),
-    ),
-    Direction(
-        key="hock",
-        slug="s-klyushkoy",
-        tab="С клюшкой",
-        crumb="Хоккейное катание",
-        short="хоккей",
-        h1="Хоккейное катание",
-        lead="Стойка, ход, повороты и торможение — чтобы на площадке думать об игре, а не о коньках.",
-        steps=(
-            _FIRST,
-            ("Возьмите экипировку", "Как минимум шлем, перчатки и клюшку."),
-            ("Разбор катания", "Тренер посмотрит на стойку, ход и торможение и скажет, что поправить."),
-        ),
-        faq=(
-            (
-                "Только начинаю играть. С чего начать?",
-                "С хоккейного катания. На ОХМ — когда уже уверенно держитесь на коньках.",
-            ),
-            ("Что такое ОХМ?", "Отработка хоккейного мастерства — тренировка элементов для тех, кто уже играет."),
-            (_Q_PLAY, None),
-        ),
-        service_ids=(4, 6),
-    ),
-)
-
-_BY_SLUG = {d.slug: d for d in DIRECTIONS}
-_BY_SERVICE = {sid: d.key for d in DIRECTIONS for sid in d.service_ids}
-_BY_KEY = {d.key: d for d in (ALL, *DIRECTIONS)}
-
-
-def direction_by_slug(slug: str | None) -> Direction | None:
-    """``None``/"" — «Все»; неизвестный slug — ``None`` (404)."""
-    if not slug:
-        return ALL
-    return _BY_SLUG.get(slug)
-
-
-def own_service_direction(service: Mapping[str, Any]) -> str | None:
-    """Вкладка своей услуги тренера (``created_by_trainer_id``, не публичная).
-
-    Привязку к публичной услуге ставит админ (TASK-353, ``services.direction_service_id``); без неё
-    своя услуга в каталог не попадает — только на страницу тренера.
-    """
-    target = service.get("direction_service_id")
-    return _BY_SERVICE.get(int(target)) if target is not None else None
-
-
-def service_direction(service: Mapping[str, Any]) -> str | None:
-    """Ключ вкладки услуги тренера или ``None`` (Ролики, ОФП/СФП, своя услуга без привязки)."""
-    try:
-        sid = int(service.get("service_id"))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
-    return _BY_SERVICE.get(sid) or own_service_direction(service)
-
-
-def catalog_path(city_name: str, direction: Direction = ALL, *, arena_id: int | None = None) -> str:
-    path = f"/c/{city_slug(city_name)}/{CATALOG_SEGMENT}" + (f"/{direction.slug}" if direction.slug else "")
-    return path + (f"?arena={int(arena_id)}" if arena_id else "")
-
-
 # ── Запись ───────────────────────────────────────────────────────────
 
 
-def booking_url(base_url: str, trainer_id: int, *, city_id: int | None = None) -> str | None:
+def booking_url(base_url: str, trainer_id: int, *, city_id: int | None = None, slot_id: int | None = None) -> str | None:
     """Единственное место, где каталог строит ссылку записи (окна и «Записаться»).
 
-    Как на ``/t/``: карточка тренера в Mini App через учётный ``/open-telegram`` (``trainer_{id}``).
-    Ссылки на конкретный слот у Mini App нет (прежний ``book?slot_id`` зависал на «Готовим форму»),
-    поэтому окно ведёт к тренеру, где это время первое. Источник записи (TASK-351) — «каталог сайта»
-    ``k<city_id>`` хвостом ``start_param``.
+    Через учётный ``/open-telegram``: ``trainer_<id>`` — карточка тренера в Mini App,
+    ``trainer_<id>_s_<slot>`` — сразу запись на это время (TASK-357; занято — «Время заняли»).
+    Источник записи (TASK-351) — «каталог сайта» ``k<city_id>`` хвостом ``start_param``.
     """
     from src.application.booking_source import place_via
     from src.application.place_links import public_telegram_cta_url, trainer_start_param
 
     via = place_via(city_id=city_id, catalog=True)
     return public_telegram_cta_url(
-        base_url, start_param=trainer_start_param(int(trainer_id), via=via), surface=CATALOG_SURFACE, city_id=city_id
+        base_url,
+        start_param=trainer_start_param(int(trainer_id), slot_id=slot_id, via=via),
+        surface=CATALOG_SURFACE,
+        city_id=city_id,
     )
 
 
@@ -588,7 +421,7 @@ def _card_html(
         act = (
             '<div><div class="tc-lbl">Записаться на время</div><div class="tc-slots">'
             + "".join(
-                f'<a class="tc-slot" href="{esc(book)}" rel="nofollow" '
+                f'<a class="tc-slot" href="{esc(booking_url(base_url, int(t["id"]), city_id=city_id, slot_id=w.get("slot_id")))}" rel="nofollow" '
                 f'aria-label="Записаться: {esc(w["day"])}, {esc(w["time"])}">{esc(w["day"])}, {esc(w["time"])}</a>'
                 for w in wins
             )

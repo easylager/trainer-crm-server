@@ -623,6 +623,25 @@ def app_url(
     return link
 
 
+def slot_app_url(
+    base_url: str, page: Mapping[str, Any], slot_id: int | None, *, client_bot_username: str | None, via: str | None = None
+) -> str | None:
+    """Время на странице — сразу запись на этот слот (``trainer_<id>_s_<slot>``, TASK-357).
+
+    Только для тренера в каталоге и не по ссылке тренера/рекомендации: там вход через бота
+    (``app_url``), а он слот не несёт — тогда время ведёт туда же, куда «Записаться».
+    """
+    if slot_id and page["listed"] and via not in (SHARE_VIA, RECOMMEND_VIA):
+        from src.application.booking_source import clean_place_via
+
+        return public_telegram_cta_url(
+            base_url,
+            start_param=trainer_start_param(int(page["id"]), slot_id=int(slot_id), via=clean_place_via(via)),
+            surface=TRAINER_SURFACE,
+        )
+    return app_url(base_url, page, client_bot_username=client_bot_username, via=via)
+
+
 def primary_cta(
     base_url: str, page: Mapping[str, Any], *, client_bot_username: str | None, via: str | None = None
 ) -> tuple[str, str] | None:
@@ -832,7 +851,7 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             for w in wins[:NEAR_SHOWN]:
                 label, sub = _near_label(w, today)
                 near.append(
-                    f'<a href="{esc(app)}" rel="nofollow" aria-label="Записаться: {esc(label)}, {esc(sub)}">'
+                    f'<a href="{esc(w.get("book_href") or app)}" rel="nofollow" aria-label="Записаться: {esc(label)}, {esc(sub)}">'
                     f"{esc(label)}<small>{esc(sub)}</small></a>"
                 )
             parts.append(
@@ -916,7 +935,7 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
         slots = by_day.get(day, [])
         inner = (
             "".join(
-                f'<a class="tp-slot" href="{esc(app)}" rel="nofollow" '
+                f'<a class="tp-slot" href="{esc(w.get("book_href") or app)}" rel="nofollow" '
                 f'aria-label="Записаться: {esc(_WEEKDAYS[day.weekday()])}, {day.day}, {esc(w["time"])}">{esc(w["time"])}</a>'
                 for w in slots
             )
@@ -1104,7 +1123,7 @@ def _mbar_html(page: Mapping[str, Any], app: str | None) -> str:
         return ""
     label = _win_label(wins[0])
     return (
-        f'<div class="tp-mbar" id="tp-mbar" hidden><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">'
+        f'<div class="tp-mbar" id="tp-mbar" hidden><a class="tp-btn tp-btn--teal" href="{esc(wins[0].get("book_href") or app)}" rel="nofollow">'
         f"Записаться на {esc(label)}</a><small>Запись в Telegram · оплата на месте</small></div>"
     )
 
@@ -1137,6 +1156,19 @@ def render_trainer_page(
     base = (base_url or "").rstrip("/")
     canonical = f"{base}{page['path']}"
     app = app_url(base_url, page, client_bot_username=client_bot_username, via=via)
+    if page.get("can_book") and app:
+        page = {
+            **page,
+            "windows": [
+                {
+                    **w,
+                    "book_href": slot_app_url(
+                        base_url, page, w.get("slot_id"), client_bot_username=client_bot_username, via=via
+                    ),
+                }
+                for w in page.get("windows") or []
+            ],
+        }
     cta = primary_cta(base_url, page, client_bot_username=client_bot_username, via=via)
     # Пришли по ссылке самого тренера (свои ученики): время сверху, без продающих блоков.
     own = via == SHARE_VIA

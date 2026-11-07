@@ -80,9 +80,9 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
 
     for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.S):
         json.loads(block)
-    # Время — ссылки в Mini App на карточку этого тренера, через учётный прокси.
+    # Время — сразу запись на этот слот в Mini App (TASK-357), через учётный прокси.
     assert "Ближайшее время — записаться" in html
-    assert f"startapp=trainer_{tid}&amp;surface=trainer_page" in html
+    assert re.search(rf"startapp=trainer_{tid}_s_[1-9][0-9]*&amp;surface=trainer_page", html)
     assert "Всё время на неделю" in html and "нет свободного времени" in html
     assert 'id="tp-mbar"' in html and "Записаться на " in html
     # Каток — ссылкой на страницу катка сайта, не в Telegram.
