@@ -4,7 +4,7 @@
  * Экраны: 1 витрина · 2 тренер · 3 другое время · 4/5 запись (новый / постоянный) · 6/6б отправлено ·
  * 7 время заняли (шторка) · 8 нет времени · 9 без онлайн-записи · 10 заявка (шторка) · 11 заявка отправлена.
  *
- * Логика записи — существующие API и BookingClient: тариф прошлой записи (priceVariantHint),
+ * Логика записи — существующие API и BookingClient: тариф прошлой записи — свой у каждого профиля и тренера,
  * ключ идемпотентности, профили семьи (X-Profile-Id), абонементы (/client/passes), блок «Разрешить».
  * Тело записи собирается в одном месте — buildBookingBody() → BookingClient.buildBookingPayload.
  *
@@ -32,6 +32,10 @@
     session: null,
     profiles: [],
     passes: {},
+    // Профили, про которые точно известно, что это ребёнок (добавлены здесь как ребёнок) — детский тариф.
+    knownChildIds: {},
+    // Тариф прошлой записи по профилю у тренера: { trainerId: { profileId: { sid, vid } } }.
+    profileHints: {},
     stack: [],
     view: 'list',
     trainer: null,
@@ -94,7 +98,12 @@
 
   function loadSession() {
     if (!initData) return Promise.resolve(null);
-    return BC.fetchClientSession(num(qs.get('trainer_id')), initData).catch(function () { return null; });
+    // Первый GET сессии создаёт её строку; параллельный запрос другого экрана может поймать гонку
+    // (уникальный ключ client_sessions) — один повтор.
+    var tid = num(qs.get('trainer_id'));
+    return BC.fetchClientSession(tid, initData)
+      .catch(function () { return BC.fetchClientSession(tid, initData); })
+      .catch(function () { return null; });
   }
 
   function loadProfiles() {
@@ -574,13 +583,43 @@
     return String(saved || (u && u.first_name) || '').trim();
   }
 
+  /** Профиль, выбранный в хабе (активный ?? по умолчанию) — им же отмечаем строку в форме. */
+  function actingProfileId() {
+    var CPS = window.ClientProfileSwitcher;
+    var id = CPS && typeof CPS.getActiveProfileId === 'function' ? CPS.getActiveProfileId() : null;
+    return id != null ? id : S.defaultProfileId;
+  }
+
+  /**
+   * Тариф прошлой записи — у каждого профиля свой и только у этого тренера: /client/session?for_trainer_id=
+   * с X-Profile-Id профиля (явный заголовок главнее патча переключателя профилей).
+   */
+  function loadProfileHints(trainerId) {
+    if (!initData || !S.profiles.length || S.profileHints[trainerId]) return Promise.resolve();
+    var map = {};
+    S.profileHints[trainerId] = map;
+    // По очереди, не параллельно: GET сессии пишет строку client_sessions аккаунта.
+    return S.profiles.reduce(function (chain, p) {
+      return chain.then(function () {
+        return api('/api/webapp/client/session?for_trainer_id=' + encodeURIComponent(trainerId), { profileId: p.client_id })
+          .then(function (d) {
+            if (d && d.last_created_booking_service_id != null && d.last_created_booking_service_price_variant_id != null) {
+              map[p.client_id] = { sid: Number(d.last_created_booking_service_id), vid: Number(d.last_created_booking_service_price_variant_id) };
+            }
+          })
+          .catch(function () { /* без подсказки — явный выбор тарифа */ });
+      });
+    }, Promise.resolve());
+  }
+
   function openBooking(slot) {
     var keep = S.book && S.book.slot && S.view === 'book' ? S.book : null;
     var regular = isRegular();
     var def = null;
     if (regular) {
-      var defId = S.defaultProfileId;
+      var defId = actingProfileId();
       def = S.profiles.filter(function (p) { return Number(p.client_id) === Number(defId); })[0] || S.profiles[0];
+      loadProfileHints(S.trainer.id).then(function () { if (S.view === 'book') render(); });
     }
     S.book = {
       slot: slot,
@@ -617,14 +656,14 @@
     return currentService();
   }
 
-  function lastVariantOpts(svc) {
-    var hint = S.session && svc ? BC.priceVariantHint({
-      lastCreatedBookingServiceId: S.session.last_created_booking_service_id,
-      lastCreatedBookingPriceVariantId: S.session.last_created_booking_service_price_variant_id,
-      bookingContextServiceId: S.session.booking_context_service_id,
-      bookingContextServicePriceVariantId: S.session.booking_context_service_price_variant_id,
-    }, svc.service_id) : null;
-    return { lastVariantId: hint, lastProfileId: S.defaultProfileId };
+  /** Опции тарифа постоянного: подсказки только этого тренера и этой услуги, известные дети, явный выбор. */
+  function regularOpts(svc) {
+    var hints = {};
+    var map = (S.trainer && S.profileHints[S.trainer.id]) || {};
+    Object.keys(map).forEach(function (pid) {
+      if (svc && map[pid].sid === Number(svc.service_id)) hints[pid] = map[pid].vid;
+    });
+    return { hints: hints, knownChildIds: S.knownChildIds, override: S.book ? S.book.override : null };
   }
 
   /** Тариф и участники текущего выбора: { tier, duo, ready, participant, kindTitle }. */
@@ -635,14 +674,15 @@
     if (!svc) return { ready: false };
     if (b.regular) {
       if (!b.selected.length) return { ready: false };
-      var opts = lastVariantOpts(svc);
-      opts.override = b.override;
+      var opts = regularOpts(svc);
       var tier = group ? null : M.regularTier(svc, b.selected, opts);
       var hasTiers = (svc.price_tiers || []).length > 0;
       return {
-        ready: group || !hasTiers || !!tier,
+        // Тариф не определился (вид профиля неизвестен) — форма просит выбрать его явно.
+        ready: group || (!hasTiers && b.selected.length === 1) || !!tier,
+        needsTier: !group && hasTiers && !tier,
         tier: tier,
-        duo: !!(tier && ['two_children', 'adult_and_child', 'two_adults'].indexOf(tier.tier_kind) >= 0) || b.selected.length === 2,
+        duo: !!(tier && M.isDuoKind(tier.tier_kind)) || b.selected.length === 2,
         participant: b.selected.map(function (p) { return p.first_name; }).join(' и '),
       };
     }
@@ -700,9 +740,12 @@
     var slot = b.slot;
     var arena = arenaById(slot.arena_id);
     var pass = null;
-    if (b.regular) {
-      for (var i = 0; i < b.selected.length && !pass; i++) {
-        pass = M.usablePass(S.passes[b.selected[i].client_id], S.trainer.id, svc.service_id);
+    if (b.regular && b.selected.length) {
+      // Запись уходит на первого отмеченного — его абонемент сервер и спишет (если покрывает тариф).
+      var kind = choice.tier ? choice.tier.tier_kind : null;
+      pass = M.usablePass(S.passes[b.selected[0].client_id], S.trainer.id, svc.service_id, kind);
+      for (var i = 1; i < b.selected.length && !pass; i++) {
+        pass = M.usablePass(S.passes[b.selected[i].client_id], S.trainer.id, svc.service_id, kind);
       }
     }
     var groupCents = slot.capacity > 1 && svc.group_price_cents ? svc.group_price_cents : null;
@@ -758,16 +801,16 @@
 
   function regularFormHtml(svc) {
     var b = S.book;
-    var opts = lastVariantOpts(svc);
-    var hasDuo = (svc.price_tiers || []).some(function (x) { return ['two_children', 'adult_and_child', 'two_adults'].indexOf(x.tier_kind) >= 0; });
+    var opts = regularOpts(svc);
+    var hasDuo = M.tierChoices(svc, 2).length > 0;
     var h = '<div class="fl"><span class="lbl">Кого записываем?' + (hasDuo ? ' <span class="mut" style="font-weight:500">Можно двоих</span>' : '') + '</span><div class="pick multi">';
     h += S.profiles.map(function (p) {
       var on = b.selected.some(function (x) { return Number(x.client_id) === Number(p.client_id); });
-      var tier = M.regularTier(svc, [p], opts);
-      var last = tier && opts.lastVariantId != null && Number(tier.id) === Number(opts.lastVariantId) && Number(p.client_id) === Number(opts.lastProfileId);
-      var sub = last ? 'как в прошлый раз' : tier ? String(BC.priceTierLabelRu(tier) || '').toLowerCase() : '';
-      if (tier && tier.tier_kind === 'child') sub = last ? sub : 'детский';
-      var dis = !on && !M.canAddProfile(svc, b.selected, p);
+      var single = { hints: opts.hints, knownChildIds: opts.knownChildIds };
+      var tier = M.regularTier(svc, [p], single);
+      var last = !!M.hintTier(svc, p, single);
+      var sub = last ? 'как в прошлый раз' : tier ? (tier.tier_kind === 'child' ? 'детский' : 'взрослый') : '';
+      var dis = !on && !M.canAddProfile(svc, b.selected, p, single);
       return pickRow(p.client_id, p.first_name || 'Без имени', sub, tier ? M.formatMoney(tier.price_cents, svc.currency_code) : '', on, dis, 'checkbox');
     }).join('');
     h += '</div></div>';
@@ -777,8 +820,10 @@
       h += '<div class="fl"><label for="newChild">Имя ребёнка</label><input id="newChild" class="inpx" data-field="new-child" maxlength="64" placeholder="Например, Соня">' +
         '<button type="button" class="sec2" data-act="add-child-save">Добавить</button></div>';
     }
-    if (b.otherTier) {
-      h += '<div class="opt">' + (svc.price_tiers || []).map(function (x) {
+    var choice = bookingChoice();
+    if (b.otherTier || choice.needsTier) {
+      var list = M.tierChoices(svc, b.selected.length || 1);
+      h += (choice.needsTier ? '<span class="lbl">Какой тариф?</span>' : '') + '<div class="opt">' + list.map(function (x) {
         return '<button type="button" data-act="tier" data-vid="' + x.id + '" aria-pressed="' + (Number(b.override) === Number(x.id)) + '"><span><b>' +
           esc(M.TIER_TITLE[x.tier_kind] || x.label) + '</b></span><em>' + esc(M.formatMoney(x.price_cents, svc.currency_code)) + '</em></button>';
       }).join('') + '</div>';
@@ -876,9 +921,13 @@
     var key = name.toLowerCase();
     if (b.childIds[key]) return Promise.resolve(b.childIds[key]);
     var existing = S.profiles.filter(function (p) { return p.role !== 'self' && String(p.first_name || '').trim().toLowerCase() === key; })[0];
-    if (existing) return Promise.resolve(existing.client_id);
+    if (existing) {
+      S.knownChildIds[existing.client_id] = true;
+      return Promise.resolve(existing.client_id);
+    }
     return api('/api/webapp/client/profiles', { method: 'POST', body: { first_name: name } }).then(function (d) {
       b.childIds[key] = d.client_id;
+      S.knownChildIds[d.client_id] = true;
       return d.client_id;
     });
   }
@@ -1100,8 +1149,11 @@
     r.sending = true;
     r.notice = '';
     paintRequest();
+    var selfP = selfProfile();
     api('/api/webapp/client/request', {
       method: 'POST',
+      // Заявка — от самого человека, а не от профиля, выбранного в хабе.
+      profileId: selfP ? selfP.client_id : null,
       body: { city_id: cityId, service_id: svc.service_id, trainer_id: t.id, comment: r.comment.trim() || null, first_name: r.name.trim(), phone: ph.phone },
     })
       .then(function () {
@@ -1287,8 +1339,10 @@
             var prof = { client_id: d.client_id, role: 'guardian', first_name: name };
             S.profiles.push(prof);
             S.passes[d.client_id] = [];
+            S.knownChildIds[d.client_id] = true; // добавлен как ребёнок — детский тариф
             b.addChild = false;
-            if (M.canAddProfile(bookingService(), b.selected, prof)) b.selected = b.selected.concat([prof]);
+            b.override = null;
+            if (M.canAddProfile(bookingService(), b.selected, prof, regularOpts(bookingService()))) b.selected = b.selected.concat([prof]);
             render();
           })
           .catch(function (e) { b.notice = (e && e.message) || 'Не удалось добавить.'; render(); });
