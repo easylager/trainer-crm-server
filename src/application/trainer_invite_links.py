@@ -3,11 +3,13 @@ Shareable links for trainers to onboard clients from DMs into the client bot + c
 
 Deep link payload matches client_handlers:
   /start client_{city_id}_{service_id_or_0}_{trainer_id}  — trainer onboarding
-  /start share_ref_{trainer_id}                            — client→friend recommendation share
+  /start share_ref_{trainer_id}[_s_{slot_id}]              — client→friend recommendation share
+  /start welcome_ref_{trainer_id}[_s_{slot_id}]            — trainer's permanent invite link
   /start preview_{trainer_id}                              — trainer previews their own card
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 
@@ -36,18 +38,47 @@ SHARE_REF_PREFIX = "share_ref_"
 WELCOME_REF_PREFIX = "welcome_ref_"
 
 
-def build_welcome_ref_payload(trainer_id: int) -> str:
-    """Permanent hub invite payload: welcome_ref_{trainer_id}."""
-    return f"{WELCOME_REF_PREFIX}{int(trainer_id)}"
+#: ``start`` у Telegram — до 64 символов; ``welcome_ref_<9 цифр>_s_<10 цифр>`` — 34.
+START_PARAM_MAX = 64
+_REF_SLOT_TAIL = re.compile(r"^([1-9][0-9]*)_s_([1-9][0-9]*)$")
+
+
+def _ref_payload(prefix: str, trainer_id: int, slot_id: int | None) -> str:
+    base = f"{prefix}{int(trainer_id)}"
+    if slot_id is not None and int(slot_id) > 0:
+        with_slot = f"{base}_s_{int(slot_id)}"
+        if len(with_slot) <= START_PARAM_MAX:
+            return with_slot
+    return base
+
+
+def parse_ref_slot(payload: str, prefix: str) -> tuple[int, int | None] | None:
+    """``<prefix><trainer>`` или ``<prefix><trainer>_s_<slot>`` → ``(trainer_id, slot_id | None)``.
+
+    Только строгая форма со слотом; всё остальное оставлено прежнему разбору (возвращает ``None``).
+    """
+    if not payload or not payload.startswith(prefix):
+        return None
+    m = _REF_SLOT_TAIL.fullmatch(payload[len(prefix) :].strip())
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def build_welcome_ref_payload(trainer_id: int, slot_id: int | None = None) -> str:
+    """Permanent hub invite payload: welcome_ref_{trainer_id}[_s_{slot_id}]."""
+    return _ref_payload(WELCOME_REF_PREFIX, trainer_id, slot_id)
 
 
 def build_trainer_universal_invite_link(
     *,
     client_bot_username: str | None,
     trainer_id: int,
+    slot_id: int | None = None,
 ) -> tuple[str | None, str | None]:
     """
     Same link as hub paperclip (GET /trainer/hub/universal-invite-link).
+    ``slot_id`` — страница тренера на сайте: бот привяжет клиента и откроет запись на это время.
     Returns (https t.me URL, error) where error is missing_username or invalid_trainer_id.
     """
     u = normalize_client_bot_username(client_bot_username)
@@ -55,13 +86,13 @@ def build_trainer_universal_invite_link(
         return None, "missing_username"
     if int(trainer_id) <= 0:
         return None, "invalid_trainer_id"
-    payload = build_welcome_ref_payload(int(trainer_id))
+    payload = build_welcome_ref_payload(int(trainer_id), slot_id)
     return f"https://t.me/{u}?start={payload}", None
 
 
-def build_share_ref_payload(trainer_id: int) -> str:
-    """Produces the /start payload for a shared trainer link: share_ref_{trainer_id}."""
-    return f"{SHARE_REF_PREFIX}{int(trainer_id)}"
+def build_share_ref_payload(trainer_id: int, slot_id: int | None = None) -> str:
+    """Produces the /start payload for a shared trainer link: share_ref_{trainer_id}[_s_{slot_id}]."""
+    return _ref_payload(SHARE_REF_PREFIX, trainer_id, slot_id)
 
 
 def build_trainer_share_link(
@@ -69,6 +100,7 @@ def build_trainer_share_link(
     webapp_base_url: str,
     client_bot_username: str | None,
     trainer_id: int,
+    slot_id: int | None = None,
 ) -> tuple[TrainerShareLink | None, str | None]:
     """
     Build a deep link for sharing a trainer profile (client→friend recommendation).
@@ -79,7 +111,7 @@ def build_trainer_share_link(
         return None, "missing_username"
     if int(trainer_id) <= 0:
         return None, "invalid_trainer_id"
-    payload = build_share_ref_payload(int(trainer_id))
+    payload = build_share_ref_payload(int(trainer_id), slot_id)
     return TrainerShareLink(bot_deep_link=f"https://t.me/{u}?start={payload}"), None
 
 

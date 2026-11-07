@@ -271,9 +271,20 @@
       });
   }
 
+  /** Ссылка на конкретное время (welcome_ref_<id>_s_<slot>): после анкеты — сразу витрина на этом слоте. */
+  function chosenSlotId() {
+    var n = parseInt(qs.get('slot_id') || '', 10);
+    return n > 0 && trainerId ? n : null;
+  }
+
   function clientHomeUrl() {
     var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
     var raw = currentInit();
+    var slot = chosenSlotId();
+    if (slot) {
+      return path + 'trainers?trainer_id=' + trainerId + '&slot_id=' + slot + '&via=link' +
+        (raw ? '&init_data=' + encodeURIComponent(raw) : '');
+    }
     return path + 'client-home' + (raw ? '?init_data=' + encodeURIComponent(raw) : '');
   }
 
