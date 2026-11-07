@@ -49,7 +49,7 @@ def _env(monkeypatch):
 def test_start_param_carries_place_without_breaking_old_links() -> None:
     assert trainer_start_param(7, via="p3") == "trainer_7_v_p3"
     assert trainer_start_param(7, via="nope") == "trainer_7"
-    assert parse_trainer_start_param("trainer_7_v_c12") == (7, None, "c12")
+    assert parse_trainer_start_param("trainer_7_v_c12") == {"trainer_id": 7, "arena_id": None, "slot_id": None, "via": "c12"}
     # Старые разборщики видят того же тренера и каток — экран Mini App не меняется.
     assert parse_trainer_deep_link("trainer_7_v_p3") == (7, None)
     assert parse_trainer_deep_link("trainer_7_a_3") == (7, 3)

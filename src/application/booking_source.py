@@ -138,7 +138,7 @@ def source_from_start_param(start_param: str | None) -> BookingSource | None:
         return None
     coach = parse_trainer_start_param(sp)
     if coach is not None:
-        _trainer_id, arena_id, via = coach
+        arena_id, via = coach["arena_id"], coach["via"]
         if via:
             return source_from_via(via)
         if arena_id is not None:

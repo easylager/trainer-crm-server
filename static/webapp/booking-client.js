@@ -23,7 +23,8 @@
 
   function apiUrl(path, initData) {
     var cred = initData != null ? initData : getInitData();
-    return path + (cred ? '?init_data=' + encodeURIComponent(cred) : '');
+    // Путь уже с query (slotsUrl) — init_data через «&», иначе он склеивается с последним параметром.
+    return path + (cred ? (path.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(cred) : '');
   }
 
   function authHeaders(initData, extra) {
@@ -638,6 +639,9 @@
     formatFirstBookingSuccess: formatFirstBookingSuccess,
     showBookingSuccess: showBookingSuccess,
     bindWriteAccessBlock: bindWriteAccessBlock,
+    // TASK-357: экран «Запись отправлена» витрины показывает тот же блок «Разрешить».
+    writeAccessBlockHtml: writeAccessBlockHtml,
+    unreachableState: unreachableState,
     catalogFormBackAction: catalogFormBackAction,
     formatPriceAmountHtml: formatPriceAmountHtml,
     resolveBookingReturn: resolveBookingReturn,

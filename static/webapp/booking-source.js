@@ -21,7 +21,7 @@
   var APP_KEY = 'glide_booking_source_app_v1';
   var VIA_PLACE = { p: 'site_place', c: 'site_city', k: 'site_catalog' };
   var VIA_RE = /^([pck])([1-9][0-9]{0,8})$/;
-  var TRAINER_RE = /^trainer_[1-9][0-9]*(?:_a_([1-9][0-9]*))?(?:_v_([pck][1-9][0-9]{0,8}))?$/i;
+  var TRAINER_RE = /^trainer_[1-9][0-9]*((?:_[a-z]+_[A-Za-z0-9]+)*)$/i;
   var CITY_COACH_RE = /^catalog_([1-9][0-9]*)_coach(?:_[a-z_]+)?$/i;
 
   function fromVia(via) {
@@ -40,8 +40,12 @@
     if (!sp) return null;
     var coach = TRAINER_RE.exec(sp);
     if (coach) {
-      if (coach[2]) return fromVia(coach[2]);
-      if (coach[1]) return { source: 'site_place', source_arena_id: parseInt(coach[1], 10) };
+      // Хвосты _a_/_s_/_v_ в любом порядке (TASK-357); слот источник не задаёт.
+      var tail = coach[1] || '';
+      var via = /_v_([pck][1-9][0-9]{0,8})(?=_|$)/i.exec(tail);
+      if (via) return fromVia(via[1]);
+      var arena = /_a_([1-9][0-9]*)(?=_|$)/i.exec(tail);
+      if (arena) return { source: 'site_place', source_arena_id: parseInt(arena[1], 10) };
       return { source: 'site_trainer' };
     }
     var city = CITY_COACH_RE.exec(sp);

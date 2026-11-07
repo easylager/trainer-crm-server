@@ -87,16 +87,43 @@
   }
 
   /**
-   * ``trainer_7`` / ``trainer_7_a_3`` (place_links.trainer_start_param) — карточка тренера,
-   * тот же путь, что тап по тренеру на карточке катка (arena-card-model.buildBookingHref).
+   * ``trainer_<id>`` + хвосты ``_<ключ>_<значение>`` в любом порядке (place_links.parse_trainer_start_param):
+   * ``_a_<arena>`` — пришли с катка, ``_s_<slot>`` — запись на это время (TASK-357), ``_v_<via>`` —
+   * откуда (TASK-351). Незнакомые хвосты игнорируются; кривой хвост (``trainer_7_a_``) — не ссылка тренера.
+   */
+  function parseTrainerDeepLink(sp) {
+    var m = /^trainer_([1-9][0-9]*)((?:_[a-z]+_[A-Za-z0-9]+)*)$/i.exec(String(sp || '').trim());
+    if (!m) return null;
+    var out = { trainerId: Number(m[1]), arenaId: null, slotId: null, via: null };
+    var re = /_([a-z]+)_([A-Za-z0-9]+)/gi;
+    var t;
+    while ((t = re.exec(m[2]))) {
+      var key = t[1].toLowerCase();
+      var val = t[2];
+      var num = /^[1-9][0-9]*$/.test(val) ? Number(val) : null;
+      if (key === 'a' && num && out.arenaId == null) out.arenaId = num;
+      else if (key === 's' && num && out.slotId == null) out.slotId = num;
+      else if (key === 'v' && out.via == null && /^[pck][1-9][0-9]{0,8}$/i.test(val)) out.via = val.toLowerCase();
+    }
+    return out;
+  }
+
+  /**
+   * Карточка тренера — тот же путь, что тап по тренеру на карточке катка (arena-card-model.buildBookingHref).
+   * Со слотом — сразу запись на это время в витрине тренеров (``trainers``); занято/прошло — «Время заняли».
    */
   function trainerDeepLinkTarget(sp) {
-    var m = /^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?(?:_v_[pck][1-9][0-9]{0,8})?$/i.exec(String(sp || '').trim());
-    if (!m) return null;
-    var path = m[2]
-      ? 'catalog?from=arena&trainer_id=' + m[1] + '&arena_id=' + m[2]
-      : 'catalog?trainer_id=' + m[1];
-    return { key: 'catalog', path: path };
+    var p = parseTrainerDeepLink(sp);
+    if (!p) return null;
+    if (p.slotId) {
+      var q = 'trainers?trainer_id=' + p.trainerId + '&slot_id=' + p.slotId;
+      if (p.arenaId) q += '&arena_id=' + p.arenaId;
+      if (p.via) q += '&via=' + encodeURIComponent(p.via);
+      return { key: 'trainers', path: q };
+    }
+    // TASK-357: ссылка тренера с сайта открывает новую карточку тренера в витрине.
+    var path = 'trainers?trainer_id=' + p.trainerId + (p.arenaId ? '&arena_id=' + p.arenaId : '');
+    return { key: 'trainers', path: path };
   }
 
   function deepLinkTarget(sp) {
@@ -272,6 +299,7 @@
     arenaPlacePath: arenaPlacePath,
     resolveArenaDeepLinkTarget: resolveArenaDeepLinkTarget,
     deepLinkTarget: deepLinkTarget,
+    parseTrainerDeepLink: parseTrainerDeepLink,
     pathnameKey: pathnameKey,
     isAlreadyOnTarget: isAlreadyOnTarget,
     resolveWebappPath: resolveWebappPath,

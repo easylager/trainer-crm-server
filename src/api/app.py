@@ -235,6 +235,15 @@ def webapp_catalog_page(request: Request):
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/trainers")
+def webapp_trainers_page():
+    """TASK-357: витрина тренеров, карточка тренера и запись (``?tab=&arena_id=&trainer_id=&slot_id=``)."""
+    path = _WEBAPP_DIR / "trainers.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/arena")
 @app.get("/webapp/arena.html")
 def webapp_arena_page():
@@ -2297,6 +2306,22 @@ def webapp_mini_app_client_bookings_css(request: Request):
     return FileResponse(
         path,
         media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-showcase-model.js")
+@app.get("/webapp/trainer-showcase-main.js")
+@app.get("/webapp/trainer-showcase.css")
+def webapp_trainer_showcase_asset(request: Request):
+    """TASK-357: витрина тренеров и запись — модель, экраны, стили. Use ``?v=…`` for long cache."""
+    name = request.url.path.rsplit("/", 1)[-1]
+    path = _WEBAPP_DIR / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path,
+        media_type="text/css" if name.endswith(".css") else "application/javascript",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
 

@@ -63,3 +63,11 @@ describe('catalog-main.js wiring', () => {
     assert.match(src, /get\('slot_id'\)/);
   });
 });
+
+describe('slotsUrl (TASK-357)', () => {
+  it('init_data идёт отдельным параметром, а не хвостом service_id', () => {
+    const { slotsUrl } = loadBookingClient();
+    const url = slotsUrl({ trainer_id: 9, service_id: 1 }, 'a=1&hash=x');
+    assert.equal(url, '/api/webapp/client/slots?trainer_id=9&service_id=1&init_data=a%3D1%26hash%3Dx');
+  });
+});
