@@ -89,7 +89,8 @@ async def test_trainers_take_the_school_and_coach_entry(app_use_test_db, db_sess
     async with _client() as client:
         await _trainer_on(db_session, client, place, first_name="Анна")
         html = (await client.get(place["path"])).text
-    assert _section_ids(html) == ["schedule", "facts", "services", "trainers", "more", "contacts"]
+    # TASK-354: после расписания — единый блок «Учиться с тренером»; «Тренеры» — школа и вход для тренера.
+    assert _section_ids(html) == ["schedule", "learn", "facts", "services", "trainers", "more", "contacts"]
     trainers = html.split('id="trainers"', 1)[1].split("</section>", 1)[0]
     assert "Школа катка" in trainers and "data-coach-open" in trainers
     more = html.split('id="more"', 1)[1].split("</section>", 1)[0]

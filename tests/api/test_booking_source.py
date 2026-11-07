@@ -18,6 +18,7 @@ from src.application.booking_source import (
     source_from_via,
 )
 from src.application.place_links import parse_trainer_deep_link, parse_trainer_start_param, trainer_start_param
+from src.application.ice_city_day import city_slug
 from src.application.site_trainer_page import trainer_path
 from src.infrastructure.db.models import SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE
 from tests.api.test_site_trainer_page import _listed
@@ -160,7 +161,10 @@ async def test_rink_page_tags_trainer_link_and_trainer_page_passes_it_to_telegra
         place_html = (await client.get(place["path"])).text
         page = (await client.get(f"{trainer_path(tid, name)}?via=p{place['arena_id']}")).text
         plain = (await client.get(trainer_path(tid, name))).text
-    assert f"{trainer_path(tid, name)}?via=p{place['arena_id']}" in place_html
+    # TASK-354: со страницы катка тренеры — через единый блок в каталог (источник «каталог сайта»),
+    # не прямыми ссылками; метка ?via=p остаётся для тех, кто пришёл на страницу тренера по ней.
+    assert f"/c/{city_slug(place['city_name'])}/trenery?arena={place['arena_id']}" in place_html
+    assert f"{trainer_path(tid, name)}?via=p" not in place_html
     assert f"startapp=trainer_{tid}_v_p{place['arena_id']}&amp;surface=trainer_page" in page
     assert f"startapp=trainer_{tid}&amp;surface=trainer_page" in plain
     # Канонический адрес метка не меняет.

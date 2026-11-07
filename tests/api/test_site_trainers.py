@@ -121,27 +121,21 @@ async def _trainer_on(db_session, client: AsyncClient, place: dict, *, first_nam
 
 
 @pytest.mark.asyncio
-async def test_place_page_lists_trainers_with_link_to_their_page(app_use_test_db, db_session) -> None:
+async def test_place_page_trainers_are_one_learn_block_not_a_list(app_use_test_db, db_session) -> None:
+    """TASK-354: список тренеров на катке заменён единым блоком «Учиться с тренером» → каталог."""
     place = await _place(db_session)
     name = f"Анна{uuid.uuid4().hex[:4]}"
     async with _client() as client:
         tid = await _trainer_on(db_session, client, place, first_name=name)
         html = (await client.get(place["path"])).text
 
-    section = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', html, re.S)
-    assert section, "нет секции тренеров"
-    body = section.group(1)
-    assert f"{name} Тренерова" in body
-    assert f"trainers/{tid}/a_list.jpg" in body
-    # Минимум тарифов 45; групповая 25 и абонемент 670/16 = 41,87 в «от» не входят.
-    assert "от\u00a045\u00a0BYN за\u00a0занятие" in body
-    # TASK-350: строка ведёт на страницу тренера сайта; подпись — по can_book, как в Mini App.
-    assert f"/t/{tid}-{city_slug(name + ' Тренерова')}" in body
-    assert "startapp=trainer_" not in body
-    async with _client() as client:
-        can_book = (await client.get(f"/api/public/trainers/{tid}")).json()["can_book"]
-    assert ("Записаться" if can_book else "Написать") in body
-    # Список заменяет счётчик «Здесь работает 1 тренер» в «На месте».
+    block = re.search(r'<section class="b-sec b-learn-sec" id="learn">(.*?)</section>', html, re.S)
+    assert block, "нет блока «Учиться с тренером»"
+    assert f"trainers/{tid}/a_list.jpg" in block.group(1)  # лицо тренера
+    assert f'href="/c/{city_slug(place["city_name"])}/trenery?arena={place["arena_id"]}"' in block.group(1)
+    assert f"{name} Тренерова" not in html and "b-row--coach" not in html
+    assert "startapp=trainer_" not in html
+    # Список заменял счётчик «Здесь работает 1 тренер» в «На месте» — блок тоже.
     assert "Здесь работает" not in html
 
 
@@ -164,23 +158,20 @@ async def test_place_page_without_trainers_invites_the_first_one(app_use_test_db
 
 
 @pytest.mark.asyncio
-async def test_city_page_shows_trainers_and_route_row_points_to_them(app_use_test_db, db_session) -> None:
+async def test_city_page_has_no_trainer_list_only_learn_block_and_coach_entry(app_use_test_db, db_session) -> None:
     place = await _place(db_session)
-    # Второй каток — вариант «много катков», где есть строка «Тренеры» в «Что нужно».
+    # Второй каток — вариант «много катков», где есть «Чем займёмся?».
     await _insert_arena(db_session, place["city_id"], name=f"Второй каток {uuid.uuid4().hex[:4]}")
     await db_session.commit()
     name = f"Борис{uuid.uuid4().hex[:4]}"
     async with _client() as client:
-        tid = await _trainer_on(db_session, client, place, first_name=name)
+        await _trainer_on(db_session, client, place, first_name=name)
         html = (await client.get(f"/c/{city_slug(place['city_name'])}")).text
 
-    section = re.search(r'<section class="b-sec" id="trainers">(.*?)</section>', html, re.S)
-    assert section, "нет раздела тренеров в городе"
-    assert f"{name} Тренерова" in section.group(1)
-    # Из города — страница тренера; рядом вход для тренеров города (TASK-350).
-    assert f"/t/{tid}-" in section.group(1)
-    assert "/trainers?utm_source=glide&amp;utm_medium=city_hub" in section.group(1)
-    assert 'href="#trainers"' in html
+    # TASK-354: нижний список «Тренеры» и строка «Тренеры · N» ушли; вход для тренеров города остался.
+    assert 'id="trainers"' not in html and 'href="#trainers"' not in html and f"{name} Тренерова" not in html
+    assert 'id="learn"' in html
+    assert "/trainers?utm_source=glide&amp;utm_medium=city_hub" in html
 
 
 @pytest.mark.asyncio

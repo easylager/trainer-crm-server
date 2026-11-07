@@ -346,6 +346,13 @@ async def place_page(
         "session_id": session_id if view.get("focus") is not None else None,
         "invite": invite,
     }
+    # TASK-354: единый блок «Учиться с тренером» после расписания; не каток — блока нет.
+    from src.shared.venue_types import has_public_skating
+
+    if has_public_skating(card.get("venue_type")):
+        from src.application.site_learn_block import learn_block, load_learn_data
+
+        view["learn"] = learn_block(await load_learn_data(session, city), "arena", arena_id=int(card["id"]))
     settings = Settings()
     html = render_place_page(
         view,
@@ -682,6 +689,18 @@ async def selection_page(
         svc=svc_value,
         seg=seg_value,
     )
+    # TASK-354: единый блок «Учиться с тренером» — внизу «Покататься» (с нуля) и «С клюшкой» (ОХМ).
+    learn_place = (
+        "hockey"
+        if view.get("kind") == "ohm" and not view.get("svc") and not view.get("seg")
+        else "skate"
+        if venue == "ice" and not kind_value and not svc_value and not seg_value
+        else None
+    )
+    if learn_place:
+        from src.application.site_learn_block import learn_block, load_learn_data
+
+        view["learn"] = learn_block(await load_learn_data(session, city), learn_place)
     # Любой ?t= / ?w= канонизируется на базовую подборку города. ?kind=ohm — свой канон.
     # ?seg=centers остаётся в каноне, чтобы ссылка открывала список центров.
     canonical_path = selection_path(
@@ -754,6 +773,13 @@ async def _city_hub(
     if city_ref != slug:
         return RedirectResponse(url=f"/c/{slug}" + (f"?w={when}" if when else ""), status_code=301)
     view = await load_city_hub_view(session, city=city, window=when or "auto")
+    # TASK-354: единый блок «Учиться с тренером» и пункты меню — из данных каталога города.
+    from src.application.site_learn_block import hockey_count, learn_block, load_learn_data
+
+    if view.get("trainer_count"):  # в городе нет опубликованных тренеров — каталог не читаем
+        learn_data = await load_learn_data(session, city)
+        view["learn"] = learn_block(learn_data, "city")
+        view["learn_hockey"] = hockey_count(learn_data)
     # Картинка и ссылка в бота знают только три окна; день (TASK-337) — вариант страницы без своей картинки.
     share_when = when if when in ("today", "tomorrow", "weekend") else None
     preview = city_hub_selection_preview_view(view)

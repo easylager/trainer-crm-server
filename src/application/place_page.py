@@ -72,6 +72,7 @@ from src.shared.public_display import (
     short_day_word,
 )
 from src.shared.venue_types import has_public_skating
+from src.application.site_learn_block import render_learn_block
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "place.html"
 
@@ -2028,33 +2029,16 @@ def _b_arrive(
     return section(title or t("hub.directions"), body, klass="b-sec--place", sec_id=sec_id)
 
 
-def _b_trainers(view: Mapping[str, Any], *, base_url: str, school_html: str = "") -> str:
-    """Тренеры на этом месте (TASK-265), как в Mini App: тап — страница тренера ``/t/…`` (TASK-350).
+def _b_trainers(view: Mapping[str, Any], *, school_html: str = "") -> str:
+    """Раздел «Тренеры» на катке с тренерами: школа катка и вход для тренера. Сами тренеры — единый
+    блок «Учиться с тренером» после расписания (TASK-354); нет тренеров — раздела нет, вход в «Ещё на катке»."""
+    from src.application.style_b import section
 
-    Одна карточка везде: подпись справа — «Записаться» / «Написать» по ``can_book``, как на
-    странице тренера и в городе. Нет тренеров — нет блока: вход для тренера тогда в «Ещё на катке».
-    """
-    from src.application.booking_source import place_via
-    from src.application.site_trainer_page import trainer_page_url
-    from src.application.style_b import section, trainer_rows_html
-
-    trainers = list(view.get("trainers") or [])
-    if not trainers:
+    if not view.get("trainers"):
         return ""
     card = view["card"]
     coach = _b_coach_entry(card, first=False) if _ice(card) else ""
-    # ``?via=p<каток>`` — источник записи и «Написать» на странице тренера (TASK-351).
-    via = place_via(arena_id=int(card["id"]))
-
-    def href_for(trainer: Mapping[str, Any]) -> str | None:
-        return f'{trainer_page_url(base_url, int(trainer["id"]), str(trainer.get("name") or ""))}?via={via}'
-
-    return section(
-        t("place.trainers"),
-        trainer_rows_html(trainers, href_for=href_for) + school_html + coach,
-        klass="b-sec--place",
-        sec_id="trainers",
-    )
+    return section(t("place.trainers"), school_html + coach, klass="b-sec--place", sec_id="trainers")
 
 
 def _b_coach_entry(card: Mapping[str, Any], *, first: bool) -> str:
@@ -2394,10 +2378,11 @@ def render_place_body_b(
         _b_hero(card, status_html=_b_status(view), chips_html=_b_hero_chips(card, links)),
         _b_plan(view, invite=invite),
         _b_ice(view, base_path=base_path, invite=invite, links=links, vv=vv),
+        render_learn_block(view.get("learn")),
         _b_matches_here(view),
         facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
         services_html(vv, title=_rental_section_title(card, hours) if hours.get("rental_title") else "Прокат и услуги"),
-        _b_trainers(view, base_url=base_url, school_html=school_in_trainers_html(vv.get("school"))),
+        _b_trainers(view, school_html=school_in_trainers_html(vv.get("school"))),
         _b_partners(card),
         more_html(vv, coach_html=coach_in_more, tel_href=str(links.get("tel") or "")),
         _b_about(card),
