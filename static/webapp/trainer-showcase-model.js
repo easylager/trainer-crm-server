@@ -132,11 +132,26 @@
     return out;
   }
 
-  /** «от N» над списком: минимум `min_session_price_cents` по показанным (тот же расчёт у витрины и у блока входов). */
-  function minPriceOf(list) {
-    var mins = (list || []).map(function (t) { return Number(t.min_session_price_cents); }).filter(function (c) { return c > 0; });
-    if (!mins.length) return null;
-    return { cents: Math.min.apply(null, mins), currency: (list[0] && list[0].min_session_price_currency) || 'BYN' };
+  /** Цена услуги «от»: минимум индивидуальных тарифов; тарифов нет — цена услуги. Групповая и абонемент сюда не входят. */
+  function servicePriceFrom(s) {
+    var prices = (s.price_tiers || []).map(function (t) { return Number(t.price_cents); }).filter(function (c) { return c > 0; });
+    if (!prices.length && Number(s.price_cents) > 0) prices = [Number(s.price_cents)];
+    return prices.length ? Math.min.apply(null, prices) : null;
+  }
+
+  /**
+   * «от N» для вкладки: минимум по услугам ЭТОГО направления у показанных тренеров (как `direction_min_price`
+   * на сайте). «Все» — по услугам всех вкладок (без роликов и ОФП/СФП). Один расчёт для витрины и блока входов.
+   */
+  function minPriceOf(list, key) {
+    var best = null;
+    (list || []).forEach(function (t) {
+      servicesInDirection(t, key || 'all').forEach(function (s) {
+        var c = servicePriceFrom(s);
+        if (c != null && (!best || c < best.cents)) best = { cents: c, currency: s.currency_code || 'BYN' };
+      });
+    });
+    return best;
   }
 
   /** Катки для фильтра: лёд у тренеров вкладки, с числом тренеров. */

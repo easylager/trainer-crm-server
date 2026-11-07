@@ -34,10 +34,10 @@ const gaevsky = trainer(9, {
   windows: [win(1, 3, '2026-11-07T17:15:00+03:00', 'сегодня', '17:15')],
 });
 const vlad = trainer(11, {
-  initial: 'В', min_session_price_cents: 4500,
+  initial: 'В', min_session_price_cents: 4500, services: [svc(1, tiers([['child', 4500], ['adult', 5000]]))],
   windows: [win(2, 3, '2026-11-08T10:00:00+03:00', 'завтра', '10:00')],
 });
-const klimas = trainer(77, { initial: 'К', min_session_price_cents: 5000, arenas: [{ id: 5, name: 'Чижовка' }], windows: [win(3, 5, '2026-11-08T18:00:00+03:00', 'завтра', '18:00')] });
+const klimas = trainer(77, { initial: 'К', min_session_price_cents: 3000, services: [svc(1, tiers([['adult', 5000]])), svc(6, tiers([['adult', 5000]])), svc(7, tiers([['adult', 3000]]))], arenas: [{ id: 5, name: 'Чижовка' }], windows: [win(3, 5, '2026-11-08T18:00:00+03:00', 'завтра', '18:00')] });
 const hockey = trainer(20, { initial: 'Х', min_session_price_cents: 6000, services: [svc(6, tiers([['adult', 6000]]))] });
 const hockey2 = trainer(21, { initial: 'Я', min_session_price_cents: 5500, services: [svc(4, tiers([['adult', 5500]]))] });
 const noWrite = trainer(74, { can_book: false, windows: [win(9, 3, '2026-11-07T09:00:00+03:00', 'сегодня', '09:00')] });
@@ -92,7 +92,7 @@ describe('главная и «Мои записи» (city)', () => {
   });
 
   it('нет цены и нет окон — строки нет, блок остаётся', () => {
-    const b = L.build([trainer(1, { min_session_price_cents: null })], 'city', { cityId: 1 });
+    const b = L.build([trainer(1, { services: [svc(1, [])] })], 'city', { cityId: 1 });
     assert.equal(b.line, '');
   });
 
@@ -163,6 +163,33 @@ describe('карточка катка (arena)', () => {
   });
 });
 
+describe('«от» — по услугам направления, а не по всем услугам тренера', () => {
+  const group = svc(1, tiers([['adult', 5000]]), { price_group_cents: 2000 });
+  const k = trainer(77, { min_session_price_cents: 3000, services: [group, svc(6, tiers([['adult', 5000]])), svc(7, tiers([['adult', 3000]]))] });
+  const v = trainer(11, { services: [svc(1, tiers([['child', 4500], ['adult', 5000]]))] });
+
+  it('ОФП (30) в «от» не входит: «С нуля» 45, «Все» 45, «С клюшкой» 50', () => {
+    const items = [k, v];
+    const show = (key) => M.minPriceOf(M.visibleTrainers(items, key, null), key).cents;
+    assert.equal(show('s-nulya'), 4500);
+    assert.equal(show('all'), 4500);
+    assert.equal(show('s-klyushkoy'), 5000);
+  });
+
+  it('нет тарифов — цена услуги; нет цен — null', () => {
+    const plain = trainer(1, { services: [svc(1, [], { price_cents: 4800 })] });
+    assert.equal(M.minPriceOf([plain], 's-nulya').cents, 4800);
+    assert.equal(M.minPriceOf([trainer(2, { services: [svc(1, [])] })], 'all'), null);
+  });
+
+  it('блок входов считает так же: главная, «С нуля», «С клюшкой»', () => {
+    const items = [k, v];
+    assert.match(L.build(items, 'city', { cityId: 1 }).line, /^От 45 BYN за занятие/);
+    assert.match(L.build(items, 'skate', { cityId: 1 }).line, /2 тренера, от 45 BYN\.$/);
+    assert.match(L.build(items, 'hockey', { cityId: 1 }).line, /1 тренер, от 50 BYN\.$/);
+  });
+});
+
 describe('одна модель с витриной', () => {
   it('число и «от» совпадают с тем, что считает витрина для вкладки', () => {
     const items = [gaevsky, vlad, klimas, hockey];
@@ -192,13 +219,13 @@ describe('компонент LearnBlock', () => {
   let respond;
 
   function load() {
-    delete require.cache[require.resolve(path.join(WEBAPP, 'learn-block.js'))];
+    delete require.cache[require.resolve(path.join(WEBAPP, 'learn-block-core.js'))];
     globalThis.TrainerShowcaseModel = M;
     globalThis.LearnBlockModel = L;
     const store = {};
     globalThis.sessionStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; } };
     globalThis.document = { querySelector: (sel) => hosts[sel] || null };
-    require(path.join(WEBAPP, 'learn-block.js'));
+    require(path.join(WEBAPP, 'learn-block-core.js'));
     return globalThis.LearnBlock;
   }
 
@@ -252,17 +279,31 @@ const read = (f) => fs.readFileSync(path.join(WEBAPP, f), 'utf8');
 const appPy = fs.readFileSync(path.resolve(__dirname, '../../src/api/app.py'), 'utf8');
 
 describe('подключение на экранах', () => {
-  for (const page of ['client-home.html', 'ice.html', 'arena.html', 'client-bookings.html']) {
-    it(page + ': стили, модель витрины, модель блока и компонент подключены', () => {
+  for (const page of ['client-home.html', 'arena.html', 'client-bookings.html']) {
+    it(page + ': статически только маленький загрузчик; тяжёлое грузится по требованию', () => {
       const html = read(page);
-      for (const a of ['learn-block.css', 'trainer-showcase-model.js', 'learn-block-model.js', 'learn-block.js']) {
-        assert.match(html, new RegExp('(src|href)="' + a.replace('.', '\\.') + '\\?v=\\d+"'), a);
+      assert.match(html, /src="learn-block\.js\?v=\d+"/);
+      for (const a of ['learn-block.css', 'trainer-showcase-model.js', 'learn-block-model.js', 'learn-block-core.js']) {
+        assert.ok(!html.includes(a), a + ' не должен подключаться статически');
       }
     });
   }
 
+  it('Поиск: загрузчик подключает сам ice-tab.js, когда блок есть что показывать (вес ice.html)', () => {
+    const html = read('ice.html');
+    for (const a of ['learn-block', 'trainer-showcase-model', 'learn-block-core']) assert.ok(!html.includes(a + '.'), a);
+    assert.match(read('ice-tab.js'), /replace\('ice-tab\.js', 'learn-block\.js'\)/);
+  });
+
+  it('загрузчик тянет стили, модели и компонент и не грузит ничего на hide()', () => {
+    const js = read('learn-block.js');
+    for (const a of ['learn-block.css', 'trainer-showcase-model.js', 'learn-block-model.js', 'learn-block-core.js']) {
+      assert.ok(js.includes(a), a);
+    }
+  });
+
   it('сервер отдаёт файлы блока', () => {
-    for (const a of ['learn-block-model.js', 'learn-block.js', 'learn-block.css']) {
+    for (const a of ['learn-block-model.js', 'learn-block.js', 'learn-block-core.js', 'learn-block.css']) {
       assert.ok(appPy.includes('@app.get("/webapp/' + a + '")'), a);
     }
   });
@@ -287,7 +328,7 @@ describe('подключение на экранах', () => {
 
   it('Поиск: массовое катание без фильтров и ОХМ-сеансы, не центры', () => {
     const js = read('ice-tab.js');
-    assert.match(js, /return 'skate'/);
-    assert.match(js, /state\.hockeySeg !== 'centers'\) return 'hockey'/);
+    assert.match(js, /state\.intent === 'skate' \? 'skate'/);
+    assert.match(js, /state\.hockeySeg !== 'centers' \? 'hockey'/);
   });
 });

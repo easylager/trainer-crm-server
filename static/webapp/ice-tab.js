@@ -1761,29 +1761,19 @@
     renderLearn();
   }
 
-  /*
-   * TASK-354: «Учиться с тренером» после списка сеансов. Только когда лента загружена и в ней есть
-   * сеансы: «Покататься» (массовое, без фильтров мест/зимы) → «С нуля»; «С клюшкой» → ОХМ (не центры)
-   * → «С клюшкой». Тренеров нет — блока нет (решает LearnBlock по выдаче витрины).
-   */
-  function learnPlace() {
-    if (state.view !== 'list' || state.loading || state.loadedIntent !== state.intent) return '';
-    if (!state.items.length || !state.cityId || state.season || winterMapPending()) return '';
-    if (state.intent === 'skate' && M.catalogScope(state.intent, state.venueTypes) === 'places' &&
-        state.placeService !== 'service' && !(state.venueTypes && state.venueTypes.length)) return 'skate';
-    if (state.intent === 'ohm' && state.hockeySeg !== 'centers') return 'hockey';
-    return '';
-  }
-
+  /* TASK-354: блок «Учиться с тренером» под сеансами; learn-block.js — по требованию. */
+  var learnSrc = document.currentScript && document.currentScript.src;
   function renderLearn() {
     var LB = global.LearnBlock;
-    if (!LB) return;
-    var place = learnPlace();
-    if (!place) {
-      LB.hide('#iceLearn');
-      return;
-    }
-    LB.mount('#iceLearn', { place: place, cityId: state.cityId });
+    var ok = state.view === 'list' && !state.loading && state.loadedIntent === state.intent && state.items.length &&
+      state.cityId && !state.season && !state.venueTypes.length && state.placeService !== 'service';
+    var place = !ok ? '' : state.intent === 'skate' ? 'skate' : state.intent === 'ohm' && state.hockeySeg !== 'centers' ? 'hockey' : '';
+    if (LB) return place ? LB.mount('#iceLearn', { place: place, cityId: state.cityId }) : LB.hide('#iceLearn');
+    if (!place || !learnSrc) return;
+    var js = document.createElement('script');
+    js.src = learnSrc.replace('ice-tab.js', 'learn-block.js');
+    js.onload = renderLearn;
+    document.head.appendChild(js);
   }
 
   /* TASK-343: зимние катки и коробки внутри «Зимой». Нет модуля или флага — лента как была. */

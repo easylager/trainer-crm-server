@@ -31,8 +31,8 @@
     return n % 10 === 1 && n % 100 !== 11;
   }
 
-  function priceText(list) {
-    var p = M.minPriceOf(list);
+  function priceText(list, key) {
+    var p = M.minPriceOf(list, key);
     return p ? M.formatMoney(p.cents, p.currency) : '';
   }
 
@@ -84,7 +84,7 @@
 
     if (place === 'city') {
       var bits = [];
-      var price = priceText(everyone);
+      var price = priceText(everyone, 'all');
       if (price) bits.push('От ' + price + ' за занятие.');
       var soon = nearest(everyone, null);
       if (soon) bits.push('Ближайшее свободное время — ' + soon + '.');
@@ -98,7 +98,7 @@
     if (place === 'skate') {
       var zero = M.visibleTrainers(items, 's-nulya', null);
       if (!zero.length) return null;
-      var p1 = priceText(zero);
+      var p1 = priceText(zero, 's-nulya');
       return block(zero, 'Учат с нуля и тех, кто уже катается. ' + count(zero.length) + (p1 ? ', от ' + p1 : '') + '.',
         href({ tab: 's-nulya' }, cityId));
     }
@@ -106,7 +106,7 @@
     if (place === 'hockey') {
       var stick = M.visibleTrainers(items, 's-klyushkoy', null);
       if (!stick.length) return null;
-      var p2 = priceText(stick);
+      var p2 = priceText(stick, 's-klyushkoy');
       return block(stick, 'Катание для хоккеистов: скорость, перекрёстный шаг, торможение. ' + count(stick.length) + (p2 ? ', от ' + p2 : '') + '.',
         href({ tab: 's-klyushkoy' }, cityId));
     }
@@ -120,7 +120,7 @@
       if (t) line += ' Ближайшее свободное время — ' + t + '.';
       return block(here, line, href({ arena_id: arenaId }, cityId));
     }
-    var p3 = priceText(everyone);
+    var p3 = priceText(everyone, 'all');
     return block(everyone, 'На этом катке тренеров пока нет. В городе — ' + everyone.length + (p3 ? ', от ' + p3 + ' за занятие' : '') + '.',
       href({}, cityId));
   }
