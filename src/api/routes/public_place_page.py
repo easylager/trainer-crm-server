@@ -554,6 +554,11 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
 
     for path in await site_trainer_page.sitemap_rows(session):
         urls.append((f"{base}{path}", "weekly", None, "0.6"))
+    # TASK-355: каталог тренеров — направления города, где есть тренеры.
+    from src.application import site_trainer_catalog
+
+    for path in await site_trainer_catalog.sitemap_rows(session):
+        urls.append((f"{base}{path}", "weekly", None, "0.6"))
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for loc, freq, stamp, priority in urls:
         lastmod = _sitemap_lastmod(stamp)
