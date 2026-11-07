@@ -76,6 +76,8 @@ async def test_showcase_has_from_price_glide_since_windows_and_ice_arenas(app_us
     assert [a["id"] for a in item["arenas"]] == [place["arena_id"]]
     svc = item["services"][0]
     assert svc["is_public"] is True
+    # Публичная услуга сама — направление; поле привязки своей услуги (TASK-353) есть и пустое.
+    assert "direction_service_id" in svc and svc["direction_service_id"] is None
     # Групповой слот записывается по COALESCE(group_price_cents, price_cents) — витрина показывает ту же цену.
     assert svc["group_price_cents"] == 2500
     assert {t["tier_kind"] for t in svc["price_tiers"]} >= {"child", "adult"}

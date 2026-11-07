@@ -110,6 +110,8 @@ def _service_out(svc: dict[str, Any], public_ids: set[int]) -> dict[str, Any]:
         "service_id": sid,
         "service_name": str(svc.get("service_name") or "").strip(),
         "is_public": sid in public_ids,
+        # Своя услуга тренера, привязанная админом к направлению (TASK-353): во вкладке этой услуги.
+        "direction_service_id": svc.get("direction_service_id"),
         "is_online": bool(svc.get("is_online")),
         "price_cents": svc.get("price_cents"),
         # Группа: сервер записывает COALESCE(group_price_cents, price_cents) — строка оплаты показывает то же.

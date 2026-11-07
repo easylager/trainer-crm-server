@@ -216,3 +216,19 @@ describe('даты и имена', () => {
     assert.equal(M.phoneFromContact(null), '');
   });
 });
+
+describe('своя услуга тренера во вкладке (TASK-353)', () => {
+  const Mo = require('../../static/webapp/trainer-showcase-model.js');
+  const own = (dir) => ({ service_id: 11, is_public: false, direction_service_id: dir, price_cents: 6000, price_tiers: [] });
+
+  it('привязанная к «Фигурному» — во вкладке «Фигурное», без привязки — нигде', () => {
+    const linked = { id: 1, services: [own(3)], arenas: [{ id: 3 }] };
+    const loose = { id: 2, services: [own(null)], arenas: [{ id: 3 }] };
+    const fig = Mo.DIRECTIONS.find((d) => d.ids && d.ids.indexOf(3) >= 0).key;
+    assert.equal(Mo.servicesInDirection(linked, fig).length, 1);
+    assert.equal(Mo.servicesInDirection(loose, fig).length, 0);
+    assert.equal(Mo.servicesInDirection(loose, 'all').length, 0);
+    // Привязка к роликам/ОФП — не вкладка.
+    assert.equal(Mo.servicesInDirection({ id: 3, services: [own(7)] }, 'all').length, 0);
+  });
+});

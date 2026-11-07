@@ -14,7 +14,8 @@
   'use strict';
 
   /* ── Направления = вкладки. «С клюшкой» = Хоккейное катание (4) + ОХМ (6). Ролики (5) и ОФП/СФП (7)
-     вкладками не бывают — только на карточке тренера. Своя услуга (is_public=false) во вкладки не идёт. */
+     вкладками не бывают — только на карточке тренера. Своя услуга (is_public=false) — во вкладке направления, к которому её привязал админ
+     (direction_service_id, TASK-353); без привязки во вкладки не идёт. */
   var DIRECTIONS = [
     { key: 'all', title: 'Все', ids: null,
       lead: 'Учат с нуля, ставят ход, фигурное катание и хоккей.' },
@@ -66,12 +67,18 @@
     return null;
   }
 
-  /** Услуги тренера во вкладке: публичные и из её списка. «Все» — любая вкладочная. */
+  /** Публичная услуга, по которой услуга тренера попадает во вкладку: своя — по привязке админа. */
+  function tabServiceId(s) {
+    if (s.is_public !== false) return Number(s.service_id);
+    return s.direction_service_id != null ? Number(s.direction_service_id) : null;
+  }
+
+  /** Услуги тренера во вкладке: публичные и из её списка, своя — по привязке. «Все» — любая вкладочная. */
   function servicesInDirection(trainer, key) {
     var dir = direction(key) || DIRECTIONS[0];
     var ids = dir.ids || TAB_SERVICE_IDS;
     return (trainer.services || []).filter(function (s) {
-      return s.is_public !== false && ids.indexOf(Number(s.service_id)) >= 0;
+      return ids.indexOf(tabServiceId(s)) >= 0;
     });
   }
 
