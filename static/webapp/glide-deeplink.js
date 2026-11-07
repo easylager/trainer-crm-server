@@ -91,7 +91,7 @@
    * тот же путь, что тап по тренеру на карточке катка (arena-card-model.buildBookingHref).
    */
   function trainerDeepLinkTarget(sp) {
-    var m = /^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?$/i.exec(String(sp || '').trim());
+    var m = /^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?(?:_v_[pck][1-9][0-9]{0,8})?$/i.exec(String(sp || '').trim());
     if (!m) return null;
     var path = m[2]
       ? 'catalog?from=arena&trainer_id=' + m[1] + '&arena_id=' + m[2]

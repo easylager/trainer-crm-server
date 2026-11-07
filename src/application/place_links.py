@@ -33,6 +33,7 @@ MATCH_START_PREFIX = "kkm_"
 
 # Ограничения Telegram на start/startapp: до 64 символов, только [A-Za-z0-9_-].
 _START_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_TRAINER_VIA_RE = re.compile(r"^[pck][1-9][0-9]{0,8}$")
 
 #: Токены startapp. shop/gym/ice/… — фильтр типа места; skate/coach — интент вкладки;
 #: ohm — любительский хоккей; service — раздел «Заточка».
@@ -227,11 +228,17 @@ def match_start_param(match_id: int, company_code: str | None = None) -> str:
     return param
 
 
-def trainer_start_param(trainer_id: int, arena_id: int | None = None) -> str:
-    """``trainer_7`` или ``trainer_7_a_3`` — карточка тренера в мини-аппе, как тап по тренеру на катке."""
+def trainer_start_param(trainer_id: int, arena_id: int | None = None, via: str | None = None) -> str:
+    """``trainer_7`` или ``trainer_7_a_3`` — карточка тренера в мини-аппе, как тап по тренеру на катке.
+
+    ``via`` — метка источника записи (``booking_source.place_via``: ``p3`` / ``c1`` / ``k1``),
+    хвостом ``_v_p3``: со страницы тренера, куда пришли с катка 3. Экран Mini App она не меняет.
+    """
     param = f"{TRAINER_START_PREFIX}{int(trainer_id)}"
     if arena_id is not None and int(arena_id) > 0:
         param += f"_a_{int(arena_id)}"
+    if via and _TRAINER_VIA_RE.match(via):
+        param += f"_v_{via}"
     return param
 
 
@@ -295,16 +302,22 @@ def parse_catalog_start_param(value: str | None) -> tuple[int | None, str | None
 _PLACE_DEEP_RE = re.compile(r"^arena_([1-9][0-9]*)(?:_s_([1-9][0-9]*))?$")
 
 
-_TRAINER_DEEP_RE = re.compile(r"^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?$")
+_TRAINER_DEEP_RE = re.compile(r"^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?(?:_v_([pck][1-9][0-9]{0,8}))?$")
 
 
-def parse_trainer_deep_link(value: str | None) -> tuple[int, int | None] | None:
-    """``trainer_7`` → ``(7, None)``; ``trainer_7_a_3`` → ``(7, 3)``."""
+def parse_trainer_start_param(value: str | None) -> tuple[int, int | None, str | None] | None:
+    """``trainer_7_a_3_v_p3`` → ``(7, 3, "p3")``; ``trainer_7`` → ``(7, None, None)``."""
     match = _TRAINER_DEEP_RE.match((value or "").strip())
     if match is None:
         return None
     arena_id = int(match.group(2)) if match.group(2) else None
-    return int(match.group(1)), arena_id
+    return int(match.group(1)), arena_id, match.group(3)
+
+
+def parse_trainer_deep_link(value: str | None) -> tuple[int, int | None] | None:
+    """``trainer_7`` → ``(7, None)``; ``trainer_7_a_3`` → ``(7, 3)``; метка ``_v_…`` не мешает."""
+    parsed = parse_trainer_start_param(value)
+    return None if parsed is None else (parsed[0], parsed[1])
 
 
 def parse_place_deep_link(value: str | None) -> tuple[int, int | None] | None:

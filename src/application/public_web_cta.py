@@ -21,6 +21,8 @@ PARTNER_ACTIONS = frozenset({CONTACT_ACTION_PARTNER_OPEN, CONTACT_ACTION_PARTNER
 CONTACT_ACTION_COACH_OPEN = "coach_open"
 CONTACT_ACTION_COACH_JOIN = "coach_join"
 COACH_ACTIONS = frozenset({CONTACT_ACTION_COACH_OPEN, CONTACT_ACTION_COACH_JOIN})
+# «Написать в Telegram» тренеру без онлайн-записи (TASK-351): в payload — trainer_id и источник.
+CONTACT_ACTION_TELEGRAM = "telegram"
 
 _ALLOWED_CONTACT_ACTIONS = frozenset(
     {CONTACT_ACTION_PHONE, CONTACT_ACTION_TICKETS, CONTACT_ACTION_DIRECTION}
@@ -109,8 +111,10 @@ def contact_click_beacon_url(
     surface: str,
     city_id: int | None = None,
     arena_id: int | None = None,
+    trainer_id: int | None = None,
+    via: str | None = None,
 ) -> str:
-    """Относительный URL для ``navigator.sendBeacon`` (POST) — учёт клика «Позвонить»."""
+    """Относительный URL для ``navigator.sendBeacon`` (POST) — учёт клика «Позвонить» / «Написать»."""
     params: dict[str, str] = {
         "action": (action or "").strip().lower(),
         "surface": (surface or "place_page").strip().lower(),
@@ -119,6 +123,10 @@ def contact_click_beacon_url(
         params["city_id"] = str(int(city_id))
     if arena_id is not None and int(arena_id) > 0:
         params["arena_id"] = str(int(arena_id))
+    if trainer_id is not None and int(trainer_id) > 0:
+        params["trainer_id"] = str(int(trainer_id))
+    if via:
+        params["via"] = via
     return f"/api/public/catalog/contact-click?{urlencode(params)}"
 
 

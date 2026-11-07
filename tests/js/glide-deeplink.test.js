@@ -56,6 +56,9 @@ describe('GlideDeepLink.readStartParam', () => {
       key: 'catalog',
       path: 'catalog?from=arena&trainer_id=7&arena_id=3',
     });
+    // TASK-351: метка источника не меняет экран.
+    assert.deepEqual(G.deepLinkTarget('trainer_7_v_p3'), { key: 'catalog', path: 'catalog?trainer_id=7' });
+    assert.equal(G.deepLinkTarget('trainer_7_v_x3'), null);
     assert.equal(G.deepLinkTarget('trainer_0'), null);
     assert.equal(G.deepLinkTarget('trainer_7_a_'), null);
   });

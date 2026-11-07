@@ -525,12 +525,22 @@ async def record_public_contact_click(
     city_id: int | None = None,
     arena_id: int | None = None,
     partner: str | None = None,
+    trainer_id: int | None = None,
+    via: str | None = None,
 ) -> None:
     """Клик «позвонить / билеты / маршрут» с SSR — demand-событие TASK-189.
 
     ``partner_open`` / ``partner_show`` — партнёр рядом с катком; slug партнёра в payload.
     ``coach_open`` / ``coach_join`` — вход для тренера на странице катка.
+    ``telegram`` — «Написать в Telegram» тренеру (TASK-351): ``trainer_id`` и ``source`` (код
+    ``booking_source``, как у записи) в payload; место — каток / город, откуда пришли.
     """
+    act_raw = (action or "").strip().lower()
+    if act_raw == "telegram":
+        await _record_trainer_write_click(
+            session, request, surface=surface, city_id=city_id, arena_id=arena_id, trainer_id=trainer_id, via=via
+        )
+        return
     from starlette.requests import Request
 
     if not isinstance(request, Request):
@@ -575,6 +585,62 @@ async def record_public_contact_click(
             "action": act,
             "ua_class": classify_user_agent(user_agent),
             **({"partner": slug} if act in partner_actions else {}),
+        },
+    )
+
+
+async def _record_trainer_write_click(
+    session: AsyncSession,
+    request: Any,
+    *,
+    surface: str,
+    city_id: int | None,
+    arena_id: int | None,
+    trainer_id: int | None,
+    via: str | None,
+) -> None:
+    from starlette.requests import Request
+
+    from src.api.middleware.http_limits import client_ip_from_request
+    from src.application.booking_source import SOURCE_SITE_TRAINER, source_from_via
+
+    if not isinstance(request, Request) or trainer_id is None or not 0 < int(trainer_id) < 2**31:
+        return
+    exists = (
+        await session.execute(text("SELECT 1 FROM trainers WHERE id = :id"), {"id": int(trainer_id)})
+    ).first()
+    if exists is None:
+        return
+    src = source_from_via(via)
+    surf = (surface or "").strip().lower()[:40]
+    code = src.code if src else (SOURCE_SITE_TRAINER if surf == "trainer_page" else None)
+    scope_city, scope_arena = await resolve_entry_scope(
+        session, start_param=None, city_id=city_id, arena_id=arena_id
+    )
+    user_agent = request.headers.get("user-agent")
+    actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
+    await record_catalog_consumer_event(
+        session,
+        kind=KIND_PUBLIC_CONTACT_CLICK,
+        surface=surf,
+        actor_hash=actor,
+        city_id=scope_city,
+        arena_id=scope_arena,
+        # Один человек — одно «Написать» тренеру за сутки, разным тренерам — разные строки.
+        dedup_key=event_dedup_hash(
+            kind=KIND_PUBLIC_CONTACT_CLICK,
+            surface=surf,
+            actor_hash=actor,
+            day=catalog_event_day_minsk(),
+            city_id=scope_city,
+            arena_id=scope_arena,
+            variant=f"telegram:{int(trainer_id)}",
+        ),
+        payload={
+            "action": "telegram",
+            "trainer_id": int(trainer_id),
+            "ua_class": classify_user_agent(user_agent),
+            **({"source": code} if code else {}),
         },
     )
 

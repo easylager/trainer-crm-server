@@ -29,7 +29,8 @@ def test_b_trainers_link_to_trainer_page_with_can_book_label() -> None:
     html = _b_trainers(view(True), base_url="https://glide.by")
     assert 'id="trainers"' in html
     assert "Александр Гаевский" in html
-    assert 'href="https://glide.by/t/42-aleksandr-gaevskiy"' in html
+    # ?via=p9 — источник записи «страница катка» (TASK-351).
+    assert 'href="https://glide.by/t/42-aleksandr-gaevskiy?via=p9"' in html
     assert "startapp=" not in html
     assert "Записаться" in html and "Перейти" not in html
     # Без подписки с онлайн-записью карточка бесплатная — «Написать», не «Записаться» (PDEC-025).

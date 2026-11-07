@@ -1671,6 +1671,11 @@ class Booking(Base):
     is_sandbox: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     # When status becomes cancelled: trainer / client / bulk system reasons. Stats omit recurring_detach & roster_detach churn.
     cancellation_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # TASK-351: откуда пришёл клиент, записавшийся сам (src/application/booking_source.py).
+    # NULL — запись тренера или старая запись. Места — без FK: аналитика не роняет запись.
+    source: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    source_arena_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    source_city_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Set when this booking was created by recurring materialization (trainer CRM «постоянный клиент»).
     recurring_client_slot_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("recurring_client_slots.id", ondelete="SET NULL"), nullable=True, index=True

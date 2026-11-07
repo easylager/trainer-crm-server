@@ -26,6 +26,7 @@ from aiogram.types import (
     WebAppInfo,
 )
 
+from src.application.booking_source import SOURCE_LINK, SOURCE_SHARE
 from src.application.booking_use_cases import (
     count_trainer_services,
     create_booking,
@@ -289,8 +290,12 @@ def _trainer_catalog_card_rows(
     service_id: int | None = None,
     arena_id: int | None = None,
     button_text: str | None = None,
+    via: str | None = None,
 ) -> list[list[InlineKeyboardButton]]:
-    """Mini App: trainer catalog card (user books from there). Not /webapp/book deep link."""
+    """Mini App: trainer catalog card (user books from there). Not /webapp/book deep link.
+
+    ``via`` — источник записи (TASK-351, ``booking-source.js``): ``share`` у рекомендации.
+    """
     label = (button_text or "").strip() or msg.CLIENT_BUTTON_BOOK
     b = (base or "").rstrip("/")
     if b.startswith("https://"):
@@ -301,6 +306,8 @@ def _trainer_catalog_card_rows(
             q += f"&service_id={int(service_id)}"
         if arena_id is not None:
             q += f"&arena_id={int(arena_id)}"
+        if via:
+            q += f"&via={via}"
         url = f"{b}/webapp/catalog?{q}"
         return [[InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))]]
     return [[InlineKeyboardButton(text=label, callback_data=f"{CATALOG_TRAINER_PREFIX}{trainer_id}")]]
@@ -360,6 +367,7 @@ def _trainer_invite_welcome_markup(
     *,
     city_id: int | None = None,
     service_id: int | None = None,
+    via: str | None = None,
 ) -> InlineKeyboardMarkup:
     """Invite / welcome_ref / share_ref: одна кнопка → карточка тренера в каталоге Mini App."""
     return InlineKeyboardMarkup(
@@ -369,6 +377,7 @@ def _trainer_invite_welcome_markup(
             city_id=city_id,
             service_id=service_id,
             button_text=msg.CLIENT_BUTTON_INVITE_TRAINER_PROFILE,
+            via=via,
         )
     )
 
@@ -1123,7 +1132,7 @@ async def cmd_start(message: Message) -> None:
             welcome_body,
             parse_mode=ParseMode.HTML,
             reply_markup=_trainer_invite_welcome_markup(
-                base, trainer_id_share, city_id=city_id, service_id=book_url_share
+                base, trainer_id_share, city_id=city_id, service_id=book_url_share, via=SOURCE_SHARE
             ),
         )
         return
@@ -1229,7 +1238,7 @@ async def cmd_start(message: Message) -> None:
             async with async_session_factory() as db_session:
                 await set_pending_referral(telegram_id, trainer_id_ref, db_session)
             name = html.escape(_trainer_name(trainer) if trainer else "тренер")
-            register_url = f"{base}/webapp/client-register?trainer_id={trainer_id_ref}"
+            register_url = f"{base}/webapp/client-register?trainer_id={trainer_id_ref}&via={SOURCE_LINK}"
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[[
                     InlineKeyboardButton(
@@ -1264,7 +1273,8 @@ async def cmd_start(message: Message) -> None:
         else:
             registered_text = msg.CLIENT_UNIVERSAL_INVITE_REGISTERED.format(name=name)
         if base_is_https:
-            home_url = f"{base}/webapp/client-home"
+            # ``via=link`` — источник записи «ссылка тренера» (TASK-351, booking-source.js).
+            home_url = f"{base}/webapp/client-home?via={SOURCE_LINK}"
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [

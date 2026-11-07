@@ -1162,7 +1162,7 @@
     }
     // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
     if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
-    var coach = /^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?$/i.exec(sp);
+    var coach = /^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?(?:_v_[pck][1-9][0-9]{0,8})?$/i.exec(sp);
     if (coach) {
       return {
         key: 'catalog',
