@@ -331,9 +331,9 @@
       }).join('') + '</div>';
     }
     h += '<span class="mut">' + esc(dir.lead) + '</span>';
-    var mins = list.map(function (t) { return Number(t.min_session_price_cents); }).filter(function (c) { return c > 0; });
+    var minPrice = M.minPriceOf(list);
     var facts = [M.word(list.length, 'тренер', 'тренера', 'тренеров')];
-    if (mins.length) facts.push('от ' + M.formatMoney(Math.min.apply(null, mins), list[0].min_session_price_currency || 'BYN'));
+    if (minPrice) facts.push('от ' + M.formatMoney(minPrice.cents, minPrice.currency));
     facts.push('оплата на месте');
     var arenas = M.arenaOptions(S.items, key);
     var arenaName = '';
