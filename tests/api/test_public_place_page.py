@@ -186,7 +186,7 @@ async def test_slot_link_puts_that_session_first_and_out_of_index(app_use_test_d
 
 
 @pytest.mark.asyncio
-async def test_place_page_lists_arena_trainers_linking_to_trainer_page(
+async def test_place_page_shows_learn_block_for_arena_trainers(
     app_use_test_db, db_session, monkeypatch
 ) -> None:
     monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_bot")
@@ -208,13 +208,11 @@ async def test_place_page_lists_arena_trainers_linking_to_trainer_page(
         resp = await client.get(place["path"])
     assert resp.status_code == 200, resp.text
     html = resp.text
-    assert 'id="trainers"' in html
-    assert "Александр Гаевский" in html
-    # TASK-350: одна карточка — подпись по can_book, тап на страницу тренера сайта, не в Telegram.
-    trainers = re.search(r'id="trainers">(.*?)</section>', html, re.S).group(1)
-    assert "Записаться" in trainers
-    assert f"/t/{tid}-aleksandr-gaevskiy" in trainers
-    assert f"startapp=trainer_{tid}" not in trainers
+    # TASK-354: тренеры катка — единый блок «Учиться с тренером» (в каталог, не в Telegram и не списком).
+    block = re.search(r'<section class="b-sec b-learn-sec" id="learn">(.*?)</section>', html, re.S).group(1)
+    assert "Александр Гаевский" not in html and "b-row--coach" not in html
+    assert f'href="/c/{city_slug(place["city_name"])}/trenery?arena={place["arena_id"]}"' in block
+    assert "startapp=" not in block and "t.me" not in block
 
 
 @pytest.mark.asyncio

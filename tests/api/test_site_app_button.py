@@ -52,7 +52,7 @@ async def test_place_without_sessions_gets_floating_button_not_a_dock(app_use_te
 
 
 @pytest.mark.asyncio
-async def test_coach_entry_closes_trainer_list_and_leads_to_rink_landing(app_use_test_db, db_session) -> None:
+async def test_coach_entry_in_trainers_section_leads_to_rink_landing(app_use_test_db, db_session) -> None:
     place = await _place(db_session, name="ТЦ Замок")
     name = f"Анна{uuid.uuid4().hex[:4]}"
     async with _client() as client:
@@ -62,8 +62,8 @@ async def test_coach_entry_closes_trainer_list_and_leads_to_rink_landing(app_use
     section = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', html, re.S)
     assert section
     body = section.group(1)
-    # Строка — после списка тренеров, а не над ним.
-    assert body.index(name) < body.index("Тренируете на этом катке?")
+    # Списка тренеров нет (его заменил единый блок) — в разделе школа и вход для тренера.
+    assert name not in body and "Тренируете на этом катке?" in body
     # Без промежуточной шторки: сразу лендинг этого катка, тап считается (coach_open).
     rink_landing = "/trainers" + place["path"][len("/p"):]
     assert f'class="b-coach tg-out" href="{rink_landing}" data-coach-open' in body

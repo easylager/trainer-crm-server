@@ -426,7 +426,6 @@ def test_skate_route_without_sessions_says_so() -> None:
             "today": date(2026, 10, 11),
             "hot_skate": None,
         },
-        coach_href="",
     )
     assert "времени катания в расписании нет" in html
     assert "Сегодня" not in html
