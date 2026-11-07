@@ -1187,11 +1187,12 @@
     var r = S.req;
     var t = S.trainer;
     var svc = currentService() || serviceList(t, S.dirKey)[0] || (t.services || [])[0];
-    var cityId = S.cityId || (S.session && S.session.city_id);
+    // Город сессии, иначе — тренера; нет и его — сервер возьмёт город тренера по trainer_id.
+    var cityId = S.cityId || (S.session && S.session.city_id) || t.city_id || null;
     if (!String(r.name || '').trim()) { r.notice = 'Укажите имя.'; paintRequest(); return; }
     var ph = readPhone(r);
     if (!ph.ok) { r.notice = ph.error; paintRequest(); return; }
-    if (!svc || !cityId) { r.notice = 'Не удалось определить город или услугу. Напишите тренеру напрямую.'; paintRequest(); return; }
+    if (!svc) { r.notice = 'Не удалось определить город или услугу. Напишите тренеру напрямую.'; paintRequest(); return; }
     r.sending = true;
     r.notice = '';
     paintRequest();
@@ -1200,7 +1201,7 @@
       method: 'POST',
       // Заявка — от самого человека, а не от профиля, выбранного в хабе.
       profileId: selfP ? selfP.client_id : null,
-      body: { city_id: cityId, service_id: svc.service_id, trainer_id: t.id, comment: r.comment.trim() || null, first_name: r.name.trim(), phone: ph.phone },
+      body: { city_id: cityId || undefined, service_id: svc.service_id, trainer_id: t.id, comment: r.comment.trim() || null, first_name: r.name.trim(), phone: ph.phone },
     })
       .then(function () {
         closeSheet();

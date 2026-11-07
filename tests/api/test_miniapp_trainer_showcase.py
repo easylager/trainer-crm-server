@@ -403,3 +403,39 @@ async def test_slot_link_respects_self_book_window_of_acting_profile(app_use_tes
     assert child_morning["available"] is True
     assert evening not in [s["id"] for s in child_list["slots"]]
     assert parent_evening["available"] is True
+
+
+@pytest.mark.asyncio
+async def test_request_without_city_takes_trainers_city(app_use_test_db, db_session) -> None:
+    """PR #236: новый родитель по личной ссылке, города в сессии нет — заявка тренеру уходит с городом тренера.
+    Без тренера и без города — 422, как и раньше (город обязателен)."""
+    async with _client() as client:
+        place = await _place(db_session)
+        trainer_id = await _trainer_on(db_session, client, place, first_name=f"Даша{uuid.uuid4().hex[:4]}")
+    trainer_city = (
+        await db_session.execute(text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :t"), {"t": trainer_id})
+    ).scalar_one()
+    assert trainer_city is not None
+    service_id = (
+        await db_session.execute(text("SELECT service_id FROM trainer_services WHERE trainer_id = :t"), {"t": trainer_id})
+    ).scalar_one()
+    await db_session.commit()
+    headers = {"X-Telegram-Init-Data": "mock"}
+    with patch_client_init_auth(_fresh_client_telegram_id()):
+        async with _client() as client:
+            ok = await client.post(
+                "/api/webapp/client/request",
+                json={"service_id": service_id, "trainer_id": trainer_id, "first_name": "Анна"},
+                headers=headers,
+            )
+            no_city_no_trainer = await client.post(
+                "/api/webapp/client/request", json={"service_id": service_id, "first_name": "Анна"}, headers=headers
+            )
+    assert ok.status_code == 200, ok.text
+    saved_city = (
+        await db_session.execute(
+            text("SELECT city_id FROM client_requests WHERE id = :r"), {"r": ok.json()["request_id"]}
+        )
+    ).scalar_one()
+    assert saved_city == trainer_city
+    assert no_city_no_trainer.status_code == 422

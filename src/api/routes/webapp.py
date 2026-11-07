@@ -2538,8 +2538,12 @@ async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
 
 
 class ClientRequestCreateBody(BaseModel):
-    """Create request from catalog Mini App: city, service, optional comment and trainer_id."""
-    city_id: int
+    """Create request from catalog Mini App: city, service, optional comment and trainer_id.
+
+    ``city_id`` можно не слать, если указан ``trainer_id``: заявка конкретному тренеру — его город
+    (новый родитель по личной ссылке ещё не выбирал город).
+    """
+    city_id: int | None = None
     service_id: int
     comment: str | None = None
     trainer_id: int | None = None
@@ -2559,6 +2563,17 @@ async def post_client_request(
 ):
     """Create a client request (from catalog Mini App). Auth: client initData. Returns request_id so UI can show success before closing."""
     telegram_id = client_catalog_telegram_key(principal)
+    city_id = body.city_id
+    if city_id is None and body.trainer_id is not None:
+        city_id = (
+            await session.execute(
+                text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :t"), {"t": int(body.trainer_id)}
+            )
+        ).scalar()
+    if city_id is None:
+        raise HTTPException(
+            status_code=422, detail="Не удалось определить город или услугу. Напишите тренеру напрямую."
+        )
     phone: str | None = None
     if (body.phone or "").strip():
         from src.shared.profile_phone import normalize_phone_input, validate_phone_non_empty
@@ -2578,7 +2593,7 @@ async def post_client_request(
     )
     comment = (body.comment or "").strip() or None
     request_id = await create_client_request(
-        session, client_id, body.city_id, body.service_id, comment=comment, trainer_id=body.trainer_id
+        session, client_id, int(city_id), body.service_id, comment=comment, trainer_id=body.trainer_id
     )
     # Trainer DM: only notification_service request loop (claim-before-send). No API immediate path.
     return {"success": True, "request_id": request_id}

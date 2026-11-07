@@ -410,3 +410,55 @@ describe('«Мои записи» после записи', () => {
     assert.equal(sw.sets.length, 0);
   });
 });
+
+describe('заявка без города в сессии', () => {
+  async function sendRequest(h) {
+    h.click({ 'data-act': 'request' });
+    h.sheetInput('rq-name', 'Анна');
+    h.sheetClick({ 'data-act': 'rq-send' });
+    await tick();
+  }
+
+  it('по личной ссылке — город тренера из карточки', async () => {
+    const card = { id: 8, can_book: false, profile: { first_name: 'Ольга', city_id: 1 }, photos: [], arena_ids: [],
+      services: [{ service_id: 1, service_name: 'С нуля', price_cents: 5000, price_tiers: [] }] };
+    const h = boot({ search: '?trainer_id=8', session: { ...PHONE, city_id: null }, routes: [
+      { match: (c) => c.url.startsWith('/api/webapp/client/catalog-trainer/8'), reply: () => resp(200, card) },
+      { match: (c) => isPath(c, '/api/webapp/client/request'), reply: () => resp(200, { success: true, request_id: 1 }) },
+    ] });
+    await tick(80);
+    await sendRequest(h);
+    const p = h.posts('/api/webapp/client/request');
+    assert.equal(p.length, 1);
+    assert.equal(p[0].body.city_id, 1);
+    assert.equal(p[0].body.trainer_id, 8);
+    assert.equal(h.S.view, 'reqsent');
+  });
+
+  it('город неизвестен и у тренера — заявка всё равно уходит (город возьмёт сервер по тренеру)', async () => {
+    const T = trainer(5, { can_book: false });
+    const h = boot({ showcase: { items: [T] }, session: { ...PHONE, city_id: null }, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/request'), reply: () => resp(200, { success: true, request_id: 1 }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 5 });
+    await tick();
+    await sendRequest(h);
+    const p = h.posts('/api/webapp/client/request');
+    assert.equal(p.length, 1);
+    assert.equal('city_id' in p[0].body, false);
+    assert.equal(p[0].body.trainer_id, 5);
+  });
+
+  it('город в сессии есть — шлём его, как раньше', async () => {
+    const T = trainer(5, { can_book: false });
+    const h = boot({ showcase: { items: [T] }, session: { ...PHONE, city_id: 3 }, routes: [
+      { match: (c) => isPath(c, '/api/webapp/client/request'), reply: () => resp(200, { success: true, request_id: 1 }) },
+    ] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 5 });
+    await tick();
+    await sendRequest(h);
+    assert.equal(h.posts('/api/webapp/client/request')[0].body.city_id, 3);
+  });
+});

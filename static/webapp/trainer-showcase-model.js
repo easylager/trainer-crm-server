@@ -538,6 +538,7 @@
       glide_since: null,
       can_book: !!t.can_book,
       contact_url: t.contact_telegram_url || null,
+      city_id: p.city_id != null ? p.city_id : null,
       services: (t.services || []).map(function (s) {
         return {
           service_id: s.service_id, service_name: s.service_name,
