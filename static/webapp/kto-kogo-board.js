@@ -124,7 +124,8 @@
         var t = S.peakTile(pk, p.crowns);
         return h('button', { type: 'button', class: 'kk-peak' + (t.gold ? ' is-gold' : ''), onclick: function () { K.go('table', { club: pk.club, period: pk.period }); } }, [
           h('span', { class: 'kk-peak__n', text: t.rank }),
-          h('span', { class: 'kk-peak__l', text: t.label }),
+          h('span', { class: 'kk-peak__l', text: t.name }),
+          h('span', { class: 'kk-peak__w', text: t.slice }),
           h('span', { class: 'kk-peak__s', text: t.note }),
         ]);
       })),
@@ -257,7 +258,8 @@
       });
       if (rows.length) main.appendChild(h('div', { class: 'kk-tbl' }, rows));
       if (!view.me) {
-        main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.reset('hub', {}); }, text: S.noMeLine(a.club, a.period, nowIso()) }));
+        main.appendChild(h('span', { class: 'kk-tx', text: S.noMeLine(a.club, a.period, nowIso()) }));
+        main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.reset('hub', {}); }, text: 'Сделать ход' }));
       }
       return [main];
     },

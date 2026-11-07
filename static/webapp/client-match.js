@@ -200,7 +200,7 @@
     b.appendChild(svg(['M7 17L17 7', 'M9 7h8v8']));
     b.addEventListener('click', function () { haptic(); openUrl(ev.tickets_url); });
     host.replaceChildren(b, el('p', 'cm-hint cm-buy__note',
-      'Продажа на ' + (ev.tickets_note || 'сайте клуба') + ' — там выберите матч ' + dayMonth(ev.match.starts_at)));
+      'Продажа на ' + (ev.tickets_note || 'сайте клуба') + ' — там выбери матч ' + dayMonth(ev.match.starts_at)));
   }
 
   function formEl(form) {
@@ -663,7 +663,7 @@
         paint(ev);
       })
       .catch(function (e) {
-        fail(e.status === 404 ? 'Матч не найден или уже убран из календаря.' : 'Не получилось загрузить матч. Попробуйте ещё раз.');
+        fail(e.status === 404 ? 'Матч не найден или уже убран из календаря.' : 'Не получилось загрузить матч. Попробуй ещё раз.');
       });
   }
 

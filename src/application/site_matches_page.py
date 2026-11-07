@@ -803,7 +803,7 @@ def render_match_page(
     if gone:
         gone_html = (
             '<div class="m-gone"><b>Матч перенесён или отменён</b>'
-            "<span>Уточните время и билеты на hockey.by — мы обновим страницу, когда клуб подтвердит.</span></div>"
+            "<span>Уточни время и билеты на hockey.by — мы обновим страницу, когда клуб подтвердит.</span></div>"
         )
     middle = ""
     if not gone:

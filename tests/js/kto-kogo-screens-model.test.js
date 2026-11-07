@@ -279,10 +279,12 @@ describe('таблица', () => {
   it('вершины: чип и плитка, корона записью', () => {
     const p = { club: 'Юность', period: '2026-11', period_title: 'ноябрь', rank: 2, players: 38 };
     assert.equal(S.peakChip(p), 'Юность · ноябрь · 2' + NBSP + 'место');
-    assert.deepEqual(S.peakTile(p, []), { rank: '2', label: 'Юность · ноябрь', note: 'из 38', gold: false });
+    assert.deepEqual(S.peakTile(p, []), { rank: '2', name: 'Юность', slice: 'ноябрь', note: 'из 38', gold: false });
     const crown = [{ kind: 'month', period: '2026-11', club: 'Юность' }];
     assert.equal(S.peakTile(Object.assign({}, p, { rank: 1 }), crown).note, 'корона твоя');
     assert.equal(S.peakTile(Object.assign({}, p, { rank: 1 }), []).note, 'лидируешь');
+    assert.equal(S.peakTile({ club: 'Динамо-Минск', period: 'season', period_title: 'сезон 2026/27', rank: 3, players: 9 }, []).name, 'Динамо');
+    assert.equal(S.peakTile({ club: null, period: 'season', period_title: 'сезон 2026/27', rank: 3, players: 9 }, []).name, 'Все матчи');
     assert.equal(S.crownCount(2), '2' + NBSP + 'короны');
   });
 });
