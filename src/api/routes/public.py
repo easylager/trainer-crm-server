@@ -601,6 +601,22 @@ async def list_active_trainers(
     }
 
 
+@router.get("/trainer-showcase")
+async def get_trainer_showcase(
+    response: Response,
+    city_id: int | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Витрина тренеров Mini App (TASK-357): тренеры города с «от N», «в Glide с», окнами и катками.
+
+    Вкладки направлений и фильтр катка считает клиент. Анонимно, как список тренеров.
+    """
+    from src.application.miniapp_trainer_showcase import load_trainer_showcase
+
+    set_public_json_list_cache(response)
+    return await load_trainer_showcase(session, city_id=city_id)
+
+
 @router.get("/training-groups")
 async def list_catalog_training_groups(
     response: Response,

@@ -527,6 +527,18 @@ async def _ensure_client_for_webapp_miniapp(
         own_id = await get_client_id_by_telegram_id(session, catalog_tid)
         resolved = await resolve_acting_client_id(session, catalog_tid, requested_profile_id)
         if resolved is not None and resolved != own_id:
+            # Профиль ребёнка, созданный до того, как у родителя был телефон (новый ученик в
+            # витрине: «Ребёнок» → POST /client/profiles → запись), — телефон для тренера из этой
+            # записи. Только пустой: заполненный номер профиля не перетираем. phone_normalized не
+            # трогаем — как create_guardian_profile, у детского профиля его нет.
+            if phone:
+                await session.execute(
+                    text(
+                        "UPDATE clients SET phone = :phone "
+                        "WHERE id = :cid AND COALESCE(TRIM(phone), '') = ''"
+                    ),
+                    {"phone": str(phone).strip()[:32], "cid": int(resolved)},
+                )
             return resolved
 
     profile = await get_client_profile_basic(session, catalog_tid)

@@ -1,0 +1,143 @@
+"""TASK-357: витрина тренеров Mini App и запись ребёнка новым учеником."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, timedelta
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+
+from src.api.app import app
+from src.infrastructure.db.models import SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE
+from tests.api.test_arena_trainer_windows import _slot
+from tests.api.test_public_place_page import _place
+from tests.api.test_site_trainers import _trainer_on
+from tests.api.test_webapp_client_miniapp_integration import (
+    _ensure_trainer_subscription_tier,
+    _fresh_client_telegram_id,
+    patch_client_init_auth,
+)
+from tests.conftest import belarus_test_phone
+
+
+def _client() -> AsyncClient:
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+async def _completed_booking(db_session, tid: int, *, days_ago: int, self_booking: bool = False) -> None:
+    tg = _fresh_client_telegram_id()
+    if self_booking:
+        await db_session.execute(text("UPDATE trainers SET telegram_id = :tg WHERE id = :t"), {"tg": tg, "t": tid})
+    cid = (
+        await db_session.execute(
+            text("INSERT INTO clients (first_name, telegram_id) VALUES ('Ученик', :tg) RETURNING id"), {"tg": tg}
+        )
+    ).scalar_one()
+    sid = (
+        await db_session.execute(
+            text(
+                "INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity) "
+                "VALUES (:t, :d, '10:00', '11:00', 'booked', 1) RETURNING id"
+            ),
+            {"t": tid, "d": date.today() - timedelta(days=days_ago)},
+        )
+    ).scalar_one()
+    await db_session.execute(
+        text(
+            "INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status) "
+            "VALUES (:s, :t, :c, (SELECT service_id FROM trainer_services WHERE trainer_id = :t LIMIT 1), 'completed')"
+        ),
+        {"s": sid, "t": tid, "c": cid},
+    )
+
+
+@pytest.mark.asyncio
+async def test_showcase_has_from_price_glide_since_windows_and_ice_arenas(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Анна{uuid.uuid4().hex[:4]}")
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"])
+        # Самозапись раньше — не считается; первое настоящее занятие — 40 дней назад.
+        await _completed_booking(db_session, tid, days_ago=400, self_booking=True)
+        await _completed_booking(db_session, tid, days_ago=40)
+        await db_session.commit()
+        body = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+
+    item = next(t for t in body["items"] if t["id"] == tid)
+    first = date.today() - timedelta(days=40)
+    assert item["glide_since"] == f"{first.year:04d}-{first.month:02d}"
+    # Тарифы фикстуры 45/50 → «от 45» из trainer_min_price.
+    assert item["min_session_price_cents"] == 4500
+    assert item["can_book"] is True
+    assert len(item["windows"]) == 1 and item["windows"][0]["slot_id"]
+    assert [a["id"] for a in item["arenas"]] == [place["arena_id"]]
+    svc = item["services"][0]
+    assert svc["is_public"] is True
+    assert {t["tier_kind"] for t in svc["price_tiers"]} >= {"child", "adult"}
+    # Число занятий не отдаём (решение владельца) — только месяц.
+    assert not any("count" in k and "rating" not in k for k in item)
+
+
+@pytest.mark.asyncio
+async def test_showcase_without_online_booking_has_no_windows(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Катя{uuid.uuid4().hex[:4]}")
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_CRM)
+        await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"])
+        await db_session.commit()
+        body = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+    item = next(t for t in body["items"] if t["id"] == tid)
+    assert item["can_book"] is False
+    assert item["windows"] == []
+    assert item["glide_since"] is None
+
+
+@pytest.mark.asyncio
+async def test_new_client_child_booking_puts_phone_on_child_profile(app_use_test_db, db_session) -> None:
+    """Новый ученик выбирает «Ребёнок»: профиль ребёнка создаётся до записи, телефон — из записи."""
+    async with _client() as client:
+        place = await _place(db_session)
+        trainer_id = await _trainer_on(db_session, client, place, first_name=f"Лена{uuid.uuid4().hex[:4]}")
+    await _ensure_trainer_subscription_tier(db_session, trainer_id, SUBSCRIPTION_TIER_ONLINE)
+    slot_id = await _slot(db_session, trainer_id, days=3, hour=12, arena_id=place["arena_id"])
+    service_id = (
+        await db_session.execute(text("SELECT service_id FROM trainer_services WHERE trainer_id = :t"), {"t": trainer_id})
+    ).scalar_one()
+    variant_id = (
+        await db_session.execute(
+            text("SELECT id FROM trainer_service_price_variants WHERE trainer_id = :t AND tier_kind = 'child'"),
+            {"t": trainer_id},
+        )
+    ).scalar_one()
+    await db_session.commit()
+    ctg = _fresh_client_telegram_id()
+    phone, _norm = belarus_test_phone(ctg)
+    headers = {"X-Telegram-Init-Data": "mock"}
+    with patch_client_init_auth(ctg):
+        async with _client() as client:
+            created = await client.post("/api/webapp/client/profiles", json={"first_name": "Соня"}, headers=headers)
+            assert created.status_code == 200, created.text
+            child_id = created.json()["client_id"]
+            book = await client.post(
+                "/api/webapp/client/booking",
+                json={
+                    "slot_id": slot_id,
+                    "phone": phone,
+                    "service_id": service_id,
+                    "service_price_variant_id": variant_id,
+                },
+                headers={**headers, "X-Profile-Id": str(child_id)},
+            )
+    assert book.status_code == 200, book.text
+    row = (
+        await db_session.execute(
+            text("SELECT b.client_id, c.first_name, c.phone FROM bookings b JOIN clients c ON c.id = b.client_id WHERE b.id = :b"),
+            {"b": book.json()["booking_id"]},
+        )
+    ).one()
+    assert row[0] == child_id and row[1] == "Соня"
+    assert row[2] == phone
