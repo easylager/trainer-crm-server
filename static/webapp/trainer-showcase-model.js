@@ -345,8 +345,16 @@
 
   /* ── Постоянный ученик ──────────────────────────────────────────────── */
 
-  function profileKind(p) {
-    return p && p.role === 'self' ? 'adult' : 'child';
+  /**
+   * Вид профиля для тарифа. Взрослый — только свой профиль (`self`); детский — только профиль,
+   * про который точно известно, что это ребёнок (`knownChildIds`: добавлен как ребёнок здесь же).
+   * Профиль семьи (`guardian`, `family_access`) сам по себе возраста не знает — `null`, не угадываем.
+   */
+  function profileKind(p, opts) {
+    if (!p) return null;
+    if (p.role === 'self') return 'adult';
+    var known = (opts && opts.knownChildIds) || {};
+    return known[p.client_id] ? 'child' : null;
   }
 
   function duoKindFor(kinds) {
@@ -357,49 +365,96 @@
     return null;
   }
 
+  function isDuoKind(kind) {
+    return DUO_KINDS.indexOf(kind) >= 0;
+  }
+
+  /** Тарифы, из которых выбирают явно: на одного — одиночные, на двоих — «двое». */
+  function tierChoices(service, count) {
+    var want = count === 2 ? DUO_KINDS : SINGLE_KINDS;
+    return ((service && service.price_tiers) || []).filter(function (t) { return want.indexOf(t.tier_kind) >= 0; });
+  }
+
   /**
-   * Тариф по выбранным профилям. Один профиль — тариф прошлой записи (`lastVariantId`, как
-   * `BookingClient.priceVariantHint`), иначе по виду профиля; двое — тариф на двоих.
-   * `override` — явный «Другой тариф».
+   * Тариф прошлой записи ЭТОГО профиля у ЭТОГО тренера на ЭТУ услугу: `hints[client_id]` — id тарифа
+   * из `/client/session?for_trainer_id=` с `X-Profile-Id` этого профиля (сервис уже сверен). Иначе null.
+   */
+  function hintTier(service, profile, opts) {
+    var hints = (opts && opts.hints) || {};
+    var vid = profile ? hints[profile.client_id] : null;
+    if (vid == null) return null;
+    var t = ((service && service.price_tiers) || []).filter(function (x) { return Number(x.id) === Number(vid); })[0];
+    return t && SINGLE_KINDS.indexOf(t.tier_kind) >= 0 ? t : null;
+  }
+
+  /**
+   * Тариф по выбранным профилям или null — тогда форма просит выбрать тариф явно.
+   * Один: явный выбор → тариф прошлой записи этого профиля → тариф его вида (только точное совпадение).
+   * Двое: явный выбор на двоих → тариф пары, если вид обоих известен.
    */
   function regularTier(service, selected, opts) {
     opts = opts || {};
-    var tiers = (service && service.price_tiers) || [];
+    var count = selected.length;
+    if (!count) return null;
     if (opts.override != null) {
-      var o = tiers.filter(function (t) { return Number(t.id) === Number(opts.override); })[0];
+      var o = tierChoices(service, count).filter(function (t) { return Number(t.id) === Number(opts.override); })[0];
       if (o) return o;
     }
-    if (!selected.length) return null;
-    if (selected.length === 2) return tierByKind(service, duoKindFor(selected.map(profileKind)));
-    var p = selected[0];
-    if (opts.lastVariantId != null && opts.lastProfileId != null && Number(p.client_id) === Number(opts.lastProfileId)) {
-      var last = tiers.filter(function (t) { return Number(t.id) === Number(opts.lastVariantId); })[0];
-      if (last && SINGLE_KINDS.indexOf(last.tier_kind) >= 0) return last;
+    if (count === 2) {
+      var k1 = profileKind(selected[0], opts);
+      var k2 = profileKind(selected[1], opts);
+      return k1 && k2 ? tierByKind(service, duoKindFor([k1, k2])) : null;
     }
-    return tierByKind(service, profileKind(p)) || (tiers.length === 1 ? tiers[0] : null);
+    var p = selected[0];
+    var hinted = hintTier(service, p, opts);
+    if (hinted) return hinted;
+    var kind = profileKind(p, opts);
+    return kind ? tierByKind(service, kind) : null;
   }
 
-  /** Можно ли отметить ещё одного: до двоих и только если есть тариф на эту пару. */
-  function canAddProfile(service, selected, candidate) {
+  /**
+   * Можно ли отметить ещё одного: до двоих и только если у услуги есть тариф на двоих (на эту пару,
+   * когда вид обоих известен). Нет тарифов на двоих — второго не выбрать.
+   */
+  function canAddProfile(service, selected, candidate, opts) {
     if (selected.length >= 2) return false;
     if (!selected.length) return true;
-    if (!(service && (service.price_tiers || []).length)) return true;
-    return !!tierByKind(service, duoKindFor([profileKind(selected[0]), profileKind(candidate)]));
+    var duo = tierChoices(service, 2);
+    if (!duo.length) return false;
+    var k1 = profileKind(selected[0], opts);
+    var k2 = profileKind(candidate, opts);
+    if (k1 && k2) return !!tierByKind(service, duoKindFor([k1, k2]));
+    return true;
   }
 
-  /** Абонемент профиля у этого тренера, который покроет занятие (списание — после занятия). */
-  function usablePass(passes, trainerId, serviceId) {
+  /**
+   * Абонемент профиля у этого тренера на эту услугу. `certain` — занятие точно спишется с него:
+   * сервер знает тарифы абонемента (`tier_kinds`, пусто — любые) и тариф записи подходит
+   * (как SQL_PASS_PRODUCT_COVERS_BOOKING). Нет данных о тарифах — `certain: false`.
+   */
+  function usablePass(passes, trainerId, serviceId, tierKind) {
     var now = Date.now();
-    return (passes || []).filter(function (p) {
+    var found = (passes || []).filter(function (p) {
       if (Number(p.trainer_id) !== Number(trainerId)) return false;
       if (p.status !== 'active' || !(Number(p.sessions_remaining) > 0) || p.is_expired) return false;
       if (p.expires_at && Date.parse(p.expires_at) < now) return false;
       var ids = p.service_ids || [];
       return !ids.length || ids.indexOf(Number(serviceId)) >= 0;
-    })[0] || null;
+    });
+    if (!found.length) return null;
+    for (var i = 0; i < found.length; i++) {
+      var kinds = found[i].tier_kinds;
+      if (Array.isArray(kinds) && (!kinds.length || (tierKind && kinds.indexOf(tierKind) >= 0))) {
+        return { pass: found[i], certain: true };
+      }
+    }
+    return { pass: found[0], certain: false };
   }
 
-  /** Строка оплаты под формой. До отправки видна вся цена: занятие, билет, прокат. */
+  /**
+   * Строка оплаты под формой. До отправки видна вся цена: занятие, билет, прокат.
+   * `pass` — результат usablePass: «спишем 1» только при `certain`; иначе обычная цена и осторожная строка.
+   */
   function payLine(opts) {
     var tier = opts.tier;
     var cur = opts.currency || 'BYN';
@@ -408,18 +463,20 @@
     var ticket = online ? '' : rental
       ? ' Билет на сеанс — в кассе катка, прокат коньков — ' + rental + ', если нужен.'
       : ' Билет на сеанс — в кассе катка.';
-    if (opts.pass && !opts.duo) {
-      var left = Number(opts.pass.sessions_remaining) - 1;
-      return '<b>Абонемент «' + esc(opts.pass.product_name) + '»</b>: спишем 1, останется ' + left + '.' + ticket;
+    var pass = opts.pass || null;
+    if (pass && pass.certain && !opts.duo) {
+      var left = Number(pass.pass.sessions_remaining) - 1;
+      return '<b>Абонемент «' + esc(pass.pass.product_name) + '»</b>: спишем 1, останется ' + left + '.' + ticket;
     }
+    var maybePass = pass && !opts.duo ? ' Если есть абонемент — тренер может списать занятие с него.' : '';
     var priceCents = tier ? tier.price_cents : opts.fallbackCents;
-    if (!(Number(priceCents) > 0)) return 'Цену уточните у тренера.' + ticket;
+    if (!(Number(priceCents) > 0)) return 'Цену уточните у тренера.' + maybePass + ticket;
     var money = formatMoney(priceCents, cur);
-    if (opts.duo) {
+    if (opts.duo && tier) {
       return '<b>' + esc(TIER_TITLE[tier.tier_kind] || tier.label) + ' — ' + money + '</b> за двоих тренеру' + (online ? '' : ' на месте') + '.' +
-        (opts.pass ? ' Вместо оплаты тренер может списать занятие с абонемента.' : '') + ticket;
+        (pass ? ' Вместо оплаты тренер может списать занятие с абонемента.' : '') + ticket;
     }
-    return '<b>' + money + '</b> — тренеру' + (online ? '' : ' на месте') + '.' + ticket;
+    return '<b>' + money + '</b> — тренеру' + (online ? '' : ' на месте') + '.' + maybePass + ticket;
   }
 
   /* ── Даты ───────────────────────────────────────────────────────────── */
@@ -609,6 +666,9 @@
     newClientBookingPlan: newClientBookingPlan,
     bookingComment: bookingComment,
     profileKind: profileKind,
+    isDuoKind: isDuoKind,
+    tierChoices: tierChoices,
+    hintTier: hintTier,
     regularTier: regularTier,
     canAddProfile: canAddProfile,
     usablePass: usablePass,

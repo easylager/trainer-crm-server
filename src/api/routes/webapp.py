@@ -531,13 +531,20 @@ async def _ensure_client_for_webapp_miniapp(
             # витрине: «Ребёнок» → POST /client/profiles → запись), — телефон для тренера из этой
             # записи. Только пустой: заполненный номер профиля не перетираем. phone_normalized не
             # трогаем — как create_guardian_profile, у детского профиля его нет.
-            if phone:
+            # Пишем только нормализованный валидный номер — эту функцию зовёт и запись на сеанс
+            # студии (/client/collective-session-booking), где телефон приходит как ввели.
+            from src.shared.profile_phone import normalize_phone_input, validate_phone_non_empty
+
+            phone_ok, phone_err = (
+                validate_phone_non_empty(normalize_phone_input(str(phone).strip())) if phone else (None, None)
+            )
+            if phone_ok and not phone_err:
                 await session.execute(
                     text(
                         "UPDATE clients SET phone = :phone "
                         "WHERE id = :cid AND COALESCE(TRIM(phone), '') = ''"
                     ),
-                    {"phone": str(phone).strip()[:32], "cid": int(resolved)},
+                    {"phone": str(phone_ok)[:32], "cid": int(resolved)},
                 )
             return resolved
 

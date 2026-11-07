@@ -837,7 +837,15 @@ async def list_client_pass_instances(
                         WHERE tps.pass_product_id = p.id
                     ),
                     ''
-                ) AS svc_scope_label
+                ) AS svc_scope_label,
+                COALESCE(
+                    (
+                        SELECT ARRAY_AGG(t_tier.tier_kind ORDER BY t_tier.tier_kind)
+                        FROM trainer_pass_product_tiers AS t_tier
+                        WHERE t_tier.pass_product_id = p.id
+                    ),
+                    CAST(ARRAY[] AS TEXT[])
+                ) AS tier_kinds
             FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             LEFT JOIN trainer_profiles prof ON prof.trainer_id = p.trainer_id
@@ -876,6 +884,9 @@ async def list_client_pass_instances(
                 "service_ids": list(row[10] or []),
                 "trainer_name": (row[11] or "").strip() or "Тренер",
                 "service_name": label if label else None,
+                # Тарифы, которые покрывает абонемент (пусто — любые), как SQL_PASS_PRODUCT_COVERS_BOOKING:
+                # клиент обещает «спишем 1» только когда занятие точно подходит (TASK-357).
+                "tier_kinds": [str(k) for k in (row[13] or [])],
             }
         )
     return out

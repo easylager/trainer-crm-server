@@ -116,23 +116,67 @@ describe('постоянный ученик', () => {
   const sonya = { client_id: 1, role: 'guardian', first_name: 'Соня' };
   const misha = { client_id: 2, role: 'guardian', first_name: 'Миша' };
   const me = { client_id: 3, role: 'self', first_name: 'Анна' };
+  const granny = { client_id: 4, role: 'family_access', first_name: 'Бабушка' };
+  const kids = { knownChildIds: { 1: true, 2: true } };
 
-  it('один — тариф прошлой записи, двое — тариф на двоих, третий неактивен', () => {
-    assert.equal(M.regularTier(s, [me], { lastVariantId: 100, lastProfileId: 3 }).tier_kind, 'child');
-    assert.equal(M.regularTier(s, [sonya]).tier_kind, 'child');
-    assert.equal(M.regularTier(s, [sonya, misha]).tier_kind, 'two_children');
-    assert.equal(M.regularTier(s, [sonya, me]).tier_kind, 'adult_and_child');
-    assert.equal(M.canAddProfile(s, [sonya, misha], me), false);
-    assert.equal(M.canAddProfile(s, [me], { client_id: 4, role: 'self' }), false); // нет «двое взрослых»
+  it('вид профиля: взрослый — свой; детский — только известный ребёнок; семья — не угадываем', () => {
+    assert.equal(M.profileKind(me), 'adult');
+    assert.equal(M.profileKind(sonya), null);
+    assert.equal(M.profileKind(granny), null);
+    assert.equal(M.profileKind(sonya, kids), 'child');
   });
 
-  it('абонемент: «спишем 1, останется N»; у одного из двоих — тренер может списать', () => {
-    const pass = { trainer_id: 9, status: 'active', sessions_remaining: 4, service_ids: [], product_name: '8 занятий' };
-    assert.equal(M.usablePass([pass], 9, 1), pass);
-    assert.equal(M.usablePass([{ ...pass, service_ids: [2] }], 9, 1), null);
-    assert.match(M.payLine({ tier: M.tierByKind(s, 'child'), pass }), /Абонемент «8 занятий»<\/b>: спишем 1, останется 3\./);
-    const duo = M.payLine({ tier: M.tierByKind(s, 'two_children'), pass, duo: true });
+  it('один — тариф прошлой записи ЭТОГО профиля; чужая подсказка не применяется', () => {
+    // Подсказка про Соню (детский, id 100) не переносится на Анну.
+    assert.equal(M.regularTier(s, [me], { hints: { 1: 100 } }).tier_kind, 'adult');
+    assert.equal(M.regularTier(s, [sonya], { hints: { 1: 100 } }).tier_kind, 'child');
+    assert.equal(M.hintTier(s, me, { hints: { 1: 100 } }), null);
+    // Взрослый профиль семьи без истории — тариф не угадываем.
+    assert.equal(M.regularTier(s, [granny]), null);
+    assert.equal(M.regularTier(s, [granny], { override: 101 }).tier_kind, 'adult');
+  });
+
+  it('единственный тариф не достаётся профилю другого вида', () => {
+    const onlyChild = svc(1, tiers([['child', 4000]]));
+    assert.equal(M.regularTier(onlyChild, [me]), null);
+    assert.equal(M.regularTier(onlyChild, [sonya], kids).tier_kind, 'child');
+  });
+
+  it('двое — тариф пары при известных видах, иначе явный выбор; третий неактивен', () => {
+    assert.equal(M.regularTier(s, [sonya, misha], kids).tier_kind, 'two_children');
+    assert.equal(M.regularTier(s, [sonya, me], kids).tier_kind, 'adult_and_child');
+    assert.equal(M.regularTier(s, [granny, me]), null);
+    assert.deepEqual(M.tierChoices(s, 2).map((t) => t.tier_kind), ['two_children', 'adult_and_child']);
+    assert.equal(M.canAddProfile(s, [sonya, misha], me, kids), false);
+  });
+
+  it('двое нельзя, если у услуги нет тарифов на двоих (или нет тарифов вовсе)', () => {
+    assert.equal(M.canAddProfile(gaevsky.services[1], [me], sonya, kids), false);
+    assert.equal(M.canAddProfile(svc(1, [], { price_cents: 5000 }), [me], sonya, kids), false);
+    const noTwoAdults = svc(1, tiers([['adult', 5000], ['adult_and_child', 8000]]));
+    assert.equal(M.canAddProfile(noTwoAdults, [me], { client_id: 9, role: 'self' }), false);
+  });
+
+  it('«спишем 1» — только если абонемент точно покрывает тариф', () => {
+    const base = { trainer_id: 9, status: 'active', sessions_remaining: 4, service_ids: [], product_name: '8 занятий' };
+    const any = { ...base, tier_kinds: [] };
+    const childOnly = { ...base, tier_kinds: ['child'] };
+    const unknown = { ...base };
+    assert.equal(M.usablePass([any], 9, 1, 'adult').certain, true);
+    assert.equal(M.usablePass([childOnly], 9, 1, 'adult').certain, false);
+    assert.equal(M.usablePass([unknown], 9, 1, 'child').certain, false);
+    assert.equal(M.usablePass([{ ...any, service_ids: [2] }], 9, 1, 'child'), null);
+    const child = M.tierByKind(s, 'child');
+    assert.match(M.payLine({ tier: child, pass: M.usablePass([any], 9, 1, 'child') }), /Абонемент «8 занятий»<\/b>: спишем 1, останется 3\./);
+    const careful = M.payLine({ tier: M.tierByKind(s, 'adult'), pass: M.usablePass([childOnly], 9, 1, 'adult') });
+    assert.doesNotMatch(careful, /спишем/);
+    assert.match(careful, /^<b>55 BYN<\/b> — тренеру на месте\. Если есть абонемент — тренер может списать занятие с него\./);
+    const duo = M.payLine({ tier: M.tierByKind(s, 'two_children'), pass: M.usablePass([any], 9, 1, 'two_children'), duo: true });
     assert.match(duo, /Двое детей — 75 BYN<\/b> за двоих тренеру на месте\. Вместо оплаты тренер может списать занятие с абонемента\./);
+  });
+
+  it('групповой слот: цена — та, что запишет сервер (group_price_cents)', () => {
+    assert.equal(M.payLine({ tier: null, fallbackCents: 2500 }), '<b>25 BYN</b> — тренеру на месте. Билет на сеанс — в кассе катка.');
   });
 
   it('оплата нового: занятие, билет и прокат, если есть', () => {

@@ -239,7 +239,7 @@
       /* Список сайта /hockey → каталог матчей Mini App. Город сайта — slug, каталог ждёт название: не подставляем. */
       else if (hockeyList) path = 'client-matches' + (/^[a-z0-9-]{1,64}$/.test(query.get('club') || '') ? '?team=' + query.get('club') : '');
       else if (/^\/m\/[1-9][0-9]*-/.test(p)) path = 'client-match?id=' + p.split('/')[2].split('-')[0];
-      else if (/^\/t\/[1-9][0-9]*(?:-|$)/.test(p)) path = 'catalog?trainer_id=' + p.split('/')[2].split('-')[0];
+      else if (/^\/t\/[1-9][0-9]*(?:-|$)/.test(p)) path = 'trainers?trainer_id=' + p.split('/')[2].split('-')[0];
       else {
         var attr = p.indexOf('/p/') === 0 ? 'data-arena-id' : 'data-city-id';
         var tag = ctx.document && ctx.document.querySelector('script[' + attr + ']');

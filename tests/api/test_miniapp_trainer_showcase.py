@@ -76,6 +76,8 @@ async def test_showcase_has_from_price_glide_since_windows_and_ice_arenas(app_us
     assert [a["id"] for a in item["arenas"]] == [place["arena_id"]]
     svc = item["services"][0]
     assert svc["is_public"] is True
+    # Групповой слот записывается по COALESCE(group_price_cents, price_cents) — витрина показывает ту же цену.
+    assert svc["group_price_cents"] == 2500
     assert {t["tier_kind"] for t in svc["price_tiers"]} >= {"child", "adult"}
     # Число занятий не отдаём (решение владельца) — только месяц.
     assert not any("count" in k and "rating" not in k for k in item)
@@ -189,3 +191,60 @@ async def test_single_slot_link_beyond_two_weeks_and_taken(app_use_test_db, db_s
     assert ok["slot"]["id"] == far and ok["slot"]["arena_id"] == place["arena_id"] and ok["slot"]["start_time"] == "12:00"
     assert busy == {"available": False, "slot": None}
     assert alien["available"] is False
+
+
+@pytest.mark.asyncio
+async def test_child_profile_phone_written_only_when_valid(app_use_test_db, db_session) -> None:
+    """Телефон в профиль ребёнка — только нормализованный валидный (запись на сеанс студии шлёт как ввели)."""
+    from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+    from src.api.routes.webapp import _ensure_client_for_webapp_miniapp
+
+    ctg = _fresh_client_telegram_id()
+    with patch_client_init_auth(ctg):
+        async with _client() as client:
+            created = await client.post(
+                "/api/webapp/client/profiles", json={"first_name": "Соня"}, headers={"X-Telegram-Init-Data": "mock"}
+            )
+    child_id = created.json()["client_id"]
+    principal = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=ctg)
+    phone, _norm = belarus_test_phone(ctg)
+
+    async def child_phone() -> str | None:
+        return (await db_session.execute(text("SELECT phone FROM clients WHERE id = :c"), {"c": child_id})).scalar()
+
+    await _ensure_client_for_webapp_miniapp(db_session, principal, "mock", phone="12-34", requested_profile_id=child_id)
+    assert not await child_phone()
+    spaced = phone[:4] + " " + phone[4:6] + " " + phone[6:]
+    await _ensure_client_for_webapp_miniapp(db_session, principal, "mock", phone=spaced, requested_profile_id=child_id)
+    assert await child_phone() == phone
+
+
+@pytest.mark.asyncio
+async def test_client_passes_list_tier_scope(app_use_test_db, db_session) -> None:
+    """«Спишем 1» обещаем только при точном покрытии: /client/passes отдаёт тарифы абонемента (пусто — любые)."""
+    from src.application.pass_product_use_cases import list_client_pass_instances
+
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Оля{uuid.uuid4().hex[:4]}")
+    cid = (await db_session.execute(text("INSERT INTO clients (first_name) VALUES ('Аня') RETURNING id"))).scalar_one()
+    for name, kinds in (("Детский", ["child"]), ("Любой", [])):
+        pid = (
+            await db_session.execute(
+                text("INSERT INTO trainer_pass_products (trainer_id, name, sessions_total, price_cents) VALUES (:t, :n, 8, 1000) RETURNING id"),
+                {"t": tid, "n": name},
+            )
+        ).scalar_one()
+        for k in kinds:
+            await db_session.execute(
+                text("INSERT INTO trainer_pass_product_tiers (pass_product_id, tier_kind) VALUES (:p, :k)"), {"p": pid, "k": k}
+            )
+        await db_session.execute(
+            text(
+                "INSERT INTO pass_instances (client_id, pass_product_id, sessions_remaining, sessions_total, price_cents, status) "
+                "VALUES (:c, :p, 4, 8, 1000, 'active')"
+            ),
+            {"c": cid, "p": pid},
+        )
+    items = {i["product_name"]: i["tier_kinds"] for i in await list_client_pass_instances(db_session, cid)}
+    assert items == {"Детский": ["child"], "Любой": []}
