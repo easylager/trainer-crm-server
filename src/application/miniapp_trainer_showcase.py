@@ -112,6 +112,8 @@ def _service_out(svc: dict[str, Any], public_ids: set[int]) -> dict[str, Any]:
         "is_public": sid in public_ids,
         "is_online": bool(svc.get("is_online")),
         "price_cents": svc.get("price_cents"),
+        # Группа: сервер записывает COALESCE(group_price_cents, price_cents) — строка оплаты показывает то же.
+        "group_price_cents": svc.get("group_price_cents"),
         "currency_code": svc.get("currency_code") or "BYN",
         "description": svc.get("description"),
         "price_tiers": [
