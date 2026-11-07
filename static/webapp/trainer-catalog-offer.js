@@ -38,6 +38,8 @@
     'background:var(--tg-theme-secondary-bg-color,var(--g-bg,#f4f6f7));color:var(--tg-theme-text-color,#0d1b26)}' +
     '.tco-note{font-size:13px!important;margin:8px 0 0!important}';
 
+  var NOTE_HINT = 'Дополнить или поправить карточку можно в любой момент в «Профиле», убрать — в «Каталоге».';
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -188,7 +190,7 @@
       cardHtml(pv) +
       '<button type="button" class="tco-btn" data-tco-yes>Показать меня</button>' +
       '<button type="button" class="tco-btn tco-btn--ghost" data-tco-no>Пока только по ссылке</button>' +
-      '<p class="tco-note">Дополнить или поправить карточку можно в любой момент в «Профиле», убрать — в «Каталоге».</p>';
+      '<p class="tco-note">' + NOTE_HINT + '</p>';
     back.appendChild(box);
     global.document.body.appendChild(back);
     markSeen();
@@ -202,6 +204,13 @@
       if (yes.disabled) return;
       yes.disabled = true;
       yes.textContent = 'Публикуем…';
+      // Сообщение прошлой попытки (ошибка сети/«заполните…») убираем: исходная подсказка возвращается.
+      var hint = box.querySelector('.tco-note');
+      if (hint) {
+        hint.textContent = NOTE_HINT;
+        if (hint.removeAttribute) hint.removeAttribute('role');
+        else hint.attrs && delete hint.attrs.role;
+      }
       getJson(opts, '/trainer/catalog/submit', 'POST').then(function (o) {
         if (o.ok && o.data && o.data.state === 'published') {
           renderPublished(box, back, opts, rinks);

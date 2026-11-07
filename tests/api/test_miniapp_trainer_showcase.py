@@ -464,3 +464,23 @@ async def test_request_without_city_takes_trainers_city(app_use_test_db, db_sess
     ).scalar_one()
     assert saved_city == trainer_city
     assert no_city_no_trainer.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_showcase_keeps_window_on_primary_arena_without_trainer_arenas_row(app_use_test_db, db_session) -> None:
+    """Основной каток без записи в ``trainer_arenas`` и каток другого города: свой остаётся, чужой скрыт."""
+    async with _client() as client:
+        a = await _place(db_session)
+        b = await _place(db_session)
+        tid = await _trainer_on(db_session, client, a, first_name=f"Прим{uuid.uuid4().hex[:4]}")
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        await db_session.execute(text("DELETE FROM trainer_arenas WHERE trainer_id = :t"), {"t": tid})
+        await db_session.execute(
+            text("UPDATE trainers SET primary_arena_id = :a WHERE id = :t"), {"a": a["arena_id"], "t": tid}
+        )
+        mine = await _slot(db_session, tid, days=2, hour=12, arena_id=None)  # без катка слота -> основной
+        await _slot(db_session, tid, days=2, hour=14, arena_id=b["arena_id"])  # каток другого города
+        await db_session.commit()
+        body = (await client.get(f"/api/public/trainer-showcase?city_id={a['city_id']}")).json()
+    item = next(t for t in body["items"] if t["id"] == tid)
+    assert [w["slot_id"] for w in item["windows"]] == [mine]

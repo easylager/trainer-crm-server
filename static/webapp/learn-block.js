@@ -86,12 +86,28 @@
     host.removeAttribute('data-lb-wait');
   }
 
+  /* Кеш сеанса learn-block-core.js (тот же ключ и срок): для города лежит пустая выдача — блока не будет. */
+  var CACHE_KEY = 'glide_learn_showcase_v1:';
+  var CACHE_TTL_MS = 10 * 60 * 1000;
+
+  function knownEmpty(spec) {
+    try {
+      var raw = global.sessionStorage.getItem(CACHE_KEY + String((spec && spec.cityId) || 'all'));
+      if (!raw) return false;
+      var rec = JSON.parse(raw);
+      return !!rec && Array.isArray(rec.items) && rec.items.length === 0 && Date.now() - rec.at <= CACHE_TTL_MS;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /* Место под блок, пока грузятся его файлы и данные (CSS ещё не пришёл — размеры инлайном):
      без этого контент ниже прыгает на высоту карточки (CLS). Высота — измеренная карточка без
      направлений-чипов (212) и с ними на «главной»/«Моих записях» (266). Пустой ответ/ошибка → hideEl. */
   function reserve(target, spec) {
     var host = el(target);
     if (!host || !host.hidden) return;
+    if (knownEmpty(spec)) return; // в городе уже знаем, что тренеров нет: плашка схлопнулась бы — место не держим
     host.hidden = false;
     host.style.margin = '12px 16px';
     host.style.minHeight = (spec && spec.place === 'city' ? 266 : 212) + 'px';

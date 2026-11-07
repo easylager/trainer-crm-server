@@ -135,19 +135,15 @@ def _service_out(svc: dict[str, Any], public_ids: set[int]) -> dict[str, Any]:
     }
 
 
-def _window_in_city(window: dict[str, Any], arenas: dict[int, dict[str, Any]], city_id: int | None) -> bool:
-    """Окно на катке другого города в витрине этого города не показываем (окно без катка — онлайн — остаётся)."""
-    aid = window.get("arena_id")
-    if city_id is None or aid is None:
-        return True
-    arena = arenas.get(int(aid))
-    return arena is not None and arena.get("city_id") == int(city_id)
-
-
 async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -> dict[str, Any]:
     """Тренеры города для витрины. Фильтр катка и вкладки клиент считает сам — по этим данным."""
     from src.application.arena_public_use_cases import _trainer_windows_on_arena
-    from src.application.site_trainer_catalog import min_price_by_direction, services_by_direction
+    from src.application.site_trainer_catalog import (
+        min_price_by_direction,
+        services_by_direction,
+        window_arena_cities,
+        window_in_city,
+    )
     from src.application.site_trainer_page import contact_url
     from src.application.site_trainers import trainer_initial, trainer_name, trainer_photo_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
@@ -183,6 +179,8 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
         await _trainer_windows_on_arena(session, None, bookable, timezone_name=NOTIFICATION_TZ) if bookable else {}
     )
 
+    win_cities = await window_arena_cities(session, [w for ws in windows.values() for w in ws])
+
     out: list[dict[str, Any]] = []
     for t in items:
         tid = int(t["id"])
@@ -214,7 +212,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 "windows": [
                     {k: w.get(k) for k in ("slot_id", "arena_id", "starts_at", "ends_at", "time", "day")}
                     for w in windows.get(tid, [])
-                    if _window_in_city(w, arenas, city_id)
+                    if window_in_city(w.get("arena_id"), win_cities, city_id)
                 ],
             }
         )
