@@ -539,7 +539,7 @@
     var r = m.result || {};
     var pts = card.points == null ? 0 : card.points;
     // Те же слова, что KtoKogoModel.verdict: модель игры на главную не грузим ради одной строки.
-    var head = pts === 50 ? 'в точку!' : pts === 30 ? 'почти в точку' : pts === 20 ? 'есть победитель' : pts === 10 ? 'шайбы угаданы' : 'в этот раз мимо';
+    var head = pts === 50 ? 'в точку!' : pts === 30 ? 'почти в точку' : pts === 20 ? 'угадал победителя' : pts === 10 ? 'шайбы угаданы' : 'мимо';
     var a = link(el('a', 'hn__card hn__card--dark'), 'kto-kogo?reveal=' + m.id);
     // ×2 (TASK-335): слова — по базовым очкам, наклейка — с умножением.
     var doubled = !!(card.my_pick && card.my_pick.doubled);

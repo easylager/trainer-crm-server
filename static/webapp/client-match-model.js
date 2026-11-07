@@ -61,7 +61,7 @@
   }
 
   /**
-   * «Кто из ваших». Пусто — блока нет: сервер не отдаёт список из одного себя.
+   * «Кто из твоих». Пусто — блока нет: сервер не отдаёт список из одного себя.
    * Себя называем «Ты» и ставим первым — так человек сразу видит свой ответ среди друзей.
    */
   function who(people) {
@@ -102,12 +102,14 @@
     return (t && t.name) || '';
   }
 
-  function verdict(points) {
-    if (points === EXACT) return 'В точку! +50';
-    if (points === 30) return 'Почти в точку · +30';
-    if (points === 20) return 'Угадал победителя · +20';
-    if (points === 10) return 'Угадал шайбы · +10';
-    return 'В этот раз мимо';
+  /** Слово — по базовым очкам хода, число — итог с козырем (на экране игры стоит именно оно). */
+  function verdict(points, doubled) {
+    var total = doubled ? points * 2 : points;
+    if (points === EXACT) return 'В точку! +' + total;
+    if (points === 30) return 'Почти в точку · +' + total;
+    if (points === 20) return 'Угадал победителя · +' + total;
+    if (points === 10) return 'Угадал шайбы · +' + total;
+    return 'Мимо';
   }
 
   function moveText(pick, match) {
@@ -166,7 +168,7 @@
     var pts = kk.points == null ? null : Number(kk.points);
     if (pts == null) return { title: 'Считаем очки', sub: cap(moveText(pick, m)), href: 'kto-kogo' };
     return {
-      title: verdict(pts),
+      title: verdict(pts, !!(pick && pick.doubled)),
       sub: pts >= 20 ? 'Похвастаться в чате' : cap(moveText(pick, m)),
       href: 'kto-kogo?reveal=' + m.id,
     };
