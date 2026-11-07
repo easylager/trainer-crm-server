@@ -525,6 +525,12 @@
         if (!r.ok) throw new Error(String(r.status));
       }).catch(function () {
         kkBefore(card, host);
+        // Кнопка откатилась — говорим об этом в строке подсказки карточки (тостов на главной нет).
+        var hint = host.querySelector('.hn__hint');
+        if (hint) {
+          hint.textContent = 'Не получилось, попробуй ещё раз';
+          hint.setAttribute('role', 'status');
+        }
       });
     }
     teams.appendChild(teamButton(m.home, 'home', onPick));
