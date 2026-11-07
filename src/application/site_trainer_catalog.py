@@ -174,10 +174,75 @@ def services_by_direction(services: Sequence[dict[str, Any]]) -> dict[str, list[
     return by_dir
 
 
+def window_in_city(arena_id: Any, arena_cities: Mapping[int, int | None], city_id: int | None) -> bool:
+    """Окно не показываем в городе, только если город его катка ИЗВЕСТЕН и другой (общее правило сайта и Mini App).
+
+    Окно без катка (онлайн), без города или на катке, которого нет в ``arena_cities``, остаётся.
+    """
+    if city_id is None or arena_id is None:
+        return True
+    known = arena_cities.get(int(arena_id))
+    return known is None or int(known) == int(city_id)
+
+
+async def window_arena_cities(session: AsyncSession, windows: Sequence[Mapping[str, Any]]) -> dict[int, int | None]:
+    """Город каждого катка из окон (любой каток: скрытый, слитый, не ледовый)."""
+    ids = sorted({int(w["arena_id"]) for w in windows if w.get("arena_id") is not None})
+    if not ids:
+        return {}
+    rows = await session.execute(text("SELECT id, city_id FROM arenas WHERE id = ANY(:ids)"), {"ids": ids})
+    return {int(a): (int(c) if c is not None else None) for a, c in rows.fetchall()}
+
+
+async def _primary_public_arenas(
+    session: AsyncSession, trainer_ids: list[int], city_id: int
+) -> dict[int, list[dict[str, Any]]]:
+    """Основной каток тренера (``primary_arena_id``), если он публичный ледовый в этом городе.
+
+    Каток, который тренер сам скрыл в ``trainer_arenas``, не берём. Нужен только окнам: записи в ``trainer_arenas``
+    у основного катка может не быть, а окна на нём — главные окна тренера.
+    """
+    from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+
+    if not trainer_ids:
+        return {}
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT t.id AS trainer_id, a.id, a.name
+                FROM trainers t
+                JOIN arenas a ON a.id = t.primary_arena_id
+                JOIN cities c ON c.id = a.city_id
+                LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                WHERE t.id = ANY(:tids) AND a.city_id = :city AND a.merged_into_arena_id IS NULL
+                  AND COALESCE(a.venue_type, 'ice') = 'ice'
+                  AND NOT EXISTS (SELECT 1 FROM trainer_arenas ta
+                                  WHERE ta.trainer_id = t.id AND ta.arena_id = a.id AND NOT COALESCE(ta.is_public, true))
+                  AND {PUBLIC_ARENA_VISIBLE_SQL}
+                """
+            ),
+            {"tids": trainer_ids, "city": int(city_id), **public_scope_params()},
+        )
+    ).mappings().all()
+    return {
+        int(r["trainer_id"]): [{"id": int(r["id"]), "name": str(r["name"] or "").strip()}] for r in rows
+    }
+
+
 def city_windows(
-    windows: Sequence[Mapping[str, Any]], city_arenas: Sequence[Mapping[str, Any]], *, name_arena: bool
+    windows: Sequence[Mapping[str, Any]],
+    city_arenas: Sequence[Mapping[str, Any]],
+    *,
+    name_arena: bool,
+    arena_cities: Mapping[int, int | None] | None = None,
+    city_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Окна тренера только на катках этого города (окно без катка — онлайн — остаётся).
+    """Окна тренера для каталога города: только на публичных катках этого города (окно без катка — онлайн — остаётся).
+
+    ``city_arenas`` — публичные катки тренера в городе плюс его публичный основной каток. Окно на катке, которого
+    там нет (на модерации, скрытом, в другом городе), не показываем. Город катка сверяем общим правилом
+    ``window_in_city``, если переданы ``arena_cities``/``city_id``.
 
     ``name_arena`` — у тренера несколько катков или они в разных городах: окну дописываем название катка.
     """
@@ -186,6 +251,8 @@ def city_windows(
     for w in windows:
         aid = w.get("arena_id")
         if aid is not None and int(aid) not in names:
+            continue
+        if arena_cities is not None and not window_in_city(aid, arena_cities, city_id):
             continue
         out.append({**w, "arena_name": names.get(int(aid)) if (name_arena and aid is not None) else None})
     return out
@@ -210,6 +277,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     ids = [int(b["id"]) for b in bodies]
     arenas = await _ice_arenas(session, ids, city_id)
     all_arenas = await _ice_arenas(session, ids, None)
+    primary = await _primary_public_arenas(session, ids, city_id)
     usernames = await _usernames(session, ids) if ids else {}
     passes = await load_pass_offers(session, ids)
     can_book: dict[int, bool] = {}
@@ -218,6 +286,7 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     windows = await _trainer_windows_on_arena(
         session, None, [t for t in ids if can_book[t]], timezone_name=NOTIFICATION_TZ
     )
+    win_cities = await window_arena_cities(session, [w for ws in windows.values() for w in ws])
     trainers: list[dict[str, Any]] = []
     for order, body in enumerate(bodies):
         tid = int(body["id"])
@@ -244,8 +313,11 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
                 "windows": (
                     city_windows(
                         windows.get(tid, []),
-                        arenas.get(tid, []),
+                        arenas.get(tid, [])
+                        + [a for a in primary.get(tid, []) if a["id"] not in {x["id"] for x in arenas.get(tid, [])}],
                         name_arena=len(all_arenas.get(tid, [])) > 1,
+                        arena_cities=win_cities,
+                        city_id=city_id,
                     )
                     if can_book[tid]
                     else []

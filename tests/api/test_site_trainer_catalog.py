@@ -395,3 +395,50 @@ async def test_city_catalog_single_arena_has_no_arena_name_on_slot(app_use_test_
         await db_session.commit()
         html = (await client.get(f"/c/{city_slug(place['city_name'])}/trenery")).text
     assert 'class="tc-slot"' in html and "13:00 ·" not in html
+
+
+@pytest.mark.asyncio
+async def test_city_catalog_window_on_public_primary_arena_without_trainer_arenas_row(
+    app_use_test_db, db_session
+) -> None:
+    """Основной публичный каток без ``trainer_arenas`` показывает окно; каток другого города — нет."""
+    async with _client() as client:
+        t = await _two_city_trainer(db_session, client)
+        await db_session.execute(text("DELETE FROM trainer_arenas WHERE trainer_id = :t"), {"t": t["tid"]})
+        await db_session.execute(
+            text("UPDATE trainers SET primary_arena_id = :a WHERE id = :t"), {"a": t["a"]["arena_id"], "t": t["tid"]}
+        )
+        await _slot(db_session, t["tid"], days=2, hour=13, arena_id=None)
+        await _slot(db_session, t["tid"], days=2, hour=15, arena_id=t["b"]["arena_id"])
+        await db_session.commit()
+        html_a = (await client.get(f"/c/{city_slug(t['a']['city_name'])}/trenery")).text
+    assert len(re.findall(r'class="tc-slot"', html_a)) == 1
+    assert "13:00" in html_a
+
+
+@pytest.mark.asyncio
+async def test_city_catalog_hides_window_on_unpublished_primary_arena(app_use_test_db, db_session) -> None:
+    """Каток на модерации (не подтверждён) — окно на нём клиентам города не светим, даже если он основной."""
+    async with _client() as client:
+        t = await _two_city_trainer(db_session, client)
+        await db_session.execute(text("DELETE FROM trainer_arenas WHERE trainer_id = :t"), {"t": t["tid"]})
+        await db_session.execute(
+            text("UPDATE trainers SET primary_arena_id = :a WHERE id = :t"), {"a": t["a"]["arena_id"], "t": t["tid"]}
+        )
+        await db_session.execute(text("UPDATE arenas SET is_confirmed = false WHERE id = :a"), {"a": t["a"]["arena_id"]})
+        await _slot(db_session, t["tid"], days=2, hour=13, arena_id=None)
+        await db_session.commit()
+        html_a = (await client.get(f"/c/{city_slug(t['a']['city_name'])}/trenery")).text
+    assert 'class="tc-slot"' not in html_a
+
+
+def test_window_in_city_hides_only_known_other_city() -> None:
+    from src.application.site_trainer_catalog import window_in_city
+
+    cities = {1: 10, 2: 20, 3: None}
+    assert window_in_city(None, cities, 10)
+    assert window_in_city(1, cities, 10)
+    assert not window_in_city(2, cities, 10)
+    assert window_in_city(3, cities, 10)  # город неизвестен
+    assert window_in_city(99, cities, 10)  # каток не найден
+    assert window_in_city(2, cities, None)
