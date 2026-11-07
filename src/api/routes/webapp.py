@@ -136,6 +136,7 @@ from src.application.family_access_use_cases import (
 )
 from src.application.client_profile_use_cases import (
     create_guardian_profile,
+    find_guardian_profile_by_name,
     list_accessible_profiles,
     resolve_acting_client_id,
     set_default_profile,
@@ -1876,10 +1877,25 @@ async def get_client_slots(
     }
 
 
+async def _slot_in_archived_training_group(session: AsyncSession, slot: dict) -> bool:
+    """Слот группы, которую тренер убрал в архив: в списках клиента его нет — по ссылке тоже не записать.
+
+    Архивация отменяет только пустые будущие слоты группы; слоты с записями остаются ``available``.
+    """
+    group_id = slot.get("training_group_id")
+    if group_id is None:
+        return False
+    status = (
+        await session.execute(text("SELECT status FROM training_groups WHERE id = :g"), {"g": int(group_id)})
+    ).scalar()
+    return (status or "").strip().lower() == "archived"
+
+
 @router.get("/client/slot/{slot_id:int}")
 async def get_client_slot(
     slot_id: int,
     trainer_id: int = Query(..., description="Trainer from the link — slot must belong to them"),
+    x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
@@ -1887,13 +1903,15 @@ async def get_client_slot(
 
     ``/client/slots`` отдаёт только эту и следующую неделю; ссылка с сайта может вести дальше.
     Свободно и доступно для записи — те же правила, что у списка: ``available``, без активной
-    записи на одного, не раньше ``min_hours_before_booking`` рабочих часов, онлайн-запись у тренера.
+    записи на одного, не раньше ``min_hours_before_booking`` рабочих часов, онлайн-запись у тренера,
+    не слот архивной группы, в окне самозаписи этого клиента у тренера (с учётом ``X-Profile-Id``).
     Иначе ``{"available": false}`` — клиент показывает «Время заняли».
     """
-    del principal
     slot = await get_slot(session, slot_id)
     unavailable = {"available": False, "slot": None}
     if not slot or int(slot["trainer_id"]) != int(trainer_id) or slot.get("status") != "available":
+        return unavailable
+    if await _slot_in_archived_training_group(session, slot):
         return unavailable
     if not await trainer_allows_online_booking(session, trainer_id):
         return unavailable
@@ -1926,21 +1944,29 @@ async def get_client_slot(
         arena_name = (
             await session.execute(text("SELECT name FROM arenas WHERE id = :a"), {"a": int(arena_id)})
         ).scalar()
-    return {
-        "available": True,
-        "slot": {
-            "id": int(slot["id"]),
-            "slot_date": slot["slot_date"].isoformat(),
-            "start_time": slot["start_time"].strftime("%H:%M"),
-            "end_time": slot["end_time"].strftime("%H:%M") if slot.get("end_time") else "",
-            "capacity": cap,
-            "spots_left": max(0, cap - active),
-            "service_id": slot.get("service_id"),
-            "arena_id": arena_id,
-            "arena_name": (str(arena_name).strip() or None) if arena_name else ("Онлайн" if slot.get("is_online") else None),
-            "is_online": bool(slot.get("is_online")),
-        },
+    payload = {
+        "id": int(slot["id"]),
+        "slot_date": slot["slot_date"].isoformat(),
+        "start_time": slot["start_time"].strftime("%H:%M"),
+        "end_time": slot["end_time"].strftime("%H:%M") if slot.get("end_time") else "",
+        "capacity": cap,
+        "spots_left": max(0, cap - active),
+        "service_id": slot.get("service_id"),
+        "arena_id": arena_id,
+        "arena_name": (str(arena_name).strip() or None) if arena_name else ("Онлайн" if slot.get("is_online") else None),
+        "is_online": bool(slot.get("is_online")),
     }
+    # Окно самозаписи (утро/день/вечер), которое тренер задал этому клиенту, — как в /client/slots.
+    in_window, _daypart = await _client_slots_after_self_book_window(
+        session,
+        int(trainer_id),
+        client_catalog_telegram_key(principal),
+        [payload],
+        _parse_profile_id_header(x_profile_id),
+    )
+    if not in_window:
+        return unavailable
+    return {"available": True, "slot": payload}
 
 
 def _this_week_monday() -> date:
@@ -2061,6 +2087,9 @@ async def post_client_booking(
 
     slot = await get_slot(session, body.slot_id)
     if not slot or slot.get("status") != "available":
+        raise HTTPException(status_code=400, detail="Slot not available")
+    # Новая запись в архивную группу — как в занятый слот; существующие записи группы не трогаем.
+    if await _slot_in_archived_training_group(session, slot):
         raise HTTPException(status_code=400, detail="Slot not available")
     trainer_id = slot["trainer_id"]
 
@@ -2509,8 +2538,12 @@ async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
 
 
 class ClientRequestCreateBody(BaseModel):
-    """Create request from catalog Mini App: city, service, optional comment and trainer_id."""
-    city_id: int
+    """Create request from catalog Mini App: city, service, optional comment and trainer_id.
+
+    ``city_id`` можно не слать, если указан ``trainer_id``: заявка конкретному тренеру — его город
+    (новый родитель по личной ссылке ещё не выбирал город).
+    """
+    city_id: int | None = None
     service_id: int
     comment: str | None = None
     trainer_id: int | None = None
@@ -2530,6 +2563,17 @@ async def post_client_request(
 ):
     """Create a client request (from catalog Mini App). Auth: client initData. Returns request_id so UI can show success before closing."""
     telegram_id = client_catalog_telegram_key(principal)
+    city_id = body.city_id
+    if city_id is None and body.trainer_id is not None:
+        city_id = (
+            await session.execute(
+                text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :t"), {"t": int(body.trainer_id)}
+            )
+        ).scalar()
+    if city_id is None:
+        raise HTTPException(
+            status_code=422, detail="Не удалось определить город или услугу. Напишите тренеру напрямую."
+        )
     phone: str | None = None
     if (body.phone or "").strip():
         from src.shared.profile_phone import normalize_phone_input, validate_phone_non_empty
@@ -2549,7 +2593,7 @@ async def post_client_request(
     )
     comment = (body.comment or "").strip() or None
     request_id = await create_client_request(
-        session, client_id, body.city_id, body.service_id, comment=comment, trainer_id=body.trainer_id
+        session, client_id, int(city_id), body.service_id, comment=comment, trainer_id=body.trainer_id
     )
     # Trainer DM: only notification_service request loop (claim-before-send). No API immediate path.
     return {"success": True, "request_id": request_id}
@@ -2973,8 +3017,16 @@ async def post_client_profiles(
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
-    """Add an independent profile (e.g. a second child) under this account."""
+    """Add an independent profile (e.g. a second child) under this account.
+
+    Ребёнок с тем же именем у этого аккаунта уже есть — возвращается он, второй профиль не создаётся.
+    """
     telegram_id = client_catalog_telegram_key(principal)
+    existing_id = await find_guardian_profile_by_name(
+        session, telegram_id, first_name=body.first_name, last_name=body.last_name
+    )
+    if existing_id is not None:
+        return {"client_id": existing_id}
     phone = await get_client_phone_for_webapp(session, telegram_id)
     try:
         new_client_id = await create_guardian_profile(

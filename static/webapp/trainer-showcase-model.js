@@ -431,10 +431,12 @@
   /**
    * Можно ли отметить ещё одного: до двоих и только если у услуги есть тариф на двоих (на эту пару,
    * когда вид обоих известен). Нет тарифов на двоих — второго не выбрать.
+   * Групповой слот (`opts.group`): одна запись = одно место = один участник — второго не отметить.
    */
   function canAddProfile(service, selected, candidate, opts) {
     if (selected.length >= 2) return false;
     if (!selected.length) return true;
+    if (opts && opts.group) return false;
     var duo = tierChoices(service, 2);
     if (!duo.length) return false;
     var k1 = profileKind(selected[0], opts);
@@ -493,6 +495,63 @@
         (pass ? ' Вместо оплаты тренер может списать занятие с абонемента.' : '') + ticket;
     }
     return '<b>' + money + '</b> — тренеру' + (online ? '' : ' на месте') + '.' + maybePass + ticket;
+  }
+
+  /* ── Услуга и слот ──────────────────────────────────────────────────── */
+
+  /**
+   * Подходит ли услуга к формату слота — то же правило, что у сервера (`post_client_booking` → 422):
+   * онлайн-слот (`is_online` и без катка) — только онлайн-услуга, очный — только очная.
+   */
+  function serviceFitsSlot(service, slot) {
+    if (!service || !slot) return false;
+    var slotOnline = !!slot.is_online && slot.arena_id == null;
+    return !!service.is_online === slotOnline;
+  }
+
+  function servicesForSlot(services, slot) {
+    return (services || []).filter(function (s) { return serviceFitsSlot(s, slot); });
+  }
+
+  /**
+   * Карточка каталога (`/client/catalog-trainer/{id}`, `/public/trainers/{id}`) → тренер витрины.
+   * Тренер не из выдачи города (личная ссылка) — та же форма, те же поля услуги, что у `_service_out`
+   * (в т.ч. `group_price_cents`: сервер записывает в группу COALESCE(group_price_cents, price_cents)).
+   */
+  function trainerFromCatalogCard(t) {
+    var p = t.profile || {};
+    var name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Тренер';
+    var photo = (t.photos || [])[0] || {};
+    var initial = (name.match(/\p{L}/u) || ['Т'])[0].toUpperCase();
+    return {
+      id: t.id,
+      name: name,
+      first_name: (p.first_name || '').trim() || name,
+      initial: initial,
+      photo_url: photo.url || photo.list_url || null,
+      experience_years: p.experience_years,
+      description: (p.description || '').trim(),
+      education: (p.education || '').trim(),
+      rating_avg: p.rating_avg,
+      rating_count: p.rating_count || 0,
+      session_duration_minutes: p.session_duration_minutes,
+      glide_since: null,
+      can_book: !!t.can_book,
+      contact_url: t.contact_telegram_url || null,
+      city_id: p.city_id != null ? p.city_id : null,
+      services: (t.services || []).map(function (s) {
+        return {
+          service_id: s.service_id, service_name: s.service_name,
+          is_public: s.is_public !== false, direction_service_id: s.direction_service_id != null ? s.direction_service_id : null,
+          is_online: !!s.is_online,
+          price_cents: s.price_cents, group_price_cents: s.group_price_cents != null ? s.group_price_cents : null,
+          currency_code: s.currency_code || 'BYN', description: s.description,
+          price_tiers: s.price_tiers || [],
+        };
+      }),
+      arenas: (t.arena_ids || []).map(function (id, i) { return { id: id, name: (t.arena_names || [])[i] || '' }; }).filter(function (a) { return a.name; }),
+      windows: [],
+    };
   }
 
   /* ── Даты ───────────────────────────────────────────────────────────── */
@@ -687,6 +746,9 @@
     hintTier: hintTier,
     regularTier: regularTier,
     canAddProfile: canAddProfile,
+    serviceFitsSlot: serviceFitsSlot,
+    servicesForSlot: servicesForSlot,
+    trainerFromCatalogCard: trainerFromCatalogCard,
     usablePass: usablePass,
     payLine: payLine,
     addDays: addDays,

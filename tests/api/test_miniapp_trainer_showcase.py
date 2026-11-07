@@ -280,3 +280,187 @@ async def test_showcase_windows_only_on_arenas_of_this_city(app_use_test_db, db_
     assert next(t for t in in_a["items"] if t["id"] == tid)["windows"] == []
     wins_b = next(t for t in in_b["items"] if t["id"] == tid)["windows"]
     assert len(wins_b) == 1 and wins_b[0]["arena_id"] == b["arena_id"]
+
+
+@pytest.mark.asyncio
+async def test_group_price_by_personal_link_matches_booked_price(app_use_test_db, db_session) -> None:
+    """PR #236: тренер по личной ссылке (карточка каталога) — групповая цена та же, что запишет сервер.
+
+    Форма записи (``trainerFromCatalogCard`` → ``payHtml``) берёт ``group_price_cents`` карточки;
+    сервер пишет в группу ``COALESCE(group_price_cents, price_cents)``. Здесь — что обе стороны равны.
+    """
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Оля{uuid.uuid4().hex[:4]}")
+    await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+    service_id = (
+        await db_session.execute(text("SELECT service_id FROM trainer_services WHERE trainer_id = :t"), {"t": tid})
+    ).scalar_one()
+    slot_id = await _slot(db_session, tid, days=3, hour=12, arena_id=place["arena_id"], capacity=6)
+    await db_session.execute(text("UPDATE slots SET service_id = :s WHERE id = :id"), {"s": service_id, "id": slot_id})
+    await db_session.commit()
+    ctg = _fresh_client_telegram_id()
+    phone, _norm = belarus_test_phone(ctg)
+    headers = {"X-Telegram-Init-Data": "mock"}
+    with patch_client_init_auth(ctg):
+        async with _client() as client:
+            card = (await client.get(f"/api/webapp/client/catalog-trainer/{tid}", headers=headers)).json()
+            showcase = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+            book = await client.post(
+                "/api/webapp/client/booking",
+                json={"slot_id": slot_id, "phone": phone, "service_id": service_id, "first_name": "Анна"},
+                headers=headers,
+            )
+    assert book.status_code == 200, book.text
+    booked = (
+        await db_session.execute(
+            text("SELECT booking_price_cents FROM bookings WHERE id = :b"), {"b": book.json()["booking_id"]}
+        )
+    ).scalar_one()
+    card_svc = next(s for s in card["services"] if s["service_id"] == service_id)
+    showcase_svc = next(s for s in next(t for t in showcase["items"] if t["id"] == tid)["services"] if s["service_id"] == service_id)
+    assert card_svc["group_price_cents"] == showcase_svc["group_price_cents"] == booked == 2500
+
+
+async def _group_slot(db_session, tid: int, arena_id: int, *, status: str, hour: int = 12) -> tuple[int, int, int]:
+    service_id = (
+        await db_session.execute(text("SELECT service_id FROM trainer_services WHERE trainer_id = :t"), {"t": tid})
+    ).scalar_one()
+    group_id = (
+        await db_session.execute(
+            text(
+                "INSERT INTO training_groups (trainer_id, name, service_id, arena_id, max_members, status) "
+                "VALUES (:t, 'Группа', :s, :a, 6, :st) RETURNING id"
+            ),
+            {"t": tid, "s": service_id, "a": arena_id, "st": status},
+        )
+    ).scalar_one()
+    slot_id = await _slot(db_session, tid, days=4, hour=hour, arena_id=arena_id, capacity=6)
+    await db_session.execute(
+        text("UPDATE slots SET service_id = :s, training_group_id = :g WHERE id = :id"),
+        {"s": service_id, "g": group_id, "id": slot_id},
+    )
+    return slot_id, service_id, group_id
+
+
+@pytest.mark.asyncio
+async def test_archived_group_slot_not_offered_by_link_nor_bookable(app_use_test_db, db_session) -> None:
+    """PR #236: слот архивной группы (в нём уже есть запись — архивация его не отменила) по ссылке не свободен,
+    новая запись — «Slot not available»; прежняя запись остаётся как была. Активная группа — как раньше."""
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Вера{uuid.uuid4().hex[:4]}")
+    await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+    archived_slot, service_id, _g = await _group_slot(db_session, tid, place["arena_id"], status="archived")
+    active_slot, _s, _g2 = await _group_slot(db_session, tid, place["arena_id"], status="active", hour=15)
+    member = (
+        await db_session.execute(
+            text("INSERT INTO clients (first_name, telegram_id) VALUES ('Участник', :tg) RETURNING id"),
+            {"tg": _fresh_client_telegram_id()},
+        )
+    ).scalar_one()
+    old_booking = (
+        await db_session.execute(
+            text(
+                "INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status) "
+                "VALUES (:s, :t, :c, :svc, 'confirmed') RETURNING id"
+            ),
+            {"s": archived_slot, "t": tid, "c": member, "svc": service_id},
+        )
+    ).scalar_one()
+    await db_session.commit()
+    ctg = _fresh_client_telegram_id()
+    phone, _norm = belarus_test_phone(ctg)
+    headers = {"X-Telegram-Init-Data": "mock"}
+    body = {"phone": phone, "service_id": service_id, "first_name": "Анна"}
+    with patch_client_init_auth(ctg):
+        async with _client() as client:
+            by_link = (await client.get(f"/api/webapp/client/slot/{archived_slot}?trainer_id={tid}", headers=headers)).json()
+            book = await client.post("/api/webapp/client/booking", json={**body, "slot_id": archived_slot}, headers=headers)
+            active_link = (await client.get(f"/api/webapp/client/slot/{active_slot}?trainer_id={tid}", headers=headers)).json()
+            active_book = await client.post("/api/webapp/client/booking", json={**body, "slot_id": active_slot}, headers=headers)
+    assert by_link == {"available": False, "slot": None}
+    assert book.status_code == 400 and book.json()["detail"] == "Slot not available"
+    assert active_link["available"] is True and active_link["slot"]["capacity"] == 6
+    assert active_book.status_code == 200, active_book.text
+    old = (await db_session.execute(text("SELECT status FROM bookings WHERE id = :b"), {"b": old_booking})).scalar_one()
+    assert old == "confirmed"
+    n = (
+        await db_session.execute(
+            text("SELECT COUNT(*) FROM bookings WHERE slot_id = :s AND status IN ('pending', 'confirmed')"),
+            {"s": archived_slot},
+        )
+    ).scalar_one()
+    assert n == 1
+
+
+@pytest.mark.asyncio
+async def test_slot_link_respects_self_book_window_of_acting_profile(app_use_test_db, db_session) -> None:
+    """PR #236: окно самозаписи ребёнка «утро» — вечернее время по ссылке для него недоступно (как в /client/slots);
+    у родителя без ограничения то же время свободно."""
+    from src.application.client_booking_daypart_use_cases import set_client_booking_daypart
+
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Нина{uuid.uuid4().hex[:4]}")
+    await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+    evening = await _slot(db_session, tid, days=4, hour=18, arena_id=place["arena_id"])
+    morning = await _slot(db_session, tid, days=4, hour=9, arena_id=place["arena_id"])
+    await db_session.commit()
+    ctg = _fresh_client_telegram_id()
+    await db_session.execute(
+        text("INSERT INTO clients (first_name, telegram_id) VALUES ('Мама', :tg)"), {"tg": ctg}
+    )
+    await db_session.commit()
+    headers = {"X-Telegram-Init-Data": "mock"}
+    with patch_client_init_auth(ctg):
+        async with _client() as client:
+            child_id = (
+                await client.post("/api/webapp/client/profiles", json={"first_name": "Соня"}, headers=headers)
+            ).json()["client_id"]
+            await set_client_booking_daypart(db_session, tid, child_id, "morning")
+            child = {**headers, "X-Profile-Id": str(child_id)}
+            child_evening = (await client.get(f"/api/webapp/client/slot/{evening}?trainer_id={tid}", headers=child)).json()
+            child_morning = (await client.get(f"/api/webapp/client/slot/{morning}?trainer_id={tid}", headers=child)).json()
+            child_list = (await client.get(f"/api/webapp/client/slots?trainer_id={tid}", headers=child)).json()
+            parent_evening = (await client.get(f"/api/webapp/client/slot/{evening}?trainer_id={tid}", headers=headers)).json()
+    assert child_evening == {"available": False, "slot": None}
+    assert child_morning["available"] is True
+    assert evening not in [s["id"] for s in child_list["slots"]]
+    assert parent_evening["available"] is True
+
+
+@pytest.mark.asyncio
+async def test_request_without_city_takes_trainers_city(app_use_test_db, db_session) -> None:
+    """PR #236: новый родитель по личной ссылке, города в сессии нет — заявка тренеру уходит с городом тренера.
+    Без тренера и без города — 422, как и раньше (город обязателен)."""
+    async with _client() as client:
+        place = await _place(db_session)
+        trainer_id = await _trainer_on(db_session, client, place, first_name=f"Даша{uuid.uuid4().hex[:4]}")
+    trainer_city = (
+        await db_session.execute(text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :t"), {"t": trainer_id})
+    ).scalar_one()
+    assert trainer_city is not None
+    service_id = (
+        await db_session.execute(text("SELECT service_id FROM trainer_services WHERE trainer_id = :t"), {"t": trainer_id})
+    ).scalar_one()
+    await db_session.commit()
+    headers = {"X-Telegram-Init-Data": "mock"}
+    with patch_client_init_auth(_fresh_client_telegram_id()):
+        async with _client() as client:
+            ok = await client.post(
+                "/api/webapp/client/request",
+                json={"service_id": service_id, "trainer_id": trainer_id, "first_name": "Анна"},
+                headers=headers,
+            )
+            no_city_no_trainer = await client.post(
+                "/api/webapp/client/request", json={"service_id": service_id, "first_name": "Анна"}, headers=headers
+            )
+    assert ok.status_code == 200, ok.text
+    saved_city = (
+        await db_session.execute(
+            text("SELECT city_id FROM client_requests WHERE id = :r"), {"r": ok.json()["request_id"]}
+        )
+    ).scalar_one()
+    assert saved_city == trainer_city
+    assert no_city_no_trainer.status_code == 422

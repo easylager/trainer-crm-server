@@ -36,9 +36,16 @@
     knownChildIds: {},
     // Тариф прошлой записи по профилю у тренера: { trainerId: { profileId: { sid, vid } } }.
     profileHints: {},
+    // Ребёнок, созданный здесь для записи: имя (lower) → client_id. Живёт дольше формы: повтор записи
+    // («время заняли» → другое время, вторая запись подряд) не создаёт второй профиль того же ребёнка.
+    childIds: {},
     stack: [],
     view: 'list',
     trainer: null,
+    // Поколение открытого тренера и номер запроса слотов: поздний ответ прежнего тренера (или прежней
+    // услуги) отбрасывается — иначе карточка Б показывала бы время А и запись ушла бы к А.
+    trainerGen: 0,
+    slotsSeq: 0,
     dirKey: null,
     serviceId: null,
     slots: null,
@@ -127,73 +134,61 @@
   /** Тренер не из выдачи города (личная ссылка, другой город) — та же форма из карточки каталога. */
   function loadTrainerFallback(id) {
     var url = initData ? '/api/webapp/client/catalog-trainer/' + id : '/api/public/trainers/' + id;
-    return api(url).then(function (t) {
-      var p = t.profile || {};
-      var name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Тренер';
-      var photo = (t.photos || [])[0] || {};
-      return {
-        id: t.id,
-        name: name,
-        first_name: (p.first_name || '').trim() || name,
-        initial: (name.match(/\p{L}/u) || ['Т'])[0].toUpperCase(),
-        photo_url: photo.url || photo.list_url || null,
-        experience_years: p.experience_years,
-        description: (p.description || '').trim(),
-        education: (p.education || '').trim(),
-        rating_avg: p.rating_avg,
-        rating_count: p.rating_count || 0,
-        session_duration_minutes: p.session_duration_minutes,
-        glide_since: null,
-        can_book: !!t.can_book,
-        contact_url: t.contact_telegram_url || null,
-        services: (t.services || []).map(function (s) {
-          return {
-            service_id: s.service_id, service_name: s.service_name, is_public: true, is_online: !!s.is_online,
-            price_cents: s.price_cents, currency_code: s.currency_code || 'BYN', description: s.description,
-            price_tiers: s.price_tiers || [],
-          };
-        }),
-        arenas: (t.arena_ids || []).map(function (id, i) { return { id: id, name: (t.arena_names || [])[i] || '' }; }).filter(function (a) { return a.name; }),
-        windows: [],
-      };
-    });
+    return api(url).then(M.trainerFromCatalogCard);
   }
 
+  /**
+   * Слоты открытого тренера. Промис → true, если ответ применён; false — ответ устарел (за это время
+   * открыли другого тренера или запросили слоты заново): `S` не тронут, вызывающий ничего не делает.
+   */
   function loadSlots() {
     var t = S.trainer;
-    if (!t) return Promise.resolve();
+    var seq = ++S.slotsSeq;
+    function fresh() { return seq === S.slotsSeq && S.trainer === t; }
+    if (!t) return Promise.resolve(true);
     if (!t.can_book) {
       S.slots = [];
-      return Promise.resolve();
+      return Promise.resolve(true);
     }
     if (!initData) {
       // Вне Telegram записи нет — показываем окна витрины, запись попросит открыть в Telegram.
-      S.slots = (t.windows || []).map(function (w) { return decorateSlot(M.windowToSlot(w)); });
-      return Promise.resolve();
+      S.slots = (t.windows || []).map(function (w) { return decorateSlot(M.windowToSlot(w), t); });
+      return Promise.resolve(true);
     }
     S.slots = null;
     S.slotsError = false;
     var svc = currentService();
     return BC.fetchClientSlots({ trainerId: t.id, serviceId: svc ? svc.service_id : null, initData: initData })
       .then(function (d) {
-        S.slots = M.sortSlots((d && d.slots) || []).map(decorateSlot);
+        if (!fresh()) return false;
+        S.slots = M.sortSlots((d && d.slots) || []).map(function (x) { return decorateSlot(x, t); });
+        return true;
       })
       .catch(function () {
+        if (!fresh()) return false;
         S.slots = [];
         S.slotsError = true;
+        return true;
       });
   }
 
-  function decorateSlot(s) {
-    var a = arenaById(s.arena_id);
+  /** Слот помечается тренером, для которого его загрузили, — запись проверяет, что это открытый тренер. */
+  function decorateSlot(s, t) {
+    t = t || S.trainer;
+    if (t && s.trainer_id == null) s.trainer_id = t.id;
+    var a = arenaOf(t, s.arena_id);
     if (a && !s.arena_name) s.arena_name = a.name;
     return s;
   }
 
-  function arenaById(id) {
-    var list = (S.trainer && S.trainer.arenas) || [];
+  function arenaOf(t, id) {
+    var list = (t && t.arenas) || [];
     for (var i = 0; i < list.length; i++) if (Number(list[i].id) === Number(id)) return list[i];
     return null;
+  }
+
+  function arenaById(id) {
+    return arenaOf(S.trainer, id);
   }
 
   function loadPasses() {
@@ -283,6 +278,12 @@
       if (found) return found;
     }
     return svcs.length === 1 ? svcs[0] : null;
+  }
+
+  /** Услуги, которые можно записать на этот слот (онлайн/очно — как проверяет сервер): сначала из направления. */
+  function servicesForSlot(t, slot) {
+    var fit = M.servicesForSlot(serviceList(t, S.dirKey), slot);
+    return fit.length ? fit : M.servicesForSlot(t.services, slot);
   }
 
   function slotLabel(slot, withArena) {
@@ -405,6 +406,7 @@
 
   function openTrainer(t, opts) {
     opts = opts || {};
+    S.trainerGen++;
     S.trainer = t;
     var dirs = M.trainerDirections(t);
     var want = opts.dirKey || (S.tab !== 'all' ? S.tab : null);
@@ -412,7 +414,10 @@
     S.serviceId = num(qs.get('service_id')) && Number(t.id) === num(qs.get('trainer_id')) ? num(qs.get('service_id')) : null;
     S.saved = false;
     if (opts.view !== false) go('trainer');
-    return loadSlots().then(render);
+    return loadSlots().then(function (fresh) {
+      if (fresh) render();
+      return fresh;
+    });
   }
 
   function renderTrainer() {
@@ -613,6 +618,8 @@
   }
 
   function openBooking(slot) {
+    // Слот другого тренера (поздний ответ) — не записываем: запись ушла бы не тому тренеру.
+    if (!S.trainer || (slot.trainer_id != null && Number(slot.trainer_id) !== Number(S.trainer.id))) return;
     var keep = S.book && S.book.slot && S.view === 'book' ? S.book : null;
     var regular = isRegular();
     var def = null;
@@ -623,7 +630,8 @@
     }
     S.book = {
       slot: slot,
-      regular: regular,
+      // Форма нового ученика остаётся ею при смене времени, даже если профиль ребёнка уже создан.
+      regular: keep ? keep.regular : regular,
       kind: keep ? keep.kind : null,
       duoOpen: keep ? keep.duoOpen : false,
       names: keep ? keep.names : { self: tgFirstName() },
@@ -636,12 +644,17 @@
       phone: keep ? keep.phone : String((S.session && S.session.client_phone) || ''),
       phoneEdit: keep ? keep.phoneEdit : false,
       phoneManual: keep ? keep.phoneManual : false,
-      childIds: keep ? keep.childIds : {},
       idem: BC.newIdempotencyKey(),
       submitting: false,
       notice: '',
     };
     if (slot.capacity > 1 && slot.service_id) S.serviceId = slot.service_id;
+    else if (S.serviceId != null) {
+      var picked = (S.trainer.services || []).filter(function (s) { return Number(s.service_id) === Number(S.serviceId); })[0];
+      if (picked && !M.serviceFitsSlot(picked, slot)) S.serviceId = null; // форма спросит подходящую услугу
+    }
+    // В группу — одно место на запись: из двоих, отмеченных на прошлом слоте, остаётся первый.
+    if (slot.capacity > 1 && S.book.selected.length > 1) S.book.selected = S.book.selected.slice(0, 1);
     BC.emitBookingAnalytics('booking_step_viewed', { step: 'form', host: 'trainers' });
     if (S.view === 'book') render();
     else go('book');
@@ -653,7 +666,17 @@
       var g = (S.trainer.services || []).filter(function (s) { return Number(s.service_id) === Number(b.slot.service_id); })[0];
       if (g) return g;
     }
-    return currentService();
+    var svc = currentService();
+    if (!b || !b.slot) return svc;
+    // Онлайн-услуга на очный слот (и наоборот) — сервер ответит 422; такую пару форма не собирает.
+    if (svc && M.serviceFitsSlot(svc, b.slot)) return svc;
+    var fit = servicesForSlot(S.trainer, b.slot);
+    return fit.length === 1 ? fit[0] : null;
+  }
+
+  /** Групповой слот: одна запись = одно место = один участник (второй профиль и «двое» недоступны). */
+  function isGroupBooking() {
+    return !!(S.book && S.book.slot && S.book.slot.capacity > 1);
   }
 
   /** Опции тарифа постоянного: подсказки только этого тренера и этой услуги, известные дети, явный выбор. */
@@ -663,7 +686,7 @@
     Object.keys(map).forEach(function (pid) {
       if (svc && map[pid].sid === Number(svc.service_id)) hints[pid] = map[pid].vid;
     });
-    return { hints: hints, knownChildIds: S.knownChildIds, override: S.book ? S.book.override : null };
+    return { hints: hints, knownChildIds: S.knownChildIds, override: S.book ? S.book.override : null, group: isGroupBooking() };
   }
 
   /** Тариф и участники текущего выбора: { tier, duo, ready, participant, kindTitle }. */
@@ -679,7 +702,7 @@
       var hasTiers = (svc.price_tiers || []).length > 0;
       return {
         // Тариф не определился (вид профиля неизвестен) — форма просит выбрать его явно.
-        ready: group || (!hasTiers && b.selected.length === 1) || !!tier,
+        ready: group ? b.selected.length === 1 : (!hasTiers && b.selected.length === 1) || !!tier,
         needsTier: !group && hasTiers && !tier,
         tier: tier,
         duo: !!(tier && M.isDuoKind(tier.tier_kind)) || b.selected.length === 2,
@@ -711,7 +734,7 @@
     h += '<div class="sum"><div class="k">' + (t.photo_url ? '<img src="' + esc(t.photo_url) + '" alt="">' : '<i>' + esc(t.initial || 'Т') + '</i>') +
       '<div class="when"><b>' + esc(M.slotWhen(slot, S.todayIso)) + '</b><br><span>' + esc([t.name, what, place].filter(Boolean).join(' · ')) + '</span></div></div></div>';
     if (!svc) {
-      var svcs = serviceList(t, S.dirKey);
+      var svcs = servicesForSlot(t, slot);
       h += '<div class="fl"><span class="lbl">Какое занятие?</span><div class="opt">' + svcs.map(function (s) {
         var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин · ' : '';
         return '<button type="button" data-act="svc" data-sid="' + s.service_id + '"><span><b>' + esc(s.service_name) + '</b><br>' + esc(dur) +
@@ -802,11 +825,11 @@
   function regularFormHtml(svc) {
     var b = S.book;
     var opts = regularOpts(svc);
-    var hasDuo = M.tierChoices(svc, 2).length > 0;
+    var hasDuo = !opts.group && M.tierChoices(svc, 2).length > 0;
     var h = '<div class="fl"><span class="lbl">Кого записываем?' + (hasDuo ? ' <span class="mut" style="font-weight:500">Можно двоих</span>' : '') + '</span><div class="pick multi">';
     h += S.profiles.map(function (p) {
       var on = b.selected.some(function (x) { return Number(x.client_id) === Number(p.client_id); });
-      var single = { hints: opts.hints, knownChildIds: opts.knownChildIds };
+      var single = { hints: opts.hints, knownChildIds: opts.knownChildIds, group: opts.group };
       var tier = M.regularTier(svc, [p], single);
       var last = !!M.hintTier(svc, p, single);
       var sub = last ? 'как в прошлый раз' : tier ? (tier.tier_kind === 'child' ? 'детский' : 'взрослый') : '';
@@ -916,19 +939,37 @@
     });
   }
 
+  function childNameKey(name) {
+    return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
   function ensureChildProfile(name) {
-    var b = S.book;
-    var key = name.toLowerCase();
-    if (b.childIds[key]) return Promise.resolve(b.childIds[key]);
-    var existing = S.profiles.filter(function (p) { return p.role !== 'self' && String(p.first_name || '').trim().toLowerCase() === key; })[0];
+    var key = childNameKey(name);
+    if (S.childIds[key]) return Promise.resolve(S.childIds[key]);
+    var existing = S.profiles.filter(function (p) { return p.role !== 'self' && childNameKey(p.first_name) === key; })[0];
     if (existing) {
       S.knownChildIds[existing.client_id] = true;
       return Promise.resolve(existing.client_id);
     }
     return api('/api/webapp/client/profiles', { method: 'POST', body: { first_name: name } }).then(function (d) {
-      b.childIds[key] = d.client_id;
+      S.childIds[key] = d.client_id;
       S.knownChildIds[d.client_id] = true;
+      // Как «+ Добавить ребёнка»: профиль сразу в списке — следующая запись найдёт его, а не создаст второй.
+      if (!S.profiles.some(function (p) { return Number(p.client_id) === Number(d.client_id); })) {
+        S.profiles.push({ client_id: d.client_id, role: 'guardian', first_name: name });
+        S.passes[d.client_id] = S.passes[d.client_id] || [];
+      }
       return d.client_id;
+    });
+  }
+
+  /** После записи — профили с сервера (новый «я»/ребёнок), их абонементы и тарифы прошлой записи заново. */
+  function refreshProfiles() {
+    return loadProfiles().then(function (list) {
+      if (!list.length) return;
+      S.profiles = list;
+      S.profileHints = {};
+      return loadPasses();
     });
   }
 
@@ -973,9 +1014,12 @@
     }
     b.submitting = true;
     b.notice = '';
+    b.sentProfileId = null;
     render();
     profilePromise
       .then(function (profileId) {
+        // Профиль, на который уходит запись: при обрыве связи проверяем записи именно у него.
+        b.sentProfileId = profileId;
         var isSelf = !b.regular ? plan.profile === 'self' : (b.selected[0].role === 'self');
         var body = buildBookingBody({
           slot: b.slot,
@@ -995,7 +1039,7 @@
         var r = x.r;
         b.submitting = false;
         if (r.res.ok && r.data && r.data.success) {
-          onBooked(r.data, choice);
+          onBooked(r.data, choice, x.profileId);
           return;
         }
         var detail = r.data && typeof r.data.detail === 'string' ? r.data.detail : '';
@@ -1017,7 +1061,7 @@
           render();
           return;
         }
-        verifyUnknown(null, choice);
+        verifyUnknown(b.sentProfileId, choice);
       });
   }
 
@@ -1030,7 +1074,7 @@
           return (day.bookings || []).some(function (x) { return String(x.slot_id) === String(b.slot.id); });
         });
         if (found) {
-          onBooked({ success: true }, choice);
+          onBooked({ success: true }, choice, profileId);
           return;
         }
         b.notice = 'Запись не дошла. Нажмите ещё раз — второй записи не будет.';
@@ -1042,15 +1086,16 @@
       });
   }
 
-  function onBooked(data, choice) {
+  function onBooked(data, choice, profileId) {
     var b = S.book;
     BC.hapticSuccess();
-    S.sent = { data: data, slot: b.slot, participant: choice.participant, trainer: S.trainer, dirKey: S.dirKey };
+    S.sent = { data: data, slot: b.slot, participant: choice.participant, trainer: S.trainer, dirKey: S.dirKey, profileId: profileId != null ? profileId : null };
     S.stack = [];
     S.view = 'sent';
     render();
     window.scrollTo(0, 0);
     S.book = null;
+    refreshProfiles();
   }
 
   /* ── 7 · Время заняли ────────────────────────────────────────────── */
@@ -1060,7 +1105,8 @@
     var lostId = b ? b.slot.id : null;
     var title = b ? String(b.slot.start_time).slice(0, 5) + ' только что заняли' : (missingTitle || 'Это время уже заняли');
     var who = b ? bookingChoice().participant : '';
-    loadSlots().then(function () {
+    loadSlots().then(function (fresh) {
+      if (!fresh) return;
       var alt = (S.slots || []).filter(function (s) { return String(s.id) !== String(lostId); }).slice(0, 3);
       var svc = currentService();
       var price = svc ? M.cardPriceHtml(svc).replace(/<\/?b>/g, '') : '';
@@ -1141,11 +1187,12 @@
     var r = S.req;
     var t = S.trainer;
     var svc = currentService() || serviceList(t, S.dirKey)[0] || (t.services || [])[0];
-    var cityId = S.cityId || (S.session && S.session.city_id);
+    // Город сессии, иначе — тренера; нет и его — сервер возьмёт город тренера по trainer_id.
+    var cityId = S.cityId || (S.session && S.session.city_id) || t.city_id || null;
     if (!String(r.name || '').trim()) { r.notice = 'Укажите имя.'; paintRequest(); return; }
     var ph = readPhone(r);
     if (!ph.ok) { r.notice = ph.error; paintRequest(); return; }
-    if (!svc || !cityId) { r.notice = 'Не удалось определить город или услугу. Напишите тренеру напрямую.'; paintRequest(); return; }
+    if (!svc) { r.notice = 'Не удалось определить город или услугу. Напишите тренеру напрямую.'; paintRequest(); return; }
     r.sending = true;
     r.notice = '';
     paintRequest();
@@ -1154,7 +1201,7 @@
       method: 'POST',
       // Заявка — от самого человека, а не от профиля, выбранного в хабе.
       profileId: selfP ? selfP.client_id : null,
-      body: { city_id: cityId, service_id: svc.service_id, trainer_id: t.id, comment: r.comment.trim() || null, first_name: r.name.trim(), phone: ph.phone },
+      body: { city_id: cityId || undefined, service_id: svc.service_id, trainer_id: t.id, comment: r.comment.trim() || null, first_name: r.name.trim(), phone: ph.phone },
     })
       .then(function () {
         closeSheet();
@@ -1269,7 +1316,7 @@
         closeSheet();
         if (el.getAttribute('data-tid')) {
           t = trainerFromEl(el);
-          if (t) openTrainer(t).then(openWeek);
+          if (t) openTrainer(t).then(function (fresh) { if (fresh) openWeek(); });
         } else openWeek();
         break;
       case 'write':
@@ -1336,13 +1383,18 @@
         el.disabled = true;
         api('/api/webapp/client/profiles', { method: 'POST', body: { first_name: name } })
           .then(function (d) {
-            var prof = { client_id: d.client_id, role: 'guardian', first_name: name };
-            S.profiles.push(prof);
-            S.passes[d.client_id] = [];
+            // Сервер отдаёт уже существующего ребёнка с тем же именем — второй строки в списке не будет.
+            var prof = S.profiles.filter(function (x) { return Number(x.client_id) === Number(d.client_id); })[0];
+            if (!prof) {
+              prof = { client_id: d.client_id, role: 'guardian', first_name: name };
+              S.profiles.push(prof);
+              S.passes[d.client_id] = [];
+            }
             S.knownChildIds[d.client_id] = true; // добавлен как ребёнок — детский тариф
             b.addChild = false;
             b.override = null;
-            if (M.canAddProfile(bookingService(), b.selected, prof, regularOpts(bookingService()))) b.selected = b.selected.concat([prof]);
+            var already = b.selected.some(function (x) { return Number(x.client_id) === Number(prof.client_id); });
+            if (!already && M.canAddProfile(bookingService(), b.selected, prof, regularOpts(bookingService()))) b.selected = b.selected.concat([prof]);
             render();
           })
           .catch(function (e) { b.notice = (e && e.message) || 'Не удалось добавить.'; render(); });
@@ -1356,12 +1408,20 @@
       case 'rq-send': sendRequest(); break;
       case 'sheet-close': closeSheet(); break;
       case 'sheet-dim': if (ev.target === el) closeSheet(); break;
-      case 'my-bookings': navigate('client-bookings'); break;
+      case 'my-bookings': showBookedProfile(); navigate('client-bookings'); break;
       case 'my-requests': navigate('client-requests'); break;
       case 'route': openLink(S.sent && S.sent.slot.map_link); break;
       case 'to-list': S.view = 'list'; S.stack = []; render(); window.scrollTo(0, 0); break;
       default: break;
     }
+  }
+
+  /** «Мои записи» после записи ребёнка — его профиль: иначе список открылся бы у родителя и записи «не было». */
+  function showBookedProfile() {
+    var pid = S.sent && S.sent.profileId;
+    var CPS = window.ClientProfileSwitcher;
+    if (pid == null || !CPS || typeof CPS.setActiveProfileId !== 'function') return;
+    if (Number(CPS.getActiveProfileId()) !== Number(pid)) CPS.setActiveProfileId(pid);
   }
 
   function rerenderPhoneOwner() {
@@ -1390,6 +1450,9 @@
 
   /** Время с витрины → тренер (для «Назад») → сразу запись; окно ушло — «Время заняли». */
   function openTrainerAndSlot(t, slotId, viaList) {
+    var gen = ++S.trainerGen;
+    var stale = {};
+    function current() { return gen === S.trainerGen && S.trainer === t; }
     S.trainer = t;
     if (viaList) noteShowcasePick();
     var dirs = M.trainerDirections(t);
@@ -1401,15 +1464,18 @@
     else S.view = 'trainer';
     render();
     return loadSlots()
-      .then(function () {
+      .then(function (fresh) {
+        if (!fresh || !current()) return stale;
         var slot = slotById(slotId);
         if (slot || !initData) return slot;
         // Список — только эта и следующая неделя; время по ссылке может быть дальше — проверяем его отдельно.
         return api('/api/webapp/client/slot/' + encodeURIComponent(slotId) + '?trainer_id=' + t.id)
-          .then(function (d) { return d && d.available && d.slot ? decorateSlot(d.slot) : null; })
+          .then(function (d) { return d && d.available && d.slot ? decorateSlot(d.slot, t) : null; })
           .catch(function () { return null; });
       })
       .then(function (slot) {
+        // Пока ждали ответ, открыли другого тренера — ответ этого уже не нужен.
+        if (slot === stale || !current()) return;
         if (slot) openBooking(slot);
         else {
           render();
@@ -1431,8 +1497,11 @@
       var tid = num(qs.get('trainer_id'));
       if (!tid) { render(); return; }
       var t = trainerById(tid);
+      var gen = S.trainerGen;
       var p = t ? Promise.resolve(t) : loadTrainerFallback(tid).catch(function () { return null; });
       return p.then(function (tr) {
+        // Пока грузили тренера по ссылке, человек уже открыл другого — не перебиваем его выбор.
+        if (gen !== S.trainerGen) return;
         if (!tr) { render(); return; }
         var sid = qs.get('slot_id');
         if (sid) return openTrainerAndSlot(tr, sid, false);

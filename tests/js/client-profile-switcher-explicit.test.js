@@ -44,7 +44,7 @@ async function boot({ stored = null } = {}) {
   const ctx = { window, document, URLSearchParams, JSON, Object, String, Number, parseInt, console };
   vm.runInNewContext(src, ctx);
   await window.ClientProfileSwitcher.init();
-  return { window, calls };
+  return { window, calls, storage };
 }
 
 describe('ClientProfileSwitcher fetch patch', () => {
@@ -61,5 +61,22 @@ describe('ClientProfileSwitcher fetch patch', () => {
     await window.fetch('/api/webapp/client/passes', { headers: { 'x-profile-id': '2' } });
     assert.equal(calls.at(-1).headers['x-profile-id'], '2');
     assert.equal(calls.at(-1).headers['X-Profile-Id'], undefined);
+  });
+
+  it('setActiveProfileId: профиль записи становится активным без перезагрузки и переживает переход', async () => {
+    const { window, calls, storage } = await boot();
+    window.ClientProfileSwitcher.setActiveProfileId(2);
+    assert.equal(window.ClientProfileSwitcher.getActiveProfileId(), 2);
+    assert.equal(storage.get('cw_active_profile_id_v1'), '2');
+    await window.fetch('/api/webapp/client/bookings', {});
+    assert.equal(calls.at(-1).headers['X-Profile-Id'], '2');
+    // Явный заголовок по-прежнему главнее.
+    await window.fetch('/api/webapp/client/booking', { headers: { 'X-Profile-Id': '1' } });
+    assert.equal(calls.at(-1).headers['X-Profile-Id'], '1');
+    // Профиль по умолчанию — «нет выбора», как в шторке.
+    window.ClientProfileSwitcher.setActiveProfileId(1);
+    assert.equal(window.ClientProfileSwitcher.getStoredActiveProfileId(), null);
+    assert.equal(storage.has('cw_active_profile_id_v1'), false);
+    assert.equal(window.ClientProfileSwitcher.getActiveProfileId(), 1);
   });
 });

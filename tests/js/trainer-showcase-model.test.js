@@ -157,6 +157,13 @@ describe('постоянный ученик', () => {
     assert.equal(M.canAddProfile(noTwoAdults, [me], { client_id: 9, role: 'self' }), false);
   });
 
+  it('групповой слот: одно место на запись — второго не отметить, даже если у услуги есть тариф на двоих', () => {
+    assert.equal(M.canAddProfile(s, [sonya], misha, { ...kids, group: true }), false);
+    assert.equal(M.canAddProfile(s, [], sonya, { ...kids, group: true }), true);
+    assert.equal(M.canAddProfile(s, [sonya], misha, kids), true);
+    assert.equal(M.whoOptions(s, { group: true }).duo.length, 0);
+  });
+
   it('«спишем 1» — только если абонемент точно покрывает тариф', () => {
     const base = { trainer_id: 9, status: 'active', sessions_remaining: 4, service_ids: [], product_name: '8 занятий' };
     const any = { ...base, tier_kinds: [] };
@@ -250,5 +257,34 @@ describe('«от» вкладки — с сервера (min_price_by_direction)
     assert.equal(Mo.minPriceOf([t(1, { all: p(4500) })], 'figurnoe'), null);
     assert.equal(Mo.minPriceOf([t(1, undefined)], 'all'), null);
     assert.deepEqual(Mo.minPriceOf([t(1, { all: p(4500) })]), p(4500));
+  });
+});
+
+describe('услуга подходит к слоту — как проверяет сервер (422)', () => {
+  it('онлайн-слот — онлайн-услуга, очный — очная; онлайн-флаг при катке = очный', () => {
+    const live = { service_id: 1, is_online: false };
+    const web = { service_id: 9, is_online: true };
+    assert.equal(M.serviceFitsSlot(live, { is_online: false, arena_id: 3 }), true);
+    assert.equal(M.serviceFitsSlot(web, { is_online: false, arena_id: 3 }), false);
+    assert.equal(M.serviceFitsSlot(web, { is_online: true, arena_id: null }), true);
+    assert.equal(M.serviceFitsSlot(live, { is_online: true, arena_id: null }), false);
+    assert.equal(M.serviceFitsSlot(web, { is_online: true, arena_id: 3 }), false);
+    assert.deepEqual(M.servicesForSlot([live, web], { is_online: false, arena_id: 3 }).map((s) => s.service_id), [1]);
+  });
+});
+
+describe('карточка каталога → тренер витрины (личная ссылка)', () => {
+  it('переносит групповую цену и привязку своей услуги', () => {
+    const t = M.trainerFromCatalogCard({
+      id: 7, can_book: true, profile: { first_name: 'Ольга', last_name: 'К' }, arena_ids: [3], arena_names: ['Каток'],
+      services: [{ service_id: 1, service_name: 'С нуля', price_cents: 5000, group_price_cents: 2500, price_tiers: [] },
+        { service_id: 42, service_name: 'Своя', price_cents: 3000, direction_service_id: 2, price_tiers: [] }],
+    });
+    assert.equal(t.name, 'Ольга К');
+    assert.equal(t.initial, 'О');
+    assert.equal(t.services[0].group_price_cents, 2500);
+    assert.equal(t.services[1].group_price_cents, null);
+    assert.equal(t.services[1].direction_service_id, 2);
+    assert.deepEqual([...t.arenas.map((a) => a.id)], [3]);
   });
 });

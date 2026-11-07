@@ -212,6 +212,59 @@ async def test_create_booking_concurrent_same_slot_two_sessions_one_wins() -> No
 
 
 @pytest.mark.asyncio
+async def test_create_booking_concurrent_group_last_seat_one_wins() -> None:
+    """Группа: последнее место, две параллельные записи (двое детей одной семьи) — проходит одна.
+
+    PR #236: клиент не даёт отметить двоих на одно место; сервер всё равно не пускает сверх вместимости.
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from src.shared.config import Settings
+
+    settings = Settings()
+    engine = create_async_engine(settings.database_url, echo=False)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        tomorrow = date.today() + timedelta(days=1)
+        async with factory() as session:
+            trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+                session, tomorrow, time(10, 0), time(11, 0), capacity=2
+            )
+            first_client = await _create_client(session, unique_test_telegram_id())
+            child_1 = await _create_client(session, unique_test_telegram_id())
+            child_2 = await _create_client(session, unique_test_telegram_id())
+            taken, _ = await create_booking(session, slot_id, trainer_id, first_client, service_id=service_id)
+            assert taken is not None
+            await session.commit()
+
+        async def _attempt(client_id: int) -> int | None:
+            async with factory() as session:
+                bid, _flags = await create_booking(
+                    session,
+                    slot_id,
+                    trainer_id,
+                    client_id,
+                    service_id=service_id,
+                )
+                return bid
+
+        results = await asyncio.gather(_attempt(child_1), _attempt(child_2))
+        assert len([r for r in results if r is not None]) == 1
+        async with factory() as session:
+            active = (
+                await session.execute(
+                    text("SELECT COUNT(*) FROM bookings WHERE slot_id = :s AND status IN ('pending', 'confirmed')"),
+                    {"s": slot_id},
+                )
+            ).scalar()
+            status = (await session.execute(text("SELECT status FROM slots WHERE id = :s"), {"s": slot_id})).scalar()
+        assert active == 2
+        assert status == "booked"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_generate_reminders_and_list_pending(db_session: AsyncSession) -> None:
     """After create_booking + generate_reminders, reminders exist; list_pending returns due ones only."""
     # Slot in 3 days so 24h and 2h reminders are in the future — list_pending_reminders returns empty until we insert one due
