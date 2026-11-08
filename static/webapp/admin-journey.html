@@ -49,6 +49,8 @@
     .jr-btn { display: flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 10px; padding: 0 14px; font: inherit; font-size: 14px; font-weight: 600; text-decoration: none; border: 1px solid rgba(255,255,255,.14); background: transparent; color: var(--tg-theme-text-color, #f5f5f5); cursor: pointer; width: 100%; }
     .jr-btn.primary { background: #45b9bb; border-color: #45b9bb; color: #06292a; }
     .jr-note { margin-top: 12px; }
+    /* «Убрать из списка» — в самом конце карточки, тихо: не должна нажиматься случайно рядом с «Написать» */
+    .jr-btn.quiet { margin-top: 14px; border-style: dashed; color: var(--tg-theme-hint-color, #9a9a9a); font-weight: 500; }
   </style>
 </head>
 <body>
@@ -67,12 +69,15 @@
       var A = window.AdmAnalytics;
       var esc = A.escapeHtml;
       var state = { sort: 'new', filter: 'all', data: null };
+      // Скрытые тренеры не попадают ни в один фильтр и счётчик, кроме «Скрытые»: список не засоряют случайные заходы.
+      function shown(t) { return !t.hidden_at; }
       var FILTERS = [
-        { id: 'all', label: 'Все', test: function () { return true; } },
-        { id: 'stuck', label: 'Застряли', test: function (t) { return !t.working; } },
-        { id: 'noclient', label: 'Нет клиента', test: function (t) { return t.reached >= 4 && t.reached <= 6; } },
-        { id: 'nocat', label: 'Не в каталоге', test: function (t) { return !t.catalog.listed; } },
-        { id: 'fresh', label: 'Мы не писали', test: function (t) { return !t.contacted_at; } }
+        { id: 'all', label: 'Все', test: function (t) { return shown(t); } },
+        { id: 'stuck', label: 'Застряли', test: function (t) { return shown(t) && !t.working; } },
+        { id: 'noclient', label: 'Нет клиента', test: function (t) { return shown(t) && t.reached >= 4 && t.reached <= 6; } },
+        { id: 'nocat', label: 'Не в каталоге', test: function (t) { return shown(t) && !t.catalog.listed; } },
+        { id: 'fresh', label: 'Мы не писали', test: function (t) { return shown(t) && !t.contacted_at; } },
+        { id: 'hidden', label: 'Скрытые', test: function (t) { return !shown(t); }, onlyIfAny: true }
       ];
       var SORTS = [
         { id: 'new', label: 'Новые сверху', key: 'joined_at' },
@@ -141,7 +146,9 @@
           '<div class="jr-btns"><a class="jr-btn primary" data-write="' + esc(href) + '" href="' + esc(href) + '">' + write + '</a>' +
           '<button class="jr-btn" type="button" data-mark="' + t.trainer_id + '">' +
           (t.contacted_at ? 'Снять отметку «написали»' : 'Отметить: написал') + '</button></div>' +
-          contacted + '</div>';
+          contacted +
+          '<button class="jr-btn quiet" type="button" data-hide="' + t.trainer_id + '">' +
+          (t.hidden_at ? 'Вернуть в список' : 'Убрать из списка') + '</button></div>';
       }
 
       function visible() {
@@ -154,12 +161,18 @@
 
       function draw() {
         var d = state.data;
-        document.getElementById('sub').textContent = d.total + ' в системе · ' +
-          (state.sort === 'new' ? 'по времени первого входа' : 'по последней активности');
+        var hiddenCount = d.items.filter(function (t) { return !shown(t); }).length;
+        document.getElementById('sub').textContent = (d.items.length - hiddenCount) + ' в системе · ' +
+          (state.sort === 'new' ? 'по времени первого входа' : 'по последней активности') +
+          (hiddenCount ? ' · скрыто ' + hiddenCount : '');
+        // Последний скрытый вернули — «Скрытые» исчезает, и мы не остаёмся на пустом фильтре.
+        if (state.filter === 'hidden' && !hiddenCount) state.filter = 'all';
         document.getElementById('sorts').innerHTML = SORTS.map(function (s) {
           return '<button class="jr-tab" type="button" data-sort="' + s.id + '" aria-pressed="' + (state.sort === s.id) + '">' + s.label + '</button>';
         }).join('');
-        document.getElementById('filters').innerHTML = FILTERS.map(function (f) {
+        document.getElementById('filters').innerHTML = FILTERS.filter(function (f) {
+          return !f.onlyIfAny || d.items.some(f.test);
+        }).map(function (f) {
           return '<button class="jr-chip" type="button" data-filter="' + f.id + '" aria-pressed="' + (state.filter === f.id) + '">' +
             f.label + ' · ' + d.items.filter(f.test).length + '</button>';
         }).join('');
@@ -178,7 +191,7 @@
       }
 
       document.addEventListener('click', function (ev) {
-        var el = ev.target.closest('[data-sort],[data-filter],[data-mark],[data-write]');
+        var el = ev.target.closest('[data-sort],[data-filter],[data-mark],[data-write],[data-hide]');
         if (!el || !state.data) return;
         if (el.dataset.sort) { state.sort = el.dataset.sort; draw(); return; }
         if (el.dataset.filter) { state.filter = el.dataset.filter; draw(); return; }
@@ -189,6 +202,18 @@
             ev.preventDefault();
             tg.openTelegramLink(href);
           }
+          return;
+        }
+        if (el.dataset.hide) {
+          var hid = +el.dataset.hide;
+          var target = state.data.items.filter(function (t) { return t.trainer_id === hid; })[0];
+          if (!target) return;
+          var nextHidden = !target.hidden_at;
+          el.disabled = true;
+          post('/admin/trainer-journey/' + hid + '/hidden', { hidden: nextHidden }).then(function () {
+            target.hidden_at = nextHidden ? new Date().toISOString() : null;
+            draw();
+          }).catch(function () { el.disabled = false; el.textContent = 'Не сохранилось, повторите'; });
           return;
         }
         var id = +el.dataset.mark;

@@ -143,10 +143,12 @@ _JOURNEY_SQL = text(
             ORDER BY (ts.expires_at > CURRENT_TIMESTAMP) DESC, ts.expires_at DESC
             LIMIT 1
         ) AS sub_raw,
-        ac.contacted_at
+        ac.contacted_at,
+        hid.hidden_at
     FROM trainers t
     LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
     LEFT JOIN admin_trainer_contacts ac ON ac.trainer_id = t.id
+    LEFT JOIN admin_trainer_journey_hidden hid ON hid.trainer_id = t.id
     WHERE t.telegram_id IS NOT NULL
       AND t.status <> 'deactivated'
       AND NOT (t.telegram_id = ANY(:exclude_ids))
@@ -262,6 +264,7 @@ def build_journey_row(row: Any, now: datetime, missing: list[str] | None = None)
         "bookings": row.bookings_count,
         "plan": _plan(row.sub_raw, now),
         "contacted_at": _iso(row.contacted_at),
+        "hidden_at": _iso(getattr(row, "hidden_at", None)),
         "catalog": build_catalog_info(
             getattr(row, "catalog_state", None), getattr(row, "catalog_state_reason", None), missing
         ),
@@ -324,6 +327,38 @@ async def set_trainer_contacted(
     else:
         await session.execute(
             text("DELETE FROM admin_trainer_contacts WHERE trainer_id = :tid"), {"tid": trainer_id}
+        )
+    await session.commit()
+    return True
+
+
+async def set_trainer_hidden(
+    session: AsyncSession, *, trainer_id: int, hidden: bool, admin_telegram_id: int | None
+) -> bool:
+    """Hide / restore a trainer in the journey list only — the trainer itself is not touched.
+
+    Returns False when the trainer does not exist.
+    """
+    exists = (
+        await session.execute(text("SELECT 1 FROM trainers WHERE id = :tid"), {"tid": trainer_id})
+    ).first()
+    if exists is None:
+        return False
+    if hidden:
+        await session.execute(
+            text(
+                """
+                INSERT INTO admin_trainer_journey_hidden (trainer_id, admin_telegram_id)
+                VALUES (:tid, :aid)
+                ON CONFLICT (trainer_id) DO UPDATE
+                SET hidden_at = now(), admin_telegram_id = EXCLUDED.admin_telegram_id
+                """
+            ),
+            {"tid": trainer_id, "aid": admin_telegram_id},
+        )
+    else:
+        await session.execute(
+            text("DELETE FROM admin_trainer_journey_hidden WHERE trainer_id = :tid"), {"tid": trainer_id}
         )
     await session.commit()
     return True
