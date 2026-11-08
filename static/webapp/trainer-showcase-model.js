@@ -206,6 +206,37 @@
     return 'Цену уточните у тренера';
   }
 
+  var NOTICE_LEAD = /^\s*(?:в\s+(?:стоимость|цену)\s+не\s+(?:входят|входит)|не\s+(?:входят|входит)\s+в\s+(?:стоимость|цену))\s*[:\-–—]?\s*/i;
+
+  /**
+   * Заметка тренера «в цену не входит» → {lead, text}. Вводную («В стоимость не входят:») снимаем — её заменяет
+   * подпись «Не входит в цену»; первая буква заглавная. Другая заметка остаётся дословно (lead=false).
+   */
+  function noticeParts(notice) {
+    var raw = String(notice == null ? '' : notice).trim();
+    if (!raw) return null;
+    var stripped = raw.replace(NOTICE_LEAD, '');
+    if (stripped === raw || !stripped) return { lead: false, text: raw };
+    return { lead: true, text: stripped.charAt(0).toUpperCase() + stripped.slice(1) };
+  }
+
+  /**
+   * Блок «О занятии» одной услуги — только наши тексты (крючок, подробности) и слова тренера дословно.
+   * Ничего нет → null (карточку не рисуем).
+   */
+  function serviceAbout(service) {
+    if (!service) return null;
+    var hook = String(service.summary_hook || '').trim();
+    var body = String(service.summary_body || '').split(/\n\s*\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+    var words = String(service.description || '').trim();
+    var notice = noticeParts(service.client_notice);
+    if (!hook && !body.length && !words && !notice) return null;
+    return {
+      title: String(service.title || service.service_name || '').trim(),
+      hook: hook, body: body, words: words, notice: notice,
+    };
+  }
+
   /** «Кого учит»: из тарифов; тарифов нет — строки нет. */
   function whoTeaches(services) {
     var kids = false;
@@ -731,6 +762,8 @@
     formatMoney: formatMoney,
     tierByKind: tierByKind,
     cardPriceHtml: cardPriceHtml,
+    noticeParts: noticeParts,
+    serviceAbout: serviceAbout,
     whoTeaches: whoTeaches,
     experienceBadge: experienceBadge,
     ratingLine: ratingLine,

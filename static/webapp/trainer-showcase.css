@@ -78,16 +78,29 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 .seg::-webkit-scrollbar { display: none; }
 .seg button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 0 12px; font-size: 13px; font-weight: 700; color: var(--a-hero-hint); }
 .seg button[aria-pressed="true"] { background: #fff; color: #0d1b26; border-color: #fff; }
-.svcs { display: grid; gap: 6px; }
-.svcs button { all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; align-items: center; min-height: 44px; padding: 6px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.22); font-size: 13.5px; }
-.svcs button small { color: var(--a-hero-hint); font-size: 12px; display: block; }
+.svcs { display: grid; gap: 0; }
+.svcs button { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 6px; min-height: 44px; padding: 10px 12px; border-radius: 12px; border: 1px solid transparent; font-size: 13.5px; }
+.svcs button + button { margin-top: 6px; position: relative; }
+.svcs button + button::before { content: ""; position: absolute; left: 12px; right: 12px; top: -4px; border-top: 1px solid rgba(255,255,255,.16); }
+.svcs button .nm { font-weight: 700; font-size: 14px; }
+.svcs button .nm small { color: var(--a-hero-hint); font-size: 12px; font-weight: 600; margin-left: 8px; }
 .svcs button[aria-pressed="true"] { border-color: var(--a-cta); background: rgba(69,185,187,.16); }
-.tiers { display: flex; gap: 16px; flex-wrap: wrap; } .tiers div { display: grid; } .tiers small { font-size: 12px; color: var(--a-hero-hint); font-weight: 600; } .tiers b { font: 400 21px/1.1 var(--display); }
+.svcs .tiers { gap: 6px 16px; }
+.pc .hk, .svcs .hk { margin: 0; font-size: 14.5px; line-height: 1.4; color: rgba(255,255,255,.78); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tiers { display: flex; gap: 16px; flex-wrap: wrap; } .tiers div, .tiers span { display: grid; } .tiers small { font-size: 12px; color: var(--a-hero-hint); font-weight: 600; } .tiers b { font: 400 21px/1.1 var(--display); }
 .pc .times button.alt { background: rgba(255,255,255,.1); color: #fff; }
 .pc p { margin: 0; font-size: 14px; }
 .card { background: var(--a-sf); border: 1px solid var(--a-line); border-radius: 18px; padding: 14px; display: grid; gap: 8px; }
 .card h4 { margin: 0; font: 400 16px/1.15 var(--display); }
 .card p { margin: 0; font-size: 13.5px; white-space: pre-line; }
+.card .ab { display: grid; gap: 8px; }
+.card .ab + .ab { border-top: 1px solid var(--a-line); padding-top: 10px; }
+.card .abt { font-size: 14px; }
+.card .abh { font-weight: 700; }
+.card .words { margin: 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--a-line); display: grid; gap: 4px; }
+.card .words cite { font-style: normal; font-size: 12px; color: var(--a-hint); font-weight: 600; }
+.card .nt { display: grid; gap: 2px; }
+.card .nt span { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--a-hint); font-weight: 700; }
 .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; padding: 7px 0; border-top: 1px solid var(--a-line); }
 .kv:first-of-type { border-top: 0; } .kv span { color: var(--a-hint); } .kv b { font-variant-numeric: tabular-nums; text-align: right; }
 .more { all: unset; cursor: pointer; color: var(--a-soft-tx); font-weight: 700; font-size: 13.5px; min-height: 44px; display: inline-flex; align-items: center; justify-self: start; }

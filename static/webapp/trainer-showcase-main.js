@@ -457,13 +457,18 @@
         }).join('') + '</div>';
       }
       if (svcs.length > 1) {
+        // Несколько услуг: у каждой название, наш крючок и цены; нажатие выбирает услугу для записи.
         h += '<span class="lb">Какое занятие?</span><div class="svcs">' + svcs.map(function (s) {
-          var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин · ' : '';
+          var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '';
           return '<button type="button" data-act="svc" data-sid="' + s.service_id + '" aria-pressed="' + (svc && Number(svc.service_id) === Number(s.service_id)) + '">' +
-            '<span>' + esc(s.service_name) + '<small>' + esc(dur) + M.cardPriceHtml(s).replace(/<\/?b>/g, '') + '</small></span></button>';
+            '<span class="nm">' + esc(s.title || s.service_name) + (dur ? '<small>' + esc(dur) + '</small>' : '') + '</span>' +
+            (s.summary_hook ? '<span class="hk">' + esc(s.summary_hook) + '</span>' : '') +
+            tiersHtml(s, 'span') + '</button>';
         }).join('') + '</div>';
+      } else if (svc) {
+        if (svc.summary_hook) h += '<p class="hk">' + esc(svc.summary_hook) + '</p>';
+        h += tiersHtml(svc);
       }
-      if (svc) h += tiersHtml(svc);
       var where = svc && svc.is_online ? 'онлайн' : ((t.arenas || []).length === 1 ? t.arenas[0].name : '');
       var lb = [t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '', where, 'ближайшее время'].filter(Boolean).join(' · ');
       var noTime = S.slots && !S.slots.length && !S.slotsError;
@@ -484,12 +489,12 @@
       }
       if (S.slotsError) h += '<button type="button" class="sec2" data-act="reslots">Повторить</button>';
     }
+    h += aboutCard(svcs, svc);
     h += whereCard(t, svc);
     if (t.description || t.education) {
       h += '<div class="card"><h4>О тренере</h4>' + (t.description ? '<p>' + esc(t.description) + '</p>' : '') +
         (t.education ? '<span class="mut">' + esc(t.education) + '</span>' : '') + '</div>';
     }
-    if (svc && svc.description) h += '<div class="card"><h4>' + esc(svc.service_name) + '</h4><p>' + esc(svc.description) + '</p></div>';
     var duo = svc ? M.whoOptions(svc).duo : [];
     if (duo.length) {
       h += '<div class="card"><h4>Другие тарифы</h4>' + duo.map(function (r) {
@@ -515,14 +520,39 @@
     return h;
   }
 
-  function tiersHtml(svc) {
+  function tiersHtml(svc, tag) {
+    tag = tag || 'div';
+    var o = '<' + tag + '>', c = '</' + tag + '>';
     var single = M.whoOptions(svc).single.filter(function (r) { return r.priceCents != null; });
+    var inner;
     if (single.length) {
-      return '<div class="tiers">' + single.map(function (r) {
-        return '<div><small>' + esc(r.title) + '</small><b>' + esc(M.formatMoney(r.priceCents, svc.currency_code)) + '</b></div>';
-      }).join('') + '</div>';
+      inner = single.map(function (r) {
+        return o + '<small>' + esc(r.title) + '</small><b>' + esc(M.formatMoney(r.priceCents, svc.currency_code)) + '</b>' + c;
+      }).join('');
+    } else {
+      inner = o + '<small>Занятие</small><b>' + M.cardPriceHtml(svc).replace(/<\/?b>/g, '') + '</b>' + c;
     }
-    return '<div class="tiers"><div><small>Занятие</small><b>' + M.cardPriceHtml(svc).replace(/<\/?b>/g, '') + '</b></div></div>';
+    return '<' + tag + ' class="tiers">' + inner + c;
+  }
+
+  /** Карточка «О занятии»: наши тексты услуги + слова тренера дословно + «Не входит в цену». Данных нет — карточки нет. */
+  function aboutCard(svcs, svc) {
+    var targets = svc ? [svc] : svcs;
+    var named = svcs.length > 1;
+    var parts = targets.map(function (s) {
+      var a = M.serviceAbout(s);
+      if (!a) return '';
+      var h = '<div class="ab">';
+      if (named && a.title) h += '<b class="abt">' + esc(a.title) + '</b>';
+      if (a.hook) h += '<p class="abh">' + esc(a.hook) + '</p>';
+      a.body.forEach(function (p) { h += '<p>' + esc(p) + '</p>'; });
+      if (a.words) h += '<blockquote class="words"><p>' + esc(a.words) + '</p><cite>Слова тренера</cite></blockquote>';
+      if (a.notice) {
+        h += '<p class="nt">' + (a.notice.lead ? '<span>Не входит в цену</span>' : '<span>Заметка тренера</span>') + esc(a.notice.text) + '</p>';
+      }
+      return h + '</div>';
+    }).filter(Boolean);
+    return parts.length ? '<div class="card"><h4>О занятии</h4>' + parts.join('') + '</div>' : '';
   }
 
   function whereCard(t, svc) {
