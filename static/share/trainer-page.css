@@ -169,7 +169,20 @@
 @media (max-width: 700px) {
   body:has(.tp-pcard) #appButton { display: none; }
 }
-.tp-card h4.tp-svc__name { margin: 6px 0 0; }
+.tp-card h4.tp-svc__name { margin: 0; }
+/* услуги внутри карточки направления: отдельные блоки, а не одна простыня */
+.tp-sv { display: grid; gap: 12px; }
+.tp-sv + .tp-sv { border-top: 1px dashed var(--g-line); padding-top: 18px; margin-top: 6px; }
+/* две главные цены — плитками; остальные составы — по клику */
+.tp-card dl.tp-ptiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.tp-card dl.tp-ptiles div { display: grid; gap: 2px; align-content: start; padding: 12px 14px; border: 0; border-radius: 16px; background: var(--g-chip); }
+.tp-card dl.tp-ptiles dt { font-size: 13px; color: var(--g-muted); }
+.tp-card dl.tp-ptiles dd { font: 400 24px/1.1 var(--g-font-display); color: var(--g-ink); }
+.tp-pmore summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: 14px; font-weight: 700; color: var(--g-accent-ink); }
+.tp-pmore summary::-webkit-details-marker { display: none; }
+.tp-pmore summary::after { content: "▾"; font-size: 12px; transition: transform .15s; }
+.tp-pmore[open] summary::after { transform: rotate(180deg); }
+.tp-pmore dl { margin-top: 4px; }
 /* низ карточки услуги: «Подходит?» + мягкая кнопка (главный CTA страницы — один, в верхней карточке) */
 .tp-cardact { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 6px; padding-top: 14px; border-top: 1px dashed var(--g-line); }
 .tp-cardact > span { flex: 1 1 auto; font-size: 14px; font-weight: 600; color: var(--g-muted); }
@@ -188,4 +201,4 @@ html { scroll-behavior: smooth; }
 .tp-quote { margin: 0; display: grid; gap: 4px; border-left: 3px solid var(--g-line); padding-left: 12px; }
 .tp-quote figcaption { font-size: 12px; font-weight: 600; color: var(--g-ink-2); }
 .tp-quote blockquote { margin: 0; }
-.tp-notice { margin: 0; font-size: 14px; line-height: 1.45; color: var(--g-ink-2); overflow-wrap: anywhere; }
+.tp-notice { margin: 0; font-size: 13px; line-height: 1.45; color: var(--g-muted); overflow-wrap: anywhere; }

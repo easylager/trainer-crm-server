@@ -1113,6 +1113,22 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
     return _sec("Всё время на неделю", body, sec_id="time", nosnippet=True)
 
 
+def _price_rows(prices: Sequence[tuple[str, str]]) -> str:
+    """Цены услуги: две главные (ребёнок / взрослый) — крупными плитками, составы «на двоих» — в раскрывашке.
+
+    Все строки остаются в HTML (``dt``/``dd``): раскрывашка прячет их только визуально.
+    """
+
+    def rows(items: Sequence[tuple[str, str]]) -> str:
+        return "".join(f"<div><dt>{esc(label)}</dt><dd>{esc(val)}</dd></div>" for label, val in items)
+
+    head, rest = list(prices[:2]), list(prices[2:])
+    out = f'<dl class="tp-ptiles">{rows(head)}</dl>'
+    if rest:
+        out += f'<details class="tp-pmore"><summary>Другие составы · {len(rest)}</summary><dl>{rows(rest)}</dl></details>'
+    return out
+
+
 def _has_week(page: Mapping[str, Any], app: str | None) -> bool:
     """Есть ли на странице блок «Всё время на неделю» (``#time``) — единственное условие и у него, и у якорных кнопок."""
     return bool(page.get("can_book") and app and page.get("windows"))
@@ -1152,27 +1168,25 @@ def _prices_html(page: Mapping[str, Any], app: str | None = None, via: str | Non
     for title, svcs in groups:
         inner = ""
         for s in svcs:
+            block = ""
             if len(svcs) > 1 or s.get("own"):
-                inner += f'<h4 class="tp-svc__name">{esc(s["title"])}</h4>'
+                block += f'<h4 class="tp-svc__name">{esc(s["title"])}</h4>'
             if s.get("hook"):
-                inner += f'<p class="tp-lead">{esc(s["hook"])}</p>'
+                block += f'<p class="tp-lead">{esc(s["hook"])}</p>'
             if s.get("body"):
-                inner += f'<p class="tp-words">{esc(s["body"])}</p>'
+                block += f'<p class="tp-words">{esc(s["body"])}</p>'
             if s.get("description"):
-                inner += (
+                block += (
                     '<figure class="tp-quote"><figcaption>Слова тренера</figcaption>'
                     f'<blockquote class="tp-words">{esc(s["description"])}</blockquote></figure>'
                 )
             if s.get("prices"):
-                inner += (
-                    "<dl>"
-                    + "".join(f"<div><dt>{esc(label)}</dt><dd>{esc(val)}</dd></div>" for label, val in s["prices"])
-                    + "</dl>"
-                )
+                block += _price_rows(s["prices"])
             else:
-                inner += '<p class="tp-muted">Цену уточните у тренера</p>'
+                block += '<p class="tp-muted">Цену уточните у тренера</p>'
             if s.get("notice"):
-                inner += f'<p class="tp-notice"><b>Не входит в цену:</b> {esc(s["notice"])}</p>'
+                block += f'<p class="tp-notice"><b>Не входит в цену:</b> {esc(s["notice"])}</p>'
+            inner += f'<div class="tp-sv">{block}</div>'
         cards.append(f'<div class="tp-card"><h3>{esc(title)}</h3>{inner}{act}</div>')
     body = (
         f'<div class="tp-plist">{"".join(cards)}</div>'
