@@ -572,9 +572,9 @@
         h += '<div class="times">' + S.slots.slice(0, 3).map(function (s) { return slotLabel(s, (t.arenas || []).length > 1); }).join('') +
           '<button type="button" class="alt" data-act="week">Другое время</button></div>';
       } else if (S.slots === null) {
-        h += '<span style="color:var(--a-hero-hint)">Загружаем время…</span>';
+        h += '<span style="color:var(--a-hint)">Загружаем время…</span>';
       } else if (S.slotsError) {
-        h += '<span style="color:var(--a-hero-hint)">Не удалось загрузить время.</span>';
+        h += '<span style="color:var(--a-hint)">Не удалось загрузить время.</span>';
       }
       h += '</div>';
       if (S.slots && !S.slots.length && !S.slotsError) {

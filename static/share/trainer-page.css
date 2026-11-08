@@ -30,42 +30,42 @@
 .tp-checks li::before { content: "✓"; width: 22px; height: 22px; border-radius: 50%; background: var(--g-accent-wash); color: var(--g-accent-ink);
   display: grid; place-items: center; font-size: 12px; font-weight: 800; }
 
-/* тёмная карточка цены */
-.tp-pcard { position: relative; overflow: hidden; isolation: isolate; background: var(--g-dark); color: #fff; border-radius: 24px; padding: 20px; display: grid; gap: 14px; }
-.tp-pcard::after { content: ""; position: absolute; z-index: -1; width: 240px; height: 240px; border-radius: 50%; border: 2px solid rgba(69, 185, 187, .28); right: -90px; top: -120px; }
+/* Карточка цены — светлая/тиловая, как Mini App (не navy-остров). */
+.tp-pcard { position: relative; overflow: hidden; isolation: isolate; background: var(--g-surface); color: var(--g-ink); border: 1px solid var(--g-line); border-radius: 24px; padding: 20px; display: grid; gap: 14px; }
+.tp-pcard::after { content: ""; position: absolute; z-index: -1; width: 240px; height: 240px; border-radius: 50%; border: 2px solid rgba(69, 185, 187, .22); right: -90px; top: -120px; }
 .tp-dsw { display: flex; gap: 6px; flex-wrap: wrap; }
-.tp-dsw button { border: 1px solid rgba(255, 255, 255, .2); background: transparent; color: var(--g-on-dark-muted); border-radius: 999px;
+.tp-dsw button { border: 1px solid var(--g-line); background: var(--g-chip, #EEF1F0); color: var(--g-muted); border-radius: 999px;
   min-height: 44px; padding: 6px 13px; font: 600 14px var(--g-font); cursor: pointer; }
-.tp-dsw button[aria-pressed="true"] { background: #fff; color: var(--g-dark); border-color: #fff; }
+.tp-dsw button[aria-pressed="true"] { background: var(--g-ink); color: var(--g-bg, #fff); border-color: var(--g-ink); }
 .tp-panel[hidden] { display: none; }
 .tp-panel { display: grid; gap: 12px; }
 .tp-svc { display: grid; gap: 6px; }
-.tp-svc + .tp-svc { border-top: 1px solid rgba(255, 255, 255, .22); padding-top: 14px; }
-.tp-hook { margin: 0; font-size: 15px; line-height: 1.4; color: var(--g-on-dark-muted); display: -webkit-box; -webkit-box-orient: vertical;
+.tp-svc + .tp-svc { border-top: 1px solid var(--g-line); padding-top: 14px; }
+.tp-hook { margin: 0; font-size: 15px; line-height: 1.4; color: var(--g-muted); display: -webkit-box; -webkit-box-orient: vertical;
   -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
-.tp-svc__name { font-size: 15px; font-weight: 700; color: #fff; margin: 0; }
+.tp-svc__name { font-size: 15px; font-weight: 700; color: var(--g-ink); margin: 0; }
 .tp-svc .tp-hook { -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: normal; }
-.tp-prices { margin: 0; font-size: 17px; line-height: 1.35; color: var(--g-on-dark-muted); font-variant-numeric: tabular-nums; }
-.tp-prices b { color: #fff; font-weight: 700; white-space: nowrap; }
+.tp-prices { margin: 0; font-size: 17px; line-height: 1.35; color: var(--g-muted); font-variant-numeric: tabular-nums; }
+.tp-prices b { color: var(--g-accent-ink); font-weight: 700; white-space: nowrap; }
 .tp-tiers { display: flex; flex-wrap: wrap; gap: 6px 22px; }
 .tp-tiers div { display: grid; }
-.tp-tiers span { font-size: 12px; color: #9fb4c2; font-weight: 600; }
-.tp-tiers b { font: 400 24px/1.1 var(--g-font-display); font-weight: 400; }
-.tp-noprice { margin: 0; font-size: 16px; color: var(--g-on-dark-muted); }
-.tp-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: #9fb4c2; font-weight: 700; margin-bottom: 8px; }
+.tp-tiers span { font-size: 12px; color: var(--g-muted); font-weight: 600; }
+.tp-tiers b { font: 400 24px/1.1 var(--g-font-display); font-weight: 400; color: var(--g-ink); }
+.tp-noprice { margin: 0; font-size: 16px; color: var(--g-muted); }
+.tp-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--g-muted); font-weight: 700; margin-bottom: 8px; }
 .tp-near { display: flex; gap: 8px; flex-wrap: wrap; }
 .tp-near a { background: var(--g-accent); color: var(--g-dark) !important; border-radius: 14px; padding: 10px 14px; font-weight: 800; font-size: 15px; line-height: 1.25; }
 .tp-near a small { display: block; font-weight: 600; font-size: 11px; opacity: .75; }
-.tp-nowin { margin: 0; color: var(--g-on-dark-muted); }
+.tp-nowin { margin: 0; color: var(--g-muted); }
 .tp-act { display: flex; gap: 10px; flex-wrap: wrap; }
 .tp-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 12px 18px; border-radius: 16px;
   font-weight: 700; font-size: 15px; text-align: center; }
 .tp-btn--teal { background: var(--g-accent); color: var(--g-dark) !important; }
 .tp-btn--tg { background: var(--g-tg-btn); color: #fff !important; }
 .tp-btn--ghost { background: transparent; color: var(--g-accent-ink) !important; border: 1.5px solid var(--g-line); }
-.tp-pcard .tp-btn--ghost { background: rgba(255, 255, 255, .08); color: #fff !important; border: 0; }
-.tp-also { margin: 0; font-size: 14px; color: var(--g-on-dark-muted); }
-.tp-fine { font-size: 13px; color: #9fb4c2; }
+.tp-pcard .tp-btn--ghost { background: var(--g-accent-wash); color: var(--g-accent-ink) !important; border: 0; }
+.tp-also { margin: 0; font-size: 14px; color: var(--g-muted); }
+.tp-fine { font-size: 13px; color: var(--g-muted); }
 .tp-near a:focus-visible, .tp-btn:focus-visible, .tp-dsw button:focus-visible, .tp-slot:focus-visible { outline: 3px solid var(--g-accent); outline-offset: 2px; }
 
 /* секции */
