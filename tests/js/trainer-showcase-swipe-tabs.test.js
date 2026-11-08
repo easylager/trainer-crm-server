@@ -33,17 +33,19 @@ describe('swipeable tabs vs Telegram collapse', () => {
   }
 });
 
-describe('витрина следует теме Telegram', () => {
-  it('trainers.html без data-force-theme — colorScheme сам', () => {
-    const html = fs.readFileSync(
-      path.resolve(__dirname, '../../static/webapp/trainers.html'),
-      'utf8',
-    );
-    assert.doesNotMatch(html, /data-force-theme/);
+describe('витрина на фоне каталога/катков (--g-*)', () => {
+  it('фон страницы — var(--g-bg), как catalog-hub / ice-hub', () => {
+    assert.match(css, /background:\s*var\(--g-bg\)\s*!important/);
+    assert.match(css, /--a-bg:\s*var\(--g-bg/);
+    assert.match(css, /--a-sf:\s*var\(--g-surface/);
+    assert.doesNotMatch(css, /#0B0C0E/);
   });
 
-  it('showcase CSS: светлая Ice Paper и тёмная ARENA', () => {
-    assert.match(css, /--a-bg:\s*#F1F3F2/);
-    assert.match(css, /data-app-theme="dark"[\s\S]*--a-bg:\s*#0B0C0E/);
+  it('theme.js ставит body.tg-dark для сайтных --g-*', () => {
+    const js = fs.readFileSync(
+      path.resolve(__dirname, '../../static/webapp/client-mini-app-theme.js'),
+      'utf8',
+    );
+    assert.match(js, /classList\.toggle\('tg-dark',\s*dark\)/);
   });
 });

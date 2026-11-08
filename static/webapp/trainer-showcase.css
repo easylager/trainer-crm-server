@@ -1,21 +1,33 @@
 /* Витрина тренеров и запись (TASK-357). Раскладка и токены — из утверждённого прототипа
    .ai/epics/trainer-catalog/design/miniapp.html; палитра — client-mini-app-theme.js. */
-/* Палитра как client-mini-app-theme.js: светлая Ice Paper / тёмная ARENA по colorScheme Telegram. */
+/* Фон и поверхности — те же --g-*, что каталог/катки (catalog-hub / ice-hub).
+   Тёмная тема: body.tg-dark → --g-bg #17212b, не OLED ARENA #0B0C0E. */
 :root {
-  --a-bg: #F1F3F2; --a-sf: #FFFFFF; --a-tx: #101617; --a-hint: #5E6B6B; --a-line: #E1E6E4;
-  --a-soft: #E8F5F5; --a-soft-tx: #0B6E70; --a-cta: #45B9BB; --a-cta-tx: #04262A;
-  --a-hero: #0d1b26; --a-hero-hint: #9fb4c2; --a-chip: #EEF1F0; --a-warn: #FFF6E3; --a-warn-tx: #6B4A0C;
+  --a-bg: var(--g-bg, #f5f7f8);
+  --a-sf: var(--g-surface, #ffffff);
+  --a-tx: var(--g-ink, #0d1b26);
+  --a-hint: var(--g-muted, #5d7285);
+  --a-line: var(--g-line, #e1e8ec);
+  --a-soft: var(--g-accent-wash, #E8F5F5);
+  --a-soft-tx: var(--g-accent-ink, #0B6E70);
+  --a-cta: var(--g-accent, #45B9BB);
+  --a-cta-tx: var(--g-on-accent, #04262A);
+  --a-hero: var(--g-dark, #0d1b26);
+  --a-hero-hint: var(--g-on-dark-muted, #9fb4c2);
+  --a-chip: var(--g-chip, #eef3f5);
+  --a-warn: var(--g-warn-wash, #FFF6E3);
+  --a-warn-tx: var(--g-warn-ink, #6B4A0C);
   --a-danger: #C4342A;
-  --display: 'Dela Gothic One', 'Arial Black', sans-serif;
-}
-html[data-app-theme="dark"] {
-  --a-bg: #0B0C0E; --a-sf: #141618; --a-tx: #E6E9EA; --a-hint: #868D93; --a-line: #23272A;
-  --a-soft: #10292A; --a-soft-tx: #7FD6D7; --a-hero: #18252E; --a-hero-hint: #93A7B4;
-  --a-chip: #1C2023; --a-warn: #2A2312; --a-warn-tx: #F2D28A; --a-danger: #FF6B60;
+  --display: var(--g-font-display, 'Dela Gothic One', 'Arial Black', sans-serif);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--a-bg); color: var(--a-tx); }
-body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans-serif); min-height: 100vh; -webkit-tap-highlight-color: transparent; }
+/* Как catalog-hub / ice-hub: перекрываем canvas темы клиента. */
+html body.tsw, html.trainer-theme-dark body.tsw, html.trainer-theme-light body.tsw {
+  background: var(--g-bg) !important; color: var(--g-ink);
+  font: 14px/1.4 var(--g-font, 'Golos Text', -apple-system, sans-serif);
+  min-height: 100vh; -webkit-tap-highlight-color: transparent;
+}
 .tsw [hidden] { display: none !important; }
 :where(.tsw) button { font: inherit; color: inherit; }
 :where(.tsw) a { color: inherit; text-decoration: none; }

@@ -60,6 +60,8 @@
     d.classList.toggle('hub-is-dark', dark);
     d.classList.toggle('sub-root-dark', dark);
     d.setAttribute('data-app-theme', dark ? 'dark' : 'light');
+    /* Сайтные --g-* (каталог, катки, хаб) переключаются по body.tg-dark. */
+    if (document.body) document.body.classList.toggle('tg-dark', dark);
     if (d.hasAttribute('data-client-requests')) {
       d.classList.toggle('client-requests--dark', dark);
     }
