@@ -276,7 +276,7 @@ describe('услуга и формат слота (онлайн/очно)', () =
     assert.equal(h.S.view, 'sent');
   });
 
-  it('«Все»: в форме только очные услуги; выбранная раньше онлайн-услуга сброшена', async () => {
+  it('по ссылке: направление закреплено (первое), онлайн-услуга сброшена, подходящая очная выбрана сама', async () => {
     const h = boot({ search: '?trainer_id=1&slot_id=401&service_id=99', showcase: { items: [mixed()] }, session: PHONE, routes: [
       { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [] }) },
       { match: (c) => c.url.startsWith('/api/webapp/client/slot/401'), reply: () => resp(200, { available: true, slot: slot(401) }) },
@@ -285,7 +285,9 @@ describe('услуга и формат слота (онлайн/очно)', () =
     assert.equal(h.S.view, 'book');
     assert.equal(h.S.serviceId, null);
     const offered = (h.app.innerHTML.match(/data-act="svc" data-sid="(\d+)"/g) || []).map((x) => x.match(/\d+/)[0]);
-    assert.deepEqual(offered, ['1', '2']);
+    assert.deepEqual(offered, []); // в закреплённом направлении подходит одна очная услуга — вопроса нет
+    assert.equal(h.S.dirKey, 's-nulya');
+    assert.ok(!h.app.innerHTML.includes('Онлайн-разбор'));
     assert.match(h.app.innerHTML, /cta off/);
   });
 

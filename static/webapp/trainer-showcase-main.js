@@ -272,6 +272,19 @@
     return svcs;
   }
 
+  /** Направление всегда закреплено: нужное, если оно у тренера есть, иначе первое его направление. */
+  function pinDirection(t, want) {
+    var dirs = M.trainerDirections(t);
+    if (dirs.some(function (d) { return d.key === want; })) return want;
+    return dirs.length ? dirs[0].key : M.DIRECTIONS[0].key;
+  }
+
+  /** В направлении несколько услуг — карточка сразу показывает первую выбранной; одна — выбирать нечего. */
+  function firstServiceId(t, key) {
+    var svcs = M.servicesInDirection(t, key);
+    return svcs.length > 1 ? svcs[0].service_id : null;
+  }
+
   function currentService() {
     var t = S.trainer;
     if (!t) return null;
@@ -427,8 +440,9 @@
     S.trainer = t;
     var dirs = M.trainerDirections(t);
     var want = opts.dirKey || (S.tab !== 'all' ? S.tab : null);
-    S.dirKey = dirs.some(function (d) { return d.key === want; }) ? want : dirs.length ? dirs[0].key : null;
+    S.dirKey = pinDirection(t, want);
     S.serviceId = num(qs.get('service_id')) && Number(t.id) === num(qs.get('trainer_id')) ? num(qs.get('service_id')) : null;
+    if (S.serviceId == null) S.serviceId = firstServiceId(t, S.dirKey);
     S.saved = false;
     S.notify = false;
     S.waBlock = '';
@@ -445,7 +459,7 @@
     var t = S.trainer;
     var dirs = M.trainerDirections(t);
     var svcs = serviceList(t, S.dirKey);
-    var svc = currentService();
+    var svc = currentService() || (svcs.length > 1 ? svcs[0] : null);
     var h = '<div class="bd">' + backBtn(S.stack.length ? 'Тренеры' : 'Все тренеры') + heroHtml(t, trainerSubLine(t));
     h += '<div class="pc">';
     if (!t.can_book) {
@@ -457,15 +471,16 @@
         }).join('') + '</div>';
       }
       if (svcs.length > 1) {
-        // Несколько услуг: у каждой название, наш крючок и цены; нажатие выбирает услугу для записи.
-        h += '<span class="lb">Какое занятие?</span><div class="svcs">' + svcs.map(function (s) {
-          var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '';
-          return '<button type="button" data-act="svc" data-sid="' + s.service_id + '" aria-pressed="' + (svc && Number(svc.service_id) === Number(s.service_id)) + '">' +
+        // Несколько услуг в направлении: компактный radiogroup, ниже — деталь выбранной (крючок и тарифы) один раз.
+        var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '';
+        h += '<span class="lb" id="svcLb">Какое занятие?</span><div class="svcs" role="radiogroup" aria-labelledby="svcLb">' + svcs.map(function (s) {
+          var on = Number(svc.service_id) === Number(s.service_id);
+          return '<button type="button" role="radio" data-act="svc" data-sid="' + s.service_id + '" aria-checked="' + on + '"><i></i>' +
             '<span class="nm">' + esc(s.title || s.service_name) + (dur ? '<small>' + esc(dur) + '</small>' : '') + '</span>' +
-            (s.summary_hook ? '<span class="hk">' + esc(s.summary_hook) + '</span>' : '') +
-            tiersHtml(s, 'span') + '</button>';
+            '<em>' + esc(M.priceFrom(s)) + '</em></button>';
         }).join('') + '</div>';
-      } else if (svc) {
+      }
+      if (svc) {
         if (svc.summary_hook) h += '<p class="hk">' + esc(svc.summary_hook) + '</p>';
         h += tiersHtml(svc);
       }
@@ -523,11 +538,11 @@
   function tiersHtml(svc, tag) {
     tag = tag || 'div';
     var o = '<' + tag + '>', c = '</' + tag + '>';
-    var single = M.whoOptions(svc).single.filter(function (r) { return r.priceCents != null; });
+    var rows = M.priceRows(svc);
     var inner;
-    if (single.length) {
-      inner = single.map(function (r) {
-        return o + '<small>' + esc(r.title) + '</small><b>' + esc(M.formatMoney(r.priceCents, svc.currency_code)) + '</b>' + c;
+    if (rows.length) {
+      inner = rows.map(function (r) {
+        return o + '<small>' + esc(r.title) + '</small><b>' + esc(r.price) + '</b>' + c;
       }).join('');
     } else {
       inner = o + '<small>Занятие</small><b>' + M.cardPriceHtml(svc).replace(/<\/?b>/g, '') + '</b>' + c;
@@ -1509,7 +1524,7 @@
         break;
       case 'dir':
         S.dirKey = el.getAttribute('data-key');
-        S.serviceId = null;
+        S.serviceId = firstServiceId(S.trainer, S.dirKey);
         loadSlots().then(render);
         render();
         break;
@@ -1634,9 +1649,11 @@
     S.trainer = t;
     if (viaList) noteShowcasePick();
     var dirs = M.trainerDirections(t);
-    // Время с вкладки направления — услуга этого направления; со «Все» при нескольких направлениях
-    // услугу не угадываем: форма спросит «Какое занятие?».
-    S.dirKey = S.tab !== 'all' && dirs.some(function (d) { return d.key === S.tab; }) ? S.tab : dirs.length === 1 ? dirs[0].key : null;
+    // Направление закреплено всегда: услуга этого слота (если окно её несёт), иначе вкладка списка, иначе первое
+    // направление тренера. Услугу внутри направления форма записи спросит сама, если она не определена.
+    var win = (t.windows || []).filter(function (w) { return String(w.slot_id) === String(slotId); })[0];
+    var slotDir = win && win.service_id != null ? M.directionKeyForServiceId(win.service_id) : null;
+    S.dirKey = pinDirection(t, slotDir || (S.tab !== 'all' ? S.tab : null));
     S.serviceId = viaList ? null : num(qs.get('service_id'));
     if (viaList) go('trainer');
     else S.view = 'trainer';

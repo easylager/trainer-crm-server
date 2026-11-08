@@ -72,17 +72,60 @@ describe('карточка тренера: подача услуг', () => {
     assert.ok(!h.app.innerHTML.includes('Крючок нуля.'));
   });
 
-  it('«С клюшкой»: две услуги — у каждой название, крючок и цены; «О занятии» с названиями', async () => {
+  it('«С клюшкой»: radiogroup из двух строк без крючков; деталь выбранной один раз; «О занятии» выбранной', async () => {
     const a = svc(4, 'Хоккейное катание', { summary_hook: 'Крючок А.', summary_body: 'Тело А.' });
-    const b = svc(6, 'ОХМ(отработка)', { title: 'ОХМ — отработка', summary_hook: 'Крючок Б.' });
+    const b = svc(6, 'ОХМ(отработка)', { title: 'ОХМ — отработка', summary_hook: 'Крючок Б.', price_tiers: [{ id: 3, tier_kind: 'child', price_cents: 4500 }, { id: 4, tier_kind: 'adult', price_cents: 5500 }] });
     const h = await open([trainer([a, b])], 's-klyushkoy');
-    const html = h.app.innerHTML;
-    assert.equal((html.match(/data-act="svc"/g) || []).length, 2);
+    let html = h.app.innerHTML;
+    assert.match(html, /role="radiogroup"/);
+    assert.equal((html.match(/role="radio"/g) || []).length, 2);
+    assert.equal((html.match(/aria-checked="true"/g) || []).length, 1);
     assert.ok(html.includes('ОХМ — отработка'));
-    assert.equal((html.match(/class="hk"/g) || []).length, 2);
-    assert.equal((html.match(/class="tiers"/g) || []).length, 2);
-    assert.equal((html.match(/class="abt"/g) || []).length, 2);
-    assert.ok(html.indexOf('Крючок А.') < html.indexOf('Крючок Б.'));
+    // строки без крючков и больших цен; деталь — один раз
+    const group = html.slice(html.indexOf('role="radiogroup"'), html.indexOf('</div>', html.indexOf('role="radiogroup"')));
+    assert.ok(!group.includes('Крючок') && !group.includes('class="tiers"'));
+    assert.ok(group.includes('50 BYN') && group.includes('от 45 BYN'));
+    assert.equal((html.match(/class="hk"/g) || []).length, 1);
+    assert.equal((html.match(/class="tiers"/g) || []).length, 1);
+    assert.match(html, /class="hk">Крючок А\./);
+    // выбор строки меняет деталь
+    h.click({ 'data-act': 'svc', 'data-sid': 6 });
+    await tick();
+    html = h.app.innerHTML;
+    assert.match(html, /class="hk">Крючок Б\./);
+    assert.ok(!/class="hk">Крючок А/.test(html));
+    assert.equal(h.S.serviceId, 6);
+    assert.ok(html.includes('<b>45 BYN</b>') && html.includes('<b>55 BYN</b>'));
+    assert.equal((html.match(/class="abt"/g) || []).length, 1);
+  });
+
+  it('цены Ребёнок = Взрослый — одна строка «Дети и взрослые»', async () => {
+    const eq = [{ id: 1, tier_kind: 'child', price_cents: 5000 }, { id: 2, tier_kind: 'adult', price_cents: 5000 }];
+    const h = await open([trainer([svc(1, 'С нуля', { price_tiers: eq })])]);
+    const html = h.app.innerHTML;
+    assert.ok(html.includes('<small>Дети и взрослые</small><b>50 BYN</b>'));
+    assert.ok(!html.includes('<small>Ребёнок</small>'));
+    assert.deepEqual(M.priceRows(svc(1, 'x', { price_tiers: eq })).map((r) => r.title), ['Дети и взрослые']);
+    assert.equal(M.priceFrom(svc(1, 'x', { price_tiers: eq })), '50 BYN');
+    assert.equal(M.priceFrom(svc(1, 'x')), 'от 50 BYN');
+  });
+
+  it('S.dirKey никогда не null: список «Все» → время, по ссылке, по слоту', async () => {
+    const t = trainer([svc(1, 'С нуля'), svc(4, 'Хоккейное катание'), svc(6, 'ОХМ')], { windows: [{ slot_id: 77, starts_at: '2026-11-10T10:00:00', ends_at: '2026-11-10T10:45:00', arena_id: 3 }] });
+    const h = await open([t]);
+    assert.equal(h.S.dirKey, 's-nulya');
+    const h2 = boot({ search: '?trainer_id=1', showcase: { items: [t] }, routes: [noSlots] });
+    await tick(80);
+    assert.equal(h2.S.dirKey, 's-nulya');
+    // тап по времени в списке на вкладке «Все» → «Назад» в карточку: направление закреплено
+    const h3 = boot({ showcase: { items: [t] }, routes: [noSlots] });
+    await tick();
+    assert.equal(h3.S.tab, 'all');
+    h3.click({ 'data-act': 'win', 'data-tid': 1, 'data-slot': 77 });
+    await tick(80);
+    assert.equal(h3.S.view, 'trainer');
+    assert.equal(h3.S.dirKey, 's-nulya');
+    assert.ok(!h3.app.innerHTML.includes('role="radiogroup"'));
   });
 
   it('одна услуга — название не повторяем; нет крючка — блока нет', async () => {
