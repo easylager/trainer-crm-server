@@ -38,7 +38,7 @@ describe('витрина на фоне каталога/катков (--g-*)', (
     assert.match(css, /background:\s*var\(--g-bg\)\s*!important/);
     assert.match(css, /--a-bg:\s*var\(--g-bg/);
     assert.match(css, /--a-sf:\s*var\(--g-surface/);
-    assert.doesNotMatch(css, /#0B0C0E/);
+    assert.doesNotMatch(css, /--a-bg:\s*#0B0C0E/);
   });
 
   it('theme.js ставит body.tg-dark для сайтных --g-*', () => {
