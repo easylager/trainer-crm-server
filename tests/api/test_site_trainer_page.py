@@ -487,7 +487,7 @@ def test_role_line_reads_as_one_grammatical_phrase_for_every_combination() -> No
 
 HOOK_ZERO = "Если вы почти не стояли на льду или давно не катались — это про вас."
 HOOK_BETTER = "Уже катаетесь, но хочется увереннее, ровнее и «красивее» на льду."
-HOOK_HOCKEY = "Хоккейная стойка, ход, повороты и торможения"
+HOOK_HOCKEY = "Взрывной старт, маневренность"
 HOOK_OHM = "Узкий формат для игроков"
 
 
