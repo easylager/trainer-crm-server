@@ -39,8 +39,11 @@
 .tp-dsw button[aria-pressed="true"] { background: #fff; color: var(--g-dark); border-color: #fff; }
 .tp-panel[hidden] { display: none; }
 .tp-panel { display: grid; gap: 12px; }
-.tp-svc { display: grid; gap: 4px; }
-.tp-svc__name { font-size: 13px; font-weight: 600; color: var(--g-on-dark-muted); margin: 0; }
+.tp-svc { display: grid; gap: 6px; }
+.tp-svc + .tp-svc { border-top: 1px solid rgba(255, 255, 255, .22); padding-top: 14px; }
+.tp-hook { margin: 0; font-size: 15px; line-height: 1.4; color: var(--g-on-dark-muted); display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+.tp-svc__name { font-size: 14px; font-weight: 600; color: var(--g-on-dark-muted); margin: 0; }
 .tp-tiers { display: flex; flex-wrap: wrap; gap: 6px 22px; }
 .tp-tiers div { display: grid; }
 .tp-tiers span { font-size: 12px; color: #9fb4c2; font-weight: 600; }
@@ -145,3 +148,9 @@
   /* Пока видна «Записаться на …», общая «Приложение» не нужна: обе ведут в Telegram и легли бы друг на друга. */
   body:has(.tp-mbar:not([hidden])) #appButton { display: none; }
 }
+.tp-card h4.tp-svc__name { margin: 6px 0 0; }
+.tp-lead { margin: 0; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+.tp-quote { margin: 0; display: grid; gap: 4px; border-left: 3px solid var(--g-line); padding-left: 12px; }
+.tp-quote figcaption { font-size: 12px; font-weight: 600; color: var(--g-ink-2); }
+.tp-quote blockquote { margin: 0; }
+.tp-notice { margin: 0; font-size: 14px; line-height: 1.45; color: var(--g-ink-2); overflow-wrap: anywhere; }
