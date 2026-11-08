@@ -98,7 +98,7 @@ async def _page(db_session, texts_by_status: list[tuple[str, str]]):
     async with _client() as client:
         place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
         await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"])
-        for i, (status, body) in enumerate(texts_by_status):
+        for status, body in texts_by_status:
             tg = _tg()
             await add_trainer_rating(db_session, tid, tg, 5, review_text=body)
             rid = await _rating_id(db_session, tid, tg)
