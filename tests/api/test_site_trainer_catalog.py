@@ -270,6 +270,11 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     # «вместе с ребёнком» — из тарифов: 1 тренер с ценой «взрослый + ребёнок».
     assert "у 1 тренера есть цена «взрослый + ребёнок»" in html
     assert "Что будет после записи" in html and "Как проходит первое занятие" in html
+    assert "оплата тренеру лично" in html and "Расскажите, какая у вас цель?" in html
+    assert "Приезжайте за 15" not in html
+    from src.application.catalog_directions import ALL
+
+    assert ALL.steps[2][0] == "Вперёд тренироваться!"
 
     # «С клюшкой» = хоккейное катание (4): тариф 50/55.
     hcards = _cards(hock.text)
