@@ -53,13 +53,18 @@ def _hub_view(**extra):
 
 
 def _routes_html() -> str:
-    view = _hub_view(upcoming=[], today=date(2026, 10, 13), hot_skate=None)
-    return _b_routes(view, coach_href="/trainers").replace("\u00a0", " ")
+    from src.application.site_learn_block import LearnBlock
+
+    learn = LearnBlock(faces=(), count=3, line="", href="/c/minsk/trenery", price=(4500, "BYN"))
+    view = _hub_view(upcoming=[], today=date(2026, 10, 13), hot_skate=None, learn=learn)
+    return _b_routes(view).replace("\u00a0", " ")
 
 
 def test_a1_trainer_count_is_a_russian_phrase() -> None:
     html = _routes_html()
-    assert "3 тренера" in html
+    # TASK-354: пункт «Учиться с тренером» вместо «Тренеры · N»; число — из каталога.
+    assert "Учиться с тренером" in html and "3 тренера · от 45 BYN" in html
+    assert 'href="/c/minsk/trenery"' in html and "Тренеры" not in html
     assert "›" not in html
 
 

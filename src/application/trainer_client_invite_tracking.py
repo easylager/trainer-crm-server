@@ -39,6 +39,22 @@ def sql_trainer_submitted_for_moderation(*, trainer_alias: str = "t") -> str:
     return f"({ta}.moderation_submitted_at IS NOT NULL OR {ta}.status = 'active')"
 
 
+def sql_booking_not_self(*, booking_alias: str = "b", trainer_id_expr: str = "t.id") -> str:
+    """
+    SQL boolean: the booking's client is not the trainer himself (TASK-350).
+
+    A trainer who opens the client bot and books his own slot «to see how it works» is not his
+    first client: such a booking must not claim the first-booking milestone (celebration, referral
+    bonus, admin ping) nor silence the reactivation series. Same Telegram account on both sides is
+    the only signal we have; a client without Telegram never matches.
+    """
+    b = booking_alias
+    return f"""NOT EXISTS (
+    SELECT 1 FROM clients sc JOIN trainers st ON st.id = {trainer_id_expr}
+    WHERE sc.id = {b}.client_id AND sc.telegram_id IS NOT NULL AND sc.telegram_id = st.telegram_id
+  )"""
+
+
 def sql_trainer_has_real_booking(*, trainer_id_expr: str = "t.id") -> str:
     """
     SQL boolean: this trainer's "first real booking" milestone — true once, never regresses.
@@ -67,6 +83,7 @@ def sql_trainer_has_real_booking(*, trainer_id_expr: str = "t.id") -> str:
     WHERE b.trainer_id = {tid}
       AND COALESCE(b.is_sandbox, false) = false
       AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+      AND {sql_booking_not_self(trainer_id_expr=tid)}
   )
 )"""
 

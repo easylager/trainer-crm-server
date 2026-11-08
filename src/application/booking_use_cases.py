@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 from src.infrastructure.repositories.client_trainer_edge_repository import ClientTrainerEdgeRepository
 
+from src.application.booking_source import BookingSource
 from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.application.client_profile_use_cases import (
     resolve_client_notify_contact,
@@ -673,6 +674,7 @@ async def create_booking(
     allow_overbook: bool = False,
     is_sandbox: bool = False,
     recurring_client_slot_id: int | None = None,
+    source: BookingSource | None = None,
 ) -> tuple[int | None, tuple[bool, bool]]:
     """
     Create booking: insert row; slot becomes 'booked' only when pending+confirmed count reaches capacity.
@@ -682,6 +684,7 @@ async def create_booking(
     - Trainer-initiated bookings (created_by_trainer=True) start as 'confirmed'.
     is_sandbox=True: onboarding demo booking — excluded from stats/revenue, but still counts for the
     one-time first-booking celebration (Telegram) so TTV step 2 matches a real booking UX.
+    source: where a self-booking client came from (TASK-351); None for trainer-made bookings.
 
     If client_request_id is set, link booking to that request and archive the request.
     When created_by_trainer=True and client_request_id is set, leave client_notified_trainer_booked_at
@@ -822,11 +825,11 @@ async def create_booking(
                 INSERT INTO bookings (
                     slot_id, trainer_id, client_id, service_id, client_comment, client_request_id,
                     status, arena_id, service_price_variant_id, booking_price_cents, price_tier_kind,
-                    is_sandbox, recurring_client_slot_id
+                    is_sandbox, recurring_client_slot_id, source, source_arena_id, source_city_id
                 )
                 VALUES (
                     :sid, :tid, :cid, :svc_id, :comment, :req_id, :status, :arena_id, :vvid, :bpc, :ptk,
-                    :is_sandbox, :rcs_id
+                    :is_sandbox, :rcs_id, :src, :src_arena, :src_city
                 )
                 RETURNING id
             """),
@@ -844,6 +847,9 @@ async def create_booking(
                 "ptk": price_tier_kind,
                 "is_sandbox": is_sandbox,
                 "rcs_id": recurring_client_slot_id,
+                "src": source.code if source else None,
+                "src_arena": source.arena_id if source else None,
+                "src_city": source.city_id if source else None,
             },
         )
         (booking_id,) = r.fetchone()

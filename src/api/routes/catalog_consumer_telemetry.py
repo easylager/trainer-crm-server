@@ -21,6 +21,7 @@ from src.application.catalog_consumer_events import (
 from src.application.public_web_cta import (
     CONTACT_ACTION_DIRECTION,
     CONTACT_ACTION_PHONE,
+    CONTACT_ACTION_TELEGRAM,
     CONTACT_ACTION_TICKETS,
     COACH_ACTIONS,
     PARTNER_ACTIONS,
@@ -45,6 +46,8 @@ _ALLOWED_SURFACES = frozenset(
         "catalog_home",
         "match_page",
         "matches_list",
+        "trainer_page",
+        "trainer_catalog",
     }
 )
 
@@ -175,14 +178,23 @@ async def public_contact_click_beacon(
     city_id: int | None = Query(None),
     arena_id: int | None = Query(None),
     partner: str | None = Query(None, max_length=64, description="slug партнёра для partner_*"),
+    trainer_id: int | None = Query(None, description="тренер для telegram («Написать»)"),
+    via: str | None = Query(None, max_length=24, description="откуда пришли на страницу: p3 / c1 / k1 / link / share"),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
-    """Учёт клика «Позвонить» и партнёра рядом (``navigator.sendBeacon``); без JS клик не считается."""
+    """Учёт клика «Позвонить», «Написать» и партнёра рядом (``navigator.sendBeacon``); без JS клик не считается."""
     act = action.strip().lower()
     partner_slug = partner.strip() if isinstance(partner, str) else ""
-    if act != CONTACT_ACTION_PHONE and act not in PARTNER_ACTIONS and act not in COACH_ACTIONS:
+    if (
+        act != CONTACT_ACTION_PHONE
+        and act != CONTACT_ACTION_TELEGRAM
+        and act not in PARTNER_ACTIONS
+        and act not in COACH_ACTIONS
+    ):
         return Response(status_code=400)
     if act in PARTNER_ACTIONS and not partner_slug:
+        return Response(status_code=400)
+    if act == CONTACT_ACTION_TELEGRAM and (trainer_id is None or surface.strip().lower() not in _ALLOWED_SURFACES):
         return Response(status_code=400)
     await record_public_contact_click(
         session,
@@ -192,6 +204,8 @@ async def public_contact_click_beacon(
         city_id=city_id,
         arena_id=arena_id,
         partner=partner_slug or None,
+        trainer_id=trainer_id,
+        via=via,
     )
     return Response(status_code=204)
 

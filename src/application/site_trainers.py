@@ -44,7 +44,7 @@ def trainer_photo_url(trainer: Mapping[str, Any]) -> str | None:
 def trainer_line(trainer: Mapping[str, Any]) -> str:
     """«Обучение катанию „с нуля“ · от 41,87 BYN за занятие»: первая услуга и самое дешёвое занятие.
 
-    Цена — ``min_session_price_cents`` из ``trainer_min_price`` (абонементы, тарифы, групповые).
+    Цена — ``min_session_price_cents`` из ``trainer_min_price`` (тарифы, групповые, абонементы).
     """
     services = list(trainer.get("services") or [])
     names = [str(s.get("service_name") or s.get("name") or "").strip() for s in services]

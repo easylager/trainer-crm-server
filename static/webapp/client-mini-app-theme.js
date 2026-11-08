@@ -29,6 +29,10 @@
   }
 
   function isAppDark() {
+    /* data-force-theme на <html> — жёсткий замок экрана (витрина тренеров всегда светлая). */
+    var forced = document.documentElement.getAttribute('data-force-theme');
+    if (forced === 'light') return false;
+    if (forced === 'dark') return true;
     var tg = getTg();
     if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
     return false;
@@ -56,6 +60,8 @@
     d.classList.toggle('hub-is-dark', dark);
     d.classList.toggle('sub-root-dark', dark);
     d.setAttribute('data-app-theme', dark ? 'dark' : 'light');
+    /* Сайтные --g-* (каталог, катки, хаб) переключаются по body.tg-dark. */
+    if (document.body) document.body.classList.toggle('tg-dark', dark);
     if (d.hasAttribute('data-client-requests')) {
       d.classList.toggle('client-requests--dark', dark);
     }

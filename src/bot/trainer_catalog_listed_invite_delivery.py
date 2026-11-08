@@ -6,10 +6,8 @@ from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
-from src.application.trainer_invite_links import build_trainer_universal_invite_link
 from src.bot import messages as msg
 from src.bot.trainer_guide_keyboard import TRAINER_SUPPORT_CALLBACK
-from src.shared.config import Settings
 
 
 def catalog_listed_invite_push_keyboard(copy_link: str | None) -> InlineKeyboardMarkup:
@@ -43,11 +41,11 @@ async def send_trainer_catalog_listed_invite_push(
     Send HTML body + keyboard. Returns None on success, or an error token
     (``missing_username``) when the link cannot be built.
     """
-    settings = Settings()
-    link, err = build_trainer_universal_invite_link(
-        client_bot_username=settings.client_bot_username,
-        trainer_id=int(trainer_id),
-    )
+    from src.application.site_trainer_page import trainer_invite_link
+    from src.infrastructure.db import async_session_factory
+
+    async with async_session_factory() as session:
+        link, err = await trainer_invite_link(session, int(trainer_id))
     if err:
         return err
     await bot.send_message(

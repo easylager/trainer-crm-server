@@ -174,6 +174,7 @@ async function bootCatalog(opts) {
     scrollY: 0,
     navigator: { geolocation: null },
   };
+  if (opts.shell) sandboxWindow.ClientShell = opts.shell;
 
   const context = vm.createContext({
     window: sandboxWindow,
@@ -259,5 +260,35 @@ describe('ice-tab: смена города и магазины', () => {
       !elements.iceListSkate.innerHTML.includes('SportContinent'),
       'минский магазин не должен оставаться после пустого ответа по Бобруйску'
     );
+  });
+});
+
+describe('этап 1 входов: сегмент «Тренеры» открывает витрину', () => {
+  function tapMode(elements, mode) {
+    const btn = { getAttribute: (a) => (a === 'data-catalog-mode' ? mode : null) };
+    elements.iceModeSeg.dispatch('click', { target: { closest: (sel) => (sel === '[data-catalog-mode]' ? btn : null) } });
+  }
+
+  it('тап «Тренеры» → trainers?city_id=<текущий город>, обычным переходом (назад — в «Поиск»)', async () => {
+    const calls = [];
+    const shell = { navigate: (p, o) => calls.push([p, o == null ? null : JSON.parse(JSON.stringify(o))]) };
+    const { requests, elements, store, model } = await bootCatalog({ search: '?city_id=1', shell });
+    const before = requests.length;
+    const savedBefore = store[model.ICE_STATE_KEY];
+    tapMode(elements, 'coach');
+    await flushPromises(20);
+    assert.deepEqual(calls, [['trainers?city_id=1', null]]);
+    assert.equal(requests.length, before, 'старый список тренеров не грузится');
+    assert.equal(store[model.ICE_STATE_KEY], savedBefore, 'вкладка «Поиска» не переключилась — возврат туда же');
+    assert.ok(!requests.some((u) => u.includes('/api/public/trainers')));
+  });
+
+  it('другие сегменты — как раньше, без перехода', async () => {
+    const calls = [];
+    const shell = { navigate: (p) => calls.push(p) };
+    const { elements } = await bootCatalog({ search: '?city_id=1', shell });
+    tapMode(elements, 'shop');
+    await flushPromises(20);
+    assert.deepEqual(calls, []);
   });
 });

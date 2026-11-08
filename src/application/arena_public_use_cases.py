@@ -2547,13 +2547,19 @@ _TRAINER_WINDOWS_FETCH = 40
 
 async def _trainer_windows_on_arena(
     session: AsyncSession,
-    arena_id: int,
+    arena_id: int | None,
     trainer_ids: list[int],
     *,
     timezone_name: str,
     now: datetime | None = None,
+    limit: int = TRAINER_WINDOWS_LIMIT,
 ) -> dict[int, list[dict[str, Any]]]:
     """Ближайшие свободные окна тренеров именно на этой арене — один запрос на всех.
+
+    ``limit`` — окон на тренера; страница тренера берёт всю неделю (``site_trainer_page.WEEK_WINDOWS_LIMIT``).
+
+    ``arena_id=None`` — на всех площадках тренера (страница тренера ``/t/…``); у окна тогда
+    есть ``arena_id``, чтобы подписать, где оно.
 
     Критерии «свободно и доступно для записи» те же, что в ``/client/slots`` без
     ``service_id``: слот ``available`` на одного (capacity = 1), без активной брони,
@@ -2574,9 +2580,10 @@ async def _trainer_windows_on_arena(
     result = await session.execute(
         text(
             """
-            SELECT q.id, q.trainer_id, q.slot_date, q.start_time, q.end_time, q.min_hours
+            SELECT q.id, q.trainer_id, q.slot_date, q.start_time, q.end_time, q.min_hours, q.arena_id
             FROM (
                 SELECT s.id, s.trainer_id, s.slot_date, s.start_time, s.end_time,
+                       COALESCE(s.arena_id, t.primary_arena_id) AS arena_id,
                        COALESCE(tp.min_hours_before_booking, 3) AS min_hours,
                        ROW_NUMBER() OVER (
                            PARTITION BY s.trainer_id ORDER BY s.slot_date, s.start_time, s.id
@@ -2586,7 +2593,7 @@ async def _trainer_windows_on_arena(
                 LEFT JOIN trainer_profiles tp ON tp.trainer_id = s.trainer_id
                 LEFT JOIN training_groups tg ON tg.id = s.training_group_id
                 WHERE s.trainer_id = ANY(:tids)
-                  AND COALESCE(s.arena_id, t.primary_arena_id) = :aid
+                  AND (CAST(:aid AS integer) IS NULL OR COALESCE(s.arena_id, t.primary_arena_id) = :aid)
                   AND s.status = 'available'
                   AND COALESCE(s.capacity, 1) = 1
                   AND s.slot_date >= :d_from AND s.slot_date <= :d_to
@@ -2610,14 +2617,14 @@ async def _trainer_windows_on_arena(
             "horizon": horizon,
             "d_from": now_slot.date(),
             "d_to": horizon.astimezone(slot_tz).date(),
-            "fetch": _TRAINER_WINDOWS_FETCH,
+            "fetch": max(_TRAINER_WINDOWS_FETCH, int(limit)),
         },
     )
     today = moment.astimezone(view_tz).date()
     out: dict[int, list[dict[str, Any]]] = {}
-    for slot_id, trainer_id, slot_date, start_time, end_time, min_hours in result.fetchall():
+    for slot_id, trainer_id, slot_date, start_time, end_time, min_hours, slot_arena_id in result.fetchall():
         bucket = out.setdefault(int(trainer_id), [])
-        if len(bucket) >= TRAINER_WINDOWS_LIMIT:
+        if len(bucket) >= limit:
             continue
         if working_hours_between(now_slot, slot_date, start_time) < int(min_hours):
             continue
@@ -2633,6 +2640,7 @@ async def _trainer_windows_on_arena(
         bucket.append(
             {
                 "slot_id": int(slot_id),
+                "arena_id": int(slot_arena_id) if slot_arena_id is not None else None,
                 "starts_at": starts.isoformat(),
                 "ends_at": ends.isoformat() if ends else None,
                 "time": format_clock(starts.strftime("%H:%M")),
@@ -2672,7 +2680,7 @@ async def list_public_arena_trainers(
     )
     for body in out:
         body["windows"] = windows.get(int(body["id"]), [])
-    # «от N за занятие» — та же цифра, что на сайте (абонементы, тарифы, групповые).
+    # «от N за занятие» — та же цифра, что на сайте (тарифы, групповые, абонементы).
     from src.application.trainer_min_price import enrich_min_session_price
 
     await enrich_min_session_price(session, out)

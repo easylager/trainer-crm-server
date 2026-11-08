@@ -39,7 +39,7 @@ function loadArenaModel() {
 }
 
 describe('тренер с арены ведёт строго на карточку тренера', () => {
-  it('ссылка несёт происхождение и арену для возврата', () => {
+  it('ссылка набора группы (старый каталог) несёт происхождение и арену для возврата', () => {
     const { buildBookingHref } = loadArenaModel();
     const href = buildBookingHref({ trainerId: 710, arenaId: 42 });
     assert.match(href, /^catalog\?/);
@@ -461,5 +461,43 @@ describe('«Матчи здесь» на карточке катка в Mini App
     tap('client-match?id=171');
     tap('https://glideclub.by/m/171-lokomotiv-orsha-mogilev');
     assert.deepEqual(navigated, ['client-match?id=171']);
+  });
+});
+
+describe('этап 1 входов: тренер с катка → новая карточка на витрине', () => {
+  /** Настоящая goBooking из arena-card.js с подменёнными state/shellNav/BookingClient. */
+  function runGoBooking(card, trainerId, opts) {
+    const src = read('arena-card.js');
+    const start = src.indexOf('function goBooking');
+    const body = src.slice(start, src.indexOf('function photoUrl', start));
+    const nav = [];
+    const marks = [];
+    const M = loadArenaModel();
+    const global = { BookingClient: { markArenaCatalogStack: (id) => marks.push(id) }, sessionStorage: { setItem() {} } };
+    const fn = new Function('state', 'M', 'shellNav', 'global', body + '\nreturn goBooking;')(
+      { card }, M, (p) => nav.push(p), global,
+    );
+    fn(trainerId, opts);
+    return { nav, marks };
+  }
+
+  it('тап по тренеру → trainers?trainer_id=&arena_id=&city_id=', () => {
+    const { nav, marks } = runGoBooking({ id: 42, city_id: 1 }, '710');
+    assert.deepEqual(nav, ['trainers?trainer_id=710&arena_id=42&city_id=1']);
+    assert.deepEqual(marks, [], 'стек возврата старого каталога не трогаем — назад вернёт history.back витрины');
+  });
+
+  it('набор группы — по-прежнему старый каталог с group_id и возвратом на каток', () => {
+    const { nav, marks } = runGoBooking({ id: 42, city_id: 1 }, '710', { groupId: '33' });
+    assert.equal(nav.length, 1);
+    assert.match(nav[0], /^catalog\?from=arena&trainer_id=710&arena_id=42&group_id=33$/);
+    assert.deepEqual(marks, [42]);
+  });
+
+  it('buildTrainerShowcaseHref опускает пустое и мусорное', () => {
+    const { buildTrainerShowcaseHref } = loadArenaModel();
+    assert.equal(buildTrainerShowcaseHref({ trainerId: 7, arenaId: 3 }), 'trainers?trainer_id=7&arena_id=3');
+    assert.equal(buildTrainerShowcaseHref({ trainerId: 7, arenaId: null, cityId: '' }), 'trainers?trainer_id=7');
+    assert.equal(buildTrainerShowcaseHref({ trainerId: '7"><x', arenaId: 3 }), 'trainers?arena_id=3');
   });
 });

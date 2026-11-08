@@ -69,6 +69,16 @@ def format_admin_education_block(profile: dict, items: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _trainer_page_url(trainer_id: int, name: str) -> str | None:
+    from src.application.site_trainer_page import trainer_page_url
+    from src.shared.config import Settings
+
+    base = (Settings().webapp_base_url or "").strip()  # type: ignore[call-arg]
+    if not base.lower().startswith("https://"):
+        return None
+    return trainer_page_url(base, int(trainer_id), "" if name == "—" else name)
+
+
 def format_admin_trainer_moderation_caption(
     trainer: dict,
     education_items: list[dict],
@@ -107,6 +117,12 @@ def format_admin_trainer_moderation_caption(
     parts: list[str] = [
         f"<b>Тренер #{tid}</b>",
         f"Telegram ID: <code>{html.escape(tg_str)}</code>",
+    ]
+    # TASK-350: страница, которую видят родители, — чтобы модератор смотрел ровно на неё.
+    page_url = _trainer_page_url(tid, name_plain)
+    if page_url:
+        parts.append(f'Страница: <a href="{html.escape(page_url)}">{html.escape(page_url)}</a>')
+    parts += [
         f"Имя: {name_esc}",
         f"Город: {city_esc}",
         f"Опыт: {html.escape(exp_str)}",

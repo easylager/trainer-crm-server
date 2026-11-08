@@ -283,7 +283,7 @@ def _hero(rink: Mapping[str, Any] | None, *, rink_page: bool, join_href: str) ->
         "Свои ученики записываются к вам по ссылке, без переписки «а когда можно?».</p>"
         '<div class="tl-hero__cta">'
         f'<a class="tl-btn tl-btn--accent js-tl-join" href="{_esc(join_href)}">{cta}</a>'
-        "<span>Бесплатно. Настроим<br>вместе за 15 минут</span></div>"
+        "<span>Бесплатно. Своя страница<br>и ссылка ученикам — за 2 минуты</span></div>"
         '<span class="tl-hero__note">Тренируете на нескольких катках? Вы появитесь на странице каждого.</span>'
         "</div>"
         f"{_phone(rink)}"

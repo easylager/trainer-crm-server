@@ -23,7 +23,8 @@
 
   function apiUrl(path, initData) {
     var cred = initData != null ? initData : getInitData();
-    return path + (cred ? '?init_data=' + encodeURIComponent(cred) : '');
+    // Путь уже с query (slotsUrl) — init_data через «&», иначе он склеивается с последним параметром.
+    return path + (cred ? (path.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(cred) : '');
   }
 
   function authHeaders(initData, extra) {
@@ -192,7 +193,23 @@
       body.first_name = opts.firstName;
       if (opts.lastName) body.last_name = opts.lastName;
     }
+    // TASK-351: откуда пришёл человек (booking-source.js). Нет источника — поле не шлём.
+    var src = opts.source !== undefined ? opts.source : currentBookingSource();
+    if (src && src.source) {
+      body.source = src.source;
+      if (src.source_arena_id != null) body.source_arena_id = src.source_arena_id;
+      if (src.source_city_id != null) body.source_city_id = src.source_city_id;
+    }
     return body;
+  }
+
+  function currentBookingSource() {
+    var S = global.GlideBookingSource;
+    try {
+      return S && typeof S.current === 'function' ? S.current() : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   function submitBooking(opts) {
@@ -615,12 +632,16 @@
     fetchClientSlots: fetchClientSlots,
     validateBookingForm: validateBookingForm,
     buildBookingPayload: buildBookingPayload,
+    currentBookingSource: currentBookingSource,
     submitBooking: submitBooking,
     formatPlaceMismatchNotice: formatPlaceMismatchNotice,
     formatSuccessMessage: formatSuccessMessage,
     formatFirstBookingSuccess: formatFirstBookingSuccess,
     showBookingSuccess: showBookingSuccess,
     bindWriteAccessBlock: bindWriteAccessBlock,
+    // TASK-357: экран «Запись отправлена» витрины показывает тот же блок «Разрешить».
+    writeAccessBlockHtml: writeAccessBlockHtml,
+    unreachableState: unreachableState,
     catalogFormBackAction: catalogFormBackAction,
     formatPriceAmountHtml: formatPriceAmountHtml,
     resolveBookingReturn: resolveBookingReturn,

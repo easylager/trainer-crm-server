@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Сейчас · Админ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=202611071"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611071" />
-  <link rel="stylesheet" href="theme.css?v=202611071" />
-  <link rel="stylesheet" href="admin-analytics-shared.css?v=202611071" />
+  <script src="mini-app-telegram-chrome.js?v=2026110811"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=2026110811" />
+  <link rel="stylesheet" href="theme.css?v=2026110811" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=2026110811" />
   <style>
     .pulse-action { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.12); }
     .pulse-action.danger { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); }
@@ -314,7 +314,7 @@
   <div id="content">
     <div class="adm-loading">Загрузка…</div>
   </div>
-  <script src="admin-analytics-shared.js?v=202611071"></script>
+  <script src="admin-analytics-shared.js?v=2026110811"></script>
   <script>
     (function () {
       var A = window.AdmAnalytics;
@@ -582,8 +582,33 @@
         return html;
       }
 
+      /** TASK-351: откуда записи и «Написать в Telegram» — 7 / 30 дней. */
+      function renderBookingSources(bs) {
+        if (!bs) return '';
+        var rows = bs.rows || [];
+        var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">Откуда записи · 7 / 30 дней</div>';
+        if (!rows.length) {
+          return html + '<div class="adm-card"><div class="adm-empty">Пока нет записей с источником и нажатий «Написать»</div></div></div>';
+        }
+        html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
+        html += '<th>Источник</th><th class="num">Записи 7</th><th class="num">30</th><th class="num">«Написать» 7</th><th class="num">30</th>';
+        html += '</tr></thead><tbody>';
+        rows.concat([Object.assign({ label: 'Всего' }, bs.totals || {})]).forEach(function (r, i) {
+          var b = i === rows.length ? ['<b>', '</b>'] : ['', ''];
+          html += '<tr><td>' + b[0] + A.escapeHtml(r.label || r.source) + b[1] + '</td>';
+          ['bookings_7d', 'bookings_30d', 'writes_7d', 'writes_30d'].forEach(function (k) {
+            html += '<td class="num">' + b[0] + A.formatNum(+r[k] || 0) + b[1] + '</td>';
+          });
+          html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+        html += '<div class="adm-hint">Записи — клиенты записались сами, по дате записи, с отменёнными. «Написать» — нажатия на сайте, без ботов.</div></div>';
+        return html;
+      }
+
       function render(d) {
         var html = renderCatalogDemand(d.catalog_demand_pulse);
+        html += renderBookingSources(d.booking_sources);
         html += renderActions(d);
         html += '<details class="adm-platform-fold">';
         html += '<summary>Платформа · занятия, деньги, тренеры</summary>';

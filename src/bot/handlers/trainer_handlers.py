@@ -50,7 +50,7 @@ from src.application.booking_use_cases import (
 )
 from src.application.client_dossier_use_cases import add_client_entry_with_date
 from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
-from src.application.trainer_invite_links import build_trainer_invite_links, build_trainer_universal_invite_link
+from src.application.trainer_invite_links import build_trainer_invite_links
 from src.application.recurring_use_cases import (
     apply_recurring_bookings_for_week,
     cancel_recurring_client_slot,
@@ -2667,11 +2667,10 @@ async def on_booking_invite_client_to_bot(callback: CallbackQuery) -> None:
         await callback.message.answer("Ошибка: запись не найдена или клиент не привязан.")
         return
     client_id = booking["client_id"]
-    settings = Settings()
-    deep_link, err = build_trainer_universal_invite_link(
-        client_bot_username=settings.client_bot_username,
-        trainer_id=int(trainer_id),
-    )
+    from src.application.site_trainer_page import trainer_invite_link
+
+    async with async_session_factory() as session:
+        deep_link, err = await trainer_invite_link(session, int(trainer_id))
     if err == "missing_username" or not deep_link:
         await callback.message.answer(
             "Ошибка: не настроено имя клиентского бота для ссылок. Свяжитесь с администратором."

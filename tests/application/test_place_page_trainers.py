@@ -1,4 +1,4 @@
-"""TASK-260: тренеры на SSR-карточке места — CTA «Перейти» в Telegram."""
+"""TASK-260 → TASK-350: тренеры на SSR-карточке места — одна карточка, тап на страницу тренера ``/t/…``."""
 
 from __future__ import annotations
 
@@ -17,23 +17,12 @@ def test_trainer_rows_html_fixed_go_cta() -> None:
     assert "Записаться" not in html
 
 
-def test_b_trainers_renders_pereiti_and_trainer_startapp() -> None:
-    html = _b_trainers(
-        {
-            "card": {"id": 9, "city_id": 1, "venue_type": "ice"},
-            "trainers": [
-                {
-                    "id": 42,
-                    "name": "Александр Гаевский",
-                    "line": "С нуля · от 50 BYN за занятие",
-                    "can_book": True,
-                }
-            ],
-        },
-        base_url="https://glide.by",
-    )
-    assert 'id="trainers"' in html
-    assert "Александр Гаевский" in html
-    assert "Перейти" in html
-    assert "startapp=trainer_42_a_9" in html
-    assert "surface=place_page" in html
+def test_b_trainers_has_no_trainer_list() -> None:
+    """TASK-354: тренеры катка — единый блок «Учиться с тренером»; в разделе «Тренеры» списка нет."""
+    view = {
+        "card": {"id": 9, "city_id": 1, "venue_type": "ice"},
+        "trainers": [{"id": 42, "name": "Александр Гаевский", "line": "С нуля · от 50 BYN", "can_book": True}],
+    }
+    html = _b_trainers(view)
+    assert "Александр Гаевский" not in html
+    assert "startapp=" not in html

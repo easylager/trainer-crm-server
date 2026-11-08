@@ -176,7 +176,8 @@
     if (state.forcedTab) return state.forcedTab;
     var key = pathnameKey();
     if (key === 'client-home') return 'home';
-    if (key === 'arena' || key === 'ice') return 'catalog';
+    // Витрина тренеров — раздел «Поиска» (этап 1 входов): подсвечена вкладка «Поиск».
+    if (key === 'arena' || key === 'ice' || key === 'trainers') return 'catalog';
     if (key === 'catalog') {
       var q = global.location.search || '';
       if (q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0) return 'catalog';
@@ -500,7 +501,7 @@
     var toTab = null;
     var key = normalizeRoutePath(path).split('?')[0];
     if (key === 'client-home') toTab = 'home';
-    else if (key === 'ice' || key === 'catalog' || key === 'arena') toTab = 'catalog';
+    else if (key === 'ice' || key === 'catalog' || key === 'arena' || key === 'trainers') toTab = 'catalog';
     else if (key === 'client-bookings') toTab = 'bookings';
     var to = TAB_ORDER[toTab];
     // Уход вглубь (карточка арены, «Ещё») — всегда «вперёд»: назад оттуда
@@ -1162,13 +1163,21 @@
     }
     // Голый «catalog» — маркетинговая ссылка /go: каталог без города, город — по геолокации.
     if (/^catalog$/i.test(sp)) return { key: 'ice', path: 'ice' };
-    var coach = /^trainer_([1-9][0-9]*)(?:_a_([1-9][0-9]*))?$/i.exec(sp);
+    // Запасной разбор, если glide-deeplink.js не загрузился: trainer_<id> + хвосты _a_/_s_/_v_ в любом порядке.
+    var coach = /^trainer_([1-9][0-9]*)((?:_[a-z]+_[A-Za-z0-9]+)*)$/i.exec(sp);
     if (coach) {
+      var tail = coach[2] || '';
+      var arenaTail = /_a_([1-9][0-9]*)(?=_|$)/i.exec(tail);
+      var slotTail = /_s_([1-9][0-9]*)(?=_|$)/i.exec(tail);
+      var viaTail = /_v_([A-Za-z0-9]+)(?=_|$)/i.exec(tail);
+      // Как GlideDeepLink.trainerDeepLinkTarget: со слотом — запись и метка источника в адресе.
       return {
-        key: 'catalog',
-        path: coach[2]
-          ? 'catalog?from=arena&trainer_id=' + coach[1] + '&arena_id=' + coach[2]
-          : 'catalog?trainer_id=' + coach[1],
+        key: 'trainers',
+        path:
+          'trainers?trainer_id=' + coach[1] +
+          (slotTail ? '&slot_id=' + slotTail[1] : '') +
+          (arenaTail ? '&arena_id=' + arenaTail[1] : '') +
+          (slotTail && viaTail ? '&via=' + encodeURIComponent(viaTail[1].toLowerCase()) : ''),
       };
     }
     // «Кто кого»: приглашение в лигу друзей (TASK-298/299).

@@ -24,8 +24,8 @@ from tests.api.test_public_place_page import _client, _place
 # Warm drops only the cached city list.
 # +1 к прежним 6: правила обычной загрузки (TASK-290), кэш процесса на 60 с — в тёплом прогоне их нет.
 # +1 (TASK-329): волны расписания и горизонт катка — один запрос по arena_id, и в холодном, и в тёплом.
-_PLACE_SQL_COLD = 8
-_PLACE_SQL_WARM = 6
+_PLACE_SQL_COLD = 10  # TASK-354: +2 — каталог тренеров города для блока «Учиться с тренером»
+_PLACE_SQL_WARM = 8
 
 _CATALOG_WIDE_MARKERS = (
     "GROUP BY s.arena_id",

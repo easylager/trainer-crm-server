@@ -40,8 +40,8 @@ describe('GlideDeepLink.deepLinkTarget', () => {
       path: 'ice?city_id=7&intent=service',
     });
     assert.deepEqual(G.deepLinkTarget('trainer_15'), {
-      key: 'catalog',
-      path: 'catalog?trainer_id=15',
+      key: 'trainers',
+      path: 'trainers?trainer_id=15',
     });
     assert.equal(G.deepLinkTarget('nope'), null);
   });
@@ -50,14 +50,28 @@ describe('GlideDeepLink.deepLinkTarget', () => {
 describe('GlideDeepLink.readStartParam', () => {
   const G = load();
 
-  it('trainer_ открывает карточку тренера; с катка — с возвратом на каток (TASK-265)', () => {
-    assert.deepEqual(G.deepLinkTarget('trainer_7'), { key: 'catalog', path: 'catalog?trainer_id=7' });
+  it('trainer_ открывает карточку тренера в витрине (TASK-357); каток — фильтром', () => {
+    assert.deepEqual(G.deepLinkTarget('trainer_7'), { key: 'trainers', path: 'trainers?trainer_id=7' });
     assert.deepEqual(G.deepLinkTarget('trainer_7_a_3'), {
-      key: 'catalog',
-      path: 'catalog?from=arena&trainer_id=7&arena_id=3',
+      key: 'trainers',
+      path: 'trainers?trainer_id=7&arena_id=3',
     });
+    // TASK-351: метка источника не меняет экран; кривая метка игнорируется.
+    assert.deepEqual(G.deepLinkTarget('trainer_7_v_p3'), { key: 'trainers', path: 'trainers?trainer_id=7' });
+    assert.deepEqual(G.deepLinkTarget('trainer_7_v_x3'), { key: 'trainers', path: 'trainers?trainer_id=7' });
     assert.equal(G.deepLinkTarget('trainer_0'), null);
     assert.equal(G.deepLinkTarget('trainer_7_a_'), null);
+  });
+
+  it('trainer_<id>_s_<slot> — сразу запись на это время; хвосты _a_/_s_/_v_ в любом порядке (TASK-357)', () => {
+    assert.deepEqual(G.deepLinkTarget('trainer_7_s_55'), { key: 'trainers', path: 'trainers?trainer_id=7&slot_id=55' });
+    const want = { key: 'trainers', path: 'trainers?trainer_id=7&slot_id=55&arena_id=3&via=p3' };
+    assert.deepEqual(G.deepLinkTarget('trainer_7_a_3_s_55_v_p3'), want);
+    assert.deepEqual(G.deepLinkTarget('trainer_7_v_p3_s_55_a_3'), want);
+    // Незнакомый хвост и via без слота — карточка тренера в витрине.
+    assert.deepEqual(G.deepLinkTarget('trainer_7_v_c1'), { key: 'trainers', path: 'trainers?trainer_id=7' });
+    assert.deepEqual(G.deepLinkTarget('trainer_7_zz_1_a_3'), { key: 'trainers', path: 'trainers?trainer_id=7&arena_id=3' });
+    assert.deepEqual(G.parseTrainerDeepLink('trainer_7_s_0'), { trainerId: 7, arenaId: null, slotId: null, via: null });
   });
 
   it('читает initDataUnsafe, hash и query', () => {
@@ -318,6 +332,9 @@ describe('Mini App public URL recovery', () => {
       ['/p/orsha/orsha-arena?s=99&init_data=signed', '/webapp/arena?ref=31&s=99&init_data=signed'],
       ['/c/orsha?when=tomorrow&init_data=signed', '/webapp/ice?city_id=18&when=tomorrow&init_data=signed'],
       ['/m/5-dinamo?c=ABCD&init_data=signed', '/webapp/client-match?id=5&c=ABCD&init_data=signed'],
+      // TASK-350: страница тренера сайта → его карточка в Mini App.
+      ['/t/9-aleksandr-gaevskiy?init_data=signed', '/webapp/trainers?trainer_id=9&init_data=signed'],
+      ['/t/9?init_data=signed', '/webapp/trainers?trainer_id=9&init_data=signed'],
     ]) {
       const ctx = browser('https://app.test' + url, { initData: '' });
       assert.equal(G.maybePublicRedirect(ctx), true);
@@ -334,7 +351,7 @@ describe('Mini App public URL recovery', () => {
   });
 
   it('ordinary browser including empty Telegram SDK and startapp query stays public', () => {
-    for (const url of ['/', '/?startapp=kkm_5', '/p/orsha/orsha-arena', '/c/orsha', '/m/5-dinamo']) {
+    for (const url of ['/', '/?startapp=kkm_5', '/p/orsha/orsha-arena', '/c/orsha', '/m/5-dinamo', '/t/9-aleksandr-gaevskiy']) {
       const ctx = browser('https://app.test' + url, { initData: '' });
       assert.equal(G.maybePublicRedirect(ctx), false);
       assert.equal(ctx.location.href, 'https://app.test' + url);

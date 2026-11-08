@@ -1215,6 +1215,7 @@ def render_selection_page(
             )
         else:
             places = f'<p class="b-text">{_esc("В этой подборке пока пусто — загляните в каталог.")}</p>'
+    from src.application.site_learn_block import render_learn_block
     from src.application.style_b import back_pill, brand_link, hero_html, share_html
 
     hero = hero_html(
@@ -1241,6 +1242,7 @@ def render_selection_page(
         + (f'<section class="b-sec">{note}</section>' if note else "")
         + f'<section class="b-sec b-cards" data-glide-session-list-root>{places}</section>'
         + _b_pager(view, city_name=city_name)
+        + render_learn_block(view.get("learn"))
         + share_pick
         + share_html(share, telegram_url=None, story_image_url=story_image_url or og_image_url, telegram_link_only=True)
     )

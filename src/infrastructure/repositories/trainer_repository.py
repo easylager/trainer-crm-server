@@ -1552,14 +1552,21 @@ class TrainerRepository:
             services_by_id[tid].append(sid)
             all_sids.add(sid)
         service_names_by_id: dict[int, str] = {}
+        # TASK-353: своя услуга тренера, привязанная админом к публичному направлению.
+        direction_by_service_id: dict[int, int] = {}
         if all_sids:
             s_placeholders = ", ".join(f":s{i}" for i in range(len(all_sids)))
             s_params = {f"s{i}": v for i, v in enumerate(all_sids)}
             r_sn = await self._session.execute(
-                text(f"SELECT id, name FROM services WHERE id IN ({s_placeholders})"),
+                text(
+                    f"SELECT id, name, direction_service_id FROM services WHERE id IN ({s_placeholders})"
+                ),
                 s_params,
             )
-            service_names_by_id = {r[0]: (r[1] or "") for r in r_sn.fetchall()}
+            for r in r_sn.fetchall():
+                service_names_by_id[r[0]] = r[1] or ""
+                if r[2] is not None:
+                    direction_by_service_id[r[0]] = int(r[2])
         tiers_by_tid_sid: dict[tuple[int, int], list[dict[str, Any]]] = {}
         rv = await self._session.execute(
             text(
@@ -1623,6 +1630,7 @@ class TrainerRepository:
                 {
                     "service_id": sid,
                     "service_name": service_names_by_id.get(sid, "—"),
+                    "direction_service_id": direction_by_service_id.get(sid),
                     "price_cents": price_cents,
                     "price_byn": legacy_adult_byn,
                     "price_child_byn": legacy_child_byn,

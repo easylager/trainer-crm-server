@@ -128,3 +128,26 @@ def test_build_trainer_preview_link_invalid_trainer_id() -> None:
     link, err = build_trainer_preview_link(client_bot_username="B", trainer_id=0)
     assert link is None
     assert err == "invalid_trainer_id"
+
+
+def test_ref_payloads_carry_optional_slot_and_old_format_is_unchanged() -> None:
+    from src.application.trainer_invite_links import (
+        build_share_ref_payload,
+        build_trainer_share_link,
+        build_welcome_ref_payload,
+        parse_ref_slot,
+    )
+
+    assert build_welcome_ref_payload(9) == "welcome_ref_9"
+    assert build_share_ref_payload(9) == "share_ref_9"
+    assert build_welcome_ref_payload(9, 55) == "welcome_ref_9_s_55"
+    assert build_share_ref_payload(9, 55) == "share_ref_9_s_55"
+    link, _ = build_trainer_universal_invite_link(client_bot_username="B", trainer_id=9, slot_id=55)
+    assert link == "https://t.me/B?start=welcome_ref_9_s_55"
+    rec, _ = build_trainer_share_link(webapp_base_url="https://x", client_bot_username="B", trainer_id=9, slot_id=55)
+    assert rec is not None and rec.bot_deep_link == "https://t.me/B?start=share_ref_9_s_55"
+    # start_param у Telegram — до 64 символов: самые длинные id укладываются.
+    assert len(build_welcome_ref_payload(999_999_999, 9_999_999_999)) <= 64
+    assert parse_ref_slot("welcome_ref_9_s_55", "welcome_ref_") == (9, 55)
+    assert parse_ref_slot("welcome_ref_9", "welcome_ref_") is None
+    assert parse_ref_slot("welcome_ref_9_s_0", "welcome_ref_") is None

@@ -3204,8 +3204,16 @@
         });
       }
 
+      /** TASK-351: тренера выбрали в самом Mini App — источник записи «miniapp», если сеанс начался без другого. */
+      function noteInAppBookingSource(arenaId) {
+        try {
+          if (window.GlideBookingSource) window.GlideBookingSource.noteInApp({ arenaId: arenaId, cityId: state.cityId });
+        } catch (eSrc) { /* учёт не мешает записи */ }
+      }
+
       function openTrainerDetailFromTrainerObject(t, prefetchPhotos) {
         if (!t || !t.id) return;
+        noteInAppBookingSource(null);
         state.trainerId = t.id;
         state.trainerName = trainerName(t);
         if (prefetchPhotos) {
@@ -3627,7 +3635,8 @@
       function _updateNotifyChipUI(trainerId, isNotify) {
         var chip = document.getElementById('chipNotifySlots');
         if (!chip || parseInt(chip.dataset.trainerId, 10) !== trainerId) return;
-        chip.querySelector('span').textContent = isNotify ? 'Подписан' : 'Напомнить';
+        chip.querySelector('span').textContent = isNotify ? 'Подписан' : 'Сообщить';
+        chip.title = isNotify ? 'Вы подписаны на свободное время' : 'Сообщить, когда появится время';
         // Выкл — обычный колокол (приглашение включить); вкл — зачёркнутый (тап отключит).
         chip.querySelector('.chip-icon').textContent = isNotify ? '🔕' : '🔔';
         chip.classList.toggle('is-active', isNotify);
@@ -3821,7 +3830,7 @@
       }
 
       /**
-       * Dual-chip row: [🔔 Напомнить] [❤️ Сохранить].
+       * Dual-chip row: [🔔 Сообщить] [❤️ Сохранить].
        * Выкл = 🔔 (приглашение), вкл = 🔕 (тап отключит).
        * noSlots=true adds a subtle pulse to the notify chip to draw attention.
        */
@@ -3847,7 +3856,8 @@
         chipNotify.setAttribute('data-no-slots-context', noSlots ? '1' : '0');
         chipNotify.innerHTML =
           '<span class="chip-icon">' + (isNotify ? '🔕' : '🔔') + '</span>' +
-          '<span>' + (isNotify ? 'Подписан' : 'Напомнить') + '</span>';
+          '<span>' + (isNotify ? 'Подписан' : 'Сообщить') + '</span>';
+        chipNotify.title = isNotify ? 'Вы подписаны на свободное время' : 'Сообщить, когда появится время';
         chipNotify.onclick = function() { toggleNotifySlots(tid); };
 
         // ── Save chip (right) ──
@@ -7818,6 +7828,8 @@
           var deepTrainerFromUrl = !isNaN(deepTidParsed) && deepTidParsed > 0 ? deepTidParsed : null;
           var primaryTid = resolveCatalogAutoTrainerIdFromEdges();
           if (deepTrainerFromUrl != null) {
+            // Тап по тренеру на карточке катка в Mini App (catalog?from=arena&arena_id=…).
+            if (arenaOriginId()) noteInAppBookingSource(arenaOriginId());
             state.deepLinkTrainerId = deepTrainerFromUrl;
             state.trainerId = deepTrainerFromUrl;
             state.activeTab = 'my_trainer';

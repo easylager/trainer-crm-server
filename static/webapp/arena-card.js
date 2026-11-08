@@ -460,6 +460,16 @@
   function goBooking(trainerId, opts) {
     opts = opts || {};
     var arenaId = state.card && state.card.id;
+    // Этап 1 входов: тренер — новая карточка на витрине; «‹ Назад» там вернёт на этот каток (history.back).
+    // Набор группы витрина не раскрывает — он остаётся в старом каталоге, как и его возврат на арену ниже.
+    if (opts.groupId == null) {
+      shellNav(M.buildTrainerShowcaseHref({
+        trainerId: trainerId,
+        arenaId: arenaId,
+        cityId: state.card && state.card.city_id,
+      }));
+      return;
+    }
     if (global.BookingClient && typeof global.BookingClient.markArenaCatalogStack === 'function') {
       global.BookingClient.markArenaCatalogStack(arenaId);
     } else {
@@ -2298,6 +2308,25 @@
       (on ? '<path d="M4 4l16 16"/>' : '') + '</svg></button>';
   }
 
+  /* TASK-354: «Учиться с тренером» после расписания — только на катках, где катаются (лёд). paint()
+     пересоздаёт разметку, поэтому место — пустой контейнер, а LearnBlock берёт данные из кеша сеанса. */
+  function learnApplies() {
+    return !!(state.card && state.card.id != null && state.card.city_id && skatingCard());
+  }
+
+  function renderLearnSlot() {
+    return learnApplies() ? '<div class="lb-learn-host" id="arenaLearn" hidden></div>' : '';
+  }
+
+  function mountLearn() {
+    if (!learnApplies() || !global.LearnBlock) return;
+    global.LearnBlock.mount('#arenaLearn', {
+      place: 'arena',
+      cityId: Number(state.card.city_id),
+      arenaId: Number(state.card.id),
+    });
+  }
+
   var heroNode = null;
   var lastHeroHtml = '';
   var lastTicketSid = '';
@@ -2312,6 +2341,7 @@
       var heroHtml = renderHero();
       var restHtml =
         renderIceTabs() +
+        renderLearnSlot() +
         renderHereMatches() +
         // Карточка v2 — порядок PLACE_BLOCKS, как на сайте: на месте → тренеры → партнёры → ещё.
         (visit() && String(state.card.venue_type || '') !== 'shop' ? renderFacts() : renderAmenities()) +
@@ -2339,6 +2369,7 @@
       lastTicketSid = nextTicketSid;
       bindHeroFallbacks(root);
       bindAvatarFallbacks(root);
+      mountLearn();
     } catch (err) {
       if (global.console && global.console.error) {
         global.console.error('arena-card paint failed', err);

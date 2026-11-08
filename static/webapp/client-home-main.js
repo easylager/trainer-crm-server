@@ -937,7 +937,7 @@
       /**
        * «Мой тренер» одной рамкой. Крупного времени здесь нет намеренно: чужое
        * окно — ещё не моя запись, поэтому время живёт только чипами. Полоса
-       * чипов и есть действие; когда окон нет — «Написать» + чип 🔔 «Напомнить».
+       * чипов и есть действие; когда окон нет — «Написать» + чип 🔔 «Сообщить».
        */
       function paintMeCardForTrainer(trainer, slots, hubMeta, notifyWhenSlots) {
         var list = Array.isArray(slots) ? slots : [];
@@ -1695,6 +1695,9 @@
 
         var nextItem = findNextBooking(bookingDays);
         hubHasUpcomingBooking = !!nextItem;
+        /* TASK-354: «Учиться с тренером» — только в чистом состоянии (приоритет 5); дальше решает он сам. */
+        setHubLearn(false);
+        setOtherTrainersLink(false);
 
         /* ── Priority 1: Has upcoming booking ── */
         if (nextItem) {
@@ -1736,6 +1739,9 @@
              рендера: их судьба зависит от того, есть ли окна. */
           hideMyTrainerBlock();
           placeMeCard('mine');
+          /* Этап 1 входов: под «Моим тренером» — тихая ссылка на витрину. Сама карточка и «Записаться»
+             остаются на старом каталоге (catalog?trainer_id=…&from=hub) — их денежный путь не трогаем. */
+          setOtherTrainersLink(true, hubMeta && hubMeta.home && hubMeta.home.city ? hubMeta.home.city.id : (cs.city_id || null));
           return finishHubApply(loadAndRenderMeCardForTrainer(hubPrimaryTrainer, hubMeta));
         }
 
@@ -1764,9 +1770,55 @@
         resetHubHeroLayout();
         clearNextBookingBlock();
         hideMyTrainerBlock();
+        setHubLearn(true, hubMeta && hubMeta.home && hubMeta.home.city ? hubMeta.home.city.id : null);
         /* TASK-303: личного нет — слот уже заполнил HubHome (лёд, матч).
            Без города слот — карточка клиента «выберите город» / «вы далеко». */
         return finishHubApply(Promise.resolve());
+      }
+
+      /**
+       * TASK-354: блок «Учиться с тренером» под «Ближайшим льдом»; без города его нет (цифры — по городу).
+       * Этап 1 входов: строка «Учиться с тренером» в «Чем займёмся?» есть у всех; пока виден блок (новый
+       * клиент), строку прячем — один вход на витрину на экране. Блок пустой (тренеров показать нечем) —
+       * строка возвращается.
+       */
+      var hubLearnGen = 0;
+      function setHubLearn(on, cityId) {
+        var LB = window.LearnBlock;
+        var HH = window.HubHome;
+        var gen = ++hubLearnGen;
+        var rowHidden = function (hide) {
+          if (HH && typeof HH.hideNeed === 'function') HH.hideNeed('coach', hide);
+        };
+        if (!LB) {
+          rowHidden(false);
+          return;
+        }
+        if (!on || !cityId) {
+          LB.hide('#hubLearn');
+          rowHidden(false);
+          return;
+        }
+        rowHidden(true);
+        Promise.resolve(LB.mount('#hubLearn', { place: 'city', cityId: Number(cityId) })).then(function () {
+          if (gen !== hubLearnGen) return;
+          var host = document.getElementById('hubLearn');
+          rowHidden(!!(host && !host.hidden));
+        }, function () {
+          if (gen === hubLearnGen) rowHidden(false);
+        });
+      }
+
+      /** Этап 1 входов: «Другие тренеры» под карточкой «Мой тренер» — витрина города. */
+      function setOtherTrainersLink(on, cityId) {
+        var btn = document.getElementById('hubOtherTrainers');
+        if (!btn) return;
+        btn.hidden = !on;
+        if (!on) return;
+        var cid = Number(cityId);
+        var path = 'trainers' + (isFinite(cid) && cid > 0 ? '?city_id=' + cid : '');
+        btn.setAttribute('data-href', path);
+        btn.onclick = function () { navigateTo(path); };
       }
 
       /** TASK-303: карточка клиента — в слоте «сейчас» или в «Моих занятиях». */

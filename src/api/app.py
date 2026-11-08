@@ -41,6 +41,8 @@ from src.api.routes.zovi_create_page import router as zovi_create_page_router
 from src.api.routes.public_ice_page import router as public_ice_page_router
 from src.api.routes.public_place_page import router as public_place_page_router
 from src.api.routes.public_matches import router as public_matches_router
+from src.api.routes.public_trainer_page import router as public_trainer_page_router
+from src.api.routes.public_trainer_catalog import router as public_trainer_catalog_router
 from src.api.routes.indexnow_key import build_indexnow_key_router
 from src.api.routes.zovi_pages import router as zovi_pages_router
 from src.api.routes.public_ice_company import router as public_ice_company_router
@@ -228,6 +230,15 @@ def webapp_catalog_page(request: Request):
     if target:
         return RedirectResponse(url=target, status_code=307)
     path = _WEBAPP_DIR / "catalog.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainers")
+def webapp_trainers_page():
+    """TASK-357: витрина тренеров, карточка тренера и запись (``?tab=&arena_id=&trainer_id=&slot_id=``)."""
+    path = _WEBAPP_DIR / "trainers.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
@@ -1390,6 +1401,17 @@ def webapp_trainer_first_students_js(request: Request):
     )
 
 
+@app.get("/webapp/trainer-catalog-offer.js")
+def webapp_trainer_catalog_offer_js(request: Request):
+    """Окно «Показывать вас родителям на страницах катков?» после онбординга и на главной (TASK-350)."""
+    path = _WEBAPP_DIR / "trainer-catalog-offer.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path, media_type="application/javascript", headers=_webapp_versioned_asset_cache_headers(request)
+    )
+
+
 @app.get("/webapp/trainer-client-relay-ui.js")
 def webapp_trainer_client_relay_ui_js(request: Request):
     """Relay message sheet → POST relay-messages; trainer-home, schedule-editor, trainer-clients."""
@@ -2288,10 +2310,43 @@ def webapp_mini_app_client_bookings_css(request: Request):
     )
 
 
+@app.get("/webapp/trainer-showcase-model.js")
+@app.get("/webapp/trainer-showcase-main.js")
+@app.get("/webapp/trainer-showcase.css")
+@app.get("/webapp/learn-block-model.js")
+@app.get("/webapp/learn-block.js")
+@app.get("/webapp/learn-block-core.js")
+@app.get("/webapp/learn-block.css")
+def webapp_trainer_showcase_asset(request: Request):
+    """TASK-357: витрина тренеров и запись — модель, экраны, стили; TASK-354: блок «Учиться с тренером» в точках входа. Use ``?v=…`` for long cache."""
+    name = request.url.path.rsplit("/", 1)[-1]
+    path = _WEBAPP_DIR / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path,
+        media_type="text/css" if name.endswith(".css") else "application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/booking-client.js")
 def webapp_booking_client_js(request: Request):
     """Shared client booking module (session, slots, submit, success). Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "booking-client.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/booking-source.js")
+def webapp_booking_source_js(request: Request):
+    """Источник записи на сеанс Mini App (TASK-351). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "booking-source.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(
@@ -2505,6 +2560,9 @@ _W26_PUBLIC_ASSETS = {
     "/static/share/winter.js": ("share/winter.js", "application/javascript"),
     "/static/shared/winter.css": ("shared/winter.css", "text/css"),
     "/static/shared/winter-model.js": ("shared/winter-model.js", "application/javascript"),
+    # Страница тренера /t/… (TASK-350).
+    "/static/share/trainer-page.css": ("share/trainer-page.css", "text/css"),
+    "/static/share/trainer-catalog.css": ("share/trainer-catalog.css", "text/css"),
 }
 
 
@@ -2919,6 +2977,8 @@ app.include_router(zovi_create_page_router)
 app.include_router(public_ice_page_router)
 app.include_router(public_place_page_router)
 app.include_router(public_matches_router)
+app.include_router(public_trainer_page_router)
+app.include_router(public_trainer_catalog_router)
 _indexnow_key_router = build_indexnow_key_router()
 if _indexnow_key_router is not None:
     app.include_router(_indexnow_key_router)

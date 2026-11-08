@@ -58,6 +58,8 @@ from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.city_locative import city_locative
 from src.application.style_b import b_photo_url
 from src.shared.copy_ru import t
+from src.application.site_learn_block import TITLE as LEARN_TITLE, render_learn_block
+from src.application.site_trainer_catalog import _money, _n_trainers
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
 from src.application.city_style_b import (
     VARIANT_ONE,
@@ -453,11 +455,6 @@ async def load_city_hub_view(
     center_count = await city_hockey_center_count(session, city_id=city_id)
     trainer_rows = (await session.execute(_TRAINERS_SQL, {"city_id": city_id})).mappings().all()
     trainer_count = sum(int(r["n"] or 0) for r in trainer_rows)
-    trainers: list[dict[str, Any]] = []
-    if trainer_count:
-        from src.application.site_trainers import CITY_TRAINERS_SHOWN, load_site_trainers
-
-        trainers, _total = await load_site_trainers(session, city_id=city_id, limit=CITY_TRAINERS_SHOWN)
     roles: list[str] = []
     for r in trainer_rows:
         label = specialist_role_display(str(r.get("specialist_role") or "")).strip()
@@ -521,7 +518,6 @@ async def load_city_hub_view(
         "shops_open": [p for p in shops if p["open_state"] in ("open", "soon")],
         "trainer_count": trainer_count,
         "trainer_roles": roles[:3],
-        "trainers": trainers,
         "hot_skate": when if when_explicit else hot_window_key(skate, now=now),
         "when": when,
         "when_explicit": when_explicit,
@@ -1099,7 +1095,13 @@ def _b_open_line(
     return f"{k} {word} сейчас"
 
 
-def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
+def _b_hockey_trainers_bit(view: Mapping[str, Any]) -> list[str]:
+    """«2 тренера» в строке «С клюшкой»: сколько тренеров во вкладке «С клюшкой» каталога."""
+    n = int(view.get("learn_hockey") or 0)
+    return [_n_trainers(n)] if n else []
+
+
+def _b_routes(view: Mapping[str, Any]) -> str:
     from src.application.style_b import section
 
     slug = str(view["slug"])
@@ -1124,6 +1126,7 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
         if isinstance(nxt, Mapping):
             hhmm, day = _session_when(nxt, today=view["today"])
             bits.append(f"ближайший в {hhmm}" if day == "сегодня" else f"ближайший {day} в {hhmm}")
+        bits += _b_hockey_trainers_bit(view)
         quick = _b_quick(slug, ohm, all_count=int(ohm.get("all") or 0), hot=view.get("hot_ohm"), kind="ohm")
         rows.append(
             _b_route_row(
@@ -1131,7 +1134,7 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
             )
         )
     elif centers:
-        line = f"{centers} {plural_ru(centers, 'центр', 'центра', 'центров')} по записи"
+        line = " · ".join([f"{centers} {plural_ru(centers, 'центр', 'центра', 'центров')} по записи", *_b_hockey_trainers_bit(view)])
         rows.append(_b_route_row(href=_list_href(slug, kind="ohm", seg="centers"), icon="stick", title=t("chip.hockey"), line=_esc(line)))
     feed = view.get("matches")
     if feed:
@@ -1161,11 +1164,12 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
         if open_line:
             bits.append(open_line)
         rows.append(_b_route_row(href=_list_href(slug, t="shop"), icon="shop", title=t("route.shops"), line=_esc(" · ".join(bits))))
-    trainers = int(view.get("trainer_count") or 0)
-    trainers_href = "#trainers" if view.get("trainers") else coach_href
-    if trainers and trainers_href:
-        line = f"{trainers} {plural_ru(trainers, 'тренер', 'тренера', 'тренеров')}"
-        rows.append(_b_route_row(href=trainers_href, icon="person", title=t("route.trainers"), line=_esc(line)))
+    learn = view.get("learn")
+    if learn is not None:
+        bits = [_n_trainers(learn.count)]
+        if learn.price:
+            bits.append(f"от {_money(*learn.price)}")
+        rows.append(_b_route_row(href=learn.href, icon="person", title=LEARN_TITLE, line=_esc(" · ".join(bits))))
     winter = view.get("winter")
     if winter:
         from src.application.winter_page import winter_city_path
@@ -1182,29 +1186,22 @@ def _b_routes(view: Mapping[str, Any], *, coach_href: str) -> str:
     return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>')
 
 
-def _b_trainers(view: Mapping[str, Any], *, base_url: str, coach_href: str) -> str:
-    """Тренеры города лицами (TASK-265); больше, чем показали, — «Все тренеры» в Telegram."""
-    from src.application.place_links import public_telegram_cta_url, trainer_start_param
-    from src.application.style_b import section, trainer_rows_html
+def _b_trainers(view: Mapping[str, Any]) -> str:
+    """Вход «Тренируете в …?» (TASK-350) — остаётся и в городе без тренеров. Список тренеров заменён
+    единым блоком «Учиться с тренером» (TASK-354)."""
+    return f'<section class="b-sec">{_b_city_coach_entry(str(view["city"].get("name") or ""))}</section>'
 
-    trainers = list(view.get("trainers") or [])
-    if not trainers:
-        return ""
-    city_id = int(view["city"]["id"])
 
-    def href_for(trainer: Mapping[str, Any]) -> str | None:
-        return public_telegram_cta_url(
-            base_url,
-            start_param=trainer_start_param(int(trainer["id"])),
-            surface="selection_page",
-            city_id=city_id,
-        )
-
-    body = trainer_rows_html(trainers, href_for=href_for)
-    total = int(view.get("trainer_count") or 0)
-    if body and coach_href and total > len(trainers):
-        body += f'<a class="b-more" href="{_esc(coach_href)}">{_esc(t("hub.trainers_all"))}</a>'
-    return section(t("route.trainers"), body, sec_id="trainers")
+def _b_city_coach_entry(city_name: str) -> str:
+    """«Тренируете в Минске?» — вход для тренера рядом с тренерами города, как на странице катка (TASK-350)."""
+    loc = city_locative(city_name) if city_name else None
+    title = f"Тренируете в {loc}?" if loc else t("coach.entry_first_title")
+    return (
+        '<a class="b-coach tg-out" href="/trainers?utm_source=glide&amp;utm_medium=city_hub">'
+        '<span class="b-coach__ic" aria-hidden="true">+</span>'
+        f'<span class="b-coach__t"><b>{_esc(title)}</b><span>{_esc(t("coach.city_sub"))}</span></span>'
+        f'<span class="b-coach__go">{_esc(t("coach.entry_go"))}&nbsp;›</span></a>'
+    )
 
 
 def _b_all_places(view: Mapping[str, Any]) -> str:
@@ -1563,10 +1560,11 @@ def _b_body(
             [
                 hero,
                 schedule_block,
+                render_learn_block(view.get("learn")),
                 matches_block,
                 _b_rink_arrive(rink, base_url=base_url, city_id=city_id),
                 _b_nearby(view, title=t("hub.nearby")),
-                _b_trainers(view, base_url=base_url, coach_href=coach_href),
+                _b_trainers(view),
                 share_block,
             ]
         )
@@ -1587,8 +1585,9 @@ def _b_body(
         for r in rinks:
             blocks.append(_b_phone_block(view, r, base_url=base_url))
             blocks.append(_b_rink_arrive(r, base_url=base_url, city_id=city_id, show_phone_buttons=False))
+        blocks.append(render_learn_block(view.get("learn")))
         blocks.append(_b_nearby(view, title=t("hub.nearby_scheduled")))
-        blocks.append(_b_trainers(view, base_url=base_url, coach_href=coach_href))
+        blocks.append(_b_trainers(view))
         blocks.append(share_block)
         return "".join(blocks)
     hero = hero_html(
@@ -1610,13 +1609,14 @@ def _b_body(
             hero,
             _b_when_switch(view) if int(view["skate_counts"].get("all") or 0) else "",
             _b_upcoming(view),
+            render_learn_block(view.get("learn")),
             matches_block,
-            _b_routes(view, coach_href=coach_href),
+            _b_routes(view),
             _b_for_you(view),
             empty,
             _b_all_places(view),
             _b_city_suggest(view),
-            _b_trainers(view, base_url=base_url, coach_href=coach_href),
+            _b_trainers(view),
             share_block,
         ]
     )

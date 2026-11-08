@@ -348,6 +348,55 @@ async def list_accessible_profiles(
     return profiles
 
 
+def _profile_name_key(value: str | None) -> str:
+    """Имя для сравнения: без краёв, пробелы схлопнуты, регистр не важен («  соня » == «Соня»)."""
+    return " ".join((value or "").split()).casefold()
+
+
+async def find_guardian_profile_by_name(
+    session: AsyncSession,
+    account_telegram_id: int,
+    *,
+    first_name: str,
+    last_name: str | None = None,
+) -> int | None:
+    """
+    Уже добавленный этим аккаунтом ребёнок (``guardian``) с тем же именем — или None.
+
+    Повторное «добавить Соню» (запись подряд, повтор после «время заняли», второй экран) не должно
+    заводить второй профиль: история, абонементы и тариф прошлой записи разошлись бы по двум.
+    Фамилия: совпадают, либо у обоих не указана. «Саша» без фамилии и новый «Саша Иванова» — разные дети
+    (близнецы/тёзки), склеивать их нельзя. Сравнение в Python, не ``lower()`` в SQL:
+    кириллица не должна зависеть от локали базы.
+    """
+    fn_key = _profile_name_key(first_name)
+    if not fn_key:
+        return None
+    ln_key = _profile_name_key(last_name)
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT c.id, c.first_name, c.last_name
+                FROM client_profile_links l
+                JOIN clients c ON c.id = l.profile_client_id
+                WHERE l.account_telegram_id = :tid AND l.role = :role
+                ORDER BY l.id
+                """
+            ),
+            {"tid": account_telegram_id, "role": CLIENT_PROFILE_ROLE_GUARDIAN},
+        )
+    ).fetchall()
+    for cid, fn, ln in rows:
+        if _profile_name_key(fn) != fn_key:
+            continue
+        existing_ln = _profile_name_key(ln)
+        if ln_key != existing_ln:
+            continue
+        return int(cid)
+    return None
+
+
 async def create_guardian_profile(
     session: AsyncSession,
     account_telegram_id: int,

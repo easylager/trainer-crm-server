@@ -1248,6 +1248,32 @@
     return 'ice?intent=coach';
   }
 
+  function positiveId(v) {
+    var n = Number(v);
+    return isFinite(n) && n > 0 && Math.floor(n) === n ? n : null;
+  }
+
+  /** Витрина тренеров (этап 1 входов): сегмент «Тренеры» и строки «Поиска»; пустые параметры опускаем. */
+  function trainerShowcaseHref(opts) {
+    opts = opts || {};
+    var parts = [];
+    var tid = positiveId(opts.trainerId);
+    var aid = positiveId(opts.arenaId);
+    var cid = positiveId(opts.cityId);
+    if (tid) parts.push('trainer_id=' + tid);
+    if (aid) parts.push('arena_id=' + aid);
+    if (cid) parts.push('city_id=' + cid);
+    return 'trainers' + (parts.length ? '?' + parts.join('&') : '');
+  }
+
+  /** ice?intent=coach → витрина города (город из ссылки или «Поиска»); нет города или возврат «Назад» — '' (старый список). */
+  function coachShowcaseRedirect(search, savedCityId, returning) {
+    if (returning) return '';
+    if (intentFromSearch(search) !== INTENTS.coach) return '';
+    var cityId = cityIdFromSearch(search) || positiveId(savedCityId);
+    return cityId ? trainerShowcaseHref({ cityId: cityId }) : '';
+  }
+
   function intentFromSearch(search) {
     var raw = String(search || '');
     if (raw.charAt(0) === '?') raw = raw.slice(1);
@@ -1452,8 +1478,8 @@
   }
 
   function trainerHref(item) {
-    var id = item && item.id;
-    return 'catalog?trainer_id=' + encodeURIComponent(String(id));
+    item = item || {};
+    return trainerShowcaseHref({ trainerId: item.id, cityId: item.city_id });
   }
 
   function arenaHref(item) {
@@ -2456,6 +2482,8 @@
     arenaListLens: arenaListLens,
     catalogHref: catalogHref,
     iceCoachHref: iceCoachHref,
+    trainerShowcaseHref: trainerShowcaseHref,
+    coachShowcaseRedirect: coachShowcaseRedirect,
     intentFromSearch: intentFromSearch,
     placeServiceBootFromSearch: placeServiceBootFromSearch,
     urlBlocksSavedPlaceService: urlBlocksSavedPlaceService,

@@ -981,6 +981,38 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-coach__t span { font-size: 13px; color: var(--g-muted); }
 .b-coach__go { color: var(--g-accent-ink); font-weight: 600; font-size: 14px; white-space: nowrap; }
 
+/* ── Единый блок «Учиться с тренером» (TASK-354): город, «Покататься», каток, «С клюшкой» ──
+   Тёмная карточка с лицами; одна строка и цель меняются по месту, чипы — только на городе. */
+.b-learn {
+  position: relative; overflow: hidden; isolation: isolate; display: grid; gap: 12px; min-width: 0;
+  padding: 18px; border-radius: 24px; background: var(--g-dark); color: #fff;
+}
+.b-learn::after {
+  content: ""; position: absolute; z-index: -1; right: -60px; top: -70px; width: 200px; height: 200px;
+  border-radius: 50%; border: 2px solid rgba(69, 185, 187, .32);
+}
+.b-learn__faces { display: flex; align-items: center; min-width: 0; }
+.b-learn__faces img, .b-learn__mono {
+  width: 42px; height: 42px; flex: none; border-radius: 50%; object-fit: cover;
+  border: 3px solid var(--g-dark); margin-left: -12px; background: var(--g-dark-2);
+}
+.b-learn__faces > :first-child { margin-left: 0; }
+.b-learn__mono { display: grid; place-items: center; font: 600 16px var(--g-font); color: #fff; box-sizing: border-box; }
+.b-learn__faces > span:last-child { margin-left: 12px; font-size: 14px; color: var(--g-on-dark-muted); }
+.b-learn__t { margin: 0; font: 400 23px/1.05 var(--g-font-display); overflow-wrap: anywhere; }
+.b-learn__line { margin: 0; font-size: 14.5px; line-height: 1.4; color: var(--g-on-dark-muted); overflow-wrap: anywhere; }
+.b-learn__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.b-learn .b-learn__chips a {
+  background: rgba(255, 255, 255, .1); border-radius: 999px; padding: 7px 12px; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center;
+  font-size: 13px; font-weight: 600; color: #fff; text-decoration: none;
+}
+.b-learn .b-learn__go {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 48px;
+  background: var(--g-accent); color: var(--g-dark); border-radius: 14px; padding: 12px 14px;
+  font-weight: 800; font-size: 15px; text-decoration: none;
+}
+.b-learn .b-learn__chips a:focus-visible, .b-learn .b-learn__go:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
 
 /* ── Cross-document view transitions (публичка /, /c/, /p/) ─────────────
    Прогрессивно: Chrome/Edge 126+, Safari 18.2+; иначе обычная навигация. */

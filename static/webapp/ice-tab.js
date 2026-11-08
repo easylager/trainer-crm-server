@@ -1,7 +1,7 @@
 /**
  * TASK-053 / TASK-076 Ice tab page.
  * Skate/group: GET /api/public/ice/arenas. Coach: GET /api/public/trainers (city list).
- * Trainer card tap deep-links to catalog?trainer_id=… (no tab=catalog — that flashes the old funnel).
+ * Trainer card tap opens the trainer showcase card: trainers?trainer_id=… (stage 1 of showcase entries).
  * Chip itself stays on ice.html.
  */
 (function (global) {
@@ -1758,6 +1758,22 @@
     if (coach) coach.hidden = !coachOn;
     renderSeasonFooter();
     syncWinter();
+    renderLearn();
+  }
+
+  /* TASK-354: блок «Учиться с тренером» под сеансами; learn-block.js — по требованию. */
+  var learnSrc = document.currentScript && document.currentScript.src;
+  function renderLearn() {
+    var LB = global.LearnBlock;
+    var ok = state.view === 'list' && !state.loading && state.loadedIntent === state.intent && state.items.length &&
+      state.cityId && !state.season && !state.venueTypes.length && state.placeService !== 'service';
+    var place = !ok ? '' : state.intent === 'skate' ? 'skate' : state.intent === 'ohm' && state.hockeySeg !== 'centers' ? 'hockey' : '';
+    if (LB) return place ? LB.mount('#iceLearn', { place: place, cityId: state.cityId }) : LB.hide('#iceLearn');
+    if (!place || !learnSrc) return;
+    var js = document.createElement('script');
+    js.src = learnSrc.replace('ice-tab.js', 'learn-block.js');
+    js.onload = renderLearn;
+    document.head.appendChild(js);
   }
 
   /* TASK-343: зимние катки и коробки внутри «Зимой». Нет модуля или флага — лента как была. */
@@ -2342,6 +2358,10 @@
     if (kind && kind.indexOf('intent:') === 0) {
       var next = kind.slice('intent:'.length);
       return function () {
+        if (M.coerceIntent(next) === 'coach' && state.cityId) {
+          openTrainerShowcase(M.trainerShowcaseHref({ cityId: state.cityId }));
+          return;
+        }
         state.intent = M.coerceIntent(next);
         state.autoCoach = false;
         renderList();
@@ -2993,6 +3013,17 @@
         return Number(c.id) === Number(id);
       })[0] || null
     );
+  }
+
+  /** «Тренеры» в «Поиске» → витрина; replace для ice?intent=coach — без петли по «Назад». */
+  function openTrainerShowcase(path, replace) {
+    var shell = global.ClientShell;
+    if (shell && typeof shell.navigate === 'function') {
+      shell.navigate(path, replace ? { replace: true } : undefined);
+      return;
+    }
+    if (replace) global.location.replace(path);
+    else global.location.href = path;
   }
 
   function switchToCoach() {
@@ -3736,6 +3767,10 @@
         var btn = ev.target.closest('[data-catalog-mode]');
         if (!btn) return;
         var mode = btn.getAttribute('data-catalog-mode') || 'places';
+        if (mode === 'coach' && state.cityId) {
+          openTrainerShowcase(M.trainerShowcaseHref({ cityId: state.cityId }));
+          return;
+        }
         var patch = M.applyCatalogMode(mode);
         state.intent = M.coerceIntent(patch.intent);
         state.autoCoach = false;
@@ -4079,9 +4114,15 @@
   }
 
   function boot() {
+    var saved = M.loadIceState(global.sessionStorage);
+    /* ice?intent=coach → витрина города через location.replace; «Назад» и ссылка без города — старый список. */
+    var coachJump = M.coachShowcaseRedirect(global.location.search || '', saved && saved.cityId, navigationIsBackForward());
+    if (coachJump) {
+      openTrainerShowcase(coachJump, true);
+      return;
+    }
     bind();
     bindScrollRestoreCancel();
-    var saved = M.loadIceState(global.sessionStorage);
     takePendingListScroll();
     if (saved && saved.intent) state.intent = M.coerceIntent(saved.intent);
     if (saved && saved.serviceIds && saved.serviceIds.length) {
