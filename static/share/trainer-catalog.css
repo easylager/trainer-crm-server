@@ -54,6 +54,7 @@
 
 /* карточка тренера: вся карточка — ссылка на /t/, окна — поверх */
 .tcat-grid { display: grid; gap: 14px; }
+@media (min-width: 720px) { .tcat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
 .tc { position: relative; background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 22px; padding: 16px; display: grid; gap: 14px; }
 .tc-stretch { position: absolute; inset: 0; border-radius: 22px; z-index: 1; }
 .tc-slot, .tc-btn { position: relative; z-index: 2; }
