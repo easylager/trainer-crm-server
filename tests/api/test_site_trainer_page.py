@@ -647,3 +647,39 @@ def test_horizontal_strip_gets_scroll_arrows_hooked_to_page_script() -> None:
     assert html.startswith('<div class="tp-scroller" data-scroller><div class="tp-more">')
     assert 'tp-arrow--prev' in html and 'tp-arrow--next' in html
     assert "data-scroller" in _SCROLLER_SCRIPT and "has-next" in _SCROLLER_SCRIPT
+
+
+def _week_cells(html: str) -> list[str]:
+    week = html.split('<div class="tp-week">', 1)[1].split('<div class="tp-request">', 1)[0]
+    return re.split(r'(?=<div class="tp-day)', week)[1:]
+
+
+@pytest.mark.asyncio
+async def test_week_shows_every_day_of_the_grid_when_today_has_no_slots(app_use_test_db, db_session) -> None:
+    """Сетка стартует с первого дня с окнами (не с сегодня): её последний день не должен теряться."""
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        for d in range(1, 8):  # завтра … через 7 дней, на сегодня окон нет
+            await _slot(db_session, tid, days=d, hour=12, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+
+    cells = _week_cells(html)
+    assert len(cells) == 7
+    assert [c for c in cells if "tp-day--empty" in c] == []
+
+
+@pytest.mark.asyncio
+async def test_week_keeps_last_day_for_a_busy_trainer(app_use_test_db, db_session) -> None:
+    """Много слотов в день: общий лимит окон не должен съедать конец недели."""
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        for d in range(1, 8):
+            for h in range(7, 17):  # 10 слотов в день, 70 за неделю
+                await _slot(db_session, tid, days=d, hour=h, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+
+    cells = _week_cells(html)
+    assert len(cells) == 7
+    assert cells[-1].count('class="tp-slot"') == 10

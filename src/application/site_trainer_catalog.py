@@ -22,6 +22,7 @@ from typing import Any, Mapping, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.style_b import _file_version
 from src.application.catalog_directions import (  # noqa: F401 — реэкспорт для вызывающих и тестов
     _BY_KEY,
     _BY_SERVICE,
@@ -46,7 +47,8 @@ from src.shared.html_template import fill_placeholders, json_for_script
 
 CATALOG_SURFACE = "trainer_catalog"
 _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
-TRAINER_CATALOG_STYLE_VERSION = "2026110801"
+# Хэш содержимого, не ручной номер: правка CSS сама сбрасывает кэш браузера.
+TRAINER_CATALOG_STYLE_VERSION = _file_version("static/share/trainer-catalog.css")
 #: Сколько окон в карточке — дальше «Все окна и цены» на странице тренера.
 CARD_WINDOWS = 3
 #: Сколько катков в «Где проходят занятия».

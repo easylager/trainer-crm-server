@@ -32,6 +32,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.style_b import _file_version
 from src.application.catalog_directions import (
     DIRECTIONS,
     Direction,
@@ -58,7 +59,10 @@ DESCRIPTION_LIMIT = 155
 #: Ближайшее время в карточке цены — дальше «Всё время на неделю».
 NEAR_SHOWN = 3
 #: Слотов на неделю с запасом: у тренера с плотным расписанием их бывает десятки.
-WEEK_WINDOWS_LIMIT = 60
+#: Окон на тренера в выборке: 7 дней по ~10 слотов с запасом — общий лимит не должен съедать конец недели.
+WEEK_WINDOWS_LIMIT = 200
+#: Как далеко вперёд ищем окна: неделя сетки стартует с первого дня с окнами, он может быть не сегодня.
+WEEK_LOOKAHEAD_DAYS = 14
 WEEK_DAYS = 7
 #: Оценку показываем, когда оценок хотя бы столько (решение владельца).
 RATING_MIN_COUNT = 3
@@ -500,10 +504,18 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
     if can_book:
         windows = (
             await _trainer_windows_on_arena(
-                session, None, [int(trainer_id)], timezone_name=NOTIFICATION_TZ, limit=WEEK_WINDOWS_LIMIT
+                session,
+                None,
+                [int(trainer_id)],
+                timezone_name=NOTIFICATION_TZ,
+                limit=WEEK_WINDOWS_LIMIT,
+                days=WEEK_LOOKAHEAD_DAYS,
             )
         ).get(int(trainer_id), [])
-        windows = [w for w in windows if (datetime.fromisoformat(w["starts_at"]).date() - today).days < WEEK_DAYS]
+        # Неделя — от первого дня с окнами (как сетка в ``_week_html``), а не от сегодня: иначе её последний день пуст.
+        if windows:
+            first = min(datetime.fromisoformat(w["starts_at"]).date() for w in windows)
+            windows = [w for w in windows if (datetime.fromisoformat(w["starts_at"]).date() - first).days < WEEK_DAYS]
     name = trainer_name(body)
     arenas = await _arenas(session, int(trainer_id))
     await attach_arena_media_payloads(session, arenas)
@@ -1430,4 +1442,5 @@ def render_trainer_page(
     )
 
 
-TRAINER_PAGE_STYLE_VERSION = "2026110810"
+# Хэш содержимого, не ручной номер: правка CSS сама сбрасывает кэш браузера.
+TRAINER_PAGE_STYLE_VERSION = _file_version("static/share/trainer-page.css")
