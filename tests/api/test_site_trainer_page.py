@@ -71,7 +71,7 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
     assert resp.status_code == 200
     html = resp.text
     assert api["can_book"] is True
-    assert f"<h1 class=\"tp-name\">{name}</h1>" in html
+    assert f'<h1 class="tp-name">{name}</h1>' in html
     assert 'content="index, follow"' in html
     assert f'rel="canonical" href="https://glide.example{path}"' in html
     assert '"@type": "Person"' in html
@@ -110,7 +110,7 @@ async def test_without_online_booking_page_offers_write_not_book(app_use_test_db
     assert f'href="/r/tg/{tid}"' in html and "Написать в Telegram" in html
     assert "data-catalog-phone-beacon=" in html
     # Цены остаются: бесплатная карточка — «Написать» и цены.
-    assert "<h2 class=\"b-h2 tp-h2\">Занятия и цены</h2>" in html and "45\u00a0BYN" in html
+    assert '<h2 class="b-h2 tp-h2">Занятия и цены</h2>' in html and "45\u00a0BYN" in html
 
 
 @pytest.mark.asyncio
@@ -179,7 +179,10 @@ async def test_trainer_shared_link_is_site_page_and_keeps_welcome_ref_binding(ap
     # Тот же адрес без метки — витрина: карточка в Mini App через учётный прокси.
     assert f"startapp=trainer_{tid}&amp;surface=trainer_page" in plain
     # Канонический адрес один — метка ссылки на него не влияет.
-    assert f'rel="canonical" href="https://glide.example{link.replace("https://glide.example", "").split("?")[0]}"' in shared
+    assert (
+        f'rel="canonical" href="https://glide.example{link.replace("https://glide.example", "").split("?")[0]}"'
+        in shared
+    )
 
 
 @pytest.mark.asyncio
@@ -200,7 +203,13 @@ async def _add_service(db_session, tid: int, service_id: int, tiers: dict[str, i
             "INSERT INTO trainer_services (trainer_id, service_id, price_cents, description, client_notice) VALUES (:t, :s, :p, :d, :n) "
             "ON CONFLICT DO NOTHING"
         ),
-        {"t": tid, "s": service_id, "p": cols.get("price_cents"), "d": cols.get("description"), "n": cols.get("client_notice")},
+        {
+            "t": tid,
+            "s": service_id,
+            "p": cols.get("price_cents"),
+            "d": cols.get("description"),
+            "n": cols.get("client_notice"),
+        },
     )
     for i, (kind, cents) in enumerate((tiers or {}).items()):
         await db_session.execute(
@@ -262,9 +271,7 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
     """Гаевский-подобный: «С нуля» + «Уже катаюсь», ролики — «Ещё ведёт», 7 оценок, неделя времени."""
     async with _client() as client:
         place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
-        await _add_service(
-            db_session, tid, 1, {"two_children": 7500, "adult_and_child": 8000, "two_adults": 8500}
-        )
+        await _add_service(db_session, tid, 1, {"two_children": 7500, "adult_and_child": 8000, "two_adults": 8500})
         await _add_service(db_session, tid, 2, price_cents=5500, description="Ставлю ход и торможение.")
         await _add_service(db_session, tid, 5, price_cents=4000)
         bound = await _own_service(db_session, tid, "Постановка прыжков", direction=3)
@@ -389,7 +396,7 @@ async def test_no_individual_windows_text_does_not_claim_no_time_at_all(app_use_
     assert "Индивидуального свободного времени на этой неделе нет — напишите тренеру." in html
     assert "свободного времени нет." not in html.replace("Индивидуального свободного времени на этой неделе нет", "")
     assert 'class="tp-slot"' not in html
-    assert "Написать в Telegram" in html
+    assert "Написать тренеру" in html
 
 
 def test_price_card_no_windows_without_nick_does_not_promise_write() -> None:
@@ -403,7 +410,7 @@ def test_price_card_no_windows_without_nick_does_not_promise_write() -> None:
     assert "напишите тренеру" not in html
     assert "следующие недели видны в Telegram" in html
     assert "Следующие недели — в Telegram" in html
-    assert "Написать в Telegram" not in html
+    assert "Написать тренеру" not in html
 
 
 def test_price_card_no_windows_with_nick_keeps_write_cta() -> None:
@@ -414,7 +421,7 @@ def test_price_card_no_windows_with_nick_keeps_write_cta() -> None:
         via=None,
     )
     assert "напишите тренеру" in html
-    assert "Написать в Telegram" in html
+    assert "Написать тренеру" in html
 
 
 def test_price_card_phone_copy_and_free_card_copy_honesty() -> None:
@@ -510,13 +517,19 @@ async def test_card_panels_show_their_own_hook_and_two_services_get_titles(app_u
 
 def test_panel_with_two_services_puts_prices_on_one_line_and_cuts_hook_on_word() -> None:
     long_hook = "Хоккейная стойка, ход, повороты и торможения без лишней теории " * 3
-    html = _panel_html([
-        {"title": "Хоккейное катание", "hook": long_hook, "card_prices": [("Ребёнок", "50 BYN"), ("Взрослый", "55 BYN")]},
-        {"title": "ОХМ", "hook": "Коротко.", "card_prices": [("Дети и взрослые", "50 BYN")]},
-    ])
+    html = _panel_html(
+        [
+            {
+                "title": "Хоккейное катание",
+                "hook": long_hook,
+                "card_prices": [("Ребёнок", "50 BYN"), ("Взрослый", "55 BYN")],
+            },
+            {"title": "ОХМ", "hook": "Коротко.", "card_prices": [("Дети и взрослые", "50 BYN")]},
+        ]
+    )
     assert html.count('class="tp-svc"') == 2
-    assert 'Ребёнок <b>50 BYN</b> · Взрослый <b>55 BYN</b>' in html
-    assert 'Дети и взрослые <b>50 BYN</b>' in html
+    assert "Ребёнок <b>50 BYN</b> · Взрослый <b>55 BYN</b>" in html
+    assert "Дети и взрослые <b>50 BYN</b>" in html
     assert "tp-tiers" not in html
     hook = re.search(r'<p class="tp-hook">([^<]*)</p>', html).group(1)
     assert hook.endswith("…") and len(hook) <= 112
@@ -535,7 +548,9 @@ async def test_prices_section_presents_service_words_and_notice(app_use_test_db,
         _place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
         await _add_service(db_session, tid, 1, price_cents=5000)
         await db_session.execute(
-            text("UPDATE trainer_services SET description = :d, client_notice = :n WHERE trainer_id = :t AND service_id = 1"),
+            text(
+                "UPDATE trainer_services SET description = :d, client_notice = :n WHERE trainer_id = :t AND service_id = 1"
+            ),
             {"t": tid, "d": words, "n": "В стоимость не входят: прокат коньков, билеты <на> лёд & «всё»."},
         )
         await _add_service(db_session, tid, 2, price_cents=5500)
@@ -580,3 +595,44 @@ def test_notice_text_strips_only_the_leading_phrase() -> None:
     assert _notice_text("  В цену не входит билет") == "билет"
     assert _notice_text("Коньки берите свои") == "Коньки берите свои"
     assert _notice_text(None) == ""
+
+
+def test_week_starts_on_first_day_with_time_not_on_empty_today() -> None:
+    """Сегодня окон нет — неделя начинается с завтра: первым экраном не «нет окон»."""
+    from datetime import date as _date
+
+    from src.application.site_trainer_page import _week_html
+
+    page = {
+        "can_book": True,
+        "today": _date(2026, 11, 8),
+        "contact_url": None,
+        "windows": [{"starts_at": "2026-11-09T10:15:00", "time": "10:15", "slot_id": 1}],
+    }
+    html = _week_html(page, "https://t.me/bot", None)
+    first = html.split('class="tp-day', 2)[1]
+    assert '<span class="tp-d">9</span>' in first and "нет окон" not in first
+    assert "tp-day--today" not in html
+
+
+def test_bookable_card_has_one_primary_cta_on_nearest_time() -> None:
+    from datetime import date as _date
+
+    html = _price_card(
+        {
+            "id": 9,
+            "can_book": True,
+            "today": _date(2026, 11, 8),
+            "directions": [],
+            "contact_url": "/r/tg/9",
+            "phone": None,
+            "windows": [
+                {"starts_at": "2026-11-09T10:15:00", "time": "10:15", "slot_id": 1, "book_href": "https://t.me/b?s=1"}
+            ],
+        },
+        app="https://t.me/bot",
+        cta=None,
+        via=None,
+    )
+    assert html.count("tp-btn--teal") == 1 and 'href="https://t.me/b?s=1" rel="nofollow">Записаться на' in html
+    assert "Написать тренеру" in html and "tp-btn--tg" not in html

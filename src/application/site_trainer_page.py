@@ -66,8 +66,18 @@ RATING_MIN_COUNT = 3
 PEERS_SHOWN = 6
 _WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 _MONTHS_GEN = (
-    "января", "февраля", "марта", "апреля", "мая", "июня",
-    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
 )
 
 
@@ -91,8 +101,6 @@ def trainer_page_url(base_url: str, trainer_id: int, name: str) -> str:
 def parse_trainer_ref(ref: str) -> int | None:
     head = (ref or "").split("-", 1)[0]
     return int(head) if head.isdigit() and 0 < int(head) < 2**31 else None
-
-
 
 
 # ── Цены — только тарифы услуги ──────────────────────────────────────
@@ -269,17 +277,16 @@ def contact_url(trainer_id: int, telegram_username: str | None, *, listed: bool)
     return f"/r/tg/{int(trainer_id)}" if listed else f"https://t.me/{handle}"
 
 
-
-
 async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]]:
     """Площадки тренера, которые он показывает клиентам; у катка со страницей — ссылка на ``/p/…``."""
     from src.application.indexnow import SITEMAP_PLACE_WHERE_SQL
     from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
     rows = (
-        await session.execute(
-            text(
-                f"""
+        (
+            await session.execute(
+                text(
+                    f"""
                 SELECT a.id, a.name, a.city_id, c.name AS city_name, COALESCE(a.venue_type, 'ice') AS venue_type,
                        CASE WHEN {SITEMAP_PLACE_WHERE_SQL} THEN p.slug END AS slug
                 FROM trainer_arenas ta
@@ -290,10 +297,13 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
                 ORDER BY a.sort_order NULLS LAST, a.id
                 """
-            ),
-            {"tid": int(trainer_id), **public_scope_params()},
+                ),
+                {"tid": int(trainer_id), **public_scope_params()},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [
         {
             "id": int(r["id"]),
@@ -395,9 +405,7 @@ async def _arena_peer_counts(session: AsyncSession, trainer_id: int, arena_ids: 
     return {int(a): int(n) for a, n in rows.fetchall()}
 
 
-async def _peers(
-    session: AsyncSession, trainer_id: int, city_id: int, direction: Direction
-) -> list[dict[str, Any]]:
+async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction: Direction) -> list[dict[str, Any]]:
     """Другие тренеры направления в городе — по правилу каталога: услуга направления и (цена или каток)."""
     from src.application.trainer_use_cases import list_active_trainers_for_client
     from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
@@ -445,7 +453,9 @@ async def _peers(
                 "initial": trainer_initial(name),
                 "photo_url": trainer_photo_url(body),
                 "path": trainer_path(tid, name),
-                "price": (("" if len(cents) == 1 else "от\u00a0") + _money(cents[0], cur)) if cents else "цену уточните",
+                "price": (("" if len(cents) == 1 else "от\u00a0") + _money(cents[0], cur))
+                if cents
+                else "цену уточните",
                 "where": (
                     where[0] if len(where) == 1 else f"{len(where)} {plural_ru(len(where), 'каток', 'катка', 'катков')}"
                 )
@@ -534,7 +544,11 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         "directions": directions,
         "other_services": other,
         "audience": _audience([s for d in directions for s in d["raw"]]),
-        "services": [{"name": str(s.get("service_name") or "").strip()} for s in services if str(s.get("service_name") or "").strip()],
+        "services": [
+            {"name": str(s.get("service_name") or "").strip()}
+            for s in services
+            if str(s.get("service_name") or "").strip()
+        ],
         "arenas": arenas,
         "peers": peers,
         "today": today,
@@ -651,7 +665,12 @@ def app_url(
 
 
 def slot_app_url(
-    base_url: str, page: Mapping[str, Any], slot_id: int | None, *, client_bot_username: str | None, via: str | None = None
+    base_url: str,
+    page: Mapping[str, Any],
+    slot_id: int | None,
+    *,
+    client_bot_username: str | None,
+    via: str | None = None,
 ) -> str | None:
     """Время на странице — сразу запись на этот слот (``trainer_<id>_s_<slot>``, TASK-357).
 
@@ -704,7 +723,6 @@ def primary_cta(
     return None
 
 
-
 # ── SEO ──────────────────────────────────────────────────────────────
 
 
@@ -753,7 +771,11 @@ def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:
     if page.get("city_name"):
         person["address"] = {"@type": "PostalAddress", "addressLocality": page["city_name"]}
     places = [
-        {"@type": "SportsActivityLocation", "name": a["name"], "url": place_page_url(base_url=base_url, city_name=a["city_name"], slug=a["slug"])}
+        {
+            "@type": "SportsActivityLocation",
+            "name": a["name"],
+            "url": place_page_url(base_url=base_url, city_name=a["city_name"], slug=a["slug"]),
+        }
         for a in page.get("arenas") or []
         if a.get("slug") and a.get("city_name")
     ]
@@ -766,7 +788,6 @@ def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:
 
 def _absolute(base_url: str, url: str) -> str:
     return url if url.startswith("http") else f"{(base_url or '').rstrip('/')}{url}"
-
 
 
 def write_beacon_url(page: Mapping[str, Any], *, via: str | None = None) -> str:
@@ -786,8 +807,6 @@ def write_beacon_url(page: Mapping[str, Any], *, via: str | None = None) -> str:
         trainer_id=int(page["id"]),
         via=clean_place_via(via) or (src.code if src else None),
     )
-
-
 
 
 # ── Вёрстка ──────────────────────────────────────────────────────────
@@ -873,6 +892,7 @@ def _prices_line(prices: Sequence[tuple[str, str]]) -> str:
 
 def _panel_html(services: Sequence[Mapping[str, Any]]) -> str:
     """Цена направления в карточке. Услуга одна — крупные цены; несколько — блок на услугу с ценами в одну строку."""
+
     def hook(s: Mapping[str, Any], text: str) -> str:
         return f'<p class="tp-hook">{esc(text)}</p>' if text else ""
 
@@ -880,7 +900,7 @@ def _panel_html(services: Sequence[Mapping[str, Any]]) -> str:
         return hook(services[0], services[0].get("hook") or "") + _tiers_html(services[0]["card_prices"])
     return "".join(
         f'<div class="tp-svc"><span class="tp-svc__name">{esc(s["title"])}</span>'
-        f'{hook(s, _hook_short(s["hook"]) if s.get("hook") else "")}{_prices_line(s["card_prices"])}</div>'
+        f"{hook(s, _hook_short(s['hook']) if s.get('hook') else '')}{_prices_line(s['card_prices'])}</div>"
         for s in services
     )
 
@@ -920,7 +940,9 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             + "</div>"
         )
     for i, (k, _tab, svcs) in enumerate(panels):
-        parts.append(f'<div class="tp-panel" data-dir-panel="{esc(k)}"{"" if i == 0 else " hidden"}>{_panel_html(svcs)}</div>')
+        parts.append(
+            f'<div class="tp-panel" data-dir-panel="{esc(k)}"{"" if i == 0 else " hidden"}>{_panel_html(svcs)}</div>'
+        )
     if not panels:
         parts.append(_tiers_html([]))
     wins = page.get("windows") or []
@@ -939,6 +961,11 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
                 '<div><div class="tp-lbl">Ближайшее время — записаться</div>'
                 f'<div class="tp-near">{"".join(near)}</div></div>'
             )
+            # Одна главная кнопка — та же, что внизу Mini App: ближайшее время, без выбора.
+            parts.append(
+                f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(wins[0].get("book_href") or app)}" rel="nofollow">'
+                f"Записаться на {esc(_win_label(wins[0]))}</a></div>"
+            )
         else:
             # Текст не обещает «напишите», если ника нет и кнопки «Написать» не будет.
             nowin = (
@@ -952,16 +979,20 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             )
         if contact:
             parts.append(
-                f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(contact)}"{_write_attrs(page, via)}>Написать в Telegram</a></div>'
+                f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(contact)}"{_write_attrs(page, via)}>Написать тренеру</a></div>'
             )
         parts.append(_phone_act(page))
         parts.append(also)
-        parts.append('<span class="tp-fine">Нужен Telegram — запись и переписка идут там. Оплата тренеру на месте.</span>')
+        parts.append(
+            '<span class="tp-fine">Нужен Telegram — запись и переписка идут там. Оплата тренеру на месте.</span>'
+        )
     else:
         if cta:
             label, href = cta
             attrs = _write_attrs(page, via) if href == contact else ' rel="nofollow"'
-            parts.append(f'<div class="tp-act"><a class="tp-btn tp-btn--tg" href="{esc(href)}"{attrs}>{esc(label)}</a></div>')
+            parts.append(
+                f'<div class="tp-act"><a class="tp-btn tp-btn--tg" href="{esc(href)}"{attrs}>{esc(label)}</a></div>'
+            )
         parts.append(_phone_act(page))
         parts.append(also)
         if contact:
@@ -990,6 +1021,9 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
         role = " ".join(x for x in (_role_line(dirs), str(page.get("audience") or "")) if x)
         if role:
             head += f'<p class="tp-role">{esc(role)}</p>'
+        bio = tidy_text(page.get("description"))
+        if bio:
+            head += f'<p class="tp-bio">{esc(bio)}</p>'
         if _rating_ok(page):
             head += (
                 f'<p class="tp-rate"><i aria-hidden="true">★</i>{esc(_avg(page))} '
@@ -1024,9 +1058,11 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
     by_day: dict[date, list[Mapping[str, Any]]] = {}
     for w in wins:
         by_day.setdefault(datetime.fromisoformat(str(w["starts_at"])).date(), []).append(w)
+    # Неделя начинается с первого дня, где есть время: «сегодня — нет окон» первым экраном не показываем.
+    start = min((d for d in by_day if d >= today), default=today)
     cells = []
     for i in range(WEEK_DAYS):
-        day = today + timedelta(days=i)
+        day = start + timedelta(days=i)
         slots = by_day.get(day, [])
         inner = (
             "".join(
@@ -1038,7 +1074,7 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
             else '<span class="tp-no">нет окон</span>'
         )
         cells.append(
-            f'<div class="tp-day{" tp-day--today" if i == 0 else ""}{"" if slots else " tp-day--empty"}">'
+            f'<div class="tp-day{" tp-day--today" if day == today else ""}{"" if slots else " tp-day--empty"}">'
             f'<b>{esc(_WEEKDAYS[day.weekday()])}</b><span class="tp-d">{day.day}</span>{inner}</div>'
         )
     body = f'<div class="tp-week">{"".join(cells)}</div>'
@@ -1089,9 +1125,16 @@ def _prices_html(page: Mapping[str, Any]) -> str:
     return _sec("Занятия и цены", body)
 
 
+def tidy_text(value: Any) -> str:
+    """Текст тренера как есть, но без «слово ,» и двойных пробелов (как ``tidyText`` в Mini App)."""
+    text = re.sub(r"[ \t]+([,.;:!?])", r"\1", str(value or ""))
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
+
+
 def _about_html(page: Mapping[str, Any], *, ratings: bool) -> str:
     cards = []
-    desc = str(page.get("description") or "")
+    # На полной странице слова тренера — под именем (_hero); отдельная карточка — только в компактной.
+    desc = "" if ratings else tidy_text(page.get("description"))
     if desc:
         cards.append(f'<div class="tp-card"><h3>О тренере</h3><p class="tp-words">{esc(desc)}</p></div>')
     if ratings and _rating_ok(page):
@@ -1117,9 +1160,11 @@ def _after_html(page: Mapping[str, Any]) -> str:
         ("Оплата на месте", "Платите при встрече. Билет на каток — на кассе."),
         ("Планы поменялись", "Отмените запись в «Мои записи»."),
     )
-    body = '<div class="tp-after">' + "".join(
-        f"<div><i>{i}</i><b>{esc(b)}</b><span>{esc(s)}</span></div>" for i, (b, s) in enumerate(steps, 1)
-    ) + "</div>"
+    body = (
+        '<div class="tp-after">'
+        + "".join(f"<div><i>{i}</i><b>{esc(b)}</b><span>{esc(s)}</span></div>" for i, (b, s) in enumerate(steps, 1))
+        + "</div>"
+    )
     return _sec("Что будет после записи", body)
 
 
@@ -1153,10 +1198,14 @@ def _faq_html(page: Mapping[str, Any]) -> str:
             break
     if not items:
         return ""
-    body = '<div class="tp-faq">' + "".join(
-        f'<details{" open" if i == 0 else ""}><summary>{esc(q)}</summary><p>{a}</p></details>'
-        for i, (q, a) in enumerate(items)
-    ) + "</div>"
+    body = (
+        '<div class="tp-faq">'
+        + "".join(
+            f"<details{' open' if i == 0 else ''}><summary>{esc(q)}</summary><p>{a}</p></details>"
+            for i, (q, a) in enumerate(items)
+        )
+        + "</div>"
+    )
     if city:
         body += f'<a class="tp-link" href="{esc(catalog_path(city["name"], d))}">Все вопросы о занятиях «{esc(d.tab)}» →</a>'
     return _sec("Перед первым занятием", body)
@@ -1165,7 +1214,9 @@ def _faq_html(page: Mapping[str, Any]) -> str:
 def _arenas_html(page: Mapping[str, Any], base_url: str) -> str:
     cards = []
     for a in page.get("arenas") or []:
-        img = f'<img src="{esc(a["photo_url"])}" alt="" loading="lazy" decoding="async" />' if a.get("photo_url") else ""
+        img = (
+            f'<img src="{esc(a["photo_url"])}" alt="" loading="lazy" decoding="async" />' if a.get("photo_url") else ""
+        )
         peers = int(a.get("peers") or 0)
         lines = f"<b>{esc(a['name'])}</b>"
         if peers:
@@ -1181,7 +1232,9 @@ def _arenas_html(page: Mapping[str, Any], base_url: str) -> str:
             lines += f"<em>{esc(tail)}</em>"
         klass = "tp-ar" + ("" if img else " tp-ar--noimg")
         inner = f"{img}<div>{lines}</div>"
-        cards.append(f'<a class="{klass}" href="{esc(href)}">{inner}</a>' if href else f'<div class="{klass}">{inner}</div>')
+        cards.append(
+            f'<a class="{klass}" href="{esc(href)}">{inner}</a>' if href else f'<div class="{klass}">{inner}</div>'
+        )
     return _sec("Где занимается", f'<div class="tp-arenas">{"".join(cards)}</div>') if cards else ""
 
 
@@ -1205,7 +1258,9 @@ def _peers_html(page: Mapping[str, Any]) -> str:
             else f'<span class="tp-mini__mono" aria-hidden="true">{esc(p["initial"])}</span>'
         )
         sub = " · ".join(x for x in (p.get("price"), p.get("where")) if x)
-        minis.append(f'<a class="tp-mini" href="{esc(p["path"])}">{img}<div><b>{esc(p["name"])}</b><span>{esc(sub)}</span></div></a>')
+        minis.append(
+            f'<a class="tp-mini" href="{esc(p["path"])}">{img}<div><b>{esc(p["name"])}</b><span>{esc(sub)}</span></div></a>'
+        )
     title = " ".join(x for x in (f"Ещё тренеры «{d.tab}»", _in_city(page)) if x)
     return _sec(title, f'<div class="tp-more">{"".join(minis)}</div>')
 
@@ -1308,7 +1363,9 @@ def render_trainer_page(
     crumbs.append((str(page["name"]), canonical))
     body += breadcrumb_script(canonical, crumbs)
     body += phone_beacon_script(body)
-    og_image = _absolute(base_url, str(page["photo_url"])) if page.get("photo_url") else catalog_home_og_image_url(base_url)
+    og_image = (
+        _absolute(base_url, str(page["photo_url"])) if page.get("photo_url") else catalog_home_og_image_url(base_url)
+    )
     tail = catalog_list_share_tail(scripts=False)
     tail["__PLACE_SHARE_BAR__"] = ""
     title = page_title(page)
@@ -1343,4 +1400,4 @@ def render_trainer_page(
     )
 
 
-TRAINER_PAGE_STYLE_VERSION = "2026110802"
+TRAINER_PAGE_STYLE_VERSION = "2026110810"
