@@ -636,11 +636,7 @@
     return 'catalog?' + parts.join('&');
   }
 
-  /**
-   * Тренер с катка → карточка тренера на витрине (этап 1 входов): trainers?trainer_id=&arena_id=&city_id=.
-   * arena_id — каток, с которого пришли (витрина держит его фильтром). Группа (group_id) витрине не
-   * известна — тап по набору по-прежнему ведёт в старый каталог (buildBookingHref).
-   */
+  /** Тренер с катка → карточка на витрине (этап 1). Группа (group_id) витрине неизвестна — buildBookingHref. */
   function buildTrainerShowcaseHref(opts) {
     opts = opts || {};
     var parts = [];

@@ -1253,10 +1253,7 @@
     return isFinite(n) && n > 0 && Math.floor(n) === n ? n : null;
   }
 
-  /**
-   * Витрина тренеров (trainers.html) — этап 1 входов: сегмент «Тренеры» и строки тренеров «Поиска»
-   * ведут сюда, а не в старый каталог. trainers?trainer_id=&arena_id=&city_id= — пустое опускаем.
-   */
+  /** Витрина тренеров (этап 1 входов): сегмент «Тренеры» и строки «Поиска»; пустые параметры опускаем. */
   function trainerShowcaseHref(opts) {
     opts = opts || {};
     var parts = [];
@@ -1269,11 +1266,7 @@
     return 'trainers' + (parts.length ? '?' + parts.join('&') : '');
   }
 
-  /**
-   * Прямая ссылка ice?intent=coach (старые переходы, booking-client.js, «Найти ещё тренера», catalog_<город>_coach)
-   * → витрина города. Город — из ссылки, иначе тот, что человек смотрел в «Поиске». Нет города — '' (старый
-   * список остаётся запасным). Возврат «Назад» сюда — '' : это не новая ссылка, а возврат человека.
-   */
+  /** ice?intent=coach → витрина города (город из ссылки или «Поиска»); нет города или возврат «Назад» — '' (старый список). */
   function coachShowcaseRedirect(search, savedCityId, returning) {
     if (returning) return '';
     if (intentFromSearch(search) !== INTENTS.coach) return '';
