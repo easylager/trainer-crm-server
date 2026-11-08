@@ -33,26 +33,17 @@ describe('swipeable tabs vs Telegram collapse', () => {
   }
 });
 
-describe('витрина всегда светлая Ice Paper', () => {
-  it('trainers.html lock: data-force-theme=light', () => {
+describe('витрина следует теме Telegram', () => {
+  it('trainers.html без data-force-theme — colorScheme сам', () => {
     const html = fs.readFileSync(
       path.resolve(__dirname, '../../static/webapp/trainers.html'),
       'utf8',
     );
-    assert.match(html, /data-force-theme="light"/);
+    assert.doesNotMatch(html, /data-force-theme/);
   });
 
-  it('theme.js уважает data-force-theme=light', () => {
-    const js = fs.readFileSync(
-      path.resolve(__dirname, '../../static/webapp/client-mini-app-theme.js'),
-      'utf8',
-    );
-    assert.match(js, /data-force-theme/);
-    assert.match(js, /forced === 'light'/);
-  });
-
-  it('showcase CSS без тёмного переключателя --a-bg', () => {
-    assert.doesNotMatch(css, /data-app-theme="dark"/);
+  it('showcase CSS: светлая Ice Paper и тёмная ARENA', () => {
     assert.match(css, /--a-bg:\s*#F1F3F2/);
+    assert.match(css, /data-app-theme="dark"[\s\S]*--a-bg:\s*#0B0C0E/);
   });
 });
