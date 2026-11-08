@@ -538,6 +538,7 @@
     var svcs = serviceList(t, S.dirKey);
     var svc = currentService() || (svcs.length > 1 ? svcs[0] : null);
     var h = '<div class="bd">' + backBtn(S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры') + heroHtml(t, trainerSubLine(t));
+    h += trustHtml(t);
     h += '<div class="pc">';
     if (!t.can_book) {
       h += '<p>' + esc(M.selfBookingLine(t.first_name, RuName, {
@@ -591,10 +592,6 @@
     }
     h += aboutCard(svcs, svc);
     h += whereCard(t, svc);
-    if (t.description || t.education) {
-      h += '<div class="card"><h4>О тренере</h4>' + (t.description ? '<p>' + esc(t.description) + '</p>' : '') +
-        (t.education ? '<span class="mut">' + esc(t.education) + '</span>' : '') + '</div>';
-    }
     var duo = svc ? M.whoOptions(svc).duo : [];
     if (duo.length) {
       h += '<div class="card"><h4>Другие тарифы</h4>' + duo.map(function (r) {
@@ -620,6 +617,22 @@
       if (stuckFt) h += '<div class="ft col">' + stuckFt + '</div>';
     }
     return h;
+  }
+
+  /** Под фото: кто это — слова тренера и проверяемые факты, до цены и времени. */
+  function trustHtml(t) {
+    var chips = [];
+    if (t.education) chips.push(t.education);
+    var who = M.whoTeaches(t.services || []);
+    if (who) chips.push('Учит ' + who);
+    var n = (t.arenas || []).length;
+    if (n === 1) chips.push(t.arenas[0].name);
+    else if (n > 1) chips.push(M.word(n, 'каток', 'катка', 'катков'));
+    if (t.session_duration_minutes) chips.push('Занятие ' + t.session_duration_minutes + ' мин');
+    var bio = M.tidyText(t.description);
+    if (!bio && !chips.length) return '';
+    return '<div class="trust">' + (bio ? '<p class="bio" data-act="bio">' + esc(bio) + '</p>' : '') +
+      (chips.length ? '<ul class="chips">' + chips.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
   }
 
   function tiersHtml(svc, tag) {
@@ -1666,6 +1679,7 @@
       case 'save':
         toggleSaved(el);
         break;
+      case 'bio': el.classList.toggle('open'); break;
       case 'pick': {
         var k = el.getAttribute('data-k');
         if (b.regular) {

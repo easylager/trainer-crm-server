@@ -25,6 +25,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.catalog_directions import service_title, split_service_summary
+from src.application.site_trainer_page import education_line
 from src.application.trainer_client_invite_tracking import sql_booking_not_self
 
 #: Сколько тренеров берём в выдачу. Каталог крошечный (6 опубликованных); пагинация — открытый вопрос эпика.
@@ -212,7 +213,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 "photo_url": trainer_photo_url(t),
                 "experience_years": profile.get("experience_years"),
                 "description": str(profile.get("description") or "").strip(),
-                "education": str(profile.get("education") or "").strip(),
+                "education": education_line(profile.get("education")),
                 "rating_avg": profile.get("rating_avg"),
                 "rating_count": int(profile.get("rating_count") or 0),
                 "session_duration_minutes": profile.get("session_duration_minutes"),

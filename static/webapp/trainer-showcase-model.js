@@ -237,6 +237,11 @@
     };
   }
 
+  /** Текст тренера как есть, но без «слово ,» и двойных пробелов. */
+  function tidyText(text) {
+    return String(text || '').replace(/[ \t]+([,.;:!?])/g, '$1').replace(/[ \t]{2,}/g, ' ').trim();
+  }
+
   /** «Кого учит»: из тарифов; тарифов нет — строки нет. */
   function whoTeaches(services) {
     var kids = false;
@@ -801,6 +806,7 @@
     noticeParts: noticeParts,
     serviceAbout: serviceAbout,
     whoTeaches: whoTeaches,
+    tidyText: tidyText,
     experienceBadge: experienceBadge,
     ratingLine: ratingLine,
     glideSince: glideSince,

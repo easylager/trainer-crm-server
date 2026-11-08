@@ -1,8 +1,8 @@
 /* Витрина тренеров и запись (TASK-357). Раскладка и токены — из утверждённого прототипа
    .ai/epics/trainer-catalog/design/miniapp.html; палитра — client-mini-app-theme.js. */
-/* Фон и поверхности — те же --g-*, что каталог/катки (catalog-hub / ice-hub).
-   Тёмная тема: body.tg-dark → --g-bg #17212b, не OLED ARENA #0B0C0E. */
-:root {
+/* Светлая — те же --g-*, что каталог/катки; тёмная — графит вкладок клиента (ниже). */
+/* Токены объявлены на body.tsw: тёмные --g-* включает body.tg-dark — на :root они ещё светлые. */
+:root, body.tsw {
   --a-bg: var(--g-bg, #f5f7f8);
   --a-sf: var(--g-surface, #ffffff);
   --a-tx: var(--g-ink, #0d1b26);
@@ -20,11 +20,29 @@
   --a-danger: #C4342A;
   --display: var(--g-font-display, 'Dela Gothic One', 'Arial Black', sans-serif);
 }
+/* Тёмная тема — графит ARENA, как нижняя панель и остальные вкладки клиента (client-mini-app-theme.js). */
+body.tsw.tg-dark {
+  --a-bg: #0B0C0E;
+  --a-sf: #16181B;
+  --a-tx: #E6E9EA;
+  --a-hint: #8F979D;
+  --a-line: #24282C;
+  --a-soft: #12302F;
+  --a-soft-tx: #7FD7D8;
+  --a-cta: #45B9BB;
+  --a-cta-tx: #04262A;
+  --a-hero: #141618;
+  --a-chip: #1F2326;
+  --a-warn: #2E2412;
+  --a-warn-tx: #FFCF86;
+  --a-danger: #FF6B60;
+}
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--a-bg); color: var(--a-tx); }
+html, body { margin: 0; }
+html.trainer-theme-dark { background: #0B0C0E; }
 /* Как catalog-hub / ice-hub: перекрываем canvas темы клиента. */
 html body.tsw, html.trainer-theme-dark body.tsw, html.trainer-theme-light body.tsw {
-  background: var(--g-bg) !important; color: var(--g-ink);
+  background: var(--a-bg) !important; color: var(--a-tx);
   font: 14px/1.4 var(--g-font, 'Golos Text', -apple-system, sans-serif);
   min-height: 100vh; -webkit-tap-highlight-color: transparent;
 }
@@ -75,16 +93,17 @@ html body.tsw, html.trainer-theme-dark body.tsw, html.trainer-theme-light body.t
 .price { border-top: 1px dashed var(--a-line); padding-top: 10px; font-size: 14px; }
 .price b { font-weight: 800; }
 .times { display: flex; gap: 6px; flex-wrap: wrap; }
-.times button { all: unset; box-sizing: border-box; cursor: pointer; min-height: 44px; display: inline-grid; align-content: center; background: var(--a-cta); color: var(--a-cta-tx); border-radius: 12px; padding: 4px 11px; font-weight: 800; font-size: 14px; }
-.times button small { font-size: 11px; font-weight: 600; opacity: .8; }
-.times button.alt { background: var(--a-soft); color: var(--a-soft-tx); }
+.times button { all: unset; box-sizing: border-box; cursor: pointer; min-height: 48px; display: inline-grid; align-content: center; background: var(--a-soft); color: var(--a-tx); border: 1px solid color-mix(in srgb, var(--a-cta) 38%, transparent); border-radius: 14px; padding: 5px 12px; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+.times button:active { background: var(--a-cta); color: var(--a-cta-tx); }
+.times button small { font-size: 11.5px; font-weight: 600; color: var(--a-hint); }
+.times button.alt { background: transparent; color: var(--a-soft-tx); border-color: var(--a-line); }
 .times button.wide { flex: 1; justify-items: center; text-align: center; }
 
-.hro { position: relative; height: 240px; margin: 0 -16px; background: var(--a-hero); }
+.hro { position: relative; height: 300px; margin: 0 -16px; background: var(--a-hero); }
 .hro img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; }
-.hro::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(13,27,38,0) 45%, rgba(13,27,38,.8)); }
+.hro::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,12,14,0) 42%, rgba(8,12,14,.86)); }
 .hro .t { position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 1; color: #fff; display: grid; gap: 3px; }
-.hro .t b { font: 400 24px/1.02 var(--display); } .hro .t span { font-size: 13px; opacity: .92; }
+.hro .t b { font: 400 27px/1.02 var(--display); letter-spacing: -.01em; } .hro .t span { font-size: 13px; opacity: .92; }
 .hro .badge { position: absolute; left: 16px; top: 14px; z-index: 1; }
 /* Карточка цены — светлая/тиловая, как остальной Mini App (не navy-остров). */
 .pc { background: var(--a-sf); color: var(--a-tx); border: 1px solid var(--a-line); border-radius: 22px; padding: 14px; display: grid; gap: 12px; }
@@ -104,7 +123,7 @@ html body.tsw, html.trainer-theme-dark body.tsw, html.trainer-theme-light body.t
 .svcs button:focus-visible { outline: 2px solid var(--a-cta); outline-offset: 2px; }
 .pc .hk { margin: 0; font-size: 14.5px; line-height: 1.4; color: var(--a-hint); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .tiers { display: flex; gap: 16px; flex-wrap: wrap; } .tiers div, .tiers span { display: grid; } .tiers small { font-size: 12px; color: var(--a-hint); font-weight: 600; } .tiers b { font: 400 21px/1.1 var(--display); color: var(--a-tx); }
-.pc .times button.alt { background: var(--a-soft); color: var(--a-soft-tx); }
+.pc .times button.alt { background: transparent; color: var(--a-soft-tx); border-color: var(--a-line); }
 .pc p { margin: 0; font-size: 14px; color: var(--a-tx); }
 .card { background: var(--a-sf); border: 1px solid var(--a-line); border-radius: 18px; padding: 14px; display: grid; gap: 8px; }
 .card h4 { margin: 0; font: 400 16px/1.15 var(--display); }
@@ -183,3 +202,11 @@ textarea.inpx { padding: 12px; min-height: 76px; resize: vertical; }
 body.tsw.client-shell-body:not(.client-shell-tabs-hidden) .tsw-view { min-height: calc(100vh - var(--client-shell-tab-inset)); }
 body.tsw.client-shell-body:not(.client-shell-tabs-hidden) .ft { bottom: var(--client-shell-tab-inset); padding-bottom: 10px; z-index: 9001; background: linear-gradient(180deg, transparent, var(--a-bg) 30%, var(--a-bg)); }
 body.tsw.client-shell-body.client-shell-tabs-hidden { padding-bottom: env(safe-area-inset-bottom, 12px); }
+
+/* Доверие сразу под фото: слова тренера и факты — до цены (родитель сначала решает «кто», потом «когда»). */
+.trust { display: grid; gap: 10px; }
+.trust .bio { margin: 0; font-size: 15px; line-height: 1.45; color: var(--a-tx); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.trust .bio.open { -webkit-line-clamp: unset; display: block; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.chips li { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 11px; border-radius: 999px; background: var(--a-sf); border: 1px solid var(--a-line); font-size: 12.5px; font-weight: 700; color: var(--a-tx); }
+.chips li::before { content: "✓"; color: var(--a-soft-tx); font-weight: 900; font-size: 11px; }
