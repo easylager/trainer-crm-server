@@ -1,6 +1,6 @@
 /* Витрина тренеров и запись (TASK-357). Раскладка и токены — из утверждённого прототипа
    .ai/epics/trainer-catalog/design/miniapp.html; палитра — client-mini-app-theme.js. */
-/* Светлая — те же --g-*, что каталог/катки; тёмная — графит вкладок клиента (ниже). */
+/* Светлая и тёмная — те же --g-*, что каталог/катки. */
 /* Токены объявлены на body.tsw: тёмные --g-* включает body.tg-dark — на :root они ещё светлые. */
 :root, body.tsw {
   --a-bg: var(--g-bg, #f5f7f8);
@@ -20,26 +20,11 @@
   --a-danger: #C4342A;
   --display: var(--g-font-display, 'Dela Gothic One', 'Arial Black', sans-serif);
 }
-/* Тёмная тема — графит ARENA, как нижняя панель и остальные вкладки клиента (client-mini-app-theme.js). */
-body.tsw.tg-dark {
-  --a-bg: #0B0C0E;
-  --a-sf: #16181B;
-  --a-tx: #E6E9EA;
-  --a-hint: #8F979D;
-  --a-line: #24282C;
-  --a-soft: #12302F;
-  --a-soft-tx: #7FD7D8;
-  --a-cta: #45B9BB;
-  --a-cta-tx: #04262A;
-  --a-hero: #141618;
-  --a-chip: #1F2326;
-  --a-warn: #2E2412;
-  --a-warn-tx: #FFCF86;
-  --a-danger: #FF6B60;
-}
+/* Тёмная тема: --a-* следуют тёмным --g-* каталога (glide-tokens.css, body.tg-dark) — тот же фон, что у остального каталога. */
+body.tsw.tg-dark { --a-danger: #FF6B60; }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
-html.trainer-theme-dark { background: #0B0C0E; }
+html.trainer-theme-dark { background: #17212b; }
 /* Как catalog-hub / ice-hub: перекрываем canvas темы клиента. */
 html body.tsw, html.trainer-theme-dark body.tsw, html.trainer-theme-light body.tsw {
   background: var(--a-bg) !important; color: var(--a-tx);
