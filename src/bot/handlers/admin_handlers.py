@@ -98,6 +98,12 @@ from src.application.place_suggestion_use_cases import (
     count_new_place_suggestions,
 )
 from src.shared.place_suggestion import PLACE_SUGGEST_APPROVE_PREFIX
+from src.application.review_moderation_use_cases import (
+    ReviewModerationError,
+    list_pending_reviews,
+    moderate_review,
+)
+from src.shared.review_moderation import REVIEW_APPROVE, REVIEW_MOD_PREFIX
 from src.application.collective_use_cases import (
     admin_confirm_collective_invoice,
     admin_grant_collective_subscription,
@@ -751,6 +757,69 @@ async def on_place_suggestion_approve(callback: CallbackQuery) -> None:
     await _drop_place_suggestion_buttons(callback, sid)
     await callback.message.answer(reply, parse_mode=ParseMode.HTML)
     await callback.answer()
+
+
+@router.message(Command("reviews"))
+async def cmd_reviews(message: Message) -> None:
+    """Отзывы на проверку: до 10 карточек с «Подтвердить» / «Отклонить» (остальное — следующим вызовом)."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    from src.application.review_moderation_notify import format_review_card, review_keyboard
+    from src.application.review_moderation_use_cases import load_review_for_moderation
+
+    async with async_session_factory() as session:
+        ids = await list_pending_reviews(session, limit=10)
+        reviews = [await load_review_for_moderation(session, rid) for rid in ids]
+    reviews = [r for r in reviews if r]
+    if not reviews:
+        await message.answer("Отзывов на проверку нет.")
+        return
+    for r in reviews:
+        await message.answer(format_review_card(r), parse_mode=ParseMode.HTML, reply_markup=review_keyboard(r["id"]))
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(REVIEW_MOD_PREFIX))
+async def on_review_moderation(callback: CallbackQuery) -> None:
+    """«Подтвердить» / «Отклонить» под карточкой отзыва: публично виден только подтверждённый текст."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    action, _, raw_id = callback.data[len(REVIEW_MOD_PREFIX):].partition(":")
+    rating_id = safe_parse_id(raw_id)
+    if rating_id is None or action not in (REVIEW_APPROVE, "no"):
+        await callback.answer()
+        return
+    approve = action == REVIEW_APPROVE
+    message = callback.message if isinstance(callback.message, Message) else None
+    try:
+        async with async_session_factory() as session:
+            await moderate_review(session, rating_id, approve=approve, admin_id=user_id)
+    except ReviewModerationError as exc:
+        await callback.answer("Отзыв уже разобран" if exc.code == "closed" else "Отзыв не найден", show_alert=True)
+        if message is not None:
+            try:
+                await message.edit_reply_markup(reply_markup=None)
+            except Exception:  # noqa: BLE001
+                logger.warning("review moderation: failed to drop markup id=%s", rating_id, exc_info=True)
+        return
+    except Exception:  # noqa: BLE001
+        logger.exception("review moderation failed id=%s", rating_id)
+        await callback.answer("Не удалось сохранить, см. логи", show_alert=True)
+        return
+    audit_log("review.approved" if approve else "review.rejected", ACTOR_ADMIN_BOT, user_id, {"rating_id": rating_id})
+    verdict = "✅ Подтверждён — виден на сайте" if approve else "❌ Отклонён — на сайте не появится"
+    if message is not None:
+        try:
+            await message.edit_text(
+                f"{message.html_text}\n\n<b>{verdict}</b> · {html.escape(_admin_label(callback.from_user))}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=None,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("review moderation: failed to edit card id=%s", rating_id, exc_info=True)
+    await callback.answer(verdict[:_ALERT_MAX])
 
 
 def _admin_label(user) -> str:

@@ -1096,6 +1096,10 @@ class TrainerRating(Base):
     rating: Mapped[int] = mapped_column(Integer(), nullable=False)  # 1..5
     review_text: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    #: None — текста нет; pending → approved / rejected (публично виден только approved).
+    review_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
 
 class Service(Base):

@@ -211,3 +211,20 @@ html { scroll-behavior: smooth; }
 .tp-save:hover { color: var(--g-accent-ink) !important; }
 .tp-save:focus-visible { outline: 3px solid var(--g-accent); outline-offset: 2px; }
 .tp-th .tp-top .tp-head { padding-right: 52px; }
+
+/* «Отзывы»: сводка и компактная лента (листается, стрелки — общий .tp-scroller) */
+a.tp-rate { color: inherit; text-decoration: none; }
+a.tp-rate:hover span { color: var(--g-accent-ink); }
+#reviews { scroll-margin-top: 12px; }
+.tp-revs { align-items: flex-start; }
+.tp-rev { flex: 0 0 min(300px, 82vw); display: grid; gap: 10px; align-content: start; padding: 16px; border-radius: 20px; background: var(--g-surface); border: 1px solid var(--g-line); }
+.tp-rev header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tp-rev header b { font-size: 15px; }
+.tp-rev header i { font-style: normal; color: #f2b84b; letter-spacing: 1px; font-size: 14px; white-space: nowrap; }
+.tp-rev__text { margin: 0; color: var(--g-ink-2); line-height: 1.5; font-size: 15px; overflow-wrap: anywhere; white-space: pre-line;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
+.tp-rev__text.is-open { -webkit-line-clamp: unset; display: block; }
+.tp-rev__more { justify-self: start; padding: 0; min-height: 32px; border: 0; background: none; cursor: pointer; font: 700 14px var(--g-font); color: var(--g-accent-ink); }
+.tp-rev time { font-size: 13px; color: var(--g-muted); }
+.tp-scroller--revs .tp-arrow { top: 50%; }
+.tp-scroller--revs { margin-bottom: 4px; }

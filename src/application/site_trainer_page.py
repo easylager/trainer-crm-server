@@ -43,6 +43,7 @@ from src.application.catalog_directions import (
     service_title,
 )
 from src.application.ice_city_day import city_slug, format_price_minor, human_date, plural_ru
+from src.shared.review_moderation import REVIEWS_MIN_SHOWN
 from src.application.place_links import place_page_url, public_telegram_cta_url, trainer_start_param
 from src.application.site_trainers import trainer_initial, trainer_line, trainer_name, trainer_photo_url
 from src.application.style_b import esc
@@ -472,6 +473,40 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
     return out
 
 
+REVIEWS_SHOWN = 12
+REVIEW_PREVIEW_CHARS = 600
+
+
+async def _load_reviews(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]]:
+    """Подтверждённые админом отзывы с текстом, новые сверху. Имя — «Марк М.», без id и телеграм-данных."""
+    from src.application.review_moderation_use_cases import display_name
+
+    rows = await session.execute(
+        text(
+            """
+            SELECT r.rating, r.review_text, r.created_at, c.first_name, c.last_name
+            FROM trainer_ratings r
+            LEFT JOIN clients c ON c.telegram_id = r.client_telegram_id
+            WHERE r.trainer_id = :tid AND r.review_status = 'approved' AND btrim(COALESCE(r.review_text, '')) <> ''
+            ORDER BY r.created_at DESC, r.id DESC
+            LIMIT :lim
+            """
+        ),
+        {"tid": int(trainer_id), "lim": REVIEWS_SHOWN},
+    )
+    out = []
+    for rating, body, created, first, last in rows.fetchall():
+        out.append(
+            {
+                "rating": max(1, min(5, int(rating))),
+                "text": str(body).strip()[:REVIEW_PREVIEW_CHARS * 4],
+                "date": created.date() if created else None,
+                "name": display_name(first, last),
+            }
+        )
+    return out
+
+
 async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:
     """Всё для ``/t/…`` или ``None`` (нет такого тренера или он деактивирован)."""
     from src.application.arena_media import attach_arena_media_payloads
@@ -552,6 +587,7 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         "education": education_line(profile.get("education")),
         "rating_avg": profile.get("rating_avg"),
         "rating_count": int(profile.get("rating_count") or 0),
+        "reviews": await _load_reviews(session, int(trainer_id)),
         "glide_since": await _glide_since(session, int(trainer_id)),
         "directions": directions,
         "other_services": other,
@@ -1072,9 +1108,10 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
         if bio:
             head += f'<p class="tp-bio">{esc(bio)}</p>'
         if _rating_ok(page):
+            tag, href = ("a", ' href="#reviews"') if _reviews_ready(page) else ("p", "")
             head += (
-                f'<p class="tp-rate"><i aria-hidden="true">★</i>{esc(_avg(page))} '
-                f"<span>· {esc(_n_ratings(int(page['rating_count'])))}</span></p>"
+                f'<{tag} class="tp-rate"{href}><i aria-hidden="true">★</i>{esc(_avg(page))} '
+                f"<span>· {esc(_n_ratings(int(page['rating_count'])))}</span></{tag}>"
             )
         since = _since_text(page)
         if since:
@@ -1107,10 +1144,10 @@ _ARROW_PREV = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true
 _ARROW_NEXT = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
-def _scroller(strip: str) -> str:
+def _scroller(strip: str, *, cls: str = "") -> str:
     """Горизонтальная лента со стрелками «листать»: стрелки показывает ``_SCROLLER_SCRIPT``, только когда есть куда."""
     return (
-        f'<div class="tp-scroller" data-scroller>{strip}'
+        f'<div class="tp-scroller{" " + cls if cls else ""}" data-scroller>{strip}'
         f'<button type="button" class="tp-arrow tp-arrow--prev" aria-label="Назад" tabindex="-1">{_ARROW_PREV}</button>'
         f'<button type="button" class="tp-arrow tp-arrow--next" aria-label="Дальше" tabindex="-1">{_ARROW_NEXT}</button>'
         "</div>"
@@ -1245,13 +1282,50 @@ def tidy_text(value: Any) -> str:
     return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
+def _reviews_ready(page: Mapping[str, Any]) -> bool:
+    return len(page.get("reviews") or []) >= REVIEWS_MIN_SHOWN
+
+
+def _reviews_html(page: Mapping[str, Any]) -> str:
+    """«Отзывы»: сводка + лента коротких карточек (листается). Только от подтверждённых админом, от 3 штук."""
+    if not _reviews_ready(page):
+        return ""
+    head = ""
+    if _rating_ok(page):
+        avg = float(page["rating_avg"])
+        stars = "★" * max(1, min(5, round(avg)))
+        head = (
+            f'<div class="tp-score"><b>{esc(_avg(page))}</b><div><i aria-hidden="true">{stars}</i>'
+            f"<span>{esc(_n_ratings(int(page['rating_count'])))}</span></div></div>"
+        )
+    cards = []
+    for r in page["reviews"]:
+        d = r.get("date")
+        when = f'<time datetime="{d.isoformat()}">{d.day} {_MONTHS_GEN[d.month - 1]} {d.year}</time>' if isinstance(d, date) else ""
+        body = str(r["text"])
+        long_ = len(body) > 220
+        cards.append(
+            '<article class="tp-rev">'
+            f'<header><b>{esc(r["name"])}</b><i role="img" aria-label="{int(r["rating"])} из 5">{"★" * int(r["rating"])}</i></header>'
+            f'<p class="tp-rev__text">{esc(body)}</p>'
+            + ('<button type="button" class="tp-rev__more" hidden>Читать полностью</button>' if long_ else "")
+            + f"{when}</article>"
+        )
+    note = '<p class="tp-muted">Отзывы оставляют только те, кто занимался у тренера. Каждый отзыв проверяем перед публикацией.</p>'
+    return _sec(
+        "Отзывы",
+        head + _scroller(f'<div class="tp-more tp-revs">{"".join(cards)}</div>', cls="tp-scroller--revs") + note,
+        sec_id="reviews",
+    )
+
+
 def _about_html(page: Mapping[str, Any], *, ratings: bool) -> str:
     cards = []
     # На полной странице слова тренера — под именем (_hero); отдельная карточка — только в компактной.
     desc = "" if ratings else tidy_text(page.get("description"))
     if desc:
         cards.append(f'<div class="tp-card"><h3>О тренере</h3><p class="tp-words">{esc(desc)}</p></div>')
-    if ratings and _rating_ok(page):
+    if ratings and _rating_ok(page) and not _reviews_ready(page):
         n = int(page["rating_count"])
         avg = float(page["rating_avg"])
         stars = "★" * max(1, min(5, round(avg)))
@@ -1430,6 +1504,19 @@ _SCROLLER_SCRIPT = (
 )
 
 
+_REVIEWS_SCRIPT = (
+    "<script>(function(){"
+    "var ts=document.querySelectorAll('.tp-rev__text');"
+    "for(var i=0;i<ts.length;i++){(function(t){"
+    "var b=t.parentNode.querySelector('.tp-rev__more');if(!b)return;"
+    "if(t.scrollHeight>t.clientHeight+2)b.hidden=false;"
+    "b.addEventListener('click',function(){var o=t.classList.toggle('is-open');"
+    "b.textContent=o?'Свернуть':'Читать полностью';});"
+    "})(ts[i]);}"
+    "})();</script>"
+)
+
+
 def render_trainer_page(
     page: Mapping[str, Any], *, base_url: str, client_bot_username: str | None, via: str | None = None
 ) -> str:
@@ -1481,6 +1568,7 @@ def render_trainer_page(
         + _hero(page, card, compact=own)
         + _week_html(page, app, via)
         + _prices_html(page, app, via)
+        + ("" if own else _reviews_html(page))
         + _about_html(page, ratings=not own)
         + _after_html(page)
         + _faq_html(page)
@@ -1490,6 +1578,7 @@ def render_trainer_page(
         + _mbar_html(page, app)
         + _PAGE_SCRIPT
         + _SCROLLER_SCRIPT
+        + _REVIEWS_SCRIPT
     )
     crumbs = [("Glideclub", f"{base}/")]
     if city:
