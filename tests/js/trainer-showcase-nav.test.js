@@ -84,7 +84,7 @@ describe('панель вкладок на витрине', () => {
     const css = fs.readFileSync(path.join(webapp, 'trainer-showcase.css'), 'utf8');
     assert.match(css, /body\.tsw\.client-shell-body:not\(\.client-shell-tabs-hidden\) \.ft \{ bottom: var\(--client-shell-tab-inset\)/);
     assert.match(css, /\.dim \{[^}]*z-index: 9500/);
-    assert.match(css, /body\.tsw\.client-shell-body\.client-shell-tabs-hidden \{ padding-bottom: 0; \}/);
+    assert.match(css, /body\.tsw\.client-shell-body\.client-shell-tabs-hidden \{ padding-bottom: env\(safe-area-inset-bottom, 12px\); \}/);
   });
 });
 
