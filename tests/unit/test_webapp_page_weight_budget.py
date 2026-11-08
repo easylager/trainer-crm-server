@@ -21,10 +21,11 @@ _ATTR = re.compile(r"""(?:src|href)=["']([^"']+)["']""", re.I)
 # on demand on ice.html, which took the page back under its pre-epic size; then
 # write-access.js and the booking write-access check on catalog.html, 2026-10-25;
 # then the «Что ищем» sheet and ticket seats on the rink card, TASK-333, 2026-10-26;
-# then «Тренеры» in «Поиске» and trainer taps → the trainers showcase, stage 1 of entries, 2026-11-08: ice.html +1.2 KB).
+# then «Тренеры» in «Поиске» and trainer taps → the trainers showcase, stage 1 of entries, 2026-11-08: ice.html +1.2 KB;
+# re-measured with the trainer funnel (/t/ pages, TASK-356), 2026-11-08).
 # A page may shrink; growth past +5% fails CI.
 _BASELINE_GZIP = {
-    "ice.html": 230_000,
+    "ice.html": 241_605,
     "catalog.html": 214_952,
 }
 
