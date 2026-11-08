@@ -1888,6 +1888,8 @@
         if (sid) return openTrainerAndSlot(tr, sid, false);
         S.view = 'trainer';
         return openTrainer(tr, { view: false }).then(function (r) {
+          // Карточка уже на экране до действия: шторка заявки и баннер «сохранён» не должны лечь на пустой экран.
+          render();
           applyEntryIntent(tr);
           return r;
         });
