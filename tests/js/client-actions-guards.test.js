@@ -198,3 +198,39 @@ describe('book.html: окно записи и неделя', () => {
     assert.match(page.getEl('content').innerHTML, /data-slot-id="1"/);
   });
 });
+
+describe('этап 1 входов: «Сохранённые» → карточка тренера на витрине', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { webapp } = require('./helpers/inline-page');
+  const src = fs
+    .readFileSync(path.join(webapp, 'client-saved-trainers-main.js'), 'utf8')
+    .replace(/\}\)\(\);\s*$/, 'window.__wire = wireMount; })();');
+
+  function wireWith(attr, val) {
+    const page = runInlinePage('x', { source: src, fetch: () => json({ items: [] }) });
+    const handlers = {};
+    const node = {
+      getAttribute: (n) => (n === attr ? val : null),
+      addEventListener(t, fn) { handlers[t] = fn; },
+    };
+    page.win.__wire({
+      querySelectorAll: (sel) => (sel.indexOf('[' + attr + ']') === 0 || sel === 'button[' + attr + ']' ? [node] : []),
+      querySelector: () => null,
+    });
+    return { page, handlers };
+  }
+
+  it('тап по строке тренера (🔔) → trainers?trainer_id=…, не старый каталог', () => {
+    const { page, handlers } = wireWith('data-trainer-notify', '77');
+    handlers.click({ target: { closest: () => null }, stopPropagation() {} });
+    assert.match(page.win.location.href, /\/trainers\?trainer_id=77(&|$)/);
+    assert.ok(!page.win.location.href.includes('catalog?'));
+  });
+
+  it('«Записаться» по-прежнему ведёт в book (денежный поток не меняется)', () => {
+    const { page, handlers } = wireWith('data-cta-tid', '77');
+    handlers.click({ target: { closest: () => null }, stopPropagation() {} });
+    assert.match(page.win.location.href, /\/book\?trainer_id=77&from=saved-trainers/);
+  });
+});

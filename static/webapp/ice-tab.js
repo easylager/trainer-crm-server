@@ -1,7 +1,7 @@
 /**
  * TASK-053 / TASK-076 Ice tab page.
  * Skate/group: GET /api/public/ice/arenas. Coach: GET /api/public/trainers (city list).
- * Trainer card tap deep-links to catalog?trainer_id=… (no tab=catalog — that flashes the old funnel).
+ * Trainer card tap opens the trainer showcase card: trainers?trainer_id=… (stage 1 of showcase entries).
  * Chip itself stays on ice.html.
  */
 (function (global) {

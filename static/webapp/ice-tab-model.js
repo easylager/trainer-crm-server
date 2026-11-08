@@ -1485,8 +1485,8 @@
   }
 
   function trainerHref(item) {
-    var id = item && item.id;
-    return 'catalog?trainer_id=' + encodeURIComponent(String(id));
+    item = item || {};
+    return trainerShowcaseHref({ trainerId: item.id, cityId: item.city_id });
   }
 
   function arenaHref(item) {

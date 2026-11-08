@@ -460,6 +460,16 @@
   function goBooking(trainerId, opts) {
     opts = opts || {};
     var arenaId = state.card && state.card.id;
+    // Этап 1 входов: тренер — новая карточка на витрине; «‹ Назад» там вернёт на этот каток (history.back).
+    // Набор группы витрина не раскрывает — он остаётся в старом каталоге, как и его возврат на арену ниже.
+    if (opts.groupId == null) {
+      shellNav(M.buildTrainerShowcaseHref({
+        trainerId: trainerId,
+        arenaId: arenaId,
+        cityId: state.card && state.card.city_id,
+      }));
+      return;
+    }
     if (global.BookingClient && typeof global.BookingClient.markArenaCatalogStack === 'function') {
       global.BookingClient.markArenaCatalogStack(arenaId);
     } else {

@@ -883,9 +883,11 @@ describe('hrefs', () => {
     assert.equal(arenaHref({ id: 12, live: { kind: 'place', text: 'Заточка' } }), 'arena?ref=12');
   });
 
-  it('trainer search hits open the catalog trainer card, not the browse funnel', () => {
+  it('trainer search hits open the showcase trainer card (stage 1 entries), not the old catalog', () => {
     const { trainerHref } = loadModel();
-    assert.equal(trainerHref({ id: 77 }), 'catalog?trainer_id=77');
+    assert.equal(trainerHref({ id: 77 }), 'trainers?trainer_id=77');
+    assert.equal(trainerHref({ id: 77, city_id: 1 }), 'trainers?trainer_id=77&city_id=1');
+    assert.ok(!trainerHref({ id: 77 }).includes('catalog'));
   });
 
   it('coach list reuses GET /api/public/trainers for the city, not a booking API', () => {
@@ -1036,7 +1038,7 @@ describe('coach lens cards (TASK-076 AC-003 / AC-004)', () => {
     const { trainerCardView } = loadModel();
     const view = trainerCardView(trainer);
     assert.equal(view.name, 'Мария Иванова');
-    assert.equal(view.href, 'catalog?trainer_id=77');
+    assert.equal(view.href, 'trainers?trainer_id=77');
     assert.equal(view.thumb, '/api/public/photos/t.jpg');
     assert.match(view.meta, /Чижовка/);
     assert.ok(!view.href.includes('ice.html'));
