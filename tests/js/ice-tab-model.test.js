@@ -1808,3 +1808,43 @@ describe('TASK-291: полоса «Для вас»', () => {
     assert.doesNotMatch(M.forYouStripHtml([{ arena_id: 1, name: '<b>x</b>' }]), /<b><b>/);
   });
 });
+
+describe('этап 1 входов: «Тренеры» в «Поиске» → витрина тренеров', () => {
+  it('trainerShowcaseHref: trainer_id, arena_id, city_id — пустые и мусорные опускаем', () => {
+    const { trainerShowcaseHref } = loadModel();
+    assert.equal(trainerShowcaseHref({ cityId: 1 }), 'trainers?city_id=1');
+    assert.equal(trainerShowcaseHref({ trainerId: 9, arenaId: 3, cityId: 1 }), 'trainers?trainer_id=9&arena_id=3&city_id=1');
+    assert.equal(trainerShowcaseHref({ trainerId: '9', arenaId: null, cityId: '' }), 'trainers?trainer_id=9');
+    assert.equal(trainerShowcaseHref({ trainerId: 'x<script>', cityId: -1 }), 'trainers');
+    assert.equal(trainerShowcaseHref(), 'trainers');
+  });
+
+  it('прямая ссылка ice?intent=coach с городом → витрина города', () => {
+    const { coachShowcaseRedirect } = loadModel();
+    assert.equal(coachShowcaseRedirect('?intent=coach&city_id=4', null, false), 'trainers?city_id=4');
+    assert.equal(coachShowcaseRedirect('?city_id=4&intent=coach&when=today', 7, false), 'trainers?city_id=4', 'город ссылки важнее сохранённого');
+  });
+
+  it('без города в ссылке — город, который человек смотрел в «Поиске»', () => {
+    const { coachShowcaseRedirect } = loadModel();
+    assert.equal(coachShowcaseRedirect('?intent=coach', 7, false), 'trainers?city_id=7');
+  });
+
+  it('нет города нигде — старый список (без перехода)', () => {
+    const { coachShowcaseRedirect } = loadModel();
+    assert.equal(coachShowcaseRedirect('?intent=coach', null, false), '');
+    assert.equal(coachShowcaseRedirect('?intent=coach', 'abc', false), '');
+  });
+
+  it('без петель: возврат «Назад» сюда и другие линзы не уводят на витрину', () => {
+    const { coachShowcaseRedirect } = loadModel();
+    assert.equal(coachShowcaseRedirect('?intent=coach&city_id=4', 4, true), '', 'возврат «Назад» — остаётся «Поиск»');
+    assert.equal(coachShowcaseRedirect('?intent=skate&city_id=4', 4, false), '');
+    assert.equal(coachShowcaseRedirect('?city_id=4', 4, false), '');
+    assert.equal(coachShowcaseRedirect('', 4, false), '');
+    // Витрина сама на ice?intent=coach не ссылается — круга trainers → ice?intent=coach → trainers нет.
+    const fs = require('node:fs');
+    const showcase = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/trainer-showcase-main.js'), 'utf8');
+    assert.ok(!showcase.includes('intent=coach'));
+  });
+});

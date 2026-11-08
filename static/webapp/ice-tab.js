@@ -2358,6 +2358,11 @@
     if (kind && kind.indexOf('intent:') === 0) {
       var next = kind.slice('intent:'.length);
       return function () {
+        // «Показать тренеров» — тот же вход, что сегмент «Тренеры»: витрина города.
+        if (M.coerceIntent(next) === 'coach' && state.cityId) {
+          openTrainerShowcase(M.trainerShowcaseHref({ cityId: state.cityId }));
+          return;
+        }
         state.intent = M.coerceIntent(next);
         state.autoCoach = false;
         renderList();
@@ -3009,6 +3014,20 @@
         return Number(c.id) === Number(id);
       })[0] || null
     );
+  }
+
+  /**
+   * Этап 1 входов: «Тренеры» в «Поиске» — витрина тренеров (trainers.html), не старый список с поиском
+   * по имени. replace — для прямой ссылки ice?intent=coach: «Назад» с витрины не вернёт сюда же (без петли).
+   */
+  function openTrainerShowcase(path, replace) {
+    var shell = global.ClientShell;
+    if (shell && typeof shell.navigate === 'function') {
+      shell.navigate(path, replace ? { replace: true } : undefined);
+      return;
+    }
+    if (replace) global.location.replace(path);
+    else global.location.href = path;
   }
 
   function switchToCoach() {
@@ -3752,6 +3771,11 @@
         var btn = ev.target.closest('[data-catalog-mode]');
         if (!btn) return;
         var mode = btn.getAttribute('data-catalog-mode') || 'places';
+        // Без города витрине нечего показать — тогда прежний список тренеров (запасной путь).
+        if (mode === 'coach' && state.cityId) {
+          openTrainerShowcase(M.trainerShowcaseHref({ cityId: state.cityId }));
+          return;
+        }
         var patch = M.applyCatalogMode(mode);
         state.intent = M.coerceIntent(patch.intent);
         state.autoCoach = false;
@@ -4095,9 +4119,16 @@
   }
 
   function boot() {
+    var saved = M.loadIceState(global.sessionStorage);
+    /* Прямая ссылка ice?intent=coach → витрина тренеров города, заменой адреса (location.replace):
+       «Назад» с витрины уходит дальше, а не сюда же. Возврат «Назад» и ссылка без города — старый список. */
+    var coachJump = M.coachShowcaseRedirect(global.location.search || '', saved && saved.cityId, navigationIsBackForward());
+    if (coachJump) {
+      openTrainerShowcase(coachJump, true);
+      return;
+    }
     bind();
     bindScrollRestoreCancel();
-    var saved = M.loadIceState(global.sessionStorage);
     takePendingListScroll();
     if (saved && saved.intent) state.intent = M.coerceIntent(saved.intent);
     if (saved && saved.serviceIds && saved.serviceIds.length) {

@@ -47,7 +47,8 @@ function stubElement() {
  * Запускает настоящий boot с заданным location.search и (опционально) состоянием,
  * сохранённым в sessionStorage. Возвращает URL всех запросов и содержимое storage.
  */
-async function bootWith(search, savedState, localWhenPref) {
+async function bootWith(search, savedState, localWhenPref, opts) {
+  opts = opts || {};
   delete require.cache[require.resolve(modelPath)];
   const model = require(modelPath);
   const requests = [];
@@ -68,7 +69,13 @@ async function bootWith(search, savedState, localWhenPref) {
   };
   const sandboxWindow = {
     IceTabModel: model,
-    location: { search },
+    location: {
+      search,
+      replaced: [],
+      replace(u) {
+        this.replaced.push(String(u));
+      },
+    },
     sessionStorage: {
       getItem: (k) => (k in store ? store[k] : null),
       setItem: (k, v) => {
@@ -92,6 +99,10 @@ async function bootWith(search, savedState, localWhenPref) {
     scrollTo() {},
     scrollY: 0,
   };
+  if (opts.shell) sandboxWindow.ClientShell = opts.shell;
+  if (opts.navType) {
+    sandboxWindow.performance = { getEntriesByType: () => [{ type: opts.navType }] };
+  }
   const context = vm.createContext({
     window: sandboxWindow,
     document: {
@@ -109,7 +120,7 @@ async function bootWith(search, savedState, localWhenPref) {
   vm.runInContext(tabSource, context);
   // boot → resolveCity → fetch → loadArenas; даём цепочке промисов дойти до запроса.
   for (let i = 0; i < 50; i += 1) await Promise.resolve();
-  return { requests, store, model };
+  return { requests, store, model, win: sandboxWindow };
 }
 
 function arenasRequest(requests) {
@@ -124,8 +135,15 @@ describe('TASK-149: ?when= при открытии «Поиска»', () => {
     assert.match(url, /[?&]when=today_evening(&|$)/);
   });
 
-  it('?intent=coach&when=today_evening → окно не применяется, едут тренеры', async () => {
-    const { requests } = await bootWith('?city_id=1&intent=coach&when=today_evening');
+  it('?city_id=1&intent=coach&when=… → витрина тренеров города (этап 1 входов), «Поиск» не грузится', async () => {
+    const { requests, win } = await bootWith('?city_id=1&intent=coach&when=today_evening');
+    assert.deepEqual(win.location.replaced, ['trainers?city_id=1']);
+    assert.deepEqual(requests, []);
+  });
+
+  it('?intent=coach&when=today_evening без города → старый список: окно не применяется, едут тренеры', async () => {
+    const { requests, win } = await bootWith('?intent=coach&when=today_evening');
+    assert.deepEqual(win.location.replaced, []);
     assert.equal(arenasRequest(requests), null);
     assert.ok(
       requests.some((u) => u.includes('/api/public/trainers')),
@@ -220,5 +238,40 @@ describe('TASK-149: ?when= при открытии «Поиска»', () => {
     const url = arenasRequest(requests);
     assert.ok(url, requests.join(' | '));
     assert.match(url, /[?&]venue_type=shop(&|$)/);
+  });
+});
+
+describe('этап 1 входов: прямая ссылка ice?intent=coach → витрина, без петель', () => {
+  function shellStub() {
+    const calls = [];
+    // Объект опций — из vm: сравниваем по JSON, не по ссылке на прототип.
+    return { calls, navigate: (p, o) => calls.push([p, o ? JSON.parse(JSON.stringify(o)) : null]) };
+  }
+
+  it('через оболочку клиента — navigate с replace: «Назад» с витрины не вернёт на эту ссылку', async () => {
+    const shell = shellStub();
+    const { requests } = await bootWith('?city_id=1&intent=coach', null, null, { shell });
+    assert.deepEqual(shell.calls, [['trainers?city_id=1', { replace: true }]]);
+    assert.deepEqual(requests, []);
+  });
+
+  it('город не в ссылке — тот, что смотрели в «Поиске» (booking-client.js fallback, «Найти ещё тренера»)', async () => {
+    const shell = shellStub();
+    await bootWith('?intent=coach', { intent: 'skate', cityId: 2, cityName: 'Гомель' }, null, { shell });
+    assert.deepEqual(shell.calls, [['trainers?city_id=2', { replace: true }]]);
+  });
+
+  it('возврат «Назад» на ice?intent=coach (адрес переписан самим «Поиском») — остаёмся в «Поиске»', async () => {
+    const shell = shellStub();
+    const { requests } = await bootWith('?city_id=1&intent=coach', { intent: 'coach', cityId: 1 }, null, { shell, navType: 'back_forward' });
+    assert.deepEqual(shell.calls, []);
+    assert.ok(requests.some((u) => u.includes('/api/public/ice/cities')), requests.join(' | '));
+  });
+
+  it('другие линзы не уводят на витрину', async () => {
+    const shell = shellStub();
+    await bootWith('?city_id=1&intent=skate', null, null, { shell });
+    await bootWith('?city_id=1', { intent: 'coach', cityId: 1 }, null, { shell });
+    assert.deepEqual(shell.calls, []);
   });
 });
