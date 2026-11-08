@@ -3155,49 +3155,86 @@ def money_text(cents: int | None, currency: str = "BYN") -> str:
     return f"{num}\u00a0{currency_label_ru(currency)}"
 
 
+TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX = (
+    "✨ <b>Первая онлайн-запись</b> — клиент записался сам, подтвердите ниже.\n\n"
+)
+
+
 def format_trainer_new_booking_html(
     *,
     client_name: str,
+    phone: str | None,
     slot_date,
     start_time,
+    end_time,
+    duration_minutes: int | None,
     service: str | None,
-    arena: str | None,
+    tariff: str | None,
     price: str | None,
-    phone: str | None,
+    city: str | None,
+    arena: str | None,
     comment: str | None,
     first_online: bool,
 ) -> str:
     """
-    Новая запись ученика — три строки вместо анкеты (TASK-314):
+    Новая запись ученика — полная карточка, как до TASK-314 (тренеры просили вернуть):
 
-        Новая запись · пт, 23 окт, 17:15
-        Мария Ковальчук
-        Фигурное катание · Замок · 45 BYN
+        🔔 Новая запись — нужно ваше решение
 
-    Телефон — только если ученика нет в боте (иначе связь — кнопкой «Написать»).
-    Комментарий ученика — отдельной строкой в кавычках. Первая запись по ссылке
-    отмечается строкой сверху, без эмодзи.
+        👤 ФИО: Мария Ковальчук
+        📞 +375 29 123-45-67
+        📅 23.10 (Пт) 17:15–18:00 — 45 мин.
+        🎯 Фигурное катание
+        💳 Тариф: Ребёнок · 45 BYN
+        📍 Минск · 🏟 Замок
+        💬 Комментарий: …
+
+    Пустые поля пропускаются, а не показываются «—».
     """
     import html as _html
 
-    head = f"<b>Новая запись</b> · {ru_date_short(slot_date)}, {ru_time(start_time)}"
-    who = _html.escape(client_name.strip() or "Ученик")
-    if phone:
-        who += " · " + _html.escape(phone)
-    what = " · ".join(
-        _html.escape(x.strip()) for x in (service, arena, price) if x and x.strip() and x.strip() != "—"
+    def _clean(v: object) -> str:
+        t = str(v or "").strip()
+        return "" if t == "—" else t
+
+    def _hm(v: object) -> str:
+        return v.strftime("%H:%M") if hasattr(v, "strftime") else str(v or "")[:5]
+
+    date_str = slot_date.strftime("%d.%m") if hasattr(slot_date, "strftime") else str(slot_date)
+    dow = TRAINER_DAYS[slot_date.weekday()] if hasattr(slot_date, "weekday") else ""
+    when = f"{date_str} ({dow}) " if dow else f"{date_str} "
+    when += _hm(start_time) + (f"–{_hm(end_time)}" if end_time else "")
+    when_line = f"📅 <b>{_html.escape(when)}</b>"
+    if duration_minutes and int(duration_minutes) > 0:
+        when_line += f" — {int(duration_minutes)} мин."
+
+    lines = ["🔔 <b>Новая запись</b> — нужно ваше решение", ""]
+    lines.append(f"👤 <b>ФИО:</b> {_html.escape(_clean(client_name) or 'Клиент')}")
+    if _clean(phone):
+        lines.append(f"📞 {_html.escape(_clean(phone))}")
+    lines.append(when_line)
+    if _clean(service):
+        lines.append(f"🎯 {_html.escape(_clean(service))}")
+    pay = " · ".join(x for x in (_clean(tariff), _clean(price)) if x)
+    if pay:
+        lines.append(f"💳 <b>Тариф:</b> {_html.escape(pay)}")
+    where = " · ".join(
+        x
+        for x in (_clean(city) and _html.escape(_clean(city)), _clean(arena) and "🏟 " + _html.escape(_clean(arena)))
+        if x
     )
-    lines = []
-    if first_online:
-        lines.append("<b>Первая запись по вашей ссылке</b> — ученик выбрал время сам.")
-        lines.append("")
-    lines.append(head)
-    lines.append(who)
-    if what:
-        lines.append(what)
-    if comment and comment.strip():
-        lines.append(f"«{_html.escape(comment.strip())}»")
-    return "\n".join(lines)
+    if where:
+        lines.append(f"📍 {where}")
+    if _clean(comment):
+        lines.append(f"💬 <b>Комментарий:</b> {_html.escape(_clean(comment))}")
+    lines += [
+        "",
+        "<b>Действия:</b> подтвердите, отклоните или напишите клиенту — кнопки ниже.",
+        "",
+        "<i>Слот занят; клиент получит напоминания автоматически.</i>",
+    ]
+    text = "\n".join(lines)
+    return (TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX + text) if first_online else text
 
 
 TRAINER_BOOKING_CONFIRMED_BTN_DETAILS = "Открыть запись"

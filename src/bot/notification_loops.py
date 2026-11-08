@@ -2098,16 +2098,17 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                     currency = await resolve_trainer_currency(session, int(b["trainer_id"]))
                     phone_raw = (b.get("client_phone") or "").strip()
                     text = msg.format_trainer_new_booking_html(
-                        client_name=b.get("client_name") or "Ученик",
+                        client_name=b.get("client_name") or "Клиент",
+                        phone=format_phone_display(phone_raw) if phone_raw else None,
                         slot_date=b["slot_date"],
                         start_time=b["start_time"],
+                        end_time=b.get("end_time"),
+                        duration_minutes=_reminder_duration_minutes(b.get("start_time"), b.get("end_time")),
                         service=b.get("service_name"),
+                        tariff=b.get("price_tier_label"),
+                        price=msg.money_text(b.get("booking_price_cents"), currency),
+                        city=b.get("city_name"),
                         arena=b.get("arenas_str"),
-                        price=msg.money_text(b.get("booking_price_cents"), currency)
-                        or (b.get("price_tier_label") or ""),
-                        phone=format_phone_display(phone_raw)
-                        if phone_raw and not b.get("client_telegram_id")
-                        else None,
                         comment=b.get("client_comment"),
                         first_online=bool(b.get("is_first_client_online_booking")),
                     )
