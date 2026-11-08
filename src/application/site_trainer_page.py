@@ -1113,8 +1113,38 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
     return _sec("Всё время на неделю", body, sec_id="time", nosnippet=True)
 
 
-def _prices_html(page: Mapping[str, Any]) -> str:
+def _has_week(page: Mapping[str, Any], app: str | None) -> bool:
+    """Есть ли на странице блок «Всё время на неделю» (``#time``) — единственное условие и у него, и у якорных кнопок."""
+    return bool(page.get("can_book") and app and page.get("windows"))
+
+
+_ICON_UP = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+
+
+def _card_act(page: Mapping[str, Any], app: str | None, via: str | None) -> str:
+    """Низ карточки услуги: прочитал описание, «подходит» → к сетке времени; сетки нет — написать / скопировать телефон.
+
+    Кнопка мягкая, не главная: главный CTA страницы остаётся один — «Записаться» в верхней карточке.
+    """
+    if _has_week(page, app):
+        return (
+            '<div class="tp-cardact"><span>Подходит?</span>'
+            f'<a class="tp-go" href="#time">{_ICON_UP}Выбрать время</a></div>'
+        )
+    contact, phone = page.get("contact_url"), page.get("phone")
+    btns = []
+    if contact:
+        btns.append(f'<a class="tp-go" href="{esc(contact)}"{_write_attrs(page, via)}>Написать тренеру</a>')
+    if phone:
+        btns.append(f'<button type="button" class="tp-go tp-go--quiet" data-copy="{esc(phone)}">Скопировать телефон</button>')
+    if not btns:
+        return ""
+    return f'<div class="tp-cardact"><span>Остались вопросы?</span>{"".join(btns)}</div>'
+
+
+def _prices_html(page: Mapping[str, Any], app: str | None = None, via: str | None = None) -> str:
     cards = []
+    act = _card_act(page, app, via)
     groups = [(d["tab"], d["services"]) for d in page.get("directions") or []]
     groups += [(s["title"], [s]) for s in page.get("other_services") or [] if s.get("prices")]
     if not any(s.get("prices") for _t, svcs in groups for s in svcs):
@@ -1143,7 +1173,7 @@ def _prices_html(page: Mapping[str, Any]) -> str:
                 inner += '<p class="tp-muted">Цену уточните у тренера</p>'
             if s.get("notice"):
                 inner += f'<p class="tp-notice"><b>Не входит в цену:</b> {esc(s["notice"])}</p>'
-        cards.append(f'<div class="tp-card"><h3>{esc(title)}</h3>{inner}</div>')
+        cards.append(f'<div class="tp-card"><h3>{esc(title)}</h3>{inner}{act}</div>')
     body = (
         f'<div class="tp-plist">{"".join(cards)}</div>'
         '<p class="tp-muted">Цена за одно занятие. Билет на каток покупается отдельно, на кассе.</p>'
@@ -1387,7 +1417,7 @@ def render_trainer_page(
         + crumbs_html
         + _hero(page, card, compact=own)
         + _week_html(page, app, via)
-        + _prices_html(page)
+        + _prices_html(page, app, via)
         + _about_html(page, ratings=not own)
         + _after_html(page)
         + _faq_html(page)

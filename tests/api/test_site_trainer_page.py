@@ -683,3 +683,28 @@ async def test_week_keeps_last_day_for_a_busy_trainer(app_use_test_db, db_sessio
     cells = _week_cells(html)
     assert len(cells) == 7
     assert cells[-1].count('class="tp-slot"') == 10
+
+
+@pytest.mark.asyncio
+async def test_price_cards_link_to_the_week_grid_when_there_are_slots(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+
+    prices = html.split('<h2 class="b-h2 tp-h2">Занятия и цены</h2>', 1)[1]
+    assert 'id="time"' in html
+    assert prices.count('<a class="tp-go" href="#time">') == prices.count('<div class="tp-card">') >= 1
+
+
+@pytest.mark.asyncio
+async def test_price_cards_offer_write_and_phone_when_there_is_no_week_grid(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_CRM)
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+
+    prices = html.split('<h2 class="b-h2 tp-h2">Занятия и цены</h2>', 1)[1]
+    assert 'id="time"' not in html and 'href="#time"' not in html
+    assert "Остались вопросы?" in prices and "Написать тренеру" in prices
