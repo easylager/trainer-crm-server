@@ -59,8 +59,9 @@
     goTo('book?trainer_id=' + encodeURIComponent(String(trainerId)) + '&from=saved-trainers');
   }
 
+  /** Профиль тренера — новая карточка на витрине (этап 1 входов); «‹ Назад» там вернёт сюда. */
   function goToTrainerProfile(trainerId) {
-    goTo('catalog?trainer_id=' + encodeURIComponent(String(trainerId)));
+    goTo('trainers?trainer_id=' + encodeURIComponent(String(trainerId)));
   }
 
   function goToArena(arenaId) {
@@ -530,7 +531,7 @@
   /* ── Wire interactions on rendered DOM ──────────────────────── */
 
   function wireMount(container) {
-    /* Card containers — navigate to catalog profile on tap */
+    /* Card containers — navigate to the trainer card (showcase) on tap */
     container.querySelectorAll('[data-card-tid]:not(button)').forEach(function (el) {
       el.addEventListener('click', function (e) {
         if (e.target.closest('[data-cta-tid]')) return;

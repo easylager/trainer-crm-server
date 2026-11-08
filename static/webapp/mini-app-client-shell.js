@@ -176,7 +176,8 @@
     if (state.forcedTab) return state.forcedTab;
     var key = pathnameKey();
     if (key === 'client-home') return 'home';
-    if (key === 'arena' || key === 'ice') return 'catalog';
+    // Витрина тренеров — раздел «Поиска» (этап 1 входов): подсвечена вкладка «Поиск».
+    if (key === 'arena' || key === 'ice' || key === 'trainers') return 'catalog';
     if (key === 'catalog') {
       var q = global.location.search || '';
       if (q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0) return 'catalog';
@@ -500,7 +501,7 @@
     var toTab = null;
     var key = normalizeRoutePath(path).split('?')[0];
     if (key === 'client-home') toTab = 'home';
-    else if (key === 'ice' || key === 'catalog' || key === 'arena') toTab = 'catalog';
+    else if (key === 'ice' || key === 'catalog' || key === 'arena' || key === 'trainers') toTab = 'catalog';
     else if (key === 'client-bookings') toTab = 'bookings';
     var to = TAB_ORDER[toTab];
     // Уход вглубь (карточка арены, «Ещё») — всегда «вперёд»: назад оттуда

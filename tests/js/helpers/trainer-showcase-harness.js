@@ -77,7 +77,10 @@ const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
  * routes: [{ match(call) → bool, reply(call) → Promise<Response> }]; первые совпавшие выигрывают.
  * profiles: ответ GET /client/profiles (можно функцией — на каждый вызов).
  */
-function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null } = {}) {
+/**
+ * historyLength — history.length при открытии витрины: >1 — пришли с другого экрана (есть куда «‹ Назад»).
+ */
+function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1 } = {}) {
   const calls = [];
   const app = makeEl('app');
   const doc = { activeElement: null, body: { tag: 'body' }, keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
@@ -87,17 +90,32 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
   const ctx = {
     console, setTimeout, clearTimeout, Promise, URL, URLSearchParams, Intl, Date, JSON, Math, Number, String, Object, Array, Error, TypeError, isFinite,
     location: { search, href: 'https://x/static/webapp/trainers' + search, pathname: '/static/webapp/trainers' },
-    history: { state: null, pushState() {}, replaceState() {}, back() {} },
+    // Записи витрины (pushState) — стек; back() снимает свою запись и шлёт popstate, а из корня — уход со
+    // страницы (left: сколько раз ушли туда, откуда пришли).
+    history: {
+      state: null, length: historyLength, backs: 0, left: 0, entries: [],
+      pushState(st) { this.entries.push(st); this.state = st; this.length += 1; },
+      replaceState(st) { this.state = st; if (this.entries.length) this.entries[this.entries.length - 1] = st; },
+      back() {
+        this.backs += 1;
+        if (!this.entries.length) { this.left += 1; return; }
+        this.entries.pop();
+        this.state = this.entries.length ? this.entries[this.entries.length - 1] : null;
+        (ctx.winHandlers.popstate || []).forEach((fn) => fn({ state: this.state }));
+      },
+    },
     localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
     document: doc,
     scrollTo() {}, scrollY: 0,
-    addEventListener() {},
+    winHandlers: {},
+    addEventListener(t, fn) { (ctx.winHandlers[t] = ctx.winHandlers[t] || []).push(fn); },
     navigated: [],
   };
   doc.getElementById = (id) => (id === 'app' ? app : id === 'sheet' ? sheet : null);
   ctx.window = ctx;
   ctx.globalThis = ctx;
-  ctx.ClientShell = { navigate: (p) => ctx.navigated.push(p) };
+  ctx.tabBar = [];
+  ctx.ClientShell = { navigate: (p) => ctx.navigated.push(p), setTabBarVisible: (v) => ctx.tabBar.push(!!v) };
   if (switcher) ctx.ClientProfileSwitcher = switcher;
   ctx.fetch = (url, init = {}) => {
     const u = String(url).replace(/[?&]init_data=[^&]*/, '');

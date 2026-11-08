@@ -636,6 +636,21 @@
     return 'catalog?' + parts.join('&');
   }
 
+  /**
+   * Тренер с катка → карточка тренера на витрине (этап 1 входов): trainers?trainer_id=&arena_id=&city_id=.
+   * arena_id — каток, с которого пришли (витрина держит его фильтром). Группа (group_id) витрине не
+   * известна — тап по набору по-прежнему ведёт в старый каталог (buildBookingHref).
+   */
+  function buildTrainerShowcaseHref(opts) {
+    opts = opts || {};
+    var parts = [];
+    [['trainer_id', opts.trainerId], ['arena_id', opts.arenaId], ['city_id', opts.cityId]].forEach(function (kv) {
+      var n = Number(kv[1]);
+      if (kv[1] != null && kv[1] !== '' && isFinite(n) && n > 0 && Math.floor(n) === n) parts.push(kv[0] + '=' + n);
+    });
+    return 'trainers' + (parts.length ? '?' + parts.join('&') : '');
+  }
+
   /** «?day=2026-10-03&s=123» из ленты: день и сеанс, на которых открыть расписание. */
   function parseScheduleFocus(search) {
     var qp = new URLSearchParams(search || '');
@@ -1625,6 +1640,7 @@
     trainerCta: trainerCta,
     ticketCta: ticketCta,
     buildBookingHref: buildBookingHref,
+    buildTrainerShowcaseHref: buildTrainerShowcaseHref,
     parseArenaRef: parseArenaRef,
     sessionIdFromStartParam: sessionIdFromStartParam,
     dayForSession: dayForSession,

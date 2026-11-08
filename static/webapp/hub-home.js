@@ -733,10 +733,18 @@
     sec.hidden = false;
   }
 
+  /* Строки «Чем займёмся?», которые главная прячет сама (hideNeed): у нового клиента «Учиться с тренером»
+     уже есть крупным блоком — второй вход на ту же витрину рядом не нужен. */
+  var hiddenNeeds = {};
+  var needsPainted = false;
+  var needsCity = null;
+
   function needs(city) {
     var sec = $('hubNeeds');
     if (!sec) return;
-    var rows = (city && city.needs) || [];
+    needsPainted = true;
+    needsCity = city;
+    var rows = ((city && city.needs) || []).filter(function (n) { return !hiddenNeeds[n.key]; });
     if (!rows.length) {
       sec.hidden = true;
       return;
@@ -745,6 +753,7 @@
     list.replaceChildren();
     rows.forEach(function (n) {
       var row = el('div', 'hw__row');
+      row.setAttribute('data-need', n.key);
       var hit = link(el('a', 'hw__link'), n.href);
       hit.setAttribute('aria-label', n.title);
       row.appendChild(hit);
@@ -774,6 +783,14 @@
       list.appendChild(row);
     });
     sec.hidden = false;
+  }
+
+  /** Спрятать/вернуть строку «Чем займёмся?» по ключу (coach, skate…); перерисовывает уже показанный список. */
+  function hideNeed(key, hide) {
+    if (!!hiddenNeeds[key] === !!hide) return;
+    if (hide) hiddenNeeds[key] = true;
+    else delete hiddenNeeds[key];
+    if (needsPainted) needs(needsCity);
   }
 
   // ---------- сборка ----------
@@ -848,9 +865,11 @@
     refineTeaser: function (teaser) {
       if (lastTeaserHub && teaser) showTeaser(teaser);
     },
+    hideNeed: hideNeed,
     slot: function () { return $('hubNow'); },
     mine: function () { return $('hubMine'); },
     // Для тестов.
+    _needs: needs,
     _whenLabel: whenLabel,
     _eventTag: eventTag,
     _soonLabel: soonLabel,

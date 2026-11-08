@@ -130,7 +130,7 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 .warn p { margin: 0; }
 .warn .btn-secondary { all: unset; box-sizing: border-box; cursor: pointer; min-height: 44px; border-radius: 14px; border: 1px solid currentColor; display: flex; align-items: center; justify-content: center; font-weight: 700; }
 .note { font-size: 13px; color: var(--a-danger); margin: 0; }
-.dim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 30; display: flex; align-items: flex-end; justify-content: center; }
+.dim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9500; display: flex; align-items: flex-end; justify-content: center; }
 .sheet { background: var(--a-sf); color: var(--a-tx); border-radius: 24px 24px 0 0; padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px)); width: 100%; max-width: 560px; display: grid; gap: 12px; max-height: 88vh; overflow-y: auto; }
 .sheet .sh { display: flex; justify-content: space-between; align-items: center; gap: 10px; } .sheet h4 { margin: 0; font: 400 18px/1.15 var(--display); }
 .x { all: unset; cursor: pointer; width: 44px; height: 44px; flex: none; border-radius: 50%; background: var(--a-chip); display: grid; place-items: center; font-weight: 800; }
@@ -161,3 +161,10 @@ textarea.inpx { padding: 12px; min-height: 76px; resize: vertical; }
 .tsw .crm-phone-field-row { border: 1.5px solid var(--a-line); border-radius: 14px; background: var(--a-sf); min-height: 48px; }
 .tsw .crm-phone-national-input { font-size: 16px; color: var(--a-tx); background: transparent; }
 .days button[disabled] { opacity: .3; cursor: default; }
+
+/* Нижняя панель вкладок (mini-app-client-shell.css): витрина — часть «Поиска».
+   Панель видна — закреплённый низ (.ft) встаёт над ней, а не под неё; шторки (.dim) — над панелью.
+   На записи и итогах панель спрятана (trainer-showcase-main.js) — нижний отступ как без оболочки (mini-app-components.css). */
+body.tsw.client-shell-body:not(.client-shell-tabs-hidden) .tsw-view { min-height: calc(100vh - var(--client-shell-tab-inset)); }
+body.tsw.client-shell-body:not(.client-shell-tabs-hidden) .ft { bottom: var(--client-shell-tab-inset); padding-bottom: 10px; z-index: 9001; background: linear-gradient(180deg, transparent, var(--a-bg) 30%, var(--a-bg)); }
+body.tsw.client-shell-body.client-shell-tabs-hidden { padding-bottom: env(safe-area-inset-bottom, 12px); }

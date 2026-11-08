@@ -1248,6 +1248,39 @@
     return 'ice?intent=coach';
   }
 
+  function positiveId(v) {
+    var n = Number(v);
+    return isFinite(n) && n > 0 && Math.floor(n) === n ? n : null;
+  }
+
+  /**
+   * Витрина тренеров (trainers.html) — этап 1 входов: сегмент «Тренеры» и строки тренеров «Поиска»
+   * ведут сюда, а не в старый каталог. trainers?trainer_id=&arena_id=&city_id= — пустое опускаем.
+   */
+  function trainerShowcaseHref(opts) {
+    opts = opts || {};
+    var parts = [];
+    var tid = positiveId(opts.trainerId);
+    var aid = positiveId(opts.arenaId);
+    var cid = positiveId(opts.cityId);
+    if (tid) parts.push('trainer_id=' + tid);
+    if (aid) parts.push('arena_id=' + aid);
+    if (cid) parts.push('city_id=' + cid);
+    return 'trainers' + (parts.length ? '?' + parts.join('&') : '');
+  }
+
+  /**
+   * Прямая ссылка ice?intent=coach (старые переходы, booking-client.js, «Найти ещё тренера», catalog_<город>_coach)
+   * → витрина города. Город — из ссылки, иначе тот, что человек смотрел в «Поиске». Нет города — '' (старый
+   * список остаётся запасным). Возврат «Назад» сюда — '' : это не новая ссылка, а возврат человека.
+   */
+  function coachShowcaseRedirect(search, savedCityId, returning) {
+    if (returning) return '';
+    if (intentFromSearch(search) !== INTENTS.coach) return '';
+    var cityId = cityIdFromSearch(search) || positiveId(savedCityId);
+    return cityId ? trainerShowcaseHref({ cityId: cityId }) : '';
+  }
+
   function intentFromSearch(search) {
     var raw = String(search || '');
     if (raw.charAt(0) === '?') raw = raw.slice(1);
@@ -1452,8 +1485,8 @@
   }
 
   function trainerHref(item) {
-    var id = item && item.id;
-    return 'catalog?trainer_id=' + encodeURIComponent(String(id));
+    item = item || {};
+    return trainerShowcaseHref({ trainerId: item.id, cityId: item.city_id });
   }
 
   function arenaHref(item) {
@@ -2456,6 +2489,8 @@
     arenaListLens: arenaListLens,
     catalogHref: catalogHref,
     iceCoachHref: iceCoachHref,
+    trainerShowcaseHref: trainerShowcaseHref,
+    coachShowcaseRedirect: coachShowcaseRedirect,
     intentFromSearch: intentFromSearch,
     placeServiceBootFromSearch: placeServiceBootFromSearch,
     urlBlocksSavedPlaceService: urlBlocksSavedPlaceService,

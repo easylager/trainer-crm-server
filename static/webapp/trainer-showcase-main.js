@@ -22,6 +22,11 @@
   var qs = new URLSearchParams(location.search);
   var appEl = document.getElementById('app');
   var sheetEl = document.getElementById('sheet');
+  // Пришли с другого экрана (главная, «Поиск», каток, «Сохранённые») — снимок до наших pushState:
+  // тогда «‹ Назад» в корне витрины уводит обратно (history.back), как #btnBack на других экранах клиента.
+  var CAME_FROM = (function () { try { return Number(history.length) > 1; } catch (e) { return false; } })();
+  // Панель вкладок прячем там, где закреплена кнопка записи/итога: запись, «отправлено», «заявка отправлена».
+  var TABBAR_VIEWS = { list: true, trainer: true, week: true };
 
   var S = {
     cityId: num(qs.get('city_id')),
@@ -220,6 +225,11 @@
     closeSheet();
     var prev = S.stack.pop();
     if (!prev) {
+      // Корень витрины (или тренер по прямой ссылке): есть откуда пришли — туда; иначе тренер → список.
+      if (CAME_FROM) {
+        leave();
+        return;
+      }
       if (S.view !== 'list') {
         S.view = 'list';
         render();
@@ -231,6 +241,11 @@
     S.view = prev.view;
     render();
     window.scrollTo(0, prev.scroll || 0);
+  }
+
+  /** Уйти с витрины туда, откуда пришли (каток, «Поиск», главная, «Сохранённые»). */
+  function leave() {
+    try { history.back(); } catch (e) { /* */ }
   }
 
   window.addEventListener('popstate', function () {
@@ -336,7 +351,7 @@
 
   function renderList() {
     if (S.loadError) {
-      return '<div class="bd"><h1 class="h1a">Учиться с тренером</h1><div class="card"><p>Не удалось загрузить тренеров.</p>' +
+      return '<div class="bd">' + (CAME_FROM ? backBtn('Назад') : '') + '<h1 class="h1a">Учиться с тренером</h1><div class="card"><p>Не удалось загрузить тренеров.</p>' +
         '<button type="button" class="sec2" data-act="retry">Повторить</button></div></div>';
     }
     if (!S.items) return '<div class="bd"><div class="skel"></div><div class="skel"></div></div>';
@@ -347,7 +362,7 @@
     var counts = M.tabCounts(S.items, arenaId);
     var list = M.visibleTrainers(S.items, key, arenaId);
     var dir = M.direction(key);
-    var h = '<div class="bd"><h1 class="h1a">Учиться с тренером</h1>';
+    var h = '<div class="bd">' + (CAME_FROM ? backBtn('Назад') : '') + '<h1 class="h1a">Учиться с тренером</h1>';
     if (!solo) {
       h += '<div class="tabsA" role="tablist">' + M.DIRECTIONS.filter(function (d) {
         return d.key === 'all' || d.key === key || counts[d.key] > 0;
@@ -460,7 +475,7 @@
     var dirs = M.trainerDirections(t);
     var svcs = serviceList(t, S.dirKey);
     var svc = currentService() || (svcs.length > 1 ? svcs[0] : null);
-    var h = '<div class="bd">' + backBtn(S.stack.length ? 'Тренеры' : 'Все тренеры') + heroHtml(t, trainerSubLine(t));
+    var h = '<div class="bd">' + backBtn(S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры') + heroHtml(t, trainerSubLine(t));
     h += '<div class="pc">';
     if (!t.can_book) {
       h += '<p>' + esc(M.selfBookingLine(t.first_name, RuName)) + '</p></div>';
@@ -1470,8 +1485,16 @@
     else if (S.view === 'reqsent') html = renderReqSent();
     else html = renderList();
     appEl.innerHTML = '<div class="tsw-view">' + html + '</div>';
+    syncTabBar();
     if (S.view === 'book' && S.book) wirePhone(S.book);
     if (S.view === 'sent' || (S.view === 'trainer' && S.waBlock)) BC.bindWriteAccessBlock(appEl);
+  }
+
+  /** Нижняя панель «Главная / Поиск / Записи / Ещё» (mini-app-client-shell.js): видна на витрине, тренере и
+   *  «другом времени»; на записи и итогах спрятана — не перекрывает закреплённую кнопку и форму. */
+  function syncTabBar() {
+    var shell = window.ClientShell;
+    if (shell && typeof shell.setTabBarVisible === 'function') shell.setTabBarVisible(!!TABBAR_VIEWS[S.view]);
   }
 
   function syncUrl() {
