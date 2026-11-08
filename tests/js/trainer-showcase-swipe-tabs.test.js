@@ -32,3 +32,27 @@ describe('swipeable tabs vs Telegram collapse', () => {
     });
   }
 });
+
+describe('витрина всегда светлая Ice Paper', () => {
+  it('trainers.html lock: data-force-theme=light', () => {
+    const html = fs.readFileSync(
+      path.resolve(__dirname, '../../static/webapp/trainers.html'),
+      'utf8',
+    );
+    assert.match(html, /data-force-theme="light"/);
+  });
+
+  it('theme.js уважает data-force-theme=light', () => {
+    const js = fs.readFileSync(
+      path.resolve(__dirname, '../../static/webapp/client-mini-app-theme.js'),
+      'utf8',
+    );
+    assert.match(js, /data-force-theme/);
+    assert.match(js, /forced === 'light'/);
+  });
+
+  it('showcase CSS без тёмного переключателя --a-bg', () => {
+    assert.doesNotMatch(css, /data-app-theme="dark"/);
+    assert.match(css, /--a-bg:\s*#F1F3F2/);
+  });
+});

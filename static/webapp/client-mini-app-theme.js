@@ -29,6 +29,10 @@
   }
 
   function isAppDark() {
+    /* data-force-theme на <html> — жёсткий замок экрана (витрина тренеров всегда светлая). */
+    var forced = document.documentElement.getAttribute('data-force-theme');
+    if (forced === 'light') return false;
+    if (forced === 'dark') return true;
     var tg = getTg();
     if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
     return false;

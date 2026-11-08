@@ -1,16 +1,14 @@
 /* Витрина тренеров и запись (TASK-357). Раскладка и токены — из утверждённого прототипа
    .ai/epics/trainer-catalog/design/miniapp.html; палитра — client-mini-app-theme.js. */
+/* Витрина всегда на светлой Ice Paper / тиловой палитре Mini App — не следует
+   за Telegram dark (см. data-force-theme="light" на trainers.html). --a-hero
+   остаётся navy только под фото-оверлеем, не как фон экрана. */
 :root {
   --a-bg: #F1F3F2; --a-sf: #FFFFFF; --a-tx: #101617; --a-hint: #5E6B6B; --a-line: #E1E6E4;
   --a-soft: #E8F5F5; --a-soft-tx: #0B6E70; --a-cta: #45B9BB; --a-cta-tx: #04262A;
   --a-hero: #0d1b26; --a-hero-hint: #9fb4c2; --a-chip: #EEF1F0; --a-warn: #FFF6E3; --a-warn-tx: #6B4A0C;
   --a-danger: #C4342A;
   --display: 'Dela Gothic One', 'Arial Black', sans-serif;
-}
-html[data-app-theme="dark"] {
-  --a-bg: #0B0C0E; --a-sf: #141618; --a-tx: #E6E9EA; --a-hint: #868D93; --a-line: #23272A;
-  --a-soft: #10292A; --a-soft-tx: #7FD6D7; --a-hero: #18252E; --a-hero-hint: #93A7B4;
-  --a-chip: #1C2023; --a-warn: #2A2312; --a-warn-tx: #F2D28A; --a-danger: #FF6B60;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--a-bg); color: var(--a-tx); }
