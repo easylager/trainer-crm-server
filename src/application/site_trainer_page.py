@@ -1050,6 +1050,20 @@ def _sec(title: str, body: str, *, sec_id: str = "", nosnippet: bool = False) ->
     return f'<section class="tp-sec"{id_attr}{snip}><h2 class="b-h2 tp-h2">{esc(title)}</h2>{body}</section>'
 
 
+_ARROW_PREV = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+_ARROW_NEXT = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+
+
+def _scroller(strip: str) -> str:
+    """Горизонтальная лента со стрелками «листать»: стрелки показывает ``_SCROLLER_SCRIPT``, только когда есть куда."""
+    return (
+        f'<div class="tp-scroller" data-scroller>{strip}'
+        f'<button type="button" class="tp-arrow tp-arrow--prev" aria-label="Назад" tabindex="-1">{_ARROW_PREV}</button>'
+        f'<button type="button" class="tp-arrow tp-arrow--next" aria-label="Дальше" tabindex="-1">{_ARROW_NEXT}</button>'
+        "</div>"
+    )
+
+
 def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str:
     wins = page.get("windows") or []
     if not (page.get("can_book") and app and wins):
@@ -1262,7 +1276,7 @@ def _peers_html(page: Mapping[str, Any]) -> str:
             f'<a class="tp-mini" href="{esc(p["path"])}">{img}<div><b>{esc(p["name"])}</b><span>{esc(sub)}</span></div></a>'
         )
     title = " ".join(x for x in (f"Ещё тренеры «{d.tab}»", _in_city(page)) if x)
-    return _sec(title, f'<div class="tp-more">{"".join(minis)}</div>')
+    return _sec(title, _scroller(f'<div class="tp-more">{"".join(minis)}</div>'))
 
 
 def _band_html(page: Mapping[str, Any]) -> str:
@@ -1297,6 +1311,21 @@ _PAGE_SCRIPT = (
     "var bar=document.getElementById('tp-mbar');"
     "if(bar&&typeof IntersectionObserver==='function'){"
     "new IntersectionObserver(function(es){bar.hidden=es[es.length-1].isIntersecting;}).observe(card);}"
+    "})();</script>"
+)
+
+
+_SCROLLER_SCRIPT = (
+    "<script>(function(){"
+    "var ws=document.querySelectorAll('[data-scroller]');"
+    "for(var i=0;i<ws.length;i++){(function(w){"
+    "var s=w.firstElementChild,p=w.querySelector('.tp-arrow--prev'),n=w.querySelector('.tp-arrow--next');"
+    "function upd(){var m=s.scrollWidth-s.clientWidth;"
+    "w.classList.toggle('has-prev',s.scrollLeft>4);w.classList.toggle('has-next',m>4&&s.scrollLeft<m-4);}"
+    "function go(d){s.scrollBy({left:d*s.clientWidth*0.8,behavior:'smooth'});}"
+    "p.addEventListener('click',function(){go(-1);});n.addEventListener('click',function(){go(1);});"
+    "s.addEventListener('scroll',upd,{passive:true});window.addEventListener('resize',upd);upd();"
+    "})(ws[i]);}"
     "})();</script>"
 )
 
@@ -1355,6 +1384,7 @@ def render_trainer_page(
         + "</div>"
         + _mbar_html(page, app)
         + _PAGE_SCRIPT
+        + _SCROLLER_SCRIPT
     )
     crumbs = [("Glideclub", f"{base}/")]
     if city:

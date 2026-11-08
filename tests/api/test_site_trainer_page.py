@@ -638,3 +638,12 @@ def test_bookable_card_has_one_primary_cta_on_nearest_time() -> None:
     )
     assert html.count("tp-btn--teal") == 1 and 'href="https://t.me/b?s=1" rel="nofollow">Записаться на' in html
     assert "Написать тренеру" in html and "tp-btn--tg" not in html
+
+
+def test_horizontal_strip_gets_scroll_arrows_hooked_to_page_script() -> None:
+    from src.application.site_trainer_page import _SCROLLER_SCRIPT, _scroller
+
+    html = _scroller('<div class="tp-more">x</div>')
+    assert html.startswith('<div class="tp-scroller" data-scroller><div class="tp-more">')
+    assert 'tp-arrow--prev' in html and 'tp-arrow--next' in html
+    assert "data-scroller" in _SCROLLER_SCRIPT and "has-next" in _SCROLLER_SCRIPT
