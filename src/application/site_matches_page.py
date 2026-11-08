@@ -437,7 +437,7 @@ def match_description(data: Mapping[str, Any]) -> str:
         return f"Матч {m['title']} ({league}) перенесён или отменён — уточните на hockey.by. Время, арена и билеты на странице Glideclub."
     if m["phase"] == PHASE_AFTER:
         goals = len(data["goals"])
-        tail = f" Голы по минутам: {goals}." if goals else ""
+        tail = f" Голы по минутам: {goals}." if goals else " Протокол и ближайшие матчи — на Glideclub."
         return _fit_text(f"{m['title']}: итог матча {league} {score_text(m['result'])}, {m['day'].day} {_months(m['day'].month)}, {where}.{tail}")
     if data.get("away_trip"):
         base = f"Выездной матч {league} {m['title']} {when}."

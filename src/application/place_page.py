@@ -646,7 +646,8 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
         return f"Массовое катание — {name} | Glideclub"
     if vt == "shop":
         services = ", ".join(s.lower() for s in _services(card))
-        tail = f" — {services}" if services else " — магазин для катания"
+        # Одно слово «розница» в title — слишком мало для поиска: называем, что это за место.
+        tail = f" — магазин для катания: {services}" if services else " — магазин для катания"
         return f"{name}, {city}{tail}" if city else f"{name}{tail}"
     if _ice_without_public_skate(card):
         return f"{name}, {city} — {t('place.no_public_skate_title')}" if city else name
@@ -700,11 +701,16 @@ def search_description(view: Mapping[str, Any]) -> str:
         if bits:
             head = "Расписание массового катания на неделю. " + ". ".join(bits)
     elif card.get("venue_type") == "shop":
-        head = " · ".join(_services(card)) or "Магазин для катания"
+        services = " · ".join(_services(card))
+        head = f"Магазин для катания: {services}" if services else "Магазин для катания"
     elif _ice_without_public_skate(card):
         head = t("place.no_public_skate_meta")
     else:
-        head = f"{card.get('venue_noun') or 'Место'}: адрес, телефон и как добраться"
+        noun = card.get("venue_noun") or "Место"
+        city = _city(card)
+        head = f"{noun} ({city}) в каталоге Glideclub: адрес, телефон и как добраться" if city else (
+            f"{noun} в каталоге Glideclub: адрес, телефон и как добраться"
+        )
     where = _where(card).replace(" · ", ", ")
     return f"{head}. {where}." if where else f"{head}."
 
