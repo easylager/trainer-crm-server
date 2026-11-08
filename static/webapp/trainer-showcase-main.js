@@ -61,6 +61,7 @@
     notify: false,
     waBlock: '',
     saveNote: '',
+    entryNote: '',
     book: null,
     sent: null,
     req: null,
@@ -524,6 +525,7 @@
     S.notify = false;
     S.waBlock = '';
     S.saveNote = '';
+    S.entryNote = '';
     loadEdge(t);
     if (opts.view !== false) go('trainer');
     return loadSlots().then(function (fresh) {
@@ -537,7 +539,8 @@
     var dirs = M.trainerDirections(t);
     var svcs = serviceList(t, S.dirKey);
     var svc = currentService() || (svcs.length > 1 ? svcs[0] : null);
-    var h = '<div class="bd">' + backBtn(S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры') + heroHtml(t, trainerSubLine(t));
+    var h = '<div class="bd">' + backBtn(S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры') +
+      (S.entryNote ? '<div class="entry-note" role="status">' + esc(S.entryNote) + '</div>' : '') + heroHtml(t, trainerSubLine(t));
     h += trustHtml(t);
     h += '<div class="pc">';
     if (!t.can_book) {
@@ -1627,7 +1630,7 @@
     if (S.tab && S.tab !== 'all') q.set('tab', S.tab); else q.delete('tab');
     if (S.arenaId) q.set('arena_id', String(S.arenaId)); else q.delete('arena_id');
     // Фильтры витрины — в адресе; вход в тренера/время одноразовый и при перезагрузке не повторяется.
-    ['trainer_id', 'slot_id', 'service_id', 'via'].forEach(function (k) { q.delete(k); });
+    ['trainer_id', 'slot_id', 'service_id', 'via', 'intent'].forEach(function (k) { q.delete(k); });
     try { history.replaceState(history.state, '', location.pathname + '?' + q.toString()); } catch (e) { /* */ }
   }
 
@@ -1840,6 +1843,28 @@
       });
   }
 
+  /**
+   * Кнопки сайта «Сохранить» / «Оставить заявку» приходят ссылкой с ``_i_save`` / ``_i_request`` → ``?intent=``.
+   * Выполняем один раз при входе в карточку; сохранение идемпотентно (повторный вход не снимает сохранение).
+   */
+  function applyEntryIntent(tr) {
+    var intent = qs.get('intent');
+    if (!initData || !tr || (intent !== 'save' && intent !== 'request')) return;
+    if (intent === 'request') { openRequest(); return; }
+    var tid = tr.id;
+    api('/api/webapp/client/trainer-edges/save', { method: 'POST', body: { trainer_id: tid } }).then(function () {
+      if (!S.trainer || S.trainer.id !== tid) return;
+      S.saved = true;
+      S.entryNote = '♥ Тренер сохранён — он в «Сохранённых»';
+      render();
+      loadEdge(tr);
+    }).catch(function () {
+      if (!S.trainer || S.trainer.id !== tid) return;
+      S.entryNote = 'Не получилось сохранить — нажмите «Сохранить тренера» внизу.';
+      render();
+    });
+  }
+
   function boot() {
     Promise.all([loadSession(), loadProfiles()]).then(function (res) {
       S.session = res[0];
@@ -1862,7 +1887,10 @@
         var sid = qs.get('slot_id');
         if (sid) return openTrainerAndSlot(tr, sid, false);
         S.view = 'trainer';
-        return openTrainer(tr, { view: false });
+        return openTrainer(tr, { view: false }).then(function (r) {
+          applyEntryIntent(tr);
+          return r;
+        });
       });
     });
   }

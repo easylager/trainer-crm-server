@@ -1170,6 +1170,7 @@
       var arenaTail = /_a_([1-9][0-9]*)(?=_|$)/i.exec(tail);
       var slotTail = /_s_([1-9][0-9]*)(?=_|$)/i.exec(tail);
       var viaTail = /_v_([A-Za-z0-9]+)(?=_|$)/i.exec(tail);
+      var intentTail = /_i_(save|request)(?=_|$)/i.exec(tail);
       // Как GlideDeepLink.trainerDeepLinkTarget: со слотом — запись и метка источника в адресе.
       return {
         key: 'trainers',
@@ -1177,7 +1178,8 @@
           'trainers?trainer_id=' + coach[1] +
           (slotTail ? '&slot_id=' + slotTail[1] : '') +
           (arenaTail ? '&arena_id=' + arenaTail[1] : '') +
-          (slotTail && viaTail ? '&via=' + encodeURIComponent(viaTail[1].toLowerCase()) : ''),
+          (slotTail && viaTail ? '&via=' + encodeURIComponent(viaTail[1].toLowerCase()) : '') +
+          (!slotTail && intentTail ? '&intent=' + intentTail[1].toLowerCase() : ''),
       };
     }
     // «Кто кого»: приглашение в лигу друзей (TASK-298/299).

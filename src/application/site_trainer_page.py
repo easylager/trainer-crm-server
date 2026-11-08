@@ -676,6 +676,25 @@ def app_url(
     return link
 
 
+def intent_app_url(
+    base_url: str, page: Mapping[str, Any], intent: str, *, via: str | None = None
+) -> str | None:
+    """«Сохранить» / «Оставить заявку» → Mini App выполняет действие при открытии карточки (``_i_save`` / ``_i_request``).
+
+    Только тренеру из каталога: по личной ссылке тренера и у скрытого карточка Mini App недоступна —
+    там кнопок нет.
+    """
+    if not page.get("listed") or via in (SHARE_VIA, RECOMMEND_VIA):
+        return None
+    from src.application.booking_source import clean_place_via
+
+    return public_telegram_cta_url(
+        base_url,
+        start_param=trainer_start_param(int(page["id"]), via=clean_place_via(via), intent=intent),
+        surface=TRAINER_SURFACE,
+    )
+
+
 def slot_app_url(
     base_url: str,
     page: Mapping[str, Any],
@@ -985,10 +1004,19 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
                 if contact
                 else "Индивидуального свободного времени на этой неделе нет — следующие недели видны в Telegram."
             )
-            parts.append(
-                f'<p class="tp-nowin">{esc(nowin)}</p>'
-                f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></div>'
-            )
+            req = page.get("request_url")
+            if req:
+                # Слотов нет: главное действие — заявка (бот ведёт её тренеру); «следующие недели» — тихой ссылкой.
+                nowin = "Индивидуального свободного времени на этой неделе нет — оставьте заявку, тренер предложит своё."
+                parts.append(
+                    f'<p class="tp-nowin">{esc(nowin)} <a class="tp-link" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></p>'
+                    f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(req)}" rel="nofollow">Оставить заявку</a></div>'
+                )
+            else:
+                parts.append(
+                    f'<p class="tp-nowin">{esc(nowin)}</p>'
+                    f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></div>'
+                )
         if contact:
             parts.append(
                 f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(contact)}"{_write_attrs(page, via)}>Написать тренеру</a></div>'
@@ -1005,6 +1033,10 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             parts.append(
                 f'<div class="tp-act"><a class="tp-btn tp-btn--tg" href="{esc(href)}"{attrs}>{esc(label)}</a></div>'
             )
+        if page.get("request_url"):
+            parts.append(
+                f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(page["request_url"])}" rel="nofollow">Оставить заявку</a></div>'
+            )
         parts.append(_phone_act(page))
         parts.append(also)
         if contact:
@@ -1015,6 +1047,9 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             fine = "Онлайн-записи нет — откройте Telegram и договоритесь о времени."
         parts.append(f'<span class="tp-fine">{esc(fine)}</span>')
     return f'<div class="tp-pcard" id="tp-pcard">{"".join(p for p in parts if p)}</div>'
+
+
+_ICON_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
 def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
@@ -1051,7 +1086,13 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
         top = media + f'<div class="tp-head">{head}</div>'
     else:
         top = f'<div class="tp-top">{media}<div class="tp-head">{head}</div></div>'
-    return f'<section class="tp-th">{top}{card}</section>'
+    save = (
+        f'<a class="tp-save" href="{esc(page["save_url"])}" rel="nofollow" title="Сохранить тренера в Telegram" '
+        f'aria-label="Сохранить тренера в Telegram">{_ICON_HEART}</a>'
+        if page.get("save_url")
+        else ""
+    )
+    return f'<section class="tp-th">{save}{top}{card}</section>'
 
 
 def _sec(title: str, body: str, *, sec_id: str = "", nosnippet: bool = False) -> str:
@@ -1147,11 +1188,14 @@ def _card_act(page: Mapping[str, Any], app: str | None, via: str | None) -> str:
             '<div class="tp-cardact"><span>Подходит?</span>'
             f'<a class="tp-go" href="#time">{_ICON_UP}Выбрать время</a></div>'
         )
-    contact, phone = page.get("contact_url"), page.get("phone")
+    contact, phone, req = page.get("contact_url"), page.get("phone"), page.get("request_url")
     btns = []
+    if req:
+        btns.append(f'<a class="tp-go" href="{esc(req)}" rel="nofollow">Оставить заявку</a>')
     if contact:
-        btns.append(f'<a class="tp-go" href="{esc(contact)}"{_write_attrs(page, via)}>Написать тренеру</a>')
-    if phone:
+        cls = "tp-go tp-go--quiet" if req else "tp-go"
+        btns.append(f'<a class="{cls}" href="{esc(contact)}"{_write_attrs(page, via)}>Написать тренеру</a>')
+    if phone and not req:
         btns.append(f'<button type="button" class="tp-go tp-go--quiet" data-copy="{esc(phone)}">Скопировать телефон</button>')
     if not btns:
         return ""
@@ -1400,6 +1444,11 @@ def render_trainer_page(
     base = (base_url or "").rstrip("/")
     canonical = f"{base}{page['path']}"
     app = app_url(base_url, page, client_bot_username=client_bot_username, via=via)
+    page = {
+        **page,
+        "save_url": intent_app_url(base_url, page, "save", via=via),
+        "request_url": intent_app_url(base_url, page, "request", via=via),
+    }
     if page.get("can_book") and app:
         page = {
             **page,

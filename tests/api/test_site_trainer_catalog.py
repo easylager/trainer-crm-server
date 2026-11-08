@@ -480,3 +480,19 @@ def test_split_service_summary_and_service_title() -> None:
     assert service_title("ОХМ(отработка хоккейного мастерства)") == "ОХМ — отработка хоккейного мастерства"
     assert service_title("Хоккейное катание") == "Хоккейное катание"
     assert service_title("ОФП/СФП") == "ОФП/СФП"
+
+
+def test_card_has_save_heart_and_request_when_no_time() -> None:
+    """Сердце — на каждой карточке; «Оставить заявку» — только когда окон нет (рядом с «Написать»)."""
+    from src.application.catalog_directions import ALL
+    from src.application.site_trainer_catalog import _card_html
+
+    t = {
+        "id": 9, "name": "Анна Тренерова", "initial": "А", "path": "/t/9-anna", "photo_url": None, "services_by_dir": {},
+        "arenas": [], "about": None, "education": None, "experience_years": None, "windows": [], "can_book": True,
+        "contact_url": "https://t.me/anna", "services": [],
+    }
+    html = _card_html(t, ALL, base_url="https://glide.example", city_id=1, arena_id=None)
+    assert 'class="tc-save"' in html and "_i_save" in html.replace("&amp;", "&")
+    assert ">Оставить заявку</a>" in html and "_i_request" in html.replace("&amp;", "&")
+    assert "Написать в Telegram" in html

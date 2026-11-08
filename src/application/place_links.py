@@ -229,8 +229,17 @@ def match_start_param(match_id: int, company_code: str | None = None) -> str:
     return param
 
 
+#: Действие, которое Mini App выполняет сразу при открытии карточки тренера (кнопки на сайте):
+#: сохранить тренера / оставить ему заявку. Хвост ``_i_save`` / ``_i_request``.
+TRAINER_INTENTS = frozenset({"save", "request"})
+
+
 def trainer_start_param(
-    trainer_id: int, arena_id: int | None = None, slot_id: int | None = None, via: str | None = None
+    trainer_id: int,
+    arena_id: int | None = None,
+    slot_id: int | None = None,
+    via: str | None = None,
+    intent: str | None = None,
 ) -> str:
     """``trainer_7`` / ``trainer_7_a_3`` — карточка тренера в мини-аппе, как тап по тренеру на катке;
     ``trainer_7_s_55`` (``…_a_3_s_55``) — сразу запись на это время (TASK-357).
@@ -246,6 +255,8 @@ def trainer_start_param(
         param += f"_s_{int(slot_id)}"
     if via and _TRAINER_VIA_RE.match(via):
         param += f"_v_{via}"
+    if intent in TRAINER_INTENTS:
+        param += f"_i_{intent}"
     return param
 
 
@@ -319,15 +330,22 @@ def parse_trainer_start_param(value: str | None) -> dict[str, Any] | None:
 
     * ``_a_<arena_id>`` — пришли с катка;
     * ``_s_<slot_id>`` — запись сразу на это время (TASK-357);
-    * ``_v_<via>`` — откуда пришли (TASK-351), например ``_v_p3``.
+    * ``_v_<via>`` — откуда пришли (TASK-351), например ``_v_p3``;
+    * ``_i_<save|request>`` — действие сразу при открытии (кнопки «Сохранить» / «Оставить заявку» на сайте).
 
     Незнакомые хвосты игнорируются; повтор ключа — берётся первый. Кривой хвост
-    (``trainer_7_a_``) — не ссылка тренера. → ``{"trainer_id", "arena_id", "slot_id", "via"}``.
+    (``trainer_7_a_``) — не ссылка тренера. → ``{"trainer_id", "arena_id", "slot_id", "via", "intent"}``.
     """
     match = _TRAINER_DEEP_RE.match((value or "").strip())
     if match is None:
         return None
-    out: dict[str, Any] = {"trainer_id": int(match.group(1)), "arena_id": None, "slot_id": None, "via": None}
+    out: dict[str, Any] = {
+        "trainer_id": int(match.group(1)),
+        "arena_id": None,
+        "slot_id": None,
+        "via": None,
+        "intent": None,
+    }
     for key, val in _TRAINER_TAIL_RE.findall(match.group(2) or ""):
         key = key.lower()
         num = int(val) if _POSITIVE_INT_RE.match(val) else None
@@ -337,6 +355,8 @@ def parse_trainer_start_param(value: str | None) -> dict[str, Any] | None:
             out["slot_id"] = num
         elif key == "v" and out["via"] is None and _TRAINER_VIA_RE.match(val.lower()):
             out["via"] = val.lower()
+        elif key == "i" and out["intent"] is None and val.lower() in TRAINER_INTENTS:
+            out["intent"] = val.lower()
     return out
 
 

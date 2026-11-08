@@ -206,3 +206,6 @@ body.tsw.client-shell-body.client-shell-tabs-hidden { padding-bottom: env(safe-a
 .meet .mt-lead { font-size: 13.5px; line-height: 1.4; }
 .meet .mt-acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .meet .mt-acts .sec2 { min-height: 44px; font-size: 14px; }
+
+/* подтверждение действия с сайта («Сохранить» → тренер сохранён) */
+.entry-note { padding: 12px 14px; border-radius: 14px; background: var(--a-soft); color: var(--a-soft-tx); font-weight: 700; font-size: 14px; }

@@ -202,3 +202,12 @@ html { scroll-behavior: smooth; }
 .tp-quote figcaption { font-size: 12px; font-weight: 600; color: var(--g-ink-2); }
 .tp-quote blockquote { margin: 0; }
 .tp-notice { margin: 0; font-size: 13px; line-height: 1.45; color: var(--g-muted); overflow-wrap: anywhere; }
+
+/* «Сохранить тренера»: сердце в углу шапки (на фото — поверх него); тап открывает Telegram, где тренер сохраняется */
+.tp-th { position: relative; }
+.tp-save { position: absolute; top: 26px; right: 12px; z-index: 3; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%;
+  background: color-mix(in srgb, var(--g-surface) 92%, transparent); color: var(--g-ink) !important; border: 1px solid var(--g-line);
+  box-shadow: 0 2px 10px rgba(13, 27, 38, .16); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.tp-save:hover { color: var(--g-accent-ink) !important; }
+.tp-save:focus-visible { outline: 3px solid var(--g-accent); outline-offset: 2px; }
+.tp-th .tp-top .tp-head { padding-right: 52px; }

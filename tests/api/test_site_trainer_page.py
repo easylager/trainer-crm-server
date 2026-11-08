@@ -395,9 +395,11 @@ async def test_no_individual_windows_text_does_not_claim_no_time_at_all(app_use_
         await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"], capacity=4)
         await db_session.commit()
         html = (await client.get(trainer_path(tid, name))).text
-    assert "Индивидуального свободного времени на этой неделе нет — напишите тренеру." in html
+    # Тренер из каталога: главное действие — заявка (в Telegram), «Написать» остаётся ниже.
+    assert "Индивидуального свободного времени на этой неделе нет — оставьте заявку" in html
     assert "свободного времени нет." not in html.replace("Индивидуального свободного времени на этой неделе нет", "")
     assert 'class="tp-slot"' not in html
+    assert "_i_request" in html and ">Оставить заявку</a>" in html
     assert "Написать тренеру" in html
 
 
@@ -708,3 +710,18 @@ async def test_price_cards_offer_write_and_phone_when_there_is_no_week_grid(app_
     prices = html.split('<h2 class="b-h2 tp-h2">Занятия и цены</h2>', 1)[1]
     assert 'id="time"' not in html and 'href="#time"' not in html
     assert "Остались вопросы?" in prices and "Написать тренеру" in prices
+
+
+@pytest.mark.asyncio
+async def test_save_heart_leads_to_telegram_and_is_absent_on_trainers_own_link(app_use_test_db, db_session) -> None:
+    """«Сохранить» — сердце в шапке со ссылкой ``_i_save``; по личной ссылке тренера (``via=link``) карточка Mini App недоступна."""
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+        own = (await client.get(trainer_path(tid, name) + "?via=link")).text
+
+    m = re.search(r'<a class="tp-save" href="([^"]+)"', html)
+    assert m and f"startapp=trainer_{tid}_i_save" in m.group(1).replace("&amp;", "&")
+    assert 'class="tp-save"' not in own and "_i_request" not in own
