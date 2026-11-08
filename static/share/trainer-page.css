@@ -43,7 +43,10 @@
 .tp-svc + .tp-svc { border-top: 1px solid rgba(255, 255, 255, .22); padding-top: 14px; }
 .tp-hook { margin: 0; font-size: 15px; line-height: 1.4; color: var(--g-on-dark-muted); display: -webkit-box; -webkit-box-orient: vertical;
   -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
-.tp-svc__name { font-size: 14px; font-weight: 600; color: var(--g-on-dark-muted); margin: 0; }
+.tp-svc__name { font-size: 15px; font-weight: 700; color: #fff; margin: 0; }
+.tp-svc .tp-hook { -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: normal; }
+.tp-prices { margin: 0; font-size: 17px; line-height: 1.35; color: var(--g-on-dark-muted); font-variant-numeric: tabular-nums; }
+.tp-prices b { color: #fff; font-weight: 700; white-space: nowrap; }
 .tp-tiers { display: flex; flex-wrap: wrap; gap: 6px 22px; }
 .tp-tiers div { display: grid; }
 .tp-tiers span { font-size: 12px; color: #9fb4c2; font-weight: 600; }

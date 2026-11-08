@@ -341,6 +341,31 @@
     return { single: rows(SINGLE_KINDS), duo: rows(DUO_KINDS) };
   }
 
+  /**
+   * Строки цен услуги для карточки тренера: Ребёнок/Взрослый; цены равны — одна строка «Дети и взрослые»
+   * (то же правило «без дубля», что в whoOptions). Нет цен — [].
+   */
+  function priceRows(service) {
+    var cur = (service && service.currency_code) || 'BYN';
+    var rows = whoOptions(service).single.filter(function (r) { return r.priceCents != null; });
+    if (rows.length > 1 && rows.every(function (r) { return r.priceCents === rows[0].priceCents; })) {
+      return [{ title: 'Дети и взрослые', priceCents: rows[0].priceCents, price: formatMoney(rows[0].priceCents, cur) }];
+    }
+    return rows.map(function (r) { return { title: r.title, priceCents: r.priceCents, price: formatMoney(r.priceCents, cur) }; });
+  }
+
+  /** Короткая цена в строке выбора услуги: «50 BYN», если цена одна, иначе «от 45 BYN». Цены нет — ''. */
+  function priceFrom(service) {
+    if (!service) return '';
+    var cur = service.currency_code || 'BYN';
+    var list = (service.price_tiers || []).map(function (t) { return Number(t.price_cents); }).filter(function (n) { return n > 0; });
+    if (!list.length && Number(service.price_cents) > 0) list = [Number(service.price_cents)];
+    if (!list.length) return '';
+    var min = Math.min.apply(null, list);
+    var max = Math.max.apply(null, list);
+    return (min === max ? '' : 'от ') + formatMoney(min, cur);
+  }
+
   /** Поля имён на выбранный тариф: каждому участнику — своё. Взрослому — имя из Telegram. */
   function nameFields(kind, tgName) {
     var me = { key: 'self', label: 'Ваше имя', value: tgName || '', placeholder: '' };
@@ -770,6 +795,8 @@
     glideSince: glideSince,
     cardFacts: cardFacts,
     whoOptions: whoOptions,
+    priceRows: priceRows,
+    priceFrom: priceFrom,
     nameFields: nameFields,
     newClientBookingPlan: newClientBookingPlan,
     bookingComment: bookingComment,
