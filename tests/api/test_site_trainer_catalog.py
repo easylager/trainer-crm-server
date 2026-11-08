@@ -12,6 +12,7 @@ from sqlalchemy import text
 from src.api.app import app
 from src.application.ice_city_day import city_slug
 from src.application.site_trainer_catalog import (
+    _price_html,
     booking_url,
     ALL,
     direction_by_slug,
@@ -118,6 +119,25 @@ def test_direction_min_price_takes_group_and_covering_passes() -> None:
     }
     # Правило показа не изменилось: абонемент без цены услуги и без катка в каталог не выводит.
     assert not is_listed({**every, "services_by_dir": {"zero": [svc(1)]}, "arenas": []}, zero)
+
+
+def test_all_tab_price_says_when_minimum_is_group_or_pass() -> None:
+    def svc(*tiers, group=None):
+        return {
+            "service_id": 1,
+            "currency_code": "BYN",
+            "price_cents": None,
+            "group_price_cents": group,
+            "price_tiers": [{"tier_kind": k, "price_cents": c} for k, c in tiers],
+        }
+
+    group = {"services_by_dir": {"zero": [svc(("child", 4500), ("adult", 5000), group=3000)]}, "passes": []}
+    assert "от 30\xa0BYN <small>в группе</small>" in _price_html(group, ALL)
+    by_pass = {"services_by_dir": {"zero": [svc(("adult", 5000))]}, "passes": [{"per_session_cents": 4000, "service_ids": None}]}
+    assert "от 40\xa0BYN <small>по абонементу</small>" in _price_html(by_pass, ALL)
+    single = {"services_by_dir": {"zero": [svc(("child", 4500), ("adult", 5000), group=6000)]}, "passes": []}
+    html = _price_html(single, ALL)
+    assert "от 45\xa0BYN</div>" in html and "<small>" not in html
 
 
 def test_education_line_only_known_categories() -> None:

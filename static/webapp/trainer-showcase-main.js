@@ -670,13 +670,38 @@
     return parts.length ? '<div class="card"><h4>О занятии</h4>' + parts.join('') + '</div>' : '';
   }
 
+  /** Как связаться с тренером перед занятием: только реальные каналы, без пустых кнопок. */
+  function contactActs(t) {
+    var bits = [];
+    if (t.contact_url) bits.push('<button type="button" class="sec2" data-act="write">Написать тренеру</button>');
+    if (trainerPhone(t)) bits.push('<button type="button" class="sec2" data-act="copy-phone">Скопировать телефон</button>');
+    return bits.join('');
+  }
+
+  /** «Где встретимся»: каток, адрес, маршрут и как найти тренера за 15 минут до начала. */
+  function meetHtml(t, arenas, opts) {
+    opts = opts || {};
+    var rows = (arenas || []).filter(Boolean).map(function (a) {
+      return '<div class="mt-place"><div><b>' + esc(a.name) + '</b>' + (a.address ? '<span>' + esc(a.address) + '</span>' : '') +
+        (opts.rental && a.rental_cents ? '<span>Прокат коньков ' + esc(M.formatMoney(a.rental_cents, a.rental_currency)) + '</span>' : '') + '</div>' +
+        (a.map_link ? '<button type="button" class="mt-route" data-act="map" data-href="' + esc(a.map_link) + '">Маршрут</button>' : '') + '</div>';
+    }).join('');
+    var acts = contactActs(t);
+    var who = M.dativeFirst(t.first_name, RuName);
+    var verb = t.contact_url && trainerPhone(t) ? 'напишите или позвоните' : t.contact_url ? 'напишите' : 'позвоните';
+    var lead = acts
+      ? 'Приходите за 15 минут до начала — ' + verb + ' ' + esc(who) + ', и вас встретят у входа.'
+      : 'Приходите за 15 минут до начала. ' + esc(t.first_name) + ' напишет вам в чат с ботом, где встретиться.';
+    return '<div class="card meet"><h4>Где встретимся</h4>' + rows + '<p class="mt-lead">' + lead + '</p>' +
+      (acts ? '<div class="mt-acts">' + acts + '</div>' : '') +
+      (opts.rental ? '<p class="mut" style="font-size:12.5px">Билет на сеанс покупается в кассе катка.</p>' : '') + '</div>';
+  }
+
   function whereCard(t, svc) {
     if (svc && svc.is_online) return '<div class="card"><h4>Где проходят занятия</h4><p>Онлайн.</p></div>';
     var arenas = t.arenas || [];
     if (!arenas.length) return '';
-    return '<div class="card"><h4>Где проходят занятия</h4>' + arenas.map(function (a) {
-      return '<div class="kv"><span>' + esc(a.name) + '</span><b>' + (a.rental_cents ? 'прокат ' + esc(M.formatMoney(a.rental_cents, a.rental_currency)) : '') + '</b></div>';
-    }).join('') + '<p class="mut" style="font-size:12.5px">Билет на сеанс покупается в кассе катка.</p></div>';
+    return meetHtml(t, arenas, { rental: true });
   }
 
   /* ── 3 · Другое время ────────────────────────────────────────────── */
@@ -935,6 +960,7 @@
         : '<button type="button" class="more" data-act="comment">+ Комментарий для тренера</button>';
       h += '<p class="payl">' + payHtml(svc, choice) + '</p></div>';
     }
+    if (!slot.is_online && arenaById(slot.arena_id)) h += meetHtml(t, [arenaById(slot.arena_id)]);
     if (b.notice) h += '<p class="note" role="alert">' + esc(b.notice) + '</p>';
     h += '</div>' + bookFooter(choice.ready);
     return h;
@@ -1336,10 +1362,13 @@
     }
     h += '<div class="card"><h4>Что дальше</h4><ol class="ol">' + steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol></div>';
     if (!slot.is_online) {
+      var met = arenaById(slot.arena_id) || (slot.arena_name ? { name: slot.arena_name, map_link: slot.map_link } : null);
+      if (met && !met.map_link && slot.map_link) met = Object.assign({}, met, { map_link: slot.map_link });
+      if (met) h += meetHtml(t, [met]);
       h += '<div class="card"><h4>Что взять с собой</h4><p>' + esc(M.takeWithYou(x.dirKey, arenaById(slot.arena_id))) + '</p></div>';
     }
     h += '</div><div class="ft col"><button type="button" class="cta" data-act="my-bookings">Мои записи</button>' +
-      (slot.map_link ? '<button type="button" class="sec2" data-act="route">Маршрут до катка</button>' : '') + '</div>';
+'</div>';
     return h;
   }
 
@@ -1734,6 +1763,7 @@
       case 'my-bookings': showBookedProfile(); navigate('client-bookings'); break;
       case 'my-requests': navigate('client-requests'); break;
       case 'route': openLink(S.sent && S.sent.slot.map_link); break;
+      case 'map': ev.stopPropagation(); openLink(el.getAttribute('data-href')); break;
       case 'to-list': S.view = 'list'; S.stack = []; render(); window.scrollTo(0, 0); break;
       default: break;
     }

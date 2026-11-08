@@ -921,13 +921,15 @@ window.wireHubSlotMessageButtons = function (root) {
       } catch (e) {
         url = '';
       }
+      // ownErrors: экран сам показывает ошибку и «ещё раз» — общая заглушка его не закрывает.
+      var ownErrors = !!(init && init.miniAppOwnErrors);
       return orig.apply(this, arguments).then(function (res) {
         inspectUnauthorized(url, res, init || input);
-        inspectOutage(url, res, orig);
+        if (!ownErrors) inspectOutage(url, res, orig);
         return res;
       }).catch(function (err) {
         if (err && err.name === 'AbortError') throw err;
-        if (isAppApiUrl(url)) armOutageOverlay(orig);
+        if (isAppApiUrl(url) && !ownErrors) armOutageOverlay(orig);
         throw err;
       });
     };

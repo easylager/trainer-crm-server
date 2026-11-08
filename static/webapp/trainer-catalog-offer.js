@@ -98,7 +98,7 @@
 
   function getJson(opts, path, method) {
     return global
-      .fetch(opts.apiUrl(path), { method: method || 'GET', headers: opts.headers() })
+      .fetch(opts.apiUrl(path), { method: method || 'GET', headers: opts.headers(), miniAppOwnErrors: true })
       .then(function (r) {
         return r.json().then(function (d) { return { ok: r.ok, data: d }; }, function () { return { ok: r.ok, data: null }; });
       });

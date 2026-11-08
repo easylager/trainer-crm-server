@@ -504,11 +504,26 @@ def _arenas_check(arenas: Sequence[Mapping[str, Any]]) -> str:
     return "Каток: " + ", ".join(names)
 
 
+def _min_price_basis(t: Mapping[str, Any], cents: int) -> str:
+    """Пометка к «от», если минимум дают не обычные занятия: иначе «от 30» спорит с 45/50 на странице."""
+    from src.application.trainer_min_price import service_price_from
+
+    svcs = [s for rows in t["services_by_dir"].values() for s in rows]
+    singles = [p for p in (service_price_from(s) for s in svcs) if p is not None]
+    if singles and min(singles) <= cents:
+        return ""
+    if any(int(s.get("group_price_cents") or 0) == cents for s in svcs):
+        return "в группе"
+    return "по абонементу"
+
+
 def _price_html(t: Mapping[str, Any], direction: Direction) -> str:
     if direction is ALL:
         label = "Занятие"
         found = direction_min_price(t, ALL)
-        val = f'<div class="tc-val">от {esc(_money(*found))}</div>' if found else ""
+        basis = _min_price_basis(t, found[0]) if found else ""
+        note = f" <small>{esc(basis)}</small>" if basis else ""
+        val = f'<div class="tc-val">от {esc(_money(*found))}{note}</div>' if found else ""
     else:
         label = "Занятие · " + direction.short
         tiers = price_tiers(t["services_by_dir"].get(direction.key, []))

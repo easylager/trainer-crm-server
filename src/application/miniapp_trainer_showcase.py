@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.catalog_directions import service_title, split_service_summary
 from src.application.site_trainer_page import education_line
 from src.application.trainer_client_invite_tracking import sql_booking_not_self
+from src.shared.map_links import build_yandex_by_map_url
 
 #: Сколько тренеров берём в выдачу. Каталог крошечный (6 опубликованных); пагинация — открытый вопрос эпика.
 SHOWCASE_LIMIT = 50
@@ -68,7 +69,7 @@ async def _ice_arenas(session: AsyncSession, arena_ids: list[int]) -> dict[int, 
     rows = await session.execute(
         text(
             """
-            SELECT a.id, a.name, a.city_id,
+            SELECT a.id, a.name, a.city_id, a.address, a.latitude, a.longitude, c.name AS city_name,
                    (SELECT MIN(i.price_rental_minor) FROM ice_sessions i
                      WHERE i.arena_id = a.id AND i.price_rental_minor IS NOT NULL
                        AND i.starts_at_utc > NOW()
@@ -78,6 +79,7 @@ async def _ice_arenas(session: AsyncSession, arena_ids: list[int]) -> dict[int, 
                        AND i.starts_at_utc > NOW()
                      ORDER BY i.starts_at_utc LIMIT 1) AS rental_currency
             FROM arenas a
+            LEFT JOIN cities c ON c.id = a.city_id
             WHERE a.id = ANY(:ids)
               AND COALESCE(a.venue_type, 'ice') = 'ice'
               AND a.merged_into_arena_id IS NULL
@@ -86,14 +88,18 @@ async def _ice_arenas(session: AsyncSession, arena_ids: list[int]) -> dict[int, 
         {"ids": arena_ids, "days": _RENTAL_DAYS},
     )
     out: dict[int, dict[str, Any]] = {}
-    for aid, name, arena_city, rental_minor, rental_currency in rows.fetchall():
+    for aid, name, arena_city, address, lat, lon, city_name, rental_minor, rental_currency in rows.fetchall():
         label = str(name or "").strip()
         if not label:
             continue
+        addr = str(address or "").strip() or None
+        venue = ", ".join(p for p in (label, addr, str(city_name or "").strip()) if p)
         out[int(aid)] = {
             "id": int(aid),
             "name": label,
             "city_id": int(arena_city) if arena_city is not None else None,
+            "address": addr,
+            "map_link": build_yandex_by_map_url({"latitude": lat, "longitude": lon, "address": venue}),
             "rental_cents": int(rental_minor) if rental_minor else None,
             "rental_currency": str(rental_currency or "BYN") if rental_minor else None,
         }

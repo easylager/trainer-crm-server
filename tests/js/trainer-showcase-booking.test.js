@@ -464,3 +464,53 @@ describe('заявка без города в сессии', () => {
     assert.equal(h.posts('/api/webapp/client/request')[0].body.city_id, 3);
   });
 });
+
+describe('«Где встретимся»', () => {
+  const rink = { id: 3, name: 'Каток', address: 'пр. Победителей 65', map_link: 'https://yandex.by/maps/?pt=1' };
+  const slotsOne = { match: (c) => isPath(c, '/api/webapp/client/slots'), reply: () => resp(200, { slots: [slot(101)] }) };
+
+  it('карточка: адрес, маршрут, «за 15 минут» и только существующие каналы', async () => {
+    const h = boot({ showcase: { items: [trainer(1, { arenas: [rink], contact_url: 'https://t.me/coach', phone: '+375291112233' })] }, session: PHONE, routes: [slotsOne] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    const html = h.app.innerHTML;
+    assert.ok(html.includes('<h4>Где встретимся</h4>'));
+    assert.ok(html.includes('пр. Победителей 65'));
+    assert.ok(html.includes('data-act="map" data-href="https://yandex.by/maps/?pt=1"'));
+    assert.ok(html.includes('за 15 минут до начала — напишите или позвоните'));
+    const meet = html.slice(html.indexOf('class="card meet"'));
+    assert.ok(meet.includes('data-act="write"') && meet.includes('data-act="copy-phone"'));
+  });
+
+  it('только телефон — «позвоните», без кнопки Telegram', async () => {
+    const h = boot({ showcase: { items: [trainer(1, { arenas: [rink], phone: '+375291112233' })] }, session: PHONE, routes: [slotsOne] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    const meet = h.app.innerHTML.slice(h.app.innerHTML.indexOf('class="card meet"'));
+    assert.ok(meet.includes('— позвоните'));
+    assert.ok(!meet.slice(0, meet.indexOf('</div></div>') + 400).includes('data-act="write"'));
+  });
+
+  it('нет ни телефона, ни Telegram — не обещаем связь, говорим про чат с ботом', async () => {
+    const h = boot({ showcase: { items: [trainer(1, { arenas: [rink] })] }, session: PHONE, routes: [slotsOne] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    const html = h.app.innerHTML;
+    assert.ok(html.includes('напишет вам в чат с ботом'));
+    assert.ok(!html.includes('class="mt-acts"'));
+  });
+
+  it('форма записи показывает место выбранного слота', async () => {
+    const h = boot({ showcase: { items: [trainer(1, { arenas: [rink], contact_url: 'https://t.me/coach' })] }, session: PHONE, routes: [slotsOne] });
+    await tick();
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    h.click({ 'data-act': 'slot', 'data-slot': 101 });
+    await tick();
+    assert.equal(h.S.view, 'book');
+    assert.ok(h.app.innerHTML.includes('<h4>Где встретимся</h4>') && h.app.innerHTML.includes('пр. Победителей 65'));
+  });
+});
