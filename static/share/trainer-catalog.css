@@ -24,8 +24,9 @@
 .tcat-chip { display: inline-flex; align-items: center; min-height: 44px; border-radius: 999px; padding: 7px 14px; border: 0; cursor: pointer;
   font: 600 14px var(--g-font); background: var(--g-accent-wash); color: var(--g-accent-ink); max-width: 100%;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tcat-tabs { position: sticky; top: 0; z-index: 5; background: var(--g-bg); display: flex; gap: 8px; overflow-x: auto;
-  scrollbar-width: none; padding: 10px 0; margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+.tcat-tabs { position: sticky; top: 0; z-index: 5; background: var(--g-bg); display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none; padding: 10px 0; margin: 0 -16px; padding-left: 16px; padding-right: 16px;
+  touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .tcat-tabs::-webkit-scrollbar { display: none; }
 .tcat-tab { flex: none; display: inline-flex; align-items: center; min-height: 44px; border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: 14px; white-space: nowrap;
   background: var(--g-surface); border: 1px solid var(--g-line); }

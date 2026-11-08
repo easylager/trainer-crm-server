@@ -32,7 +32,8 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 .ft small { text-align: center; color: var(--a-hint); font-size: 12px; }
 .h1a { font: 400 22px/1.08 var(--display); margin: 0; }
 .mut { color: var(--a-hint); font-size: 13px; }
-.tabsA { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+/* pan-x + contain: горизонтальный свайп по вкладкам не уходит в сворачивание Mini App (TG). */
+.tabsA { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .tabsA::-webkit-scrollbar { display: none; }
 .tabsA button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 14px; background: var(--a-sf); border: 1px solid var(--a-line); font-weight: 700; font-size: 13.5px; }
 .tabsA button[aria-selected="true"] { background: var(--a-tx); color: var(--a-bg); border-color: var(--a-tx); }
@@ -74,7 +75,7 @@ body.tsw { font: 14px/1.4 var(--app-font-sans, 'Golos Text', -apple-system, sans
 .hro .badge { position: absolute; left: 16px; top: 14px; z-index: 1; }
 .pc { background: var(--a-hero); color: #fff; border-radius: 22px; padding: 14px; display: grid; gap: 12px; }
 .pc .lb { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--a-hero-hint); font-weight: 700; }
-.seg { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.seg { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .seg::-webkit-scrollbar { display: none; }
 .seg button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; padding: 0 12px; font-size: 13px; font-weight: 700; color: var(--a-hero-hint); }
 .seg button[aria-pressed="true"] { background: #fff; color: #0d1b26; border-color: #fff; }
