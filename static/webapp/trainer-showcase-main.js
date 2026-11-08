@@ -149,7 +149,12 @@
    * Слоты открытого тренера. Промис → true, если ответ применён; false — ответ устарел (за это время
    * открыли другого тренера или запросили слоты заново): `S` не тронут, вызывающий ничего не делает.
    */
-  function loadSlots() {
+  /**
+   * @param {{ retain?: boolean }} [opts] retain — не сбрасывать слоты в null на время запроса
+   *   (смена вкладки/услуги: иначе на секунду вспыхивает «N мин · ближайшее время»).
+   */
+  function loadSlots(opts) {
+    opts = opts || {};
     var t = S.trainer;
     var seq = ++S.slotsSeq;
     function fresh() { return seq === S.slotsSeq && S.trainer === t; }
@@ -163,7 +168,7 @@
       S.slots = (t.windows || []).map(function (w) { return decorateSlot(M.windowToSlot(w), t); });
       return Promise.resolve(true);
     }
-    S.slots = null;
+    if (!opts.retain) S.slots = null;
     S.slotsError = false;
     var svc = currentService();
     return BC.fetchClientSlots({ trainerId: t.id, serviceId: svc ? svc.service_id : null, initData: initData })
@@ -560,12 +565,14 @@
       }
       var where = svc && svc.is_online ? 'онлайн' : ((t.arenas || []).length === 1 ? t.arenas[0].name : '');
       var lb = [t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '', where, 'ближайшее время'].filter(Boolean).join(' · ');
-      var noTime = S.slots && !S.slots.length && !S.slotsError;
-      if (!noTime) h += '<span class="lb">' + esc(lb) + '</span>';
-      if (S.slots === null) h += '<span style="color:var(--a-hero-hint)">Загружаем время…</span>';
-      else if (S.slots.length) {
+      // Подпись с длительностью — только когда есть окна. При null (загрузка) её не рисуем:
+      // иначе при смене вкладки без слотов «N мин · ближайшее время» мигает и пропадает.
+      if (S.slots && S.slots.length) {
+        h += '<span class="lb">' + esc(lb) + '</span>';
         h += '<div class="times">' + S.slots.slice(0, 3).map(function (s) { return slotLabel(s, (t.arenas || []).length > 1); }).join('') +
           '<button type="button" class="alt" data-act="week">Другое время</button></div>';
+      } else if (S.slots === null) {
+        h += '<span style="color:var(--a-hero-hint)">Загружаем время…</span>';
       } else if (S.slotsError) {
         h += '<span style="color:var(--a-hero-hint)">Не удалось загрузить время.</span>';
       }
@@ -1634,13 +1641,14 @@
       case 'dir':
         S.dirKey = el.getAttribute('data-key');
         S.serviceId = firstServiceId(S.trainer, S.dirKey);
-        loadSlots().then(render);
+        // retain: пустой экран без слотов не мигает «N мин · ближайшее время» на время запроса.
+        loadSlots({ retain: true }).then(render);
         render();
         break;
       case 'svc':
         S.serviceId = Number(el.getAttribute('data-sid'));
         if (S.view === 'book') render();
-        else loadSlots().then(render);
+        else loadSlots({ retain: true }).then(render);
         break;
       case 'slot': {
         var slot = slotById(el.getAttribute('data-slot'));

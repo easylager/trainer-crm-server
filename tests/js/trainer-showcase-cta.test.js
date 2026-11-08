@@ -95,6 +95,33 @@ describe('free-card без ника', () => {
   });
 });
 
+describe('смена вкладки без слотов — без мигания длительности', () => {
+  it('на время повторного запроса не вспыхивает «N мин · ближайшее время»', async () => {
+    let n = 0;
+    const slowEmpty = {
+      match: (c) => isPath(c, '/api/webapp/client/slots'),
+      reply: () => { n += 1; return resp(200, { slots: [] }, n === 1 ? 0 : 40); },
+    };
+    const card = trainer(1, {
+      session_duration_minutes: 45,
+      services: [
+        { service_id: 1, service_name: 'С нуля', is_public: true, is_online: false, currency_code: 'BYN', price_cents: 5000,
+          price_tiers: [{ id: 1, tier_kind: 'child', price_cents: 5000, currency_code: 'BYN' }] },
+        { service_id: 2, service_name: 'Фигурное катание', is_public: true, is_online: false, currency_code: 'BYN', price_cents: 0,
+          price_tiers: [] },
+      ],
+    });
+    const h = await open([card], { routes: [slowEmpty] });
+    assert.ok(!h.app.innerHTML.includes('ближайшее время'), 'пусто — подписи с длительностью нет');
+    h.click({ 'data-act': 'dir', 'data-key': 'figurnoe' });
+    // Сразу после клика (запрос ещё летит) — не должно быть вспышки.
+    assert.ok(!h.app.innerHTML.includes('ближайшее время'), h.app.innerHTML);
+    assert.ok(!h.app.innerHTML.includes('Загружаем время'), 'retain: пустой экран не уходит в «Загружаем»');
+    await tick(60);
+    assert.ok(!h.app.innerHTML.includes('ближайшее время'));
+  });
+});
+
 describe('неделя: карточка «Не нашли время?»', () => {
   it('без ника и без initData и без телефона — блок не рисуем (нет orphan-текста)', async () => {
     const h = await open([trainer(1)], { routes: [withSlots], initData: '' });
