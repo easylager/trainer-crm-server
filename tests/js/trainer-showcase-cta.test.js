@@ -95,6 +95,30 @@ describe('free-card без ника', () => {
   });
 });
 
+describe('заявка с экрана без слотов', () => {
+  it('can_book + пустые окна: заявка уходит с trainer_id и service_id, экран «отправлено»', async () => {
+    const h = await open([trainer(1, { contact_url: '/r/tg/1' })], {
+      routes: [
+        noSlots,
+        { match: (c) => isPath(c, '/api/webapp/client/request'), reply: () => resp(200, { success: true, request_id: 77 }) },
+      ],
+    });
+    assert.ok(h.app.innerHTML.includes('data-act="request">Оставить заявку'));
+    h.click({ 'data-act': 'request' });
+    h.sheetInput('rq-name', 'Анна');
+    h.sheetClick({ 'data-act': 'rq-send' });
+    await tick();
+    const posts = h.posts('/api/webapp/client/request');
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].body.trainer_id, 1);
+    assert.equal(posts[0].body.service_id, 1);
+    assert.equal(posts[0].body.first_name, 'Анна');
+    assert.equal(h.S.view, 'reqsent');
+    assert.ok(h.app.innerHTML.includes('Заявка отправлена'));
+    assert.ok(h.app.innerHTML.includes('data-act="my-requests">Мои заявки'));
+  });
+});
+
 describe('смена вкладки без слотов — без мигания длительности', () => {
   it('на время повторного запроса не вспыхивает «N мин · ближайшее время»', async () => {
     let n = 0;
