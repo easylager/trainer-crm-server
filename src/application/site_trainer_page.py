@@ -1342,7 +1342,7 @@ def render_trainer_page(
     card = _price_card(page, app=app, cta=cta, via=via)
     body = (
         '<div class="tp">'
-        '<div class="tp-bar"><a class="b-brand" href="/">Glideclub</a></div>'
+        '<div class="tp-bar"><a class="b-brand" href="/">Glide</a></div>'
         + crumbs_html
         + _hero(page, card, compact=own)
         + _week_html(page, app, via)
