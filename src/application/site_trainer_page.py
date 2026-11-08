@@ -39,6 +39,7 @@ from src.application.catalog_directions import (
     direction_by_key,
     load_service_directions,
     service_direction,
+    service_title,
 )
 from src.application.ice_city_day import city_slug, format_price_minor, human_date, plural_ru
 from src.application.place_links import place_page_url, public_telegram_cta_url, trainer_start_param
@@ -178,9 +179,23 @@ def _role_line(directions: Sequence[Direction]) -> str:
     return f"Занятия {phrase}."
 
 
+_NOTICE_PREFIX = re.compile(r"^\s*в\s+(?:стоимость|цену)\s+не\s+вход(?:ят|ит)\s*[:\-–—]?\s*", re.IGNORECASE)
+
+
+def _notice_text(raw: Any) -> str:
+    """Заметка тренера «в цену не входит» без своего зачина — над ней уже стоит подпись «Не входит в цену»."""
+    text_ = str(raw or "").strip()
+    return _NOTICE_PREFIX.sub("", text_, count=1).strip() or text_
+
+
 def _service_view(svc: Mapping[str, Any]) -> dict[str, Any]:
+    name = str(svc.get("service_name") or "").strip()
     return {
-        "name": str(svc.get("service_name") or "").strip(),
+        "name": name,
+        "title": service_title(name),
+        "hook": str(svc.get("summary_hook") or "").strip(),
+        "body": str(svc.get("summary_body") or "").strip(),
+        "notice": _notice_text(svc.get("client_notice")),
         "description": str(svc.get("description") or "").strip(),
         "prices": service_prices(svc),
         "card_prices": card_prices(svc),
@@ -837,16 +852,20 @@ def _tiers_html(prices: Sequence[tuple[str, str]]) -> str:
 
 def _panel_html(services: Sequence[Mapping[str, Any]]) -> str:
     """Цена направления в карточке; услуг в направлении несколько — у каждой своя подпись."""
+    def hook(s: Mapping[str, Any]) -> str:
+        return f'<p class="tp-hook">{esc(s["hook"])}</p>' if s.get("hook") else ""
+
     if len(services) == 1 and not services[0].get("own"):
-        return _tiers_html(services[0]["card_prices"])
+        return hook(services[0]) + _tiers_html(services[0]["card_prices"])
     return "".join(
-        f'<div class="tp-svc"><span class="tp-svc__name">{esc(s["name"])}</span>{_tiers_html(s["card_prices"])}</div>'
+        f'<div class="tp-svc"><span class="tp-svc__name">{esc(s["title"])}</span>'
+        f'{hook(s)}{_tiers_html(s["card_prices"])}</div>'
         for s in services
     )
 
 
 def _also_line(page: Mapping[str, Any]) -> str:
-    names = [s["name"] for s in page.get("other_services") or [] if s.get("name")]
+    names = [s["title"] for s in page.get("other_services") or [] if s.get("name")]
     return f'<p class="tp-also">Ещё ведёт: {esc(", ".join(names))}.</p>' if names else ""
 
 
@@ -989,14 +1008,23 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
 def _prices_html(page: Mapping[str, Any]) -> str:
     cards = []
     groups = [(d["tab"], d["services"]) for d in page.get("directions") or []]
-    groups += [(s["name"], [s]) for s in page.get("other_services") or [] if s.get("prices")]
+    groups += [(s["title"], [s]) for s in page.get("other_services") or [] if s.get("prices")]
     if not any(s.get("prices") for _t, svcs in groups for s in svcs):
         return ""
     for title, svcs in groups:
         inner = ""
         for s in svcs:
             if len(svcs) > 1 or s.get("own"):
-                inner += f'<p class="tp-svc__name">{esc(s["name"])}</p>'
+                inner += f'<h4 class="tp-svc__name">{esc(s["title"])}</h4>'
+            if s.get("hook"):
+                inner += f'<p class="tp-lead">{esc(s["hook"])}</p>'
+            if s.get("body"):
+                inner += f'<p class="tp-words">{esc(s["body"])}</p>'
+            if s.get("description"):
+                inner += (
+                    '<figure class="tp-quote"><figcaption>Слова тренера</figcaption>'
+                    f'<blockquote class="tp-words">{esc(s["description"])}</blockquote></figure>'
+                )
             if s.get("prices"):
                 inner += (
                     "<dl>"
@@ -1005,14 +1033,14 @@ def _prices_html(page: Mapping[str, Any]) -> str:
                 )
             else:
                 inner += '<p class="tp-muted">Цену уточните у тренера</p>'
-            if s.get("description"):
-                inner += f'<p class="tp-words">{esc(s["description"])}</p>'
+            if s.get("notice"):
+                inner += f'<p class="tp-notice"><b>Не входит в цену:</b> {esc(s["notice"])}</p>'
         cards.append(f'<div class="tp-card"><h3>{esc(title)}</h3>{inner}</div>')
     body = (
         f'<div class="tp-plist">{"".join(cards)}</div>'
         '<p class="tp-muted">Цена за одно занятие. Билет на каток покупается отдельно, на кассе.</p>'
     )
-    return _sec("Цены", body)
+    return _sec("Занятия и цены", body)
 
 
 def _about_html(page: Mapping[str, Any], *, ratings: bool) -> str:

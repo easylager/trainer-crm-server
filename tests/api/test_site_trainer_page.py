@@ -110,7 +110,7 @@ async def test_without_online_booking_page_offers_write_not_book(app_use_test_db
     assert f'href="/r/tg/{tid}"' in html and "Написать в Telegram" in html
     assert "data-catalog-phone-beacon=" in html
     # Цены остаются: бесплатная карточка — «Написать» и цены.
-    assert "<h2 class=\"b-h2 tp-h2\">Цены</h2>" in html and "45\u00a0BYN" in html
+    assert "<h2 class=\"b-h2 tp-h2\">Занятия и цены</h2>" in html and "45\u00a0BYN" in html
 
 
 @pytest.mark.asyncio
@@ -197,10 +197,10 @@ async def test_page_from_client_recommendation_keeps_share_ref(app_use_test_db, 
 async def _add_service(db_session, tid: int, service_id: int, tiers: dict[str, int] | None = None, **cols) -> None:
     await db_session.execute(
         text(
-            "INSERT INTO trainer_services (trainer_id, service_id, price_cents, description) VALUES (:t, :s, :p, :d) "
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents, description, client_notice) VALUES (:t, :s, :p, :d, :n) "
             "ON CONFLICT DO NOTHING"
         ),
-        {"t": tid, "s": service_id, "p": cols.get("price_cents"), "d": cols.get("description")},
+        {"t": tid, "s": service_id, "p": cols.get("price_cents"), "d": cols.get("description"), "n": cols.get("client_notice")},
     )
     for i, (kind, cents) in enumerate((tiers or {}).items()):
         await db_session.execute(
@@ -312,7 +312,7 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
     assert week.count('class="tp-slot"') == 4
     assert week.count("tp-day") >= 7 and week.count("нет окон") == 4
     # Цены списком: все тарифы, «на двоих» тоже; слова тренера к услуге — дословно.
-    prices = html.split(">Цены</h2>", 1)[1].split("</section>", 1)[0]
+    prices = html.split(">Занятия и цены</h2>", 1)[1].split("</section>", 1)[0]
     for label in ("Ребёнок", "Взрослый", "Двое детей", "Взрослый + ребёнок", "Двое взрослых"):
         assert f"<dt>{label}</dt>" in prices
     assert "<dt>Занятие</dt><dd>55 BYN</dd>" in prices and "Ставлю ход и торможение." in prices
@@ -424,3 +424,91 @@ def test_role_line_reads_as_one_grammatical_phrase_for_every_combination() -> No
         "Занятия с нуля, для уже катающихся, по фигурному катанию и по хоккейному катанию."
     )
     assert _role_line([]) == ""
+
+
+# ── Подача услуг: крючок, описание, слова тренера, «не входит в цену» ─
+
+HOOK_ZERO = "Если вы почти не стояли на льду или давно не катались — это про вас."
+HOOK_BETTER = "Уже катаетесь, но хочется увереннее, ровнее и «красивее» на льду."
+HOOK_HOCKEY = "Хоккейная стойка, ход, повороты и торможения"
+HOOK_OHM = "Узкий формат для игроков"
+
+
+@pytest.mark.asyncio
+async def test_card_panels_show_their_own_hook_and_two_services_get_titles(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        _place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        await _add_service(db_session, tid, 1, price_cents=5000)
+        await _add_service(db_session, tid, 2, {"child": 5000, "adult": 5500})
+        await _add_service(db_session, tid, 4, price_cents=5000)
+        await _add_service(db_session, tid, 6, price_cents=5000)
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+    card = html.split('class="tp-pcard', 1)[1].split("</section>", 1)[0]
+    zero = card.split('data-dir-panel="zero"', 1)[1].split('data-dir-panel="better"', 1)[0]
+    better = card.split('data-dir-panel="better"', 1)[1].split('data-dir-panel="hock"', 1)[0]
+    hockey = card.split('data-dir-panel="hock"', 1)[1]
+    assert f'<p class="tp-hook">{HOOK_ZERO}</p>' in zero and HOOK_BETTER not in zero
+    assert f'<p class="tp-hook">{HOOK_BETTER}</p>' in better and HOOK_ZERO not in better
+    # Хук стоит над ценами; название одной услуги во вкладке не повторяется.
+    assert zero.index("tp-hook") < zero.index("tp-tiers") and "tp-svc__name" not in zero
+    assert "Ребёнок" in better and "Взрослый" in better
+    # Две услуги вкладки: название (service_title), крючок и цены у каждой.
+    assert hockey.count('class="tp-svc"') == 2
+    assert '<span class="tp-svc__name">ОХМ — отработка хоккейного мастерства</span>' in hockey
+    assert '<span class="tp-svc__name">Хоккейное катание</span>' in hockey
+    assert HOOK_HOCKEY in hockey and HOOK_OHM in hockey
+
+
+@pytest.mark.asyncio
+async def test_prices_section_presents_service_words_and_notice(app_use_test_db, db_session) -> None:
+    words = "Подойдет для тех, кто ни разу не стоял на льду <b>& «катается» вдоль бортика"
+    async with _client() as client:
+        _place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        await _add_service(db_session, tid, 1, price_cents=5000)
+        await db_session.execute(
+            text("UPDATE trainer_services SET description = :d, client_notice = :n WHERE trainer_id = :t AND service_id = 1"),
+            {"t": tid, "d": words, "n": "В стоимость не входят: прокат коньков, билеты <на> лёд & «всё»."},
+        )
+        await _add_service(db_session, tid, 2, price_cents=5500)
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+    sec = html.split(">Занятия и цены</h2>", 1)[1].split("</section>", 1)[0]
+    zero = sec.split("<h3>С нуля</h3>", 1)[1].split("<h3>", 1)[0]
+    better = sec.split("<h3>Уже катаюсь</h3>", 1)[1]
+    assert f'<p class="tp-lead">{HOOK_ZERO}</p>' in zero
+    # Слова тренера — дословно (с экранированием), с подписью; подписи без имени.
+    assert "<figcaption>Слова тренера</figcaption>" in zero
+    assert "Подойдет для тех, кто ни разу не стоял на льду &lt;b&gt;&amp; «катается» вдоль бортика" in zero
+    assert "<b>& " not in zero
+    # «Не входит в цену»: зачин заметки не дублируется, текст экранирован.
+    assert "<b>Не входит в цену:</b> прокат коньков, билеты &lt;на&gt; лёд &amp; «всё»." in zero
+    assert "В стоимость не входят" not in sec
+    # Нет слов тренера и заметки — нет блоков.
+    assert "Слова тренера" not in better and "Не входит в цену" not in better
+
+
+@pytest.mark.asyncio
+async def test_own_service_has_no_directory_text_and_empty_data_shows_no_blocks(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        _place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        await _own_service(db_session, tid, "Постановка прыжков", direction=3)
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+    assert "Постановка прыжков" in html
+    fig = html.split('data-dir-panel="fig"', 1)[1].split("</div></div>", 1)[0]
+    assert "tp-hook" not in fig
+    sec = html.split(">Занятия и цены</h2>", 1)[1].split("</section>", 1)[0]
+    own = sec.split("<h3>Фигурное</h3>", 1)[1]
+    assert "<h4" in own and "tp-lead" not in own and "tp-words" not in own
+    assert "Слова тренера" not in own and "Не входит в цену" not in own
+    assert "Повороты, прыжки, вращения" not in html
+
+
+def test_notice_text_strips_only_the_leading_phrase() -> None:
+    from src.application.site_trainer_page import _notice_text
+
+    assert _notice_text("В стоимость не входят: прокат.") == "прокат."
+    assert _notice_text("  В цену не входит билет") == "билет"
+    assert _notice_text("Коньки берите свои") == "Коньки берите свои"
+    assert _notice_text(None) == ""
