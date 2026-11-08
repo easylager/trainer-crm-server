@@ -29,7 +29,7 @@ def _client() -> AsyncClient:
 
 
 @pytest.mark.asyncio
-async def test_showcase_personalized_request_full_lifecycle(app_use_test_db, db_session) -> None:
+async def test_showcase_personalized_request_full_lifecycle(app_use_test_db, db_session, monkeypatch) -> None:
     """Как с карточки витрины без окон: POST с trainer_id → DM-очередь → respond → список клиента."""
     async with _client() as http:
         place = await _place(db_session)
@@ -90,6 +90,10 @@ async def test_showcase_personalized_request_full_lifecycle(app_use_test_db, db_
     assert hit is not None
     assert hit["trainer_telegram_id"] == trainer_tg
 
+    # Тест про путь заявки, а не про тихие часы: иначе падает в CI после 22:00 по Минску.
+    monkeypatch.setattr(
+        "src.bot.notification_loops.is_trainer_push_allowed_now", AsyncMock(return_value=True)
+    )
     bot = MagicMock()
     bot.send_message = AsyncMock(return_value=None)
     await process_request_notifications_batch(bot, db_session)
