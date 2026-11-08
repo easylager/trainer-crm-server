@@ -145,12 +145,14 @@ def _needs(view: Mapping[str, Any], city_id: int) -> list[dict[str, Any]]:
         )
     trainers = int(view.get("trainer_count") or 0)
     if trainers:
+        # Этап 1 входов в витрину тренеров: строка ведёт на витрину города (trainers.html), а не в старый
+        # каталог. Новому клиенту её прячет главная, пока виден блок «Учиться с тренером» (client-home-main.js).
         rows.append(
             {
                 "key": "coach",
-                "title": "Тренеры",
+                "title": "Учиться с тренером",
                 "line": f"{trainers} {plural_ru(trainers, 'тренер', 'тренера', 'тренеров')}",
-                "href": f"catalog?city_id={city_id}",
+                "href": f"trainers?city_id={city_id}",
                 "windows": [],
             }
         )

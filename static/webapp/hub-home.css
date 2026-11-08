@@ -328,6 +328,13 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
   background: var(--g-surface); color: var(--g-ink); font: 600 14px/1 var(--g-font); cursor: pointer;
 }
 
+/* «Другие тренеры» под «Моим тренером» — тихая ссылка на витрину (этап 1 входов). */
+.hh-others {
+  justify-self: start; align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: none;
+  color: var(--g-accent-ink); font: 700 15px/1 var(--g-font); cursor: pointer;
+}
+.hh-others[hidden] { display: none; }
+
 /*
  * Отклик на касание (TASK-332): аудит нашёл на главной десять нажимаемых элементов
  * без :active — карточку ближайшего льда, её кнопки, тренера и чипы времени.

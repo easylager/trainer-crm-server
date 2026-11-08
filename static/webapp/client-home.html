@@ -103,6 +103,8 @@
         <div id="myTrainerBlock" style="display:none;"></div>
         <section id="hubPrimaryPanel" class="hub-primary-panel" hidden></section>
         <div class="hh-rebook" id="hubRebook" hidden></div>
+        <!-- Этап 1 входов: «Другие тренеры» под «Моим тренером» → витрина (client-home-main.js setOtherTrainersLink). -->
+        <button type="button" class="hh-others" id="hubOtherTrainers" hidden>Другие тренеры</button>
       </section>
 
       <section class="hs" id="hubNearest" hidden aria-labelledby="hubNearestTitle">
@@ -113,7 +115,8 @@
         <div class="hl" id="hubNearestRow"></div>
       </section>
 
-      <!-- TASK-354: «Учиться с тренером» — только тем, у кого ещё не было записей (client-home-main.js). -->
+      <!-- TASK-354: «Учиться с тренером» — только тем, у кого ещё не было записей (client-home-main.js).
+           Остальным — строка «Учиться с тренером» в «Чем займёмся?»; при видимом блоке строка спрятана. -->
       <section class="lb-learn-host" id="hubLearn" hidden aria-label="Учиться с тренером"></section>
 
       <section class="hs" id="hubNeeds" hidden aria-labelledby="hubNeedsTitle">
