@@ -850,16 +850,34 @@ def _tiers_html(prices: Sequence[tuple[str, str]]) -> str:
     )
 
 
+_SVC_HOOK_MAX = 110
+
+
+def _hook_short(text: str) -> str:
+    """Крючок в блоке услуги (их несколько): режем по границе слова, не посреди слова."""
+    t = " ".join(str(text).split())
+    if len(t) <= _SVC_HOOK_MAX:
+        return t
+    return t[:_SVC_HOOK_MAX].rsplit(" ", 1)[0].rstrip(" ,;:—-") + "…"
+
+
+def _prices_line(prices: Sequence[tuple[str, str]]) -> str:
+    """Цены услуги одной строкой: «Ребёнок 50 BYN · Взрослый 55 BYN» / «Дети и взрослые 50 BYN»."""
+    if not prices:
+        return '<p class="tp-noprice">Цену уточните у тренера</p>'
+    return '<p class="tp-prices">' + " · ".join(f"{esc(label)} <b>{esc(val)}</b>" for label, val in prices) + "</p>"
+
+
 def _panel_html(services: Sequence[Mapping[str, Any]]) -> str:
-    """Цена направления в карточке; услуг в направлении несколько — у каждой своя подпись."""
-    def hook(s: Mapping[str, Any]) -> str:
-        return f'<p class="tp-hook">{esc(s["hook"])}</p>' if s.get("hook") else ""
+    """Цена направления в карточке. Услуга одна — крупные цены; несколько — блок на услугу с ценами в одну строку."""
+    def hook(s: Mapping[str, Any], text: str) -> str:
+        return f'<p class="tp-hook">{esc(text)}</p>' if text else ""
 
     if len(services) == 1 and not services[0].get("own"):
-        return hook(services[0]) + _tiers_html(services[0]["card_prices"])
+        return hook(services[0], services[0].get("hook") or "") + _tiers_html(services[0]["card_prices"])
     return "".join(
         f'<div class="tp-svc"><span class="tp-svc__name">{esc(s["title"])}</span>'
-        f'{hook(s)}{_tiers_html(s["card_prices"])}</div>'
+        f'{hook(s, _hook_short(s["hook"]) if s.get("hook") else "")}{_prices_line(s["card_prices"])}</div>'
         for s in services
     )
 

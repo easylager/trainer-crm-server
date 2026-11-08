@@ -14,7 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from src.api.app import app
-from src.application.site_trainer_page import parse_trainer_ref, trainer_path, trainer_slug
+from src.application.site_trainer_page import _panel_html, parse_trainer_ref, trainer_path, trainer_slug
 from src.infrastructure.db.models import SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE
 from tests.api.test_arena_trainer_windows import _slot
 from tests.api.test_public_place_page import _place
@@ -458,6 +458,26 @@ async def test_card_panels_show_their_own_hook_and_two_services_get_titles(app_u
     assert '<span class="tp-svc__name">ОХМ — отработка хоккейного мастерства</span>' in hockey
     assert '<span class="tp-svc__name">Хоккейное катание</span>' in hockey
     assert HOOK_HOCKEY in hockey and HOOK_OHM in hockey
+
+
+def test_panel_with_two_services_puts_prices_on_one_line_and_cuts_hook_on_word() -> None:
+    long_hook = "Хоккейная стойка, ход, повороты и торможения без лишней теории " * 3
+    html = _panel_html([
+        {"title": "Хоккейное катание", "hook": long_hook, "card_prices": [("Ребёнок", "50 BYN"), ("Взрослый", "55 BYN")]},
+        {"title": "ОХМ", "hook": "Коротко.", "card_prices": [("Дети и взрослые", "50 BYN")]},
+    ])
+    assert html.count('class="tp-svc"') == 2
+    assert 'Ребёнок <b>50 BYN</b> · Взрослый <b>55 BYN</b>' in html
+    assert 'Дети и взрослые <b>50 BYN</b>' in html
+    assert "tp-tiers" not in html
+    hook = re.search(r'<p class="tp-hook">([^<]*)</p>', html).group(1)
+    assert hook.endswith("…") and len(hook) <= 112
+    assert hook[:-1].split(" ")[-1] in long_hook.split(" ")  # последнее слово целое
+
+
+def test_panel_with_one_service_keeps_big_tiers() -> None:
+    html = _panel_html([{"title": "С нуля", "hook": "Крючок.", "card_prices": [("Дети и взрослые", "50 BYN")]}])
+    assert "tp-tiers" in html and "tp-prices" not in html and "tp-svc__name" not in html
 
 
 @pytest.mark.asyncio
