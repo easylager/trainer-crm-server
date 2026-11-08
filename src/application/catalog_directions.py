@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -208,20 +209,58 @@ def service_direction(service: Mapping[str, Any]) -> str | None:
     return _BY_SERVICE.get(sid) or own_service_direction(service)
 
 
+def split_service_summary(summary: str | None) -> tuple[str, str]:
+    """Клиентское описание услуги из справочника (``services.client_summary``) → ``(крючок, подробности)``.
+
+    Первый абзац — «для кого это и подходит ли вам» (одна-две строки), остальное — «что делаем».
+    Наш текст, как есть: ничего не сокращаем и не переписываем. Пусто → ``("", "")``.
+    """
+    parts = [p.strip() for p in re.split(r"\n\s*\n", (summary or "").strip()) if p.strip()]
+    if not parts:
+        return "", ""
+    return parts[0], " ".join(parts[1:])
+
+
+_NAME_WITH_PARENS = re.compile(r"^(\S+)\s*\((.+)\)$")
+
+
+def service_title(name: str | None) -> str:
+    """Название услуги для клиента: «ОХМ(отработка хоккейного мастерства)» → «ОХМ — отработка хоккейного мастерства»."""
+    text_ = (name or "").strip()
+    m = _NAME_WITH_PARENS.match(text_)
+    if not m:
+        return text_
+    inner = m.group(2).strip()
+    return f"{m.group(1)} — {inner[:1].lower() + inner[1:] if inner[:1].isupper() and not inner[:2].isupper() else inner}"
+
+
 async def load_service_directions(session: Any, services: list[dict[str, Any]]) -> None:
-    """Дописывает ``direction_service_id`` услугам из агрегата тренера (одним запросом)."""
+    """Дописывает услугам из агрегата тренера привязку к направлению и наш клиентский текст (одним запросом).
+
+    ``direction_service_id`` — привязка своей услуги админом (TASK-353). ``summary_hook`` /
+    ``summary_body`` — текст справочника, ТОЛЬКО у публичных услуг: у своей услуги тренера описания
+    справочника нет, а подставлять чужое («Фигурное катание») к «постановке прыжков» нельзя.
+    """
     from sqlalchemy import text
 
     ids = sorted({int(s["service_id"]) for s in services if s.get("service_id") is not None})
     if not ids:
         return
     rows = await session.execute(
-        text("SELECT id, direction_service_id FROM services WHERE id = ANY(:ids)"), {"ids": ids}
+        text(
+            "SELECT id, direction_service_id, client_summary, COALESCE(is_public, true) "
+            "FROM services WHERE id = ANY(:ids)"
+        ),
+        {"ids": ids},
     )
-    by_id = {int(i): (int(d) if d is not None else None) for i, d in rows.fetchall()}
+    by_id = {int(i): (int(d) if d is not None else None, summ, bool(pub)) for i, d, summ, pub in rows.fetchall()}
     for s in services:
-        if s.get("service_id") is not None:
-            s["direction_service_id"] = by_id.get(int(s["service_id"]))
+        if s.get("service_id") is None:
+            continue
+        direction, summary, public = by_id.get(int(s["service_id"]), (None, None, False))
+        s["direction_service_id"] = direction
+        hook, body = split_service_summary(summary) if public else ("", "")
+        s["summary_hook"], s["summary_body"] = hook, body
 
 
 def catalog_path(city_name: str, direction: Direction = ALL, *, arena_id: int | None = None) -> str:

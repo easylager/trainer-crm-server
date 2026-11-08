@@ -442,3 +442,16 @@ def test_window_in_city_hides_only_known_other_city() -> None:
     assert window_in_city(3, cities, 10)  # город неизвестен
     assert window_in_city(99, cities, 10)  # каток не найден
     assert window_in_city(2, cities, None)
+
+
+def test_split_service_summary_and_service_title() -> None:
+    from src.application.catalog_directions import service_title, split_service_summary
+
+    hook, body = split_service_summary("Если вы почти не стояли на льду.\n\nСпокойный старт: равновесие.\nВторая строка.")
+    assert hook == "Если вы почти не стояли на льду."
+    assert body == "Спокойный старт: равновесие.\nВторая строка."
+    assert split_service_summary(None) == ("", "") and split_service_summary("  \n ") == ("", "")
+    assert split_service_summary("Один абзац.") == ("Один абзац.", "")
+    assert service_title("ОХМ(отработка хоккейного мастерства)") == "ОХМ — отработка хоккейного мастерства"
+    assert service_title("Хоккейное катание") == "Хоккейное катание"
+    assert service_title("ОФП/СФП") == "ОФП/СФП"
