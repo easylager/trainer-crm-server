@@ -22,6 +22,7 @@ from typing import Any, Mapping, Sequence
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.style_b import _file_version
 from src.application.catalog_directions import (  # noqa: F401 — реэкспорт для вызывающих и тестов
     _BY_KEY,
     _BY_SERVICE,
@@ -46,7 +47,8 @@ from src.shared.html_template import fill_placeholders, json_for_script
 
 CATALOG_SURFACE = "trainer_catalog"
 _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
-TRAINER_CATALOG_STYLE_VERSION = "2026110801"
+# Хэш содержимого, не ручной номер: правка CSS сама сбрасывает кэш браузера.
+TRAINER_CATALOG_STYLE_VERSION = _file_version("static/share/trainer-catalog.css")
 #: Сколько окон в карточке — дальше «Все окна и цены» на странице тренера.
 CARD_WINDOWS = 3
 #: Сколько катков в «Где проходят занятия».
@@ -58,12 +60,20 @@ RATING_MIN_COUNT = 3
 # ── Запись ───────────────────────────────────────────────────────────
 
 
-def booking_url(base_url: str, trainer_id: int, *, city_id: int | None = None, slot_id: int | None = None) -> str | None:
+def booking_url(
+    base_url: str,
+    trainer_id: int,
+    *,
+    city_id: int | None = None,
+    slot_id: int | None = None,
+    intent: str | None = None,
+) -> str | None:
     """Единственное место, где каталог строит ссылку записи (окна и «Записаться»).
 
     Через учётный ``/open-telegram``: ``trainer_<id>`` — карточка тренера в Mini App,
     ``trainer_<id>_s_<slot>`` — сразу запись на это время (TASK-357; занято — «Время заняли»).
     Источник записи (TASK-351) — «каталог сайта» ``k<city_id>`` хвостом ``start_param``.
+    ``intent`` — ``save`` / ``request``: Mini App сразу сохраняет тренера / открывает «Оставить заявку».
     """
     from src.application.booking_source import place_via
     from src.application.place_links import public_telegram_cta_url, trainer_start_param
@@ -71,7 +81,7 @@ def booking_url(base_url: str, trainer_id: int, *, city_id: int | None = None, s
     via = place_via(city_id=city_id, catalog=True)
     return public_telegram_cta_url(
         base_url,
-        start_param=trainer_start_param(int(trainer_id), slot_id=slot_id, via=via),
+        start_param=trainer_start_param(int(trainer_id), slot_id=slot_id, via=via, intent=intent),
         surface=CATALOG_SURFACE,
         city_id=city_id,
     )
@@ -544,6 +554,9 @@ def _window_label(w: Mapping[str, Any]) -> str:
     return f'{base} · {w["arena_name"]}' if w.get("arena_name") else base
 
 
+_ICON_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+
+
 def _card_html(
     t: Mapping[str, Any], direction: Direction, *, base_url: str, city_id: int, arena_id: int | None
 ) -> str:
@@ -590,9 +603,23 @@ def _card_html(
         )
     else:
         act = ""
+    if not wins:
+        # Времени нет — рядом с «Написать» / «Записаться» тихая «Оставить заявку» (бот ведёт её тренеру).
+        req = booking_url(base_url, int(t["id"]), city_id=city_id, intent="request")
+        if req:
+            btn = f'<a class="tc-btn tc-btn--ghost" href="{esc(req)}" rel="nofollow">Оставить заявку</a>'
+            act = act.replace("</div>", btn + "</div>", 1) if act else f'<div class="tc-act">{btn}</div>'
+    save_url = booking_url(base_url, int(t["id"]), city_id=city_id, intent="save")
+    save = (
+        f'<a class="tc-save" href="{esc(save_url)}" rel="nofollow" title="Сохранить тренера в Telegram" '
+        f'aria-label="Сохранить: {esc(t["name"])} — в Telegram">{_ICON_HEART}</a>'
+        if save_url
+        else ""
+    )
     return (
         '<article class="tc">'
         f'<a class="tc-stretch" href="{esc(t["path"])}" aria-label="{esc(t["name"])} — страница тренера"></a>'
+        f"{save}"
         f'<div class="tc-top">{ph}<div class="tc-head">{badge}<h3 class="tc-name">{esc(t["name"])}</h3>{dirs_html}{_rating_html(t)}</div></div>'
         f"{checks_html}{about}{_price_html(t, direction)}{act}"
         '<span class="tc-more">Расписание и цены →</span>'

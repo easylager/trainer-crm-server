@@ -89,12 +89,13 @@
   /**
    * ``trainer_<id>`` + хвосты ``_<ключ>_<значение>`` в любом порядке (place_links.parse_trainer_start_param):
    * ``_a_<arena>`` — пришли с катка, ``_s_<slot>`` — запись на это время (TASK-357), ``_v_<via>`` —
-   * откуда (TASK-351). Незнакомые хвосты игнорируются; кривой хвост (``trainer_7_a_``) — не ссылка тренера.
+   * откуда (TASK-351), ``_i_save`` / ``_i_request`` — действие сразу при открытии карточки (кнопки сайта).
+   * Незнакомые хвосты игнорируются; кривой хвост (``trainer_7_a_``) — не ссылка тренера.
    */
   function parseTrainerDeepLink(sp) {
     var m = /^trainer_([1-9][0-9]*)((?:_[a-z]+_[A-Za-z0-9]+)*)$/i.exec(String(sp || '').trim());
     if (!m) return null;
-    var out = { trainerId: Number(m[1]), arenaId: null, slotId: null, via: null };
+    var out = { trainerId: Number(m[1]), arenaId: null, slotId: null, via: null, intent: null };
     var re = /_([a-z]+)_([A-Za-z0-9]+)/gi;
     var t;
     while ((t = re.exec(m[2]))) {
@@ -104,6 +105,7 @@
       if (key === 'a' && num && out.arenaId == null) out.arenaId = num;
       else if (key === 's' && num && out.slotId == null) out.slotId = num;
       else if (key === 'v' && out.via == null && /^[pck][1-9][0-9]{0,8}$/i.test(val)) out.via = val.toLowerCase();
+      else if (key === 'i' && out.intent == null && /^(save|request)$/i.test(val)) out.intent = val.toLowerCase();
     }
     return out;
   }
@@ -123,6 +125,7 @@
     }
     // TASK-357: ссылка тренера с сайта открывает новую карточку тренера в витрине.
     var path = 'trainers?trainer_id=' + p.trainerId + (p.arenaId ? '&arena_id=' + p.arenaId : '');
+    if (p.intent) path += '&intent=' + p.intent;
     return { key: 'trainers', path: path };
   }
 

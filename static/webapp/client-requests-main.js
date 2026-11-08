@@ -394,8 +394,9 @@
         } catch (e) { return ''; }
       }
 
-      /** Сколько тренеров ответили — без слова «отклик». */
-      function formatTrainerAnswersLine(count) {
+      /** Сколько тренеров ответили — без слова «отклик». Персональная заявка — одному тренеру, его имя уже в заголовке. */
+      function formatTrainerAnswersLine(count, personal) {
+        if (personal) return count === 0 ? 'Ждём ответа тренера' : 'Тренер ответил';
         if (count === 0) return 'Пока нет ответов от тренеров';
         var n = count % 100;
         var last = n % 10;
@@ -437,7 +438,7 @@
         let html = '';
         pageItems.forEach(function(req) {
           const count = (Array.isArray(req.responses) ? req.responses : []).length;
-          const sub = formatTrainerAnswersLine(count);
+          const sub = formatTrainerAnswersLine(count, !!req.is_personalized);
           html += '<button type="button" class="request-card" data-request-id="' + req.id + '">';
           html += '<div class="main"><div class="title">' + escapeHtml(formatRequestLabel(req)) + '</div>';
           html += '<div class="meta">' + escapeHtml(sub) + '</div></div>';

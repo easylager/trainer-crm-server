@@ -86,6 +86,8 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
     assert "Нужен Telegram — запись и переписка идут там." in html
     assert "Всё время на неделю" in html and "нет окон" in html
     assert 'id="tp-mbar"' in html and "Записаться на " in html
+    # Вордмарк в шапке — «Glide», не «Glideclub».
+    assert '<a class="b-brand" href="/">Glide</a>' in html
     # Каток — ссылкой на страницу катка сайта, не в Telegram.
     assert f'href="https://glide.example{place["path"]}"' in html
     # Тарифы фикстуры 45/50 — в карточке ребёнок и взрослый, цена только из тарифов (не групповая 25).
@@ -393,9 +395,11 @@ async def test_no_individual_windows_text_does_not_claim_no_time_at_all(app_use_
         await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"], capacity=4)
         await db_session.commit()
         html = (await client.get(trainer_path(tid, name))).text
-    assert "Индивидуального свободного времени на этой неделе нет — напишите тренеру." in html
+    # Тренер из каталога: главное действие — заявка (в Telegram), «Написать» остаётся ниже.
+    assert "Индивидуального свободного времени на этой неделе нет — оставьте заявку" in html
     assert "свободного времени нет." not in html.replace("Индивидуального свободного времени на этой неделе нет", "")
     assert 'class="tp-slot"' not in html
+    assert "_i_request" in html and ">Оставить заявку</a>" in html
     assert "Написать тренеру" in html
 
 
@@ -485,7 +489,7 @@ def test_role_line_reads_as_one_grammatical_phrase_for_every_combination() -> No
 
 HOOK_ZERO = "Если вы почти не стояли на льду или давно не катались — это про вас."
 HOOK_BETTER = "Уже катаетесь, но хочется увереннее, ровнее и «красивее» на льду."
-HOOK_HOCKEY = "Хоккейная стойка, ход, повороты и торможения"
+HOOK_HOCKEY = "Взрывной старт, маневренность"
 HOOK_OHM = "Узкий формат для игроков"
 
 
@@ -636,3 +640,88 @@ def test_bookable_card_has_one_primary_cta_on_nearest_time() -> None:
     )
     assert html.count("tp-btn--teal") == 1 and 'href="https://t.me/b?s=1" rel="nofollow">Записаться на' in html
     assert "Написать тренеру" in html and "tp-btn--tg" not in html
+
+
+def test_horizontal_strip_gets_scroll_arrows_hooked_to_page_script() -> None:
+    from src.application.site_trainer_page import _SCROLLER_SCRIPT, _scroller
+
+    html = _scroller('<div class="tp-more">x</div>')
+    assert html.startswith('<div class="tp-scroller" data-scroller><div class="tp-more">')
+    assert 'tp-arrow--prev' in html and 'tp-arrow--next' in html
+    assert "data-scroller" in _SCROLLER_SCRIPT and "has-next" in _SCROLLER_SCRIPT
+
+
+def _week_cells(html: str) -> list[str]:
+    week = html.split('<div class="tp-week">', 1)[1].split('<div class="tp-request">', 1)[0]
+    return re.split(r'(?=<div class="tp-day)', week)[1:]
+
+
+@pytest.mark.asyncio
+async def test_week_shows_every_day_of_the_grid_when_today_has_no_slots(app_use_test_db, db_session) -> None:
+    """Сетка стартует с первого дня с окнами (не с сегодня): её последний день не должен теряться."""
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        for d in range(1, 8):  # завтра … через 7 дней, на сегодня окон нет
+            await _slot(db_session, tid, days=d, hour=12, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+
+    cells = _week_cells(html)
+    assert len(cells) == 7
+    assert [c for c in cells if "tp-day--empty" in c] == []
+
+
+@pytest.mark.asyncio
+async def test_week_keeps_last_day_for_a_busy_trainer(app_use_test_db, db_session) -> None:
+    """Много слотов в день: общий лимит окон не должен съедать конец недели."""
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        for d in range(1, 8):
+            for h in range(7, 17):  # 10 слотов в день, 70 за неделю
+                await _slot(db_session, tid, days=d, hour=h, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+
+    cells = _week_cells(html)
+    assert len(cells) == 7
+    assert cells[-1].count('class="tp-slot"') == 10
+
+
+@pytest.mark.asyncio
+async def test_price_cards_link_to_the_week_grid_when_there_are_slots(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+
+    prices = html.split('<h2 class="b-h2 tp-h2">Занятия и цены</h2>', 1)[1]
+    assert 'id="time"' in html
+    assert prices.count('<a class="tp-go" href="#time">') == prices.count('<div class="tp-card">') >= 1
+
+
+@pytest.mark.asyncio
+async def test_price_cards_offer_write_and_phone_when_there_is_no_week_grid(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_CRM)
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+
+    prices = html.split('<h2 class="b-h2 tp-h2">Занятия и цены</h2>', 1)[1]
+    assert 'id="time"' not in html and 'href="#time"' not in html
+    assert "Остались вопросы?" in prices and "Написать тренеру" in prices
+
+
+@pytest.mark.asyncio
+async def test_save_heart_leads_to_telegram_and_is_absent_on_trainers_own_link(app_use_test_db, db_session) -> None:
+    """«Сохранить» — сердце в шапке со ссылкой ``_i_save``; по личной ссылке тренера (``via=link``) карточка Mini App недоступна."""
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        await _slot(db_session, tid, days=2, hour=12, arena_id=place["arena_id"])
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+        own = (await client.get(trainer_path(tid, name) + "?via=link")).text
+
+    m = re.search(r'<a class="tp-save" href="([^"]+)"', html)
+    assert m and f"startapp=trainer_{tid}_i_save" in m.group(1).replace("&amp;", "&")
+    assert 'class="tp-save"' not in own and "_i_request" not in own

@@ -1778,11 +1778,24 @@ class TrainerRepository:
         rating_val = max(1, min(5, rating))
         await self._session.execute(
             text("""
-                INSERT INTO trainer_ratings (trainer_id, client_telegram_id, rating, review_text)
-                VALUES (:tid, :ctid, :rating, :review_text)
+                INSERT INTO trainer_ratings (trainer_id, client_telegram_id, rating, review_text, review_status)
+                VALUES (:tid, :ctid, :rating, :review_text,
+                        CASE WHEN CAST(:review_text AS text) IS NOT NULL AND btrim(CAST(:review_text AS text)) <> ''
+                             THEN 'pending' END)
                 ON CONFLICT (trainer_id, client_telegram_id)
                 DO UPDATE SET rating = EXCLUDED.rating,
-                  review_text = COALESCE(EXCLUDED.review_text, trainer_ratings.review_text)
+                  review_text = COALESCE(EXCLUDED.review_text, trainer_ratings.review_text),
+                  -- новый или изменённый текст снова уходит на проверку; без текста статус не трогаем
+                  review_status = CASE
+                      WHEN EXCLUDED.review_text IS NOT NULL AND btrim(EXCLUDED.review_text) <> ''
+                           AND EXCLUDED.review_text IS DISTINCT FROM trainer_ratings.review_text
+                      THEN 'pending'
+                      ELSE trainer_ratings.review_status END,
+                  reviewed_at = CASE
+                      WHEN EXCLUDED.review_text IS NOT NULL AND btrim(EXCLUDED.review_text) <> ''
+                           AND EXCLUDED.review_text IS DISTINCT FROM trainer_ratings.review_text
+                      THEN NULL
+                      ELSE trainer_ratings.reviewed_at END
             """),
             {"tid": trainer_id, "ctid": client_telegram_id, "rating": rating_val, "review_text": review_text},
         )
@@ -1811,6 +1824,7 @@ class TrainerRepository:
     ) -> tuple[list[dict[str, Any]], int]:
         """
         Public review list: rating, optional text, date. No client identifiers (privacy).
+        Text is returned only after moderation (``review_status = 'approved'``).
         """
         r = await self._session.execute(
             text("SELECT COUNT(*)::int FROM trainer_ratings WHERE trainer_id = :tid"),
@@ -1819,7 +1833,9 @@ class TrainerRepository:
         total = int(r.scalar() or 0)
         r2 = await self._session.execute(
             text("""
-                SELECT rating, review_text, created_at
+                SELECT rating,
+                       CASE WHEN review_status = 'approved' THEN review_text END,
+                       created_at
                 FROM trainer_ratings
                 WHERE trainer_id = :tid
                 ORDER BY created_at DESC

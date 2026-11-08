@@ -2377,7 +2377,15 @@ async def on_feedback_review_message(message: Message) -> None:
                 review_text=review_text,
                 kind=notify_kind,
             )
-    await message.answer(msg.CLIENT_FEEDBACK_THANKS)
+    if review_text:
+        # Текст виден на сайте только после проверки админом — карточка с «Подтвердить» / «Отклонить».
+        try:
+            from src.application.review_moderation_notify import notify_admins_new_review
+
+            await notify_admins_new_review(telegram_id, int(state["trainer_id"]))
+        except Exception:  # noqa: BLE001
+            logger.exception("review moderation notify failed trainer_id=%s", state.get("trainer_id"))
+    await message.answer(msg.CLIENT_FEEDBACK_REVIEW_THANKS if review_text else msg.CLIENT_FEEDBACK_THANKS)
 
 
 # --- Repeat / Become regular: scenarios ---

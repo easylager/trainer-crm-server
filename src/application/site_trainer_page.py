@@ -32,6 +32,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.style_b import _file_version
 from src.application.catalog_directions import (
     DIRECTIONS,
     Direction,
@@ -42,6 +43,7 @@ from src.application.catalog_directions import (
     service_title,
 )
 from src.application.ice_city_day import city_slug, format_price_minor, human_date, plural_ru
+from src.shared.review_moderation import REVIEWS_MIN_SHOWN
 from src.application.place_links import place_page_url, public_telegram_cta_url, trainer_start_param
 from src.application.site_trainers import trainer_initial, trainer_line, trainer_name, trainer_photo_url
 from src.application.style_b import esc
@@ -58,7 +60,10 @@ DESCRIPTION_LIMIT = 155
 #: Ближайшее время в карточке цены — дальше «Всё время на неделю».
 NEAR_SHOWN = 3
 #: Слотов на неделю с запасом: у тренера с плотным расписанием их бывает десятки.
-WEEK_WINDOWS_LIMIT = 60
+#: Окон на тренера в выборке: 7 дней по ~10 слотов с запасом — общий лимит не должен съедать конец недели.
+WEEK_WINDOWS_LIMIT = 200
+#: Как далеко вперёд ищем окна: неделя сетки стартует с первого дня с окнами, он может быть не сегодня.
+WEEK_LOOKAHEAD_DAYS = 14
 WEEK_DAYS = 7
 #: Оценку показываем, когда оценок хотя бы столько (решение владельца).
 RATING_MIN_COUNT = 3
@@ -468,6 +473,40 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
     return out
 
 
+REVIEWS_SHOWN = 12
+REVIEW_PREVIEW_CHARS = 600
+
+
+async def _load_reviews(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]]:
+    """Подтверждённые админом отзывы с текстом, новые сверху. Имя — «Марк М.», без id и телеграм-данных."""
+    from src.application.review_moderation_use_cases import display_name
+
+    rows = await session.execute(
+        text(
+            """
+            SELECT r.rating, r.review_text, r.created_at, c.first_name, c.last_name
+            FROM trainer_ratings r
+            LEFT JOIN clients c ON c.telegram_id = r.client_telegram_id
+            WHERE r.trainer_id = :tid AND r.review_status = 'approved' AND btrim(COALESCE(r.review_text, '')) <> ''
+            ORDER BY r.created_at DESC, r.id DESC
+            LIMIT :lim
+            """
+        ),
+        {"tid": int(trainer_id), "lim": REVIEWS_SHOWN},
+    )
+    out = []
+    for rating, body, created, first, last in rows.fetchall():
+        out.append(
+            {
+                "rating": max(1, min(5, int(rating))),
+                "text": str(body).strip()[:REVIEW_PREVIEW_CHARS * 4],
+                "date": created.date() if created else None,
+                "name": display_name(first, last),
+            }
+        )
+    return out
+
+
 async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:
     """Всё для ``/t/…`` или ``None`` (нет такого тренера или он деактивирован)."""
     from src.application.arena_media import attach_arena_media_payloads
@@ -500,10 +539,18 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
     if can_book:
         windows = (
             await _trainer_windows_on_arena(
-                session, None, [int(trainer_id)], timezone_name=NOTIFICATION_TZ, limit=WEEK_WINDOWS_LIMIT
+                session,
+                None,
+                [int(trainer_id)],
+                timezone_name=NOTIFICATION_TZ,
+                limit=WEEK_WINDOWS_LIMIT,
+                days=WEEK_LOOKAHEAD_DAYS,
             )
         ).get(int(trainer_id), [])
-        windows = [w for w in windows if (datetime.fromisoformat(w["starts_at"]).date() - today).days < WEEK_DAYS]
+        # Неделя — от первого дня с окнами (как сетка в ``_week_html``), а не от сегодня: иначе её последний день пуст.
+        if windows:
+            first = min(datetime.fromisoformat(w["starts_at"]).date() for w in windows)
+            windows = [w for w in windows if (datetime.fromisoformat(w["starts_at"]).date() - first).days < WEEK_DAYS]
     name = trainer_name(body)
     arenas = await _arenas(session, int(trainer_id))
     await attach_arena_media_payloads(session, arenas)
@@ -540,6 +587,7 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         "education": education_line(profile.get("education")),
         "rating_avg": profile.get("rating_avg"),
         "rating_count": int(profile.get("rating_count") or 0),
+        "reviews": await _load_reviews(session, int(trainer_id)),
         "glide_since": await _glide_since(session, int(trainer_id)),
         "directions": directions,
         "other_services": other,
@@ -662,6 +710,25 @@ def app_url(
         client_bot_username=client_bot_username, trainer_id=int(page["id"])
     )
     return link
+
+
+def intent_app_url(
+    base_url: str, page: Mapping[str, Any], intent: str, *, via: str | None = None
+) -> str | None:
+    """«Сохранить» / «Оставить заявку» → Mini App выполняет действие при открытии карточки (``_i_save`` / ``_i_request``).
+
+    Только тренеру из каталога: по личной ссылке тренера и у скрытого карточка Mini App недоступна —
+    там кнопок нет.
+    """
+    if not page.get("listed") or via in (SHARE_VIA, RECOMMEND_VIA):
+        return None
+    from src.application.booking_source import clean_place_via
+
+    return public_telegram_cta_url(
+        base_url,
+        start_param=trainer_start_param(int(page["id"]), via=clean_place_via(via), intent=intent),
+        surface=TRAINER_SURFACE,
+    )
 
 
 def slot_app_url(
@@ -973,10 +1040,19 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
                 if contact
                 else "Индивидуального свободного времени на этой неделе нет — следующие недели видны в Telegram."
             )
-            parts.append(
-                f'<p class="tp-nowin">{esc(nowin)}</p>'
-                f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></div>'
-            )
+            req = page.get("request_url")
+            if req:
+                # Слотов нет: главное действие — заявка (бот ведёт её тренеру); «следующие недели» — тихой ссылкой.
+                nowin = "Индивидуального свободного времени на этой неделе нет — оставьте заявку, тренер предложит своё."
+                parts.append(
+                    f'<p class="tp-nowin">{esc(nowin)} <a class="tp-link" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></p>'
+                    f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(req)}" rel="nofollow">Оставить заявку</a></div>'
+                )
+            else:
+                parts.append(
+                    f'<p class="tp-nowin">{esc(nowin)}</p>'
+                    f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></div>'
+                )
         if contact:
             parts.append(
                 f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(contact)}"{_write_attrs(page, via)}>Написать тренеру</a></div>'
@@ -993,6 +1069,10 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             parts.append(
                 f'<div class="tp-act"><a class="tp-btn tp-btn--tg" href="{esc(href)}"{attrs}>{esc(label)}</a></div>'
             )
+        if page.get("request_url"):
+            parts.append(
+                f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(page["request_url"])}" rel="nofollow">Оставить заявку</a></div>'
+            )
         parts.append(_phone_act(page))
         parts.append(also)
         if contact:
@@ -1003,6 +1083,9 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             fine = "Онлайн-записи нет — откройте Telegram и договоритесь о времени."
         parts.append(f'<span class="tp-fine">{esc(fine)}</span>')
     return f'<div class="tp-pcard" id="tp-pcard">{"".join(p for p in parts if p)}</div>'
+
+
+_ICON_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
 def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
@@ -1025,9 +1108,10 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
         if bio:
             head += f'<p class="tp-bio">{esc(bio)}</p>'
         if _rating_ok(page):
+            tag, href = ("a", ' href="#reviews"') if _reviews_ready(page) else ("p", "")
             head += (
-                f'<p class="tp-rate"><i aria-hidden="true">★</i>{esc(_avg(page))} '
-                f"<span>· {esc(_n_ratings(int(page['rating_count'])))}</span></p>"
+                f'<{tag} class="tp-rate"{href}><i aria-hidden="true">★</i>{esc(_avg(page))} '
+                f"<span>· {esc(_n_ratings(int(page['rating_count'])))}</span></{tag}>"
             )
         since = _since_text(page)
         if since:
@@ -1039,7 +1123,13 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
         top = media + f'<div class="tp-head">{head}</div>'
     else:
         top = f'<div class="tp-top">{media}<div class="tp-head">{head}</div></div>'
-    return f'<section class="tp-th">{top}{card}</section>'
+    save = (
+        f'<a class="tp-save" href="{esc(page["save_url"])}" rel="nofollow" title="Сохранить тренера в Telegram" '
+        f'aria-label="Сохранить тренера в Telegram">{_ICON_HEART}</a>'
+        if page.get("save_url")
+        else ""
+    )
+    return f'<section class="tp-th">{save}{top}{card}</section>'
 
 
 def _sec(title: str, body: str, *, sec_id: str = "", nosnippet: bool = False) -> str:
@@ -1048,6 +1138,20 @@ def _sec(title: str, body: str, *, sec_id: str = "", nosnippet: bool = False) ->
     id_attr = f' id="{esc(sec_id)}"' if sec_id else ""
     snip = " data-nosnippet" if nosnippet else ""
     return f'<section class="tp-sec"{id_attr}{snip}><h2 class="b-h2 tp-h2">{esc(title)}</h2>{body}</section>'
+
+
+_ARROW_PREV = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+_ARROW_NEXT = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+
+
+def _scroller(strip: str, *, cls: str = "") -> str:
+    """Горизонтальная лента со стрелками «листать»: стрелки показывает ``_SCROLLER_SCRIPT``, только когда есть куда."""
+    return (
+        f'<div class="tp-scroller{" " + cls if cls else ""}" data-scroller>{strip}'
+        f'<button type="button" class="tp-arrow tp-arrow--prev" aria-label="Назад" tabindex="-1">{_ARROW_PREV}</button>'
+        f'<button type="button" class="tp-arrow tp-arrow--next" aria-label="Дальше" tabindex="-1">{_ARROW_NEXT}</button>'
+        "</div>"
+    )
 
 
 def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str:
@@ -1087,8 +1191,57 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
     return _sec("Всё время на неделю", body, sec_id="time", nosnippet=True)
 
 
-def _prices_html(page: Mapping[str, Any]) -> str:
+def _price_rows(prices: Sequence[tuple[str, str]]) -> str:
+    """Цены услуги: две главные (ребёнок / взрослый) — крупными плитками, составы «на двоих» — в раскрывашке.
+
+    Все строки остаются в HTML (``dt``/``dd``): раскрывашка прячет их только визуально.
+    """
+
+    def rows(items: Sequence[tuple[str, str]]) -> str:
+        return "".join(f"<div><dt>{esc(label)}</dt><dd>{esc(val)}</dd></div>" for label, val in items)
+
+    head, rest = list(prices[:2]), list(prices[2:])
+    out = f'<dl class="tp-ptiles">{rows(head)}</dl>'
+    if rest:
+        out += f'<details class="tp-pmore"><summary>Другие составы · {len(rest)}</summary><dl>{rows(rest)}</dl></details>'
+    return out
+
+
+def _has_week(page: Mapping[str, Any], app: str | None) -> bool:
+    """Есть ли на странице блок «Всё время на неделю» (``#time``) — единственное условие и у него, и у якорных кнопок."""
+    return bool(page.get("can_book") and app and page.get("windows"))
+
+
+_ICON_UP = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+
+
+def _card_act(page: Mapping[str, Any], app: str | None, via: str | None) -> str:
+    """Низ карточки услуги: прочитал описание, «подходит» → к сетке времени; сетки нет — написать / скопировать телефон.
+
+    Кнопка мягкая, не главная: главный CTA страницы остаётся один — «Записаться» в верхней карточке.
+    """
+    if _has_week(page, app):
+        return (
+            '<div class="tp-cardact"><span>Подходит?</span>'
+            f'<a class="tp-go" href="#time">{_ICON_UP}Выбрать время</a></div>'
+        )
+    contact, phone, req = page.get("contact_url"), page.get("phone"), page.get("request_url")
+    btns = []
+    if req:
+        btns.append(f'<a class="tp-go" href="{esc(req)}" rel="nofollow">Оставить заявку</a>')
+    if contact:
+        cls = "tp-go tp-go--quiet" if req else "tp-go"
+        btns.append(f'<a class="{cls}" href="{esc(contact)}"{_write_attrs(page, via)}>Написать тренеру</a>')
+    if phone and not req:
+        btns.append(f'<button type="button" class="tp-go tp-go--quiet" data-copy="{esc(phone)}">Скопировать телефон</button>')
+    if not btns:
+        return ""
+    return f'<div class="tp-cardact"><span>Остались вопросы?</span>{"".join(btns)}</div>'
+
+
+def _prices_html(page: Mapping[str, Any], app: str | None = None, via: str | None = None) -> str:
     cards = []
+    act = _card_act(page, app, via)
     groups = [(d["tab"], d["services"]) for d in page.get("directions") or []]
     groups += [(s["title"], [s]) for s in page.get("other_services") or [] if s.get("prices")]
     if not any(s.get("prices") for _t, svcs in groups for s in svcs):
@@ -1096,28 +1249,26 @@ def _prices_html(page: Mapping[str, Any]) -> str:
     for title, svcs in groups:
         inner = ""
         for s in svcs:
+            block = ""
             if len(svcs) > 1 or s.get("own"):
-                inner += f'<h4 class="tp-svc__name">{esc(s["title"])}</h4>'
+                block += f'<h4 class="tp-svc__name">{esc(s["title"])}</h4>'
             if s.get("hook"):
-                inner += f'<p class="tp-lead">{esc(s["hook"])}</p>'
+                block += f'<p class="tp-lead">{esc(s["hook"])}</p>'
             if s.get("body"):
-                inner += f'<p class="tp-words">{esc(s["body"])}</p>'
+                block += f'<p class="tp-words">{esc(s["body"])}</p>'
             if s.get("description"):
-                inner += (
+                block += (
                     '<figure class="tp-quote"><figcaption>Слова тренера</figcaption>'
                     f'<blockquote class="tp-words">{esc(s["description"])}</blockquote></figure>'
                 )
             if s.get("prices"):
-                inner += (
-                    "<dl>"
-                    + "".join(f"<div><dt>{esc(label)}</dt><dd>{esc(val)}</dd></div>" for label, val in s["prices"])
-                    + "</dl>"
-                )
+                block += _price_rows(s["prices"])
             else:
-                inner += '<p class="tp-muted">Цену уточните у тренера</p>'
+                block += '<p class="tp-muted">Цену уточните у тренера</p>'
             if s.get("notice"):
-                inner += f'<p class="tp-notice"><b>Не входит в цену:</b> {esc(s["notice"])}</p>'
-        cards.append(f'<div class="tp-card"><h3>{esc(title)}</h3>{inner}</div>')
+                block += f'<p class="tp-notice"><b>Не входит в цену:</b> {esc(s["notice"])}</p>'
+            inner += f'<div class="tp-sv">{block}</div>'
+        cards.append(f'<div class="tp-card"><h3>{esc(title)}</h3>{inner}{act}</div>')
     body = (
         f'<div class="tp-plist">{"".join(cards)}</div>'
         '<p class="tp-muted">Цена за одно занятие. Билет на каток покупается отдельно, на кассе.</p>'
@@ -1131,13 +1282,50 @@ def tidy_text(value: Any) -> str:
     return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
+def _reviews_ready(page: Mapping[str, Any]) -> bool:
+    return len(page.get("reviews") or []) >= REVIEWS_MIN_SHOWN
+
+
+def _reviews_html(page: Mapping[str, Any]) -> str:
+    """«Отзывы»: сводка + лента коротких карточек (листается). Только от подтверждённых админом, от 3 штук."""
+    if not _reviews_ready(page):
+        return ""
+    head = ""
+    if _rating_ok(page):
+        avg = float(page["rating_avg"])
+        stars = "★" * max(1, min(5, round(avg)))
+        head = (
+            f'<div class="tp-score"><b>{esc(_avg(page))}</b><div><i aria-hidden="true">{stars}</i>'
+            f"<span>{esc(_n_ratings(int(page['rating_count'])))}</span></div></div>"
+        )
+    cards = []
+    for r in page["reviews"]:
+        d = r.get("date")
+        when = f'<time datetime="{d.isoformat()}">{d.day} {_MONTHS_GEN[d.month - 1]} {d.year}</time>' if isinstance(d, date) else ""
+        body = str(r["text"])
+        long_ = len(body) > 220
+        cards.append(
+            '<article class="tp-rev">'
+            f'<header><b>{esc(r["name"])}</b><i role="img" aria-label="{int(r["rating"])} из 5">{"★" * int(r["rating"])}</i></header>'
+            f'<p class="tp-rev__text">{esc(body)}</p>'
+            + ('<button type="button" class="tp-rev__more" hidden>Читать полностью</button>' if long_ else "")
+            + f"{when}</article>"
+        )
+    note = '<p class="tp-muted">Отзывы оставляют только те, кто занимался у тренера. Каждый отзыв проверяем перед публикацией.</p>'
+    return _sec(
+        "Отзывы",
+        head + _scroller(f'<div class="tp-more tp-revs">{"".join(cards)}</div>', cls="tp-scroller--revs") + note,
+        sec_id="reviews",
+    )
+
+
 def _about_html(page: Mapping[str, Any], *, ratings: bool) -> str:
     cards = []
     # На полной странице слова тренера — под именем (_hero); отдельная карточка — только в компактной.
     desc = "" if ratings else tidy_text(page.get("description"))
     if desc:
         cards.append(f'<div class="tp-card"><h3>О тренере</h3><p class="tp-words">{esc(desc)}</p></div>')
-    if ratings and _rating_ok(page):
+    if ratings and _rating_ok(page) and not _reviews_ready(page):
         n = int(page["rating_count"])
         avg = float(page["rating_avg"])
         stars = "★" * max(1, min(5, round(avg)))
@@ -1262,7 +1450,7 @@ def _peers_html(page: Mapping[str, Any]) -> str:
             f'<a class="tp-mini" href="{esc(p["path"])}">{img}<div><b>{esc(p["name"])}</b><span>{esc(sub)}</span></div></a>'
         )
     title = " ".join(x for x in (f"Ещё тренеры «{d.tab}»", _in_city(page)) if x)
-    return _sec(title, f'<div class="tp-more">{"".join(minis)}</div>')
+    return _sec(title, _scroller(f'<div class="tp-more">{"".join(minis)}</div>'))
 
 
 def _band_html(page: Mapping[str, Any]) -> str:
@@ -1301,6 +1489,34 @@ _PAGE_SCRIPT = (
 )
 
 
+_SCROLLER_SCRIPT = (
+    "<script>(function(){"
+    "var ws=document.querySelectorAll('[data-scroller]');"
+    "for(var i=0;i<ws.length;i++){(function(w){"
+    "var s=w.firstElementChild,p=w.querySelector('.tp-arrow--prev'),n=w.querySelector('.tp-arrow--next');"
+    "function upd(){var m=s.scrollWidth-s.clientWidth;"
+    "w.classList.toggle('has-prev',s.scrollLeft>4);w.classList.toggle('has-next',m>4&&s.scrollLeft<m-4);}"
+    "function go(d){s.scrollBy({left:d*s.clientWidth*0.8,behavior:'smooth'});}"
+    "p.addEventListener('click',function(){go(-1);});n.addEventListener('click',function(){go(1);});"
+    "s.addEventListener('scroll',upd,{passive:true});window.addEventListener('resize',upd);upd();"
+    "})(ws[i]);}"
+    "})();</script>"
+)
+
+
+_REVIEWS_SCRIPT = (
+    "<script>(function(){"
+    "var ts=document.querySelectorAll('.tp-rev__text');"
+    "for(var i=0;i<ts.length;i++){(function(t){"
+    "var b=t.parentNode.querySelector('.tp-rev__more');if(!b)return;"
+    "if(t.scrollHeight>t.clientHeight+2)b.hidden=false;"
+    "b.addEventListener('click',function(){var o=t.classList.toggle('is-open');"
+    "b.textContent=o?'Свернуть':'Читать полностью';});"
+    "})(ts[i]);}"
+    "})();</script>"
+)
+
+
 def render_trainer_page(
     page: Mapping[str, Any], *, base_url: str, client_bot_username: str | None, via: str | None = None
 ) -> str:
@@ -1315,6 +1531,11 @@ def render_trainer_page(
     base = (base_url or "").rstrip("/")
     canonical = f"{base}{page['path']}"
     app = app_url(base_url, page, client_bot_username=client_bot_username, via=via)
+    page = {
+        **page,
+        "save_url": intent_app_url(base_url, page, "save", via=via),
+        "request_url": intent_app_url(base_url, page, "request", via=via),
+    }
     if page.get("can_book") and app:
         page = {
             **page,
@@ -1342,11 +1563,12 @@ def render_trainer_page(
     card = _price_card(page, app=app, cta=cta, via=via)
     body = (
         '<div class="tp">'
-        '<div class="tp-bar"><a class="b-brand" href="/">Glideclub</a></div>'
+        '<div class="tp-bar"><a class="b-brand" href="/">Glide</a></div>'
         + crumbs_html
         + _hero(page, card, compact=own)
         + _week_html(page, app, via)
-        + _prices_html(page)
+        + _prices_html(page, app, via)
+        + ("" if own else _reviews_html(page))
         + _about_html(page, ratings=not own)
         + _after_html(page)
         + _faq_html(page)
@@ -1355,6 +1577,8 @@ def render_trainer_page(
         + "</div>"
         + _mbar_html(page, app)
         + _PAGE_SCRIPT
+        + _SCROLLER_SCRIPT
+        + _REVIEWS_SCRIPT
     )
     crumbs = [("Glideclub", f"{base}/")]
     if city:
@@ -1400,4 +1624,5 @@ def render_trainer_page(
     )
 
 
-TRAINER_PAGE_STYLE_VERSION = "2026110810"
+# Хэш содержимого, не ручной номер: правка CSS сама сбрасывает кэш браузера.
+TRAINER_PAGE_STYLE_VERSION = _file_version("static/share/trainer-page.css")

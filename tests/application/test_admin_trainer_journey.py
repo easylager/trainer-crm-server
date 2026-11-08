@@ -13,6 +13,7 @@ from src.application.admin_trainer_journey import (
     build_journey_row,
     get_admin_trainer_journey,
     set_trainer_contacted,
+    set_trainer_hidden,
 )
 
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
@@ -149,3 +150,52 @@ def test_catalog_draft_that_asked_to_be_listed():
 def test_catalog_pending_review_label():
     r = build_journey_row(_row(catalog_state="pending_review"), NOW, [])
     assert r["catalog"]["label"] == "На модерации"
+
+
+def test_row_carries_hidden_flag():
+    assert build_journey_row(_row(), NOW)["hidden_at"] is None
+    assert build_journey_row(_row(hidden_at=NOW), NOW)["hidden_at"] == NOW.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_hide_removes_only_the_mark_not_the_trainer(db_session):
+    """«Убрать из списка»: тренер и его данные не меняются, метка снимается обратно."""
+    await db_session.execute(
+        text("INSERT INTO trainers (id, telegram_id, status) VALUES (9401, 9501, 'pending_profile')")
+    )
+    await db_session.commit()
+    assert await set_trainer_hidden(db_session, trainer_id=9401, hidden=True, admin_telegram_id=1)
+    assert await set_trainer_hidden(db_session, trainer_id=9401, hidden=True, admin_telegram_id=2)  # повтор — не ошибка
+    item = next(i for i in (await get_admin_trainer_journey(db_session))["items"] if i["trainer_id"] == 9401)
+    assert item["hidden_at"] is not None
+    status = (await db_session.execute(text("SELECT status FROM trainers WHERE id = 9401"))).scalar()
+    assert status == "pending_profile"
+    assert await set_trainer_hidden(db_session, trainer_id=9401, hidden=False, admin_telegram_id=1)
+    item = next(i for i in (await get_admin_trainer_journey(db_session))["items"] if i["trainer_id"] == 9401)
+    assert item["hidden_at"] is None
+    assert not await set_trainer_hidden(db_session, trainer_id=999999, hidden=True, admin_telegram_id=1)
+
+
+@pytest.mark.asyncio
+async def test_hide_endpoint_and_page_controls(db_session):
+    from httpx import ASGITransport, AsyncClient
+
+    from src.api.app import app
+    from src.api.miniapp_auth.deps import get_admin_miniapp_principal
+    from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+
+    await db_session.execute(text("INSERT INTO trainers (id, telegram_id, status) VALUES (9411, 9511, 'pending_profile')"))
+    await db_session.commit()
+    app.dependency_overrides[get_admin_miniapp_principal] = lambda: MiniAppPrincipal(
+        platform=MiniAppPlatform.TELEGRAM, user_id=4242
+    )
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            assert (await c.post("/api/webapp/admin/trainer-journey/9411/hidden", json={"hidden": True})).json() == {"ok": True, "hidden": True}
+            item = next(i for i in (await c.get("/api/webapp/admin/trainer-journey")).json()["items"] if i["trainer_id"] == 9411)
+            assert item["hidden_at"]
+            assert (await c.post("/api/webapp/admin/trainer-journey/999999/hidden", json={"hidden": True})).status_code == 404
+            html = (await c.get("/webapp/admin-journey")).text
+            assert "data-hide=" in html and "Убрать из списка" in html and "Скрытые" in html
+    finally:
+        app.dependency_overrides.pop(get_admin_miniapp_principal, None)

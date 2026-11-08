@@ -1863,7 +1863,7 @@ def format_client_booking_completed_notice_html(
         f"{svc_line}"
         f"{payment_line}"
         f"{streak_part}"
-        "\nОставьте отзыв ⭐⭐⭐⭐⭐ — кнопка ниже. Можно также написать тренеру."
+        "\nКак прошло занятие? Оцените тренера — одним нажатием ниже. Можно также написать тренеру."
     )
 
 
@@ -1880,12 +1880,11 @@ def build_client_booking_completed_inline_keyboard(
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
     base = (webapp_base_url or "").rstrip("/")
+    # Звёзды сразу в сообщении — оценка одним тапом (раньше сначала «Оставить отзыв», потом звёзды).
     rows: list[list[InlineKeyboardButton]] = [
         [
-            InlineKeyboardButton(
-                text=CLIENT_BUTTON_LEAVE_FEEDBACK,
-                callback_data=f"feedback_booking:{int(booking_id)}",
-            ),
+            InlineKeyboardButton(text=f"{n}⭐", callback_data=f"feedback_rating:{int(booking_id)}:{n}")
+            for n in range(1, 6)
         ],
     ]
     if trainer_telegram_id:
@@ -2047,9 +2046,13 @@ CLIENT_SLOT_AVAILABLE = (
 )
 CLIENT_BUTTON_BOOK_THIS_SLOT = "📅 Записаться"
 CLIENT_FEEDBACK_RATE_PROMPT = "Поставьте оценку тренеру от 1 до 5 звёзд:"
-CLIENT_FEEDBACK_REVIEW_PROMPT = "Напишите отзыв (необязательно) или нажмите «Пропустить»:"
+CLIENT_FEEDBACK_REVIEW_PROMPT = (
+    "Спасибо за оценку! Если хотите, напишите пару слов о занятии — отзыв появится на странице тренера "
+    "после проверки. Или нажмите «Пропустить»:"
+)
 CLIENT_FEEDBACK_SKIP = "Пропустить"
 CLIENT_FEEDBACK_THANKS = "Спасибо за отзыв!"
+CLIENT_FEEDBACK_REVIEW_THANKS = "Спасибо! Отзыв появится на странице тренера после проверки."
 
 
 def _upcoming_payment_outcome_from_class(expected_payment_class: str | None) -> str:

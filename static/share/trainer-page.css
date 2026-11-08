@@ -80,7 +80,7 @@
 /* неделя: семь дней, на телефоне — лента внутри блока */
 .tp-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 600px) {
-  .tp-week { grid-template-columns: repeat(7, 84px); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px 4px; scroll-padding: 0 16px; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+  .tp-week { grid-template-columns: repeat(7, 84px); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px 4px; scroll-padding: 0 16px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
   .tp-week::-webkit-scrollbar { display: none; }
 }
 .tp-day { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 18px; padding: 12px 6px; display: grid; gap: 6px;
@@ -131,8 +131,20 @@
 .tp-ar > div { padding: 12px 14px; display: grid; gap: 2px; }
 .tp-ar span { font-size: 14px; color: var(--g-muted); }
 .tp-ar em { font-style: normal; color: var(--g-accent-ink); font-weight: 600; font-size: 14px; margin-top: 2px; }
-.tp-more { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 4px; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.tp-more { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 4px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .tp-more::-webkit-scrollbar { display: none; }
+/* стрелки «листать»: видны, только когда у ленты есть продолжение (data-scroller + скрипт страницы) */
+.tp-scroller { position: relative; }
+.tp-scroller::before, .tp-scroller::after { content: ""; position: absolute; top: 0; bottom: 4px; width: 40px; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .15s; }
+.tp-scroller::before { left: -16px; background: linear-gradient(90deg, var(--g-bg), transparent); }
+.tp-scroller::after { right: -16px; background: linear-gradient(270deg, var(--g-bg), transparent); }
+.tp-scroller.has-prev::before, .tp-scroller.has-next::after { opacity: 1; }
+.tp-arrow { position: absolute; top: 75px; z-index: 2; width: 44px; height: 44px; margin-top: -22px; padding: 0; border-radius: 50%; border: 1px solid var(--g-line);
+  background: var(--g-surface); color: var(--g-ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 14px rgba(13, 27, 38, .16);
+  opacity: 0; pointer-events: none; transition: opacity .15s; }
+.tp-arrow--prev { left: 4px; }
+.tp-arrow--next { right: 4px; }
+.tp-scroller.has-prev .tp-arrow--prev, .tp-scroller.has-next .tp-arrow--next { opacity: 1; pointer-events: auto; }
 .tp-mini { flex: 0 0 200px; background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 20px; overflow: hidden; display: grid; grid-template-rows: 150px auto; }
 .tp-mini img, .tp-mini__mono { width: 100%; height: 150px; object-fit: cover; display: block; }
 .tp-mini__mono { display: grid; place-items: center; font: 400 44px/1 var(--g-font-display); color: var(--g-accent-ink); background: var(--g-accent-wash); }
@@ -157,9 +169,62 @@
 @media (max-width: 700px) {
   body:has(.tp-pcard) #appButton { display: none; }
 }
-.tp-card h4.tp-svc__name { margin: 6px 0 0; }
+.tp-card h4.tp-svc__name { margin: 0; }
+/* услуги внутри карточки направления: отдельные блоки, а не одна простыня */
+.tp-sv { display: grid; gap: 12px; }
+.tp-sv + .tp-sv { border-top: 1px dashed var(--g-line); padding-top: 18px; margin-top: 6px; }
+/* две главные цены — плитками; остальные составы — по клику */
+.tp-card dl.tp-ptiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.tp-card dl.tp-ptiles div { display: grid; gap: 2px; align-content: start; padding: 12px 14px; border: 0; border-radius: 16px; background: var(--g-chip); }
+.tp-card dl.tp-ptiles dt { font-size: 13px; color: var(--g-muted); }
+.tp-card dl.tp-ptiles dd { font: 400 24px/1.1 var(--g-font-display); color: var(--g-ink); }
+.tp-pmore summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: 14px; font-weight: 700; color: var(--g-accent-ink); }
+.tp-pmore summary::-webkit-details-marker { display: none; }
+.tp-pmore summary::after { content: "▾"; font-size: 12px; transition: transform .15s; }
+.tp-pmore[open] summary::after { transform: rotate(180deg); }
+.tp-pmore dl { margin-top: 4px; }
+/* низ карточки услуги: «Подходит?» + мягкая кнопка (главный CTA страницы — один, в верхней карточке) */
+.tp-cardact { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 6px; padding-top: 14px; border-top: 1px dashed var(--g-line); }
+.tp-cardact > span { flex: 1 1 auto; font-size: 14px; font-weight: 600; color: var(--g-muted); }
+.tp-go { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 18px; border-radius: 14px; cursor: pointer;
+  font: 800 15px/1.2 var(--g-font); background: var(--g-accent-wash); color: var(--g-accent-ink) !important; border: 1px solid rgba(69, 185, 187, .38); }
+.tp-go svg { flex: none; }
+.tp-go:hover { background: var(--g-accent); color: var(--g-dark) !important; }
+.tp-go:focus-visible { outline: 3px solid var(--g-accent); outline-offset: 2px; }
+.tp-go--quiet { background: transparent; border-color: var(--g-line); }
+@media (max-width: 600px) { .tp-cardact > span { flex-basis: 100%; } .tp-go { flex: 1 1 100%; } }
+/* «Выбрать время ↑» из карточки услуги: плавно к сетке, заголовок не прилипает к краю */
+html { scroll-behavior: smooth; }
+#time { scroll-margin-top: 12px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 .tp-lead { margin: 0; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
 .tp-quote { margin: 0; display: grid; gap: 4px; border-left: 3px solid var(--g-line); padding-left: 12px; }
 .tp-quote figcaption { font-size: 12px; font-weight: 600; color: var(--g-ink-2); }
 .tp-quote blockquote { margin: 0; }
-.tp-notice { margin: 0; font-size: 14px; line-height: 1.45; color: var(--g-ink-2); overflow-wrap: anywhere; }
+.tp-notice { margin: 0; font-size: 13px; line-height: 1.45; color: var(--g-muted); overflow-wrap: anywhere; }
+
+/* «Сохранить тренера»: сердце в углу шапки (на фото — поверх него); тап открывает Telegram, где тренер сохраняется */
+.tp-th { position: relative; }
+.tp-save { position: absolute; top: 26px; right: 12px; z-index: 3; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%;
+  background: color-mix(in srgb, var(--g-surface) 92%, transparent); color: var(--g-ink) !important; border: 1px solid var(--g-line);
+  box-shadow: 0 2px 10px rgba(13, 27, 38, .16); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.tp-save:hover { color: var(--g-accent-ink) !important; }
+.tp-save:focus-visible { outline: 3px solid var(--g-accent); outline-offset: 2px; }
+.tp-th .tp-top .tp-head { padding-right: 52px; }
+
+/* «Отзывы»: сводка и компактная лента (листается, стрелки — общий .tp-scroller) */
+a.tp-rate { color: inherit; text-decoration: none; }
+a.tp-rate:hover span { color: var(--g-accent-ink); }
+#reviews { scroll-margin-top: 12px; }
+.tp-revs { align-items: flex-start; }
+.tp-rev { flex: 0 0 min(300px, 82vw); display: grid; gap: 10px; align-content: start; padding: 16px; border-radius: 20px; background: var(--g-surface); border: 1px solid var(--g-line); }
+.tp-rev header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tp-rev header b { font-size: 15px; }
+.tp-rev header i { font-style: normal; color: #f2b84b; letter-spacing: 1px; font-size: 14px; white-space: nowrap; }
+.tp-rev__text { margin: 0; color: var(--g-ink-2); line-height: 1.5; font-size: 15px; overflow-wrap: anywhere; white-space: pre-line;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
+.tp-rev__text.is-open { -webkit-line-clamp: unset; display: block; }
+.tp-rev__more { justify-self: start; padding: 0; min-height: 32px; border: 0; background: none; cursor: pointer; font: 700 14px var(--g-font); color: var(--g-accent-ink); }
+.tp-rev time { font-size: 13px; color: var(--g-muted); }
+.tp-scroller--revs .tp-arrow { top: 50%; }
+.tp-scroller--revs { margin-bottom: 4px; }

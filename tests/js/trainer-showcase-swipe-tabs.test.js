@@ -33,7 +33,7 @@ describe('swipeable tabs vs Telegram collapse', () => {
   }
 });
 
-describe('витрина: светлая — --g-* каталога, тёмная — графит вкладок клиента', () => {
+describe('витрина: светлая — --g-* каталога, тёмная — те же --g-*', () => {
   it('светлая тема на --g-*, токены объявлены и на body.tsw (там включается tg-dark)', () => {
     assert.match(css, /background:\s*var\(--a-bg\)\s*!important/);
     assert.match(css, /:root, body\.tsw \{/);
@@ -41,12 +41,10 @@ describe('витрина: светлая — --g-* каталога, тёмна�
     assert.match(css, /--a-sf:\s*var\(--g-surface/);
   });
 
-  it('тёмная тема — графит как DARK_BG/DARK_SURFACE в client-mini-app-theme.js, не синий каталога', () => {
+  it('тёмная тема — те же --g-* каталога, без собственного графита', () => {
     const dark = css.split('body.tsw.tg-dark {')[1].split('}')[0];
-    assert.match(dark, /--a-bg:\s*#0B0C0E/);
-    assert.match(dark, /--a-sf:\s*#16181B/);
-    assert.match(dark, /--a-tx:\s*#E6E9EA/);
-    assert.doesNotMatch(dark, /#17212b|#1d2733/i);
+    assert.doesNotMatch(dark, /--a-(bg|sf|tx|line)\s*:/);
+    assert.doesNotMatch(css, /#0B0C0E/i);
   });
 
   it('theme.js ставит body.tg-dark для сайтных --g-*', () => {

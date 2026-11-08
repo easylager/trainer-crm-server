@@ -276,7 +276,11 @@ from src.application.stats_use_cases import (
     get_trainer_revenue_breakdown_for_range,
     get_trainer_stats_dashboard,
 )
-from src.application.admin_trainer_journey import get_admin_trainer_journey, set_trainer_contacted
+from src.application.admin_trainer_journey import (
+    get_admin_trainer_journey,
+    set_trainer_contacted,
+    set_trainer_hidden,
+)
 from src.application.admin_analytics_use_cases import (
     get_admin_clients_stats,
     get_admin_engagement_stats,
@@ -4826,6 +4830,29 @@ async def set_admin_trainer_contacted_api(
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
     return {"ok": True, "contacted": body.contacted}
+
+
+class AdminTrainerHiddenBody(BaseModel):
+    hidden: bool
+
+
+@router.post("/admin/trainer-journey/{trainer_id}/hidden")
+async def set_admin_trainer_hidden_api(
+    trainer_id: int,
+    body: AdminTrainerHiddenBody,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Admin removes a trainer from the journey list (or brings them back); the trainer is not changed."""
+    ok = await set_trainer_hidden(
+        session,
+        trainer_id=trainer_id,
+        hidden=body.hidden,
+        admin_telegram_id=int(principal.user_id),
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    return {"ok": True, "hidden": body.hidden}
 
 
 @router.get("/admin/stats/growth")

@@ -52,6 +52,21 @@ def test_trainer_start_param_roundtrip() -> None:
     assert parse_trainer_deep_link("arena_1") is None
 
 
+def test_trainer_start_param_intent_tail_for_site_buttons() -> None:
+    """Кнопки сайта «Сохранить» / «Оставить заявку»: хвост ``_i_save`` / ``_i_request``; чужое значение отбрасывается."""
+    from src.application.place_links import parse_trainer_start_param
+
+    assert trainer_start_param(7, via="k1", intent="save") == "trainer_7_v_k1_i_save"
+    assert trainer_start_param(7, intent="request") == "trainer_7_i_request"
+    assert trainer_start_param(7, intent="drop") == "trainer_7"
+    # Ссылки кнопок сайта без каткa и слота — самый длинный реальный вариант влезает в 64 символа Telegram.
+    assert is_valid_start_param(trainer_start_param(2_000_000_000, via="k999999999", intent="request"))
+    assert parse_trainer_start_param("trainer_7_i_save")["intent"] == "save"
+    assert parse_trainer_start_param("trainer_7_v_p3_i_REQUEST")["intent"] == "request"
+    assert parse_trainer_start_param("trainer_7_i_delete")["intent"] is None
+    assert parse_trainer_start_param("trainer_7_i_save_i_request")["intent"] == "save"
+
+
 def test_trainer_start_param_slot_and_via_tails_any_order() -> None:
     """TASK-357: ``_s_<slot>`` — запись на время; TASK-351 добавляет ``_v_<via>``; порядок хвостов любой."""
     from src.application.place_links import parse_trainer_start_param
@@ -59,10 +74,16 @@ def test_trainer_start_param_slot_and_via_tails_any_order() -> None:
     assert trainer_start_param(7, slot_id=55) == "trainer_7_s_55"
     assert trainer_start_param(7, 3, 55) == "trainer_7_a_3_s_55"
     assert is_valid_start_param(trainer_start_param(2_000_000_000, 2_000_000_000, 2_000_000_000))
-    want = {"trainer_id": 7, "arena_id": 3, "slot_id": 55, "via": "p3"}
+    want = {"trainer_id": 7, "arena_id": 3, "slot_id": 55, "via": "p3", "intent": None}
     assert parse_trainer_start_param("trainer_7_a_3_s_55_v_p3") == want
     assert parse_trainer_start_param("trainer_7_v_p3_s_55_a_3") == want
-    assert parse_trainer_start_param("trainer_7_s_55_x_zz") == {"trainer_id": 7, "arena_id": None, "slot_id": 55, "via": None}
+    assert parse_trainer_start_param("trainer_7_s_55_x_zz") == {
+        "trainer_id": 7,
+        "arena_id": None,
+        "slot_id": 55,
+        "via": None,
+        "intent": None,
+    }
     assert parse_trainer_start_param("trainer_7_s_0")["slot_id"] is None
     assert parse_trainer_start_param("trainer_7_a_") is None
     assert parse_trainer_deep_link("trainer_7_s_55_a_3") == (7, 3)

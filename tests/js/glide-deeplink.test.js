@@ -71,7 +71,13 @@ describe('GlideDeepLink.readStartParam', () => {
     // Незнакомый хвост и via без слота — карточка тренера в витрине.
     assert.deepEqual(G.deepLinkTarget('trainer_7_v_c1'), { key: 'trainers', path: 'trainers?trainer_id=7' });
     assert.deepEqual(G.deepLinkTarget('trainer_7_zz_1_a_3'), { key: 'trainers', path: 'trainers?trainer_id=7&arena_id=3' });
-    assert.deepEqual(G.parseTrainerDeepLink('trainer_7_s_0'), { trainerId: 7, arenaId: null, slotId: null, via: null });
+    assert.deepEqual(G.parseTrainerDeepLink('trainer_7_s_0'), { trainerId: 7, arenaId: null, slotId: null, via: null, intent: null });
+  });
+
+  it('хвост _i_ — действие сразу при открытии карточки тренера (кнопки сайта)', () => {
+    assert.deepEqual(G.deepLinkTarget('trainer_7_v_k1_i_save'), { key: 'trainers', path: 'trainers?trainer_id=7&intent=save' });
+    assert.deepEqual(G.deepLinkTarget('trainer_7_i_request'), { key: 'trainers', path: 'trainers?trainer_id=7&intent=request' });
+    assert.deepEqual(G.deepLinkTarget('trainer_7_i_drop'), { key: 'trainers', path: 'trainers?trainer_id=7' });
   });
 
   it('читает initDataUnsafe, hash и query', () => {

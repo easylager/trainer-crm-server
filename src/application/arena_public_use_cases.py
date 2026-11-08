@@ -2553,10 +2553,13 @@ async def _trainer_windows_on_arena(
     timezone_name: str,
     now: datetime | None = None,
     limit: int = TRAINER_WINDOWS_LIMIT,
+    days: int = TRAINER_WINDOWS_DAYS,
 ) -> dict[int, list[dict[str, Any]]]:
     """Ближайшие свободные окна тренеров именно на этой арене — один запрос на всех.
 
     ``limit`` — окон на тренера; страница тренера берёт всю неделю (``site_trainer_page.WEEK_WINDOWS_LIMIT``).
+    ``days`` — как далеко вперёд смотреть; страница тренера берёт запас, потому что её неделя
+    начинается с первого дня с окнами, а не с сегодня.
 
     ``arena_id=None`` — на всех площадках тренера (страница тренера ``/t/…``); у окна тогда
     есть ``arena_id``, чтобы подписать, где оно.
@@ -2576,7 +2579,7 @@ async def _trainer_windows_on_arena(
     slot_tz = ZoneInfo(NOTIFICATION_TZ)
     view_tz = ZoneInfo(timezone_name)
     now_slot = moment.astimezone(slot_tz)
-    horizon = moment + timedelta(days=TRAINER_WINDOWS_DAYS)
+    horizon = moment + timedelta(days=days)
     result = await session.execute(
         text(
             """
