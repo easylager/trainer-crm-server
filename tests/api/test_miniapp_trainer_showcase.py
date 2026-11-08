@@ -91,6 +91,57 @@ async def test_showcase_has_from_price_glide_since_windows_and_ice_arenas(app_us
 
 
 @pytest.mark.asyncio
+async def test_showcase_service_presentation_public_vs_own(app_use_test_db, db_session) -> None:
+    """Публичная услуга отдаёт наш крючок/подробности и название; своя — только слова тренера и заметку."""
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Оля{uuid.uuid4().hex[:4]}")
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        public_sid = (
+            await db_session.execute(text("SELECT service_id FROM trainer_services WHERE trainer_id = :t"), {"t": tid})
+        ).scalar_one()
+        await db_session.execute(
+            text("UPDATE services SET name = 'ОХМ(отработка хоккейного мастерства)', client_summary = :s WHERE id = :i"),
+            {"s": "Для тех, кто уже стоит на льду.\n\nОтрабатываем повороты.\n\nИ торможение.", "i": public_sid},
+        )
+        await db_session.execute(
+            text(
+                "UPDATE trainer_services SET description = 'Слова тренера', "
+                "client_notice = 'В стоимость не входят: прокат коньков.' WHERE trainer_id = :t AND service_id = :i"
+            ),
+            {"t": tid, "i": public_sid},
+        )
+        own_sid = (
+            await db_session.execute(
+                text(
+                    "INSERT INTO services (name, is_public, created_by_trainer_id, client_summary) "
+                    "VALUES ('Постановка прыжков', false, :t, 'Чужой текст.\n\nНе должен утечь.') RETURNING id"
+                ),
+                {"t": tid},
+            )
+        ).scalar_one()
+        await db_session.execute(
+            text("INSERT INTO trainer_services (trainer_id, service_id, price_cents, description) VALUES (:t, :s, 6000, 'Мои слова')"),
+            {"t": tid, "s": own_sid},
+        )
+        await db_session.commit()
+        body = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+
+    item = next(t for t in body["items"] if t["id"] == tid)
+    by_id = {s["service_id"]: s for s in item["services"]}
+    pub, own = by_id[public_sid], by_id[own_sid]
+    assert pub["title"] == "ОХМ — отработка хоккейного мастерства"
+    assert pub["summary_hook"] == "Для тех, кто уже стоит на льду."
+    assert pub["summary_body"] == "Отрабатываем повороты. И торможение."
+    assert pub["description"] == "Слова тренера"
+    assert pub["client_notice"] == "В стоимость не входят: прокат коньков."
+    assert own["is_public"] is False
+    assert own["title"] == "Постановка прыжков"
+    assert own["summary_hook"] == "" and own["summary_body"] == ""
+    assert own["description"] == "Мои слова" and own["client_notice"] is None
+
+
+@pytest.mark.asyncio
 async def test_showcase_without_online_booking_has_no_windows(app_use_test_db, db_session) -> None:
     async with _client() as client:
         place = await _place(db_session)

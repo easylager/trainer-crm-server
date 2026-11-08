@@ -24,6 +24,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.catalog_directions import service_title, split_service_summary
 from src.application.trainer_client_invite_tracking import sql_booking_not_self
 
 #: Сколько тренеров берём в выдачу. Каталог крошечный (6 опубликованных); пагинация — открытый вопрос эпика.
@@ -98,22 +99,31 @@ async def _ice_arenas(session: AsyncSession, arena_ids: list[int]) -> dict[int, 
     return out
 
 
-async def _public_service_ids(session: AsyncSession, service_ids: set[int]) -> set[int]:
+async def _service_catalog_info(session: AsyncSession, service_ids: set[int]) -> dict[int, tuple[bool, str | None]]:
+    """``service_id → (is_public, client_summary)`` одним запросом на всю выдачу."""
     if not service_ids:
-        return set()
+        return {}
     rows = await session.execute(
-        text("SELECT id FROM services WHERE id = ANY(:ids) AND COALESCE(is_public, true)"),
+        text("SELECT id, COALESCE(is_public, true), client_summary FROM services WHERE id = ANY(:ids)"),
         {"ids": sorted(service_ids)},
     )
-    return {int(r[0]) for r in rows.fetchall()}
+    return {int(r[0]): (bool(r[1]), r[2]) for r in rows.fetchall()}
 
 
-def _service_out(svc: dict[str, Any], public_ids: set[int]) -> dict[str, Any]:
+def _service_out(svc: dict[str, Any], catalog: dict[int, tuple[bool, str | None]]) -> dict[str, Any]:
     sid = int(svc["service_id"])
+    is_public, summary = catalog.get(sid, (False, None))
+    # Наш текст из справочника — только у публичных услуг: у своей услуги тренера его нет.
+    hook, body = split_service_summary(summary) if is_public else ("", "")
+    name = str(svc.get("service_name") or "").strip()
     return {
         "service_id": sid,
-        "service_name": str(svc.get("service_name") or "").strip(),
-        "is_public": sid in public_ids,
+        "service_name": name,
+        "title": service_title(name),
+        "is_public": is_public,
+        "summary_hook": hook,
+        "summary_body": body,
+        "client_notice": str(svc.get("client_notice") or "").strip() or None,
         # Своя услуга тренера, привязанная админом к направлению (TASK-353): во вкладке этой услуги.
         "direction_service_id": svc.get("direction_service_id"),
         "is_online": bool(svc.get("is_online")),
@@ -161,7 +171,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     since = await _glide_since(session, ids)
     arena_ids = sorted({int(a) for t in items for a in (t.get("arena_ids") or [])})
     arenas = await _ice_arenas(session, arena_ids)
-    public_ids = await _public_service_ids(
+    catalog = await _service_catalog_info(
         session, {int(s["service_id"]) for t in items for s in t.get("services") or []}
     )
     usernames: dict[int, str | None] = {}
@@ -207,7 +217,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 "min_price_by_direction": min_price_by_direction(
                     {"services_by_dir": services_by_direction(t.get("services") or []), "passes": passes.get(tid, [])}
                 ),
-                "services": [_service_out(s, public_ids) for s in t.get("services") or []],
+                "services": [_service_out(s, catalog) for s in t.get("services") or []],
                 "arenas": [arenas[a] for a in (t.get("arena_ids") or []) if a in arenas],
                 "windows": [
                     {k: w.get(k) for k in ("slot_id", "arena_id", "starts_at", "ends_at", "time", "day")}
