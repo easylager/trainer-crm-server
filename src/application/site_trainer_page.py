@@ -510,6 +510,8 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
     photos = body.get("photos") or []
     big_photo = b_photo_url((photos[0] or {}).get("file_key")) if photos else None
     first_name = str(profile.get("first_name") or "").strip()
+    from src.shared.phone_guard import sanitize_public_phone
+
     return {
         "id": int(trainer_id),
         "name": name,
@@ -520,6 +522,7 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         "listed": listed,
         "can_book": can_book,
         "contact_url": contact_url(int(trainer_id), username, listed=listed),
+        "phone": sanitize_public_phone(profile.get("phone")),
         "city": city,
         "city_name": city["name"] if city else "",
         "experience_years": profile.get("experience_years"),
@@ -887,6 +890,17 @@ def _also_line(page: Mapping[str, Any]) -> str:
     return f'<p class="tp-also">Ещё ведёт: {esc(", ".join(names))}.</p>' if names else ""
 
 
+def _phone_act(page: Mapping[str, Any]) -> str:
+    """Кнопка «Скопировать телефон», если в анкете есть публичный номер."""
+    phone = page.get("phone")
+    if not phone:
+        return ""
+    return (
+        f'<div class="tp-act"><button type="button" class="tp-btn tp-btn--ghost" data-copy="{esc(phone)}">'
+        f"Скопировать телефон</button></div>"
+    )
+
+
 def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str] | None, via: str | None) -> str:
     dirs = page.get("directions") or []
     panels = [(d["key"], d["tab"], d["services"]) for d in dirs]
@@ -926,14 +940,21 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
                 f'<div class="tp-near">{"".join(near)}</div></div>'
             )
         else:
+            # Текст не обещает «напишите», если ника нет и кнопки «Написать» не будет.
+            nowin = (
+                "Индивидуального свободного времени на этой неделе нет — напишите тренеру."
+                if contact
+                else "Индивидуального свободного времени на этой неделе нет — следующие недели видны в Telegram."
+            )
             parts.append(
-                '<p class="tp-nowin">Индивидуального свободного времени на этой неделе нет — напишите тренеру.</p>'
+                f'<p class="tp-nowin">{esc(nowin)}</p>'
                 f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></div>'
             )
         if contact:
             parts.append(
                 f'<div class="tp-act"><a class="tp-btn tp-btn--ghost" href="{esc(contact)}"{_write_attrs(page, via)}>Написать в Telegram</a></div>'
             )
+        parts.append(_phone_act(page))
         parts.append(also)
         parts.append('<span class="tp-fine">Нужен Telegram — запись и переписка идут там. Оплата тренеру на месте.</span>')
     else:
@@ -941,8 +962,15 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             label, href = cta
             attrs = _write_attrs(page, via) if href == contact else ' rel="nofollow"'
             parts.append(f'<div class="tp-act"><a class="tp-btn tp-btn--tg" href="{esc(href)}"{attrs}>{esc(label)}</a></div>')
+        parts.append(_phone_act(page))
         parts.append(also)
-        parts.append('<span class="tp-fine">Онлайн-записи нет — напишите и договоритесь о времени. Нужен Telegram — переписка идёт там.</span>')
+        if contact:
+            fine = "Онлайн-записи нет — напишите и договоритесь о времени. Нужен Telegram — переписка идёт там."
+        elif page.get("phone"):
+            fine = "Онлайн-записи нет — позвоните или откройте Telegram и договоритесь о времени."
+        else:
+            fine = "Онлайн-записи нет — откройте Telegram и договоритесь о времени."
+        parts.append(f'<span class="tp-fine">{esc(fine)}</span>')
     return f'<div class="tp-pcard" id="tp-pcard">{"".join(p for p in parts if p)}</div>'
 
 

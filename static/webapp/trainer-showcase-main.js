@@ -269,6 +269,57 @@
     window.open(abs, '_blank');
   }
 
+  function trainerPhone(t) {
+    return String((t && t.phone) || '').trim();
+  }
+
+  /** Скопировать телефон тренера — как на записях клиента. */
+  function copyTrainerPhone(phone) {
+    var p = String(phone || '').trim();
+    if (!p) return;
+    function ok() {
+      if (tg && tg.HapticFeedback) try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) { /* */ }
+      if (tg && typeof tg.showAlert === 'function') tg.showAlert('Номер скопирован');
+      else try { window.alert('Номер скопирован'); } catch (e2) { /* */ }
+    }
+    function fail() {
+      if (tg && typeof tg.showAlert === 'function') tg.showAlert('Не удалось скопировать. Номер: ' + p);
+      else try { window.alert('Не удалось скопировать. Номер: ' + p); } catch (e2) { /* */ }
+    }
+    if (tg && typeof tg.copyText === 'function') {
+      try { tg.copyText(p); ok(); return; } catch (e) { /* */ }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(p).then(ok).catch(fail);
+      return;
+    }
+    fail();
+  }
+
+  /**
+   * Выходы, когда запись сейчас недоступна: Написать / Заявка / Телефон / Telegram.
+   * Sticky и карточки никогда не остаются без хотя бы одного действия, если есть хоть какой-то канал.
+   */
+  function exitButtons(t, opts) {
+    opts = opts || {};
+    var bits = [];
+    var tidAttr = opts.tid ? ' data-tid="' + t.id + '"' : '';
+    if (t.contact_url) {
+      bits.push('<button type="button" class="' + (opts.writeClass || 'sec2') + '" data-act="write"' + tidAttr + '>Написать тренеру</button>');
+    }
+    if (initData && opts.request !== false) {
+      bits.push('<button type="button" class="' + (opts.requestClass || 'sec2') + '" data-act="request">Оставить заявку</button>');
+    }
+    if (trainerPhone(t) && opts.phone !== false) {
+      bits.push('<button type="button" class="' + (opts.phoneClass || 'sec2') + '" data-act="copy-phone"' + tidAttr + '>Скопировать телефон</button>');
+    }
+    // Браузер без Telegram-сессии: как сайт — уводим в Telegram, а не оставляем тупик.
+    if (!initData && t.telegram_url && !t.contact_url && opts.openTg !== false) {
+      bits.push('<button type="button" class="' + (opts.tgClass || 'cta') + '" data-act="open-tg"' + tidAttr + '>Открыть в Telegram</button>');
+    }
+    return bits.join('');
+  }
+
   /* ── Общие куски ─────────────────────────────────────────────────── */
 
   function backBtn(label) {
@@ -417,8 +468,14 @@
         return '<button type="button" data-act="win" data-tid="' + t.id + '" data-slot="' + w.slot_id + '">' + esc(w.time) +
           '<small>' + esc(w.day + (a ? ' · ' + a : '')) + '</small></button>';
       }).join('') + '<button type="button" class="alt" data-act="week" data-tid="' + t.id + '">Другое время</button>';
-    } else if (t.contact_url) {
-      times = '<button type="button" class="alt wide" data-act="write" data-tid="' + t.id + '">Написать тренеру</button>';
+    } else {
+      // Нет окон (или free-card): выход на карточке списка. Заявку не ставим здесь —
+      // openRequest() смотрит S.trainer; заявка — на экране тренера.
+      var listExit = exitButtons(t, {
+        writeClass: 'alt wide', tid: true,
+        phoneClass: 'alt wide', tgClass: 'alt wide', request: false,
+      });
+      if (listExit) times = listExit;
     }
     return '<article class="vc" data-act="trainer" data-tid="' + t.id + '">' + head + '<div class="in">' +
       (since ? '<span class="proof">' + esc(since) + '</span>' : '') +
@@ -478,7 +535,9 @@
     var h = '<div class="bd">' + backBtn(S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры') + heroHtml(t, trainerSubLine(t));
     h += '<div class="pc">';
     if (!t.can_book) {
-      h += '<p>' + esc(M.selfBookingLine(t.first_name, RuName)) + '</p></div>';
+      h += '<p>' + esc(M.selfBookingLine(t.first_name, RuName, {
+        canWrite: !!t.contact_url, canRequest: !!initData, hasPhone: !!trainerPhone(t),
+      })) + '</p></div>';
     } else {
       if (dirs.length > 1) {
         h += '<div class="seg">' + dirs.map(function (d) {
@@ -512,7 +571,11 @@
       }
       h += '</div>';
       if (S.slots && !S.slots.length && !S.slotsError) {
-        h += '<div class="card"><h4>На ближайшие 2 недели свободного времени нет</h4><p class="mut">Попросите сообщить, когда появится.</p>' +
+        var emptyHint = initData
+          ? 'Попросите сообщить, когда появится, или оставьте заявку.'
+          : (t.contact_url ? 'Напишите тренеру или откройте Telegram — там видны следующие недели.'
+            : 'Откройте Telegram — там видны следующие недели и можно договориться.');
+        h += '<div class="card"><h4>На ближайшие 2 недели свободного времени нет</h4><p class="mut">' + esc(emptyHint) + '</p>' +
           (initData ? '<button type="button" class="sec2" data-act="notify"' + (S.notify ? ' disabled' : '') + '>' +
             (S.notify ? 'Сообщим, когда появится время' : 'Сообщить, когда появится время') + '</button>' : '') +
           (S.waBlock ? '<div class="warn">' + BC.writeAccessBlockHtml(S.waBlock) + '</div>' : '') + '</div>';
@@ -537,15 +600,17 @@
     }
     h += '</div>';
     if (!t.can_book) {
-      h += '<div class="ft col">' + (t.contact_url ? '<button type="button" class="cta" data-act="write">Написать тренеру</button>' : '') +
-        (initData ? '<button type="button" class="sec2" data-act="request">Оставить заявку</button>' : '') + '</div>';
+      var freeFt = exitButtons(t, { writeClass: 'cta', requestClass: 'sec2', phoneClass: 'sec2', tgClass: 'cta' });
+      if (freeFt) h += '<div class="ft col">' + freeFt + '</div>';
     } else if (S.slots && S.slots.length) {
       var first = S.slots[0];
       h += '<div class="ft"><button type="button" class="cta" data-act="slot" data-slot="' + esc(first.id) + '">Записаться на ' +
         esc(M.ctaDay(first.slot_date, S.todayIso) + ', ' + String(first.start_time).slice(0, 5)) + '</button>' +
         (t.contact_url ? '<button type="button" class="ico" data-act="write" aria-label="Написать тренеру"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></button>' : '') + '</div>';
-    } else if (t.contact_url) {
-      h += '<div class="ft"><button type="button" class="sec2" style="flex:1" data-act="write">Написать тренеру</button></div>';
+    } else if (S.slots !== null) {
+      // Нет окон или ошибка загрузки — sticky всегда с выходом (не только «Повторить»).
+      var stuckFt = exitButtons(t, { writeClass: 'sec2', requestClass: 'sec2', phoneClass: 'sec2', tgClass: 'cta' });
+      if (stuckFt) h += '<div class="ft col">' + stuckFt + '</div>';
     }
     return h;
   }
@@ -645,9 +710,20 @@
     if (end > horizon) {
       h += '<span class="mut">Время после ' + esc(M.dayLabel(horizon, '0000-01-01').replace(/^[^,]+, /, '')) + ' здесь пока не видно — спросите тренера.</span>';
     }
-    h += '<div class="card"><p>Не нашли подходящее время? Напишите ' + esc(M.dativeFirst(t.first_name, RuName)) + ' — обсудите другое время.</p>' +
-      (t.contact_url ? '<button type="button" class="more" data-act="write">Написать тренеру</button>' : '') +
-      (initData && !t.contact_url ? '<button type="button" class="more" data-act="request">Оставить заявку</button>' : '') + '</div></div>';
+    var weekExit = exitButtons(t, {
+      writeClass: 'more', requestClass: 'more', phoneClass: 'more', tgClass: 'more',
+      // Заявка рядом с «Написать», если человек в Telegram — иначе текст без кнопки.
+      request: !!initData,
+    });
+    if (weekExit) {
+      var weekLead = t.contact_url
+        ? ('Не нашли подходящее время? Напишите ' + M.dativeFirst(t.first_name, RuName) + ' — обсудите другое время.')
+        : (initData
+          ? ('Не нашли подходящее время? Оставьте заявку ' + M.dativeFirst(t.first_name, RuName) + ' — обсудите другое время.')
+          : 'Не нашли подходящее время? Откройте Telegram или скопируйте телефон — обсудите другое время.');
+      h += '<div class="card"><p>' + esc(weekLead) + '</p>' + weekExit + '</div>';
+    }
+    h += '</div>';
     return h;
   }
 
@@ -1544,6 +1620,16 @@
         ev.stopPropagation();
         t = el.getAttribute('data-tid') ? trainerFromEl(el) : S.trainer;
         if (t) openLink(t.contact_url);
+        break;
+      case 'open-tg':
+        ev.stopPropagation();
+        t = el.getAttribute('data-tid') ? trainerFromEl(el) : S.trainer;
+        if (t) openLink(t.telegram_url);
+        break;
+      case 'copy-phone':
+        ev.stopPropagation();
+        t = el.getAttribute('data-tid') ? trainerFromEl(el) : S.trainer;
+        copyTrainerPhone(trainerPhone(t));
         break;
       case 'dir':
         S.dirKey = el.getAttribute('data-key');

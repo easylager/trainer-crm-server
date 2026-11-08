@@ -79,6 +79,8 @@ async def test_showcase_has_from_price_glide_since_windows_and_ice_arenas(app_us
     assert item["can_book"] is True
     assert len(item["windows"]) == 1 and item["windows"][0]["slot_id"]
     assert [a["id"] for a in item["arenas"]] == [place["arena_id"]]
+    assert item["telegram_url"] and f"trainer_{tid}" in item["telegram_url"]
+    assert "phone" in item
     svc = item["services"][0]
     assert svc["is_public"] is True
     # Публичная услуга сама — направление; поле привязки своей услуги (TASK-353) есть и пустое.

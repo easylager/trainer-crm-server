@@ -213,8 +213,9 @@ describe('даты и имена', () => {
   it('«Запись отправлена Александру»; латиница — как есть', () => {
     assert.equal(M.dativeFirst('Александр', RuName), 'Александру');
     assert.equal(M.dativeFirst('Katusha', RuName), 'Katusha');
-    assert.equal(M.selfBookingLine('Мария', RuName), 'Мария записывает сама — напишите и договоритесь о времени и цене.');
-    assert.match(M.selfBookingLine('Katusha', RuName), /^Онлайн-записи нет\. Напишите тренеру/);
+    assert.equal(M.selfBookingLine('Мария', RuName, { canWrite: true }), 'Мария записывает сама — напишите и договоритесь о времени и цене.');
+    assert.equal(M.selfBookingLine('Мария', RuName, { canRequest: true }), 'Мария записывает сама — оставьте заявку и договоритесь о времени и цене.');
+    assert.match(M.selfBookingLine('Katusha', RuName, {}), /^Онлайн-записи нет\. откройте Telegram/);
   });
 
   it('номер из requestContact', () => {

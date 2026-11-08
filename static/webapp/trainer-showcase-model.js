@@ -727,12 +727,23 @@
   }
 
   /** «Katusha записывает сама — …». Пол угадываем только по кириллице; иначе — без глагола в роде. */
-  function selfBookingLine(first, ruName) {
+  /**
+   * Текст без онлайн-записи. Не обещает «напишите», если кнопки «Написать» нет
+   * (``canWrite`` / ``canRequest`` / ``hasPhone`` — что реально покажем).
+   */
+  function selfBookingLine(first, ruName, opts) {
+    opts = opts || {};
     var f = String(first || '').trim().split(/\s+/)[0] || 'Тренер';
+    var who = '';
     if (isCyrillic(f) && ruName && typeof ruName.guessGender === 'function') {
-      return f + ' записывает ' + (ruName.guessGender(f) === 'f' ? 'сама' : 'сам') + ' — напишите и договоритесь о времени и цене.';
+      who = f + ' записывает ' + (ruName.guessGender(f) === 'f' ? 'сама' : 'сам') + ' — ';
+    } else {
+      who = 'Онлайн-записи нет. ';
     }
-    return 'Онлайн-записи нет. Напишите тренеру и договоритесь о времени и цене.';
+    if (opts.canWrite) return who + 'напишите и договоритесь о времени и цене.';
+    if (opts.canRequest) return who + 'оставьте заявку и договоритесь о времени и цене.';
+    if (opts.hasPhone) return who + 'позвоните и договоритесь о времени и цене.';
+    return who + 'откройте Telegram и договоритесь о времени и цене.';
   }
 
   function esc(s) {

@@ -154,12 +154,14 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
         window_arena_cities,
         window_in_city,
     )
+    from src.application.place_links import public_telegram_cta_url, trainer_start_param
     from src.application.site_trainer_page import contact_url
     from src.application.site_trainers import trainer_initial, trainer_name, trainer_photo_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
     from src.application.trainer_min_price import enrich_min_session_price
     from src.application.trainer_use_cases import list_active_trainers_for_client
     from src.shared.notification_hours import NOTIFICATION_TZ
+    from src.shared.phone_guard import sanitize_public_phone
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
     raw_items, _total = await list_active_trainers_for_client(
@@ -196,6 +198,11 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
         tid = int(t["id"])
         profile = t.get("profile") or {}
         name = trainer_name(t)
+        contact = contact_url(tid, usernames.get(tid), listed=True)
+        # Браузер без initData: выход в Telegram (как «Следующие недели» на /t), не тупик.
+        telegram_url = public_telegram_cta_url(
+            "", start_param=trainer_start_param(tid), surface="trainer_showcase", city_id=city_id
+        )
         out.append(
             {
                 "id": tid,
@@ -211,7 +218,9 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 "session_duration_minutes": profile.get("session_duration_minutes"),
                 "glide_since": since.get(tid),
                 "can_book": can_book[tid],
-                "contact_url": contact_url(tid, usernames.get(tid), listed=True),
+                "contact_url": contact,
+                "telegram_url": telegram_url,
+                "phone": sanitize_public_phone(profile.get("phone")),
                 "min_session_price_cents": t.get("min_session_price_cents"),
                 "min_session_price_currency": t.get("min_session_price_currency"),
                 "min_price_by_direction": min_price_by_direction(

@@ -14,7 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from src.api.app import app
-from src.application.site_trainer_page import _panel_html, parse_trainer_ref, trainer_path, trainer_slug
+from src.application.site_trainer_page import _panel_html, _price_card, parse_trainer_ref, trainer_path, trainer_slug
 from src.infrastructure.db.models import SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE
 from tests.api.test_arena_trainer_windows import _slot
 from tests.api.test_public_place_page import _place
@@ -389,6 +389,54 @@ async def test_no_individual_windows_text_does_not_claim_no_time_at_all(app_use_
     assert "Индивидуального свободного времени на этой неделе нет — напишите тренеру." in html
     assert "свободного времени нет." not in html.replace("Индивидуального свободного времени на этой неделе нет", "")
     assert 'class="tp-slot"' not in html
+    assert "Написать в Telegram" in html
+
+
+def test_price_card_no_windows_without_nick_does_not_promise_write() -> None:
+    """Без ника: текст не говорит «напишите», кнопка «Написать» скрыта, Telegram-выход остаётся."""
+    html = _price_card(
+        {"id": 9, "can_book": True, "windows": [], "directions": [], "contact_url": None, "phone": None},
+        app="https://t.me/bot",
+        cta=None,
+        via=None,
+    )
+    assert "напишите тренеру" not in html
+    assert "следующие недели видны в Telegram" in html
+    assert "Следующие недели — в Telegram" in html
+    assert "Написать в Telegram" not in html
+
+
+def test_price_card_no_windows_with_nick_keeps_write_cta() -> None:
+    html = _price_card(
+        {"id": 9, "can_book": True, "windows": [], "directions": [], "contact_url": "/r/tg/9", "phone": None},
+        app="https://t.me/bot",
+        cta=None,
+        via=None,
+    )
+    assert "напишите тренеру" in html
+    assert "Написать в Telegram" in html
+
+
+def test_price_card_phone_copy_and_free_card_copy_honesty() -> None:
+    with_phone = _price_card(
+        {"id": 9, "can_book": False, "windows": [], "directions": [], "contact_url": None, "phone": "+375291112233"},
+        app=None,
+        cta=("Открыть в Telegram", "https://t.me/bot"),
+        via=None,
+    )
+    assert 'data-copy="+375291112233"' in with_phone
+    assert "Скопировать телефон" in with_phone
+    assert "напишите и договоритесь" not in with_phone
+    assert "позвоните или откройте Telegram" in with_phone
+
+    no_contact = _price_card(
+        {"id": 9, "can_book": False, "windows": [], "directions": [], "contact_url": None, "phone": None},
+        app=None,
+        cta=("Открыть в Telegram", "https://t.me/bot"),
+        via=None,
+    )
+    assert "напишите и договоритесь" not in no_contact
+    assert "откройте Telegram и договоритесь" in no_contact
 
 
 @pytest.mark.asyncio

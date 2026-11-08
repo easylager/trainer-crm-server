@@ -80,7 +80,7 @@ const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 /**
  * historyLength — history.length при открытии витрины: >1 — пришли с другого экрана (есть куда «‹ Назад»).
  */
-function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1 } = {}) {
+function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x' } = {}) {
   const calls = [];
   const app = makeEl('app');
   const doc = { activeElement: null, body: { tag: 'body' }, keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
@@ -132,7 +132,7 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
     return resp(404, { detail: 'not mocked ' + u });
   };
   ctx.BookingClient = {
-    getInitData: () => 'x',
+    getInitData: () => initData,
     fetchClientSession: (tid) => ctx.fetch('/api/webapp/client/session' + (tid ? '?for_trainer_id=' + tid : '')).then((r) => r.json()),
     fetchClientSlots: (o) => ctx.fetch('/api/webapp/client/slots?trainer_id=' + o.trainerId + (o.serviceId ? '&service_id=' + o.serviceId : ''))
       .then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }),
