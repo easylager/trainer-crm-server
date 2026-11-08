@@ -80,7 +80,7 @@
 /* неделя: семь дней, на телефоне — лента внутри блока */
 .tp-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 600px) {
-  .tp-week { grid-template-columns: repeat(7, 84px); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px 4px; scroll-padding: 0 16px; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+  .tp-week { grid-template-columns: repeat(7, 84px); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px 4px; scroll-padding: 0 16px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
   .tp-week::-webkit-scrollbar { display: none; }
 }
 .tp-day { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 18px; padding: 12px 6px; display: grid; gap: 6px;
@@ -131,7 +131,7 @@
 .tp-ar > div { padding: 12px 14px; display: grid; gap: 2px; }
 .tp-ar span { font-size: 14px; color: var(--g-muted); }
 .tp-ar em { font-style: normal; color: var(--g-accent-ink); font-weight: 600; font-size: 14px; margin-top: 2px; }
-.tp-more { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 4px; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.tp-more { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 4px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .tp-more::-webkit-scrollbar { display: none; }
 .tp-mini { flex: 0 0 200px; background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 20px; overflow: hidden; display: grid; grid-template-rows: 150px auto; }
 .tp-mini img, .tp-mini__mono { width: 100%; height: 150px; object-fit: cover; display: block; }
