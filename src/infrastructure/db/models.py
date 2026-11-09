@@ -638,6 +638,8 @@ class HockeyPick(Base):
     __table_args__ = (
         UniqueConstraint("match_id", "player_key", name="uq_hockey_picks_match_player"),
         Index("ix_hockey_picks_player", "player_key"),
+        # Счётчики сторон по списку матчей (миграция 0311).
+        Index("ix_hockey_picks_match_side", "match_id", "side"),
         CheckConstraint("side IN ('home', 'away')", name="ck_hockey_picks_side"),
         CheckConstraint("(home_score IS NULL) = (away_score IS NULL)", name="ck_hockey_picks_score_pair"),
         CheckConstraint(

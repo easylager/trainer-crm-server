@@ -151,7 +151,13 @@ async def post_client_hockey_share(
             winners=data["winners"],
             won=res["won"],
         )
-        leagues = await player_leagues(session, player_key=player_key, now=now)
+        leagues = (
+            await player_leagues(
+                session, player_key=player_key, now=now, league_ids=[crown_league], ends_after=None, with_rank=False
+            )
+            if crown_league
+            else []
+        )
         code = next((x.invite_code for x in leagues if x.id == crown_league), None)
         url = card_link(START_LEAGUE_CARD, code) if code else card_link(START_RESULT_CARD)
         button = {"text": "Новый месяц — играть", "url": url}
@@ -171,7 +177,7 @@ async def post_client_hockey_share(
             home=m.home_team, away=m.away_team, home_score=m.home_score, away_score=m.away_score, points=card.points
         )
         # Позвать в свою лигу, если она есть: хвастаются обычно там, где играют вместе.
-        leagues = await player_leagues(session, player_key=player_key, now=now)
+        leagues = await player_leagues(session, player_key=player_key, now=now, with_rank=False)  # нужен код, не место
         url = card_link(START_RESULT_CARD, leagues[0].invite_code if leagues else None)
         button = {"text": "А ты угадаешь?", "url": url}
         sig = result_card_sig(settings.telegram_bot_token_client, m.id, card.points)
@@ -189,7 +195,16 @@ async def post_client_hockey_share(
         except PermissionError:
             raise HTTPException(status_code=403, detail="Нет доступа к этой лиге") from None
         mine = next(
-            row for row in await player_leagues(session, player_key=player_key, now=now) if row.id == body.league_id
+            iter(
+                await player_leagues(
+                    session,
+                    player_key=player_key,
+                    now=now,
+                    league_ids=[body.league_id],
+                    ends_after=None,
+                    with_rank=False,
+                )
+            )
         )
         lc = await league_card(session, mine.invite_code, now=now)
         assert lc is not None

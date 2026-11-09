@@ -3472,6 +3472,10 @@ async def run_hockey_matches_loop() -> None:
                     counts["league_notices"] = await deliver_league_notices(
                         async_session_factory, now=now, send=send_via_client_bot
                     )
+                    # Старые строки hockey_notices — редко (раз в 6 часов) и порциями.
+                    from src.application.hockey_notices import cleanup_old_notices
+
+                    counts["notices_cleaned"] = await cleanup_old_notices(async_session_factory, now=now)
                 finally:
                     await close_client_bot()  # один Bot на проход: сессию закрываем, а не держим между тиками
                 if calendar_due and not counts["calendar_failed"]:

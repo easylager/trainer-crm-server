@@ -316,3 +316,13 @@ def _enable_trainer_collective_feature_for_marked_tests(request, monkeypatch) ->
     """Collective API/application tests assume TRAINER_COLLECTIVE_ENABLED=1."""
     if request.node.get_closest_marker("collective"):
         monkeypatch.setenv("TRAINER_COLLECTIVE_ENABLED", "1")
+
+
+@pytest.fixture(autouse=True)
+def _reset_hockey_aggregate_cache():
+    """Короткий кэш таблиц «Кто кого» процессный: между тестами (и в начале каждого) он пуст."""
+    from src.application.hockey_cache import invalidate_aggregates
+
+    invalidate_aggregates()
+    yield
+    invalidate_aggregates()

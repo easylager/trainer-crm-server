@@ -451,6 +451,10 @@ async def close_due_races(session: AsyncSession, *, now: datetime) -> list[int]:
     await _close_months(session, now=now, closed=closed)
     await _close_leagues(session, now=now, closed=closed)
     await _close_seasons(session, now=now, closed=closed)
+    if closed:
+        from src.application.hockey_cache import invalidate_after_commit
+
+        invalidate_after_commit(session)  # короткий кэш таблиц: закрытая гонка меняет то, что видят экраны
     return closed
 
 
@@ -645,11 +649,15 @@ _WINNERS = text("""
     """)
 
 
-async def crown_counts(session: AsyncSession, *, league_id: int | None = None) -> dict[int, int]:
-    """Короны у каждого — те же, что и в общей таблице и профиле (один источник: ``crown_totals``)."""
+async def crown_counts(
+    session: AsyncSession, *, league_id: int | None = None, player_keys: list[int] | None = None
+) -> dict[int, int]:
+    """Короны у каждого — те же, что и в общей таблице и профиле (один источник: ``crown_totals``).
+
+    ``player_keys`` — только показанные на экране игроки (участники лиги), а не вся таблица корон."""
     from src.application.hockey_slices import crown_totals
 
-    return await crown_totals(session)
+    return await crown_totals(session, player_keys=player_keys)
 
 
 def _season_months(first: date, last: date) -> list[tuple[datetime, str]]:
@@ -727,7 +735,10 @@ async def leader_line(session: AsyncSession, *, player_key: int, now: datetime) 
     """Строка под финалом месяца — в лучшей лиге игрока: кто впереди и на сколько."""
     from src.application.hockey_leagues import league_table, player_leagues
 
-    leagues = [x for x in await player_leagues(session, player_key=player_key, now=now) if x.members > 1 and x.active]
+    # Нужны только идущие лиги: закончившиеся не считаем (ends_after=now).
+    leagues = [
+        x for x in await player_leagues(session, player_key=player_key, now=now, ends_after=_utc(now)) if x.members > 1
+    ]
     if not leagues:
         return None
     best = min(leagues, key=lambda x: (x.my_rank, -x.my_points, x.id))
@@ -758,10 +769,17 @@ async def race_result(session: AsyncSession, *, player_key: int, race: Race) -> 
     from src.application.hockey_leagues import league_table, player_leagues
 
     period = Period(PERIOD_MONTH, race.starts_at, race.ends_at, "", race.title)
-    leagues = [x for x in await player_leagues(session, player_key=player_key, now=race.starts_at) if x.members > 1]
     # Лучшая лига — среди тех, где за этот месяц выдали корону: место «сейчас» в тихой лиге ничего не значит.
+    # Таблицы считаем сперва только для коронованных лиг; остальные — лишь если среди них никого нет.
     crowned = set((await session.execute(_RACE_CROWN_LEAGUES, {"race_id": race.id})).scalars().all())
-    leagues = [x for x in leagues if x.id in crowned] or leagues
+    leagues = []
+    if crowned:
+        found = await player_leagues(
+            session, player_key=player_key, now=race.starts_at, league_ids=sorted(crowned), ends_after=None
+        )
+        leagues = [x for x in found if x.members > 1]
+    if not leagues:
+        leagues = [x for x in await player_leagues(session, player_key=player_key, now=race.starts_at) if x.members > 1]
     league = min(leagues, key=lambda x: (x.my_rank, -x.my_points, x.id)) if leagues else None
     if league is not None:
         rows = await league_table(

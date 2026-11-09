@@ -942,6 +942,53 @@ async def release(session: AsyncSession, notice: Notice) -> None:
         await session.execute(_RELEASE, {"player_key": notice.player_key, "match_id": match_id, "kind": notice.kind})
 
 
+# ---------- чистка старых строк ----------
+
+# Строки hockey_notices нужны, пока матч «живой» для сообщений (защита от повтора). Старше этого срока
+# отправленные и окончательно упавшие строки только раздувают таблицу и индексы.
+NOTICES_KEEP = timedelta(days=60)
+NOTICES_CLEANUP_EVERY = timedelta(hours=6)
+NOTICES_CLEANUP_BATCH = 2000
+NOTICES_CLEANUP_MAX_BATCHES = 10
+
+# Неотправленные строки очереди (sent_at IS NULL и не failed) не трогаем; повторно поставленная строка
+# («moved» снова в очереди) имеет свежий sent_at/NULL, поэтому под условие не попадает.
+_DELETE_OLD_NOTICES = text("""
+    DELETE FROM hockey_notices
+    WHERE (player_key, match_id, kind) IN (
+        SELECT player_key, match_id, kind FROM hockey_notices
+        WHERE COALESCE(sent_at, created_at) < :cutoff AND (sent_at IS NOT NULL OR failed)
+        LIMIT :batch
+    )
+    """)
+
+_last_cleanup: datetime | None = None
+
+
+async def cleanup_old_notices(session_factory, *, now: datetime, force: bool = False) -> int:
+    """Удалить старые строки порциями, не чаще раза в ``NOTICES_CLEANUP_EVERY``. Возвращает число удалённых.
+
+    Каждая порция — своя короткая транзакция; за проход не больше ``NOTICES_CLEANUP_MAX_BATCHES`` порций,
+    остаток уйдёт в следующий раз."""
+    global _last_cleanup
+    now = _utc(now)
+    if not force and _last_cleanup is not None and now - _last_cleanup < NOTICES_CLEANUP_EVERY:
+        return 0
+    _last_cleanup = now
+    total = 0
+    for _ in range(NOTICES_CLEANUP_MAX_BATCHES):
+        async with session_factory() as session:
+            result = await session.execute(
+                _DELETE_OLD_NOTICES, {"cutoff": now - NOTICES_KEEP, "batch": NOTICES_CLEANUP_BATCH}
+            )
+            await session.commit()
+        deleted = getattr(result, "rowcount", 0) or 0
+        total += deleted
+        if deleted < NOTICES_CLEANUP_BATCH:
+            break
+    return total
+
+
 def _outcome(value: "bool | str") -> str:
     if value is True:
         return SENT
@@ -1256,6 +1303,7 @@ __all__ = [
     "claim",
     "close_client_bot",
     "clear_blocked",
+    "cleanup_old_notices",
     "deliver",
     "deliver_league_notices",
     "due_notices",

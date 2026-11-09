@@ -36,6 +36,9 @@ from src.ingestion.hockey_sources import MINSK_TZ
 NAME_MAX = 28
 MAX_MEMBERS = 100
 MAX_LEAGUES_PER_PLAYER = 20
+# Список «мои лиги»: закончившиеся показываем ещё столько дней и не больше стольких лиг (таблица считается на каждую).
+RECENTLY_ENDED_DAYS = 60
+MY_LEAGUES_LIMIT = 40
 MAX_CLUBS = 20
 SCOPES = ("all", "extraliga", "dinamo", "clubs")
 TERM_KINDS = ("season", "month", "weeks4", "playoff", "dates")
@@ -98,8 +101,8 @@ class LeagueSummary:
     invite_code: str
     is_owner: bool
     members: int
-    my_rank: int
-    my_points: int
+    my_rank: int | None  # None, если место не считали (with_rank=False)
+    my_points: int | None
     scope: str = "dinamo"
     clubs: tuple[str, ...] = ()
     term_kind: str = "season"
@@ -227,13 +230,24 @@ _LEAGUE_TABLE = text("""
     ORDER BY rank, pl.display_name, mb.player_key
     """)
 
+# Лиги игрока. Закончившиеся без границы копились бы вечно, а на каждую считается таблица, поэтому по
+# умолчанию — только идущие и недавно закончившиеся (ends_at > :ends_after), не больше :limit: сперва идущие,
+# среди равных — позже кончающиеся. Выдаём по-прежнему в порядке вступления.
 _MY_LEAGUES = text("""
-    SELECT l.id, l.name, l.invite_code, (l.owner_key = :player_key) AS is_owner,
-           l.scope, l.clubs, l.term_kind, l.starts_at, l.ends_at,
-           (SELECT COUNT(*) FROM hockey_league_members x WHERE x.league_id = l.id)::int AS members
-    FROM hockey_leagues AS l
-    JOIN hockey_league_members AS me ON me.league_id = l.id AND me.player_key = :player_key
-    ORDER BY me.joined_at, l.id
+    SELECT t.id, t.name, t.invite_code, t.is_owner, t.scope, t.clubs, t.term_kind, t.starts_at, t.ends_at,
+           (SELECT COUNT(*) FROM hockey_league_members x WHERE x.league_id = t.id)::int AS members
+    FROM (
+        SELECT l.id, l.name, l.invite_code, (l.owner_key = :player_key) AS is_owner,
+               l.scope, l.clubs, l.term_kind, l.starts_at, l.ends_at, me.joined_at
+        FROM hockey_leagues AS l
+        JOIN hockey_league_members AS me ON me.league_id = l.id AND me.player_key = :player_key
+        WHERE (CAST(:ids AS bigint[]) IS NULL OR l.id = ANY(CAST(:ids AS bigint[])))
+          AND (CAST(:ends_after AS timestamptz) IS NULL OR l.ends_at > CAST(:ends_after AS timestamptz))
+          AND (CAST(:starts_by AS timestamptz) IS NULL OR l.starts_at <= CAST(:starts_by AS timestamptz))
+        ORDER BY (l.ends_at > :now) DESC, l.ends_at DESC, l.id DESC
+        LIMIT :limit
+    ) AS t
+    ORDER BY t.joined_at, t.id
     """)
 
 _PREVIEW_NAMES = text("""
@@ -751,9 +765,40 @@ async def league_titles(session: AsyncSession, *, league_id: int, now: datetime)
     return pick_titles(picks, next_match_id=next_id)
 
 
-async def player_leagues(session: AsyncSession, *, player_key: int, now: datetime) -> list[LeagueSummary]:
+_RECENT = object()
+
+
+async def player_leagues(
+    session: AsyncSession,
+    *,
+    player_key: int,
+    now: datetime,
+    league_ids: list[int] | None = None,
+    ends_after: datetime | None | object = _RECENT,
+    starts_by: datetime | None = None,
+    limit: int = MY_LEAGUES_LIMIT,
+    with_rank: bool = True,
+) -> list[LeagueSummary]:
+    """Лиги игрока в порядке вступления; место и очки — по таблице лиги.
+
+    По умолчанию — идущие и закончившиеся не раньше ``RECENTLY_ENDED_DAYS`` назад, не больше ``limit``.
+    ``league_ids`` — только эти лиги (границы срока тогда не нужны: ``ends_after=None``); ``ends_after`` — лиги,
+    кончающиеся позже этого момента; ``starts_by`` — начавшиеся не позже. Таблица считается на каждую вернувшуюся
+    лигу, поэтому берите узкий срез; ``with_rank=False`` таблиц не считает (``my_rank``/``my_points`` — ``None``).
+    """
+    now_utc = _utc(now)
+    if ends_after is _RECENT:
+        ends_after = now_utc - timedelta(days=RECENTLY_ENDED_DAYS)
+    params = {
+        "player_key": player_key,
+        "now": now_utc,
+        "ids": None if league_ids is None else list(league_ids),
+        "ends_after": None if ends_after is None else _utc(ends_after),  # type: ignore[arg-type]
+        "starts_by": None if starts_by is None else _utc(starts_by),
+        "limit": limit,
+    }
     out: list[LeagueSummary] = []
-    for record in (await session.execute(_MY_LEAGUES, {"player_key": player_key})).all():
+    for record in (await session.execute(_MY_LEAGUES, params)).all():
         league = League(
             id=record.id,
             name=record.name,
@@ -765,8 +810,11 @@ async def player_leagues(session: AsyncSession, *, player_key: int, now: datetim
             starts_at=record.starts_at,
             ends_at=record.ends_at,
         )
-        rows = await league_table_rows(session, league)
-        mine = next(r for r in rows if r.player_key == player_key)
+        rank = points = None
+        if with_rank:
+            rows = await league_table_rows(session, league)
+            mine = next(r for r in rows if r.player_key == player_key)
+            rank, points = mine.rank, mine.points
         out.append(
             LeagueSummary(
                 id=record.id,
@@ -774,14 +822,14 @@ async def player_leagues(session: AsyncSession, *, player_key: int, now: datetim
                 invite_code=record.invite_code,
                 is_owner=bool(record.is_owner),
                 members=record.members,
-                my_rank=mine.rank,
-                my_points=mine.points,
+                my_rank=rank,  # type: ignore[arg-type]
+                my_points=points,  # type: ignore[arg-type]
                 scope=record.scope,
                 clubs=league.clubs,
                 term_kind=record.term_kind,
                 starts_at=record.starts_at,
                 ends_at=record.ends_at,
-                active=_utc(record.ends_at) > _utc(now),
+                active=_utc(record.ends_at) > now_utc,
             )
         )
     return out

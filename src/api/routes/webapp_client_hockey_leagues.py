@@ -308,11 +308,16 @@ async def get_client_hockey_league(
         rows = await league_table(session, league_id=league_id, player_key=player_key, now=now, period=chosen)
     except (LookupError, PermissionError) as exc:
         _raise_league(exc)
+    # Нужна только эта лига и без места: таблицу мы уже посчитали выше, остальные лиги игрока не считаем.
     summary = next(
-        item for item in await player_leagues(session, player_key=player_key, now=now) if item.id == league_id
+        iter(
+            await player_leagues(
+                session, player_key=player_key, now=now, league_ids=[league_id], ends_after=None, with_rank=False
+            )
+        )
     )
     titles = await league_titles(session, league_id=league_id, now=now)
-    crowns = await crown_counts(session, league_id=league_id)
+    crowns = await crown_counts(session, league_id=league_id, player_keys=[row.player_key for row in rows])
     return {
         "id": summary.id,
         "name": summary.name,
