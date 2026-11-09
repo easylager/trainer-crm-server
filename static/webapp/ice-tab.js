@@ -1196,6 +1196,8 @@
     if (!sheet) return;
     if (open) paintIntentSheet();
     if (chip) chip.setAttribute('aria-expanded', open ? 'true' : 'false');
+    // Пока шторка открыта, свайп вниз — её, а не «закрыть мини-апп» (иначе мимо ручки закрывалось приложение).
+    setTelegramSwipes(open || mapViewActive());
     if (open) {
       sheet.hidden = false;
       global.requestAnimationFrame(function () { sheet.classList.add('is-open'); });
@@ -1247,21 +1249,28 @@
   }
 
   /*
-   * Шторку тянут вниз за ручку и заголовок — как лист «Поделиться» (TASK-308): дальше 90 px
+   * Шторку тянут вниз за любое место панели — как лист «Поделиться» (TASK-308): дальше 90 px
    * или резко вниз — закрывается, иначе встаёт на место. Вверх упирается пружиной.
+   * Тяга стартует после 6 px движения, поэтому тап по строке остаётся тапом; после тяги
+   * следующий клик гасится, чтобы не выбрать строку под пальцем.
    */
   function bindIntentSheetDrag(panel) {
     if (!panel || !global.PointerEvent) return;
     var drag = null;
+    var DRAG_START = 6;
     panel.addEventListener('pointerdown', function (e) {
-      if (e.button || !e.target.closest('.ice-intent-sheet__grab, .ice-intent-sheet__title')) return;
-      drag = { id: e.pointerId, y0: e.clientY, y: e.clientY, t: e.timeStamp, v: 0, dy: 0 };
-      try { panel.setPointerCapture(e.pointerId); } catch (eCap) { /* */ }
-      panel.classList.add('is-drag');
+      if (e.button) return;
+      drag = { id: e.pointerId, y0: e.clientY, y: e.clientY, t: e.timeStamp, v: 0, dy: 0, armed: false };
     });
     panel.addEventListener('pointermove', function (e) {
       if (!drag || e.pointerId !== drag.id) return;
       var raw = e.clientY - drag.y0;
+      if (!drag.armed) {
+        if (Math.abs(raw) < DRAG_START) return;
+        drag.armed = true;
+        try { panel.setPointerCapture(e.pointerId); } catch (eCap) { /* */ }
+        panel.classList.add('is-drag');
+      }
       drag.v = (e.clientY - drag.y) / Math.max(1, e.timeStamp - drag.t);
       drag.y = e.clientY;
       drag.t = e.timeStamp;
@@ -1270,11 +1279,17 @@
     });
     function end(e) {
       if (!drag || e.pointerId !== drag.id) return;
+      var wasDrag = drag.armed;
       var gone = drag.dy > 90 || (drag.dy > 24 && drag.v > 0.6);
       var tap = Math.abs(drag.dy) < 4;
       drag = null;
       panel.classList.remove('is-drag');
       panel.style.transform = '';
+      if (wasDrag) {
+        var swallow = function (ev) { ev.stopPropagation(); ev.preventDefault(); };
+        panel.addEventListener('click', swallow, { capture: true, once: true });
+        global.setTimeout(function () { panel.removeEventListener('click', swallow, true); }, 0);
+      }
       if (gone || (tap && e.type === 'pointerup' && e.target.closest('.ice-intent-sheet__grab'))) openIntentSheet(false);
     }
     panel.addEventListener('pointerup', end);
