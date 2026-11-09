@@ -407,6 +407,9 @@ async def stakes(session: AsyncSession, *, player_key: int, match_id: int, now: 
         return None
     mult = 2 if match.doubled else 1
     add = POINTS_WINNER * mult
+    if match.status != "scheduled":
+        # Сыгранный (или отменённый) матч уже в таблицах: очки победителя второй раз не добавляем.
+        return {"match_id": match_id, "points_if_winner": add, "doubled": bool(match.doubled), "items": []}
     month = month_period(_utc(match.starts_at).astimezone(MINSK_TZ).date())
     season = season_period(match.starts_at)
     out: list[dict] = []

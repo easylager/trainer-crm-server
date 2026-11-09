@@ -555,20 +555,28 @@ async def league_by_code(session: AsyncSession, code: str) -> League | None:
     return None if record is None else _league(record)
 
 
-async def join_by_code(session: AsyncSession, *, player_key: int, display_name: str, code: str) -> League:
-    """Вступить по коду. Повторный переход по той же ссылке ничего не меняет."""
+async def join_league(session: AsyncSession, *, player_key: int, display_name: str, code: str) -> tuple[League, bool]:
+    """Вступить по коду. Возвращает (лига, добавлен_ли_сейчас): повторный переход по ссылке ничего не меняет."""
     found = await league_by_code(session, code)
     if found is None:
         raise LookupError(code)
     # Лочим строку лиги: двое одновременно не превысят лимит участников.
-    league = _league((await session.execute(_LEAGUE_BY_ID_LOCK, {"league_id": found.id})).one())
+    record = (await session.execute(_LEAGUE_BY_ID_LOCK, {"league_id": found.id})).one_or_none()
+    if record is None:  # лигу удалили между поиском по коду и блокировкой
+        raise LookupError(code)
+    league = _league(record)
     await _ensure_player(session, player_key, display_name)
     if (await session.execute(_IS_MEMBER, {"league_id": league.id, "player_key": player_key})).first():
-        return league
+        return league, False
     if (await session.execute(_MEMBER_COUNT, {"league_id": league.id})).scalar_one() >= MAX_MEMBERS:
         raise LeagueFull(league.id)
     await _check_league_quota(session, player_key)
     await session.execute(_ADD_MEMBER, {"league_id": league.id, "player_key": player_key})
+    return league, True
+
+
+async def join_by_code(session: AsyncSession, *, player_key: int, display_name: str, code: str) -> League:
+    league, _ = await join_league(session, player_key=player_key, display_name=display_name, code=code)
     return league
 
 
@@ -865,6 +873,7 @@ __all__ = [
     "friends_picks",
     "AlreadyExtended",
     "join_by_code",
+    "join_league",
     "league_by_code",
     "league_preview",
     "league_table",

@@ -25,7 +25,7 @@ from src.application.hockey_leagues import (
     build_terms,
     create_league,
     extend_league,
-    join_by_code,
+    join_league,
     league_table,
     league_titles,
     leave_league,
@@ -273,9 +273,8 @@ async def post_client_hockey_league_join(
 ) -> dict:
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
-    already = {row.id for row in await player_leagues(session, player_key=player_key, now=now)}
     try:
-        league = await join_by_code(
+        league, added = await join_league(
             session,
             player_key=player_key,
             display_name=_player_name(body.display_name, _init_raw(init_data, x_telegram_init_data)),
@@ -284,7 +283,7 @@ async def post_client_hockey_league_join(
         payload = await _created_out(session, league, player_key, now)
     except (LookupError, LeagueFull, TooManyLeagues) as exc:
         _raise_league(exc)
-    if body.from_card and league.id not in already:
+    if body.from_card and added:  # двойной тап «Вступить» событие не дублирует
         await record_card_event(session, kind="joined", card=body.from_card, league_id=league.id)
     await session.commit()
     return payload

@@ -210,3 +210,67 @@ def test_d_build_terms_rejects_absurd_years_with_invalid_terms(kwargs: dict) -> 
 
     with pytest.raises(InvalidTerms):
         build_terms(scope="dinamo", now=NOV, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_e_stakes_for_played_match_promise_nothing(app_use_test_db, db_session) -> None:
+    """«Если угадаешь» для сыгранного матча не добавляет очки победителя второй раз."""
+    from src.application.hockey_slices import stakes
+
+    await _league_with(db_session, ME, "Саша", "Трое", (FRIEND, "Катя"), (THIRD, "Лёша"))
+    starts = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
+    match_id = await _insert_match(db_session, starts_at=starts)
+    # Друзья сходили на матч, Саша нет: матч сыгран, и обещать Саше «если угадаешь» уже нечего.
+    for player in (FRIEND, THIRD):
+        await make_pick(
+            db_session,
+            player_key=player,
+            display_name=NAMES[player],
+            match_id=match_id,
+            home_score=5,
+            away_score=0,
+            now=starts - timedelta(hours=1),
+        )
+    await set_manual_result(db_session, match_id, home_score=3, away_score=1, decided_in="regulation", now=DEC)
+    await score_finished_matches(db_session, now=DEC)
+
+    after = await stakes(db_session, player_key=ME, match_id=match_id, now=DEC)
+    assert after is not None and after["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_e_join_by_code_vanished_league_is_lookup_error(app_use_test_db, db_session, monkeypatch) -> None:
+    """Лигу удалили между поиском по коду и блокировкой строки: LookupError (404), не NoResultFound."""
+    from src.application import hockey_leagues
+
+    league = await _league_with(db_session, ME, "Саша", "Исчезнет")
+    ghost = hockey_leagues.League(**{**league.__dict__, "id": -1})
+
+    async def fake_by_code(session, code):
+        return ghost
+
+    monkeypatch.setattr(hockey_leagues, "league_by_code", fake_by_code)
+    with pytest.raises(LookupError):
+        await hockey_leagues.join_by_code(db_session, player_key=FRIEND, display_name="Катя", code="X")
+
+
+@pytest.mark.asyncio
+async def test_e_join_league_reports_whether_player_was_added(app_use_test_db, db_session) -> None:
+    """Событие joined пишется по факту вступления: повторный «Вступить» нового участника не создаёт."""
+    from src.application.hockey_leagues import join_league
+
+    league = await _league_with(db_session, ME, "Саша", "Двор")
+    first, added = await join_league(db_session, player_key=FRIEND, display_name="Катя", code=league.invite_code)
+    again, added_again = await join_league(db_session, player_key=FRIEND, display_name="Катя", code=league.invite_code)
+    assert first.id == again.id == league.id
+    assert (added, added_again) == (True, False)
+
+
+def test_e_phase_closes_with_the_pick_window() -> None:
+    """Последние 60 секунд ход уже не принимается, и фаза не должна говорить «open»."""
+    from src.application.hockey_event import _phase
+
+    start = datetime(2026, 11, 20, 19, 0, tzinfo=timezone.utc)
+    assert _phase("scheduled", start, now=start - timedelta(minutes=5), picked=False) == "open"
+    assert _phase("scheduled", start, now=start - timedelta(seconds=30), picked=False) == "live"
+    assert _phase("scheduled", start, now=start - timedelta(seconds=30), picked=True) == "live"
