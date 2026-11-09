@@ -638,7 +638,7 @@
         }
       }
     }
-    if (tg && tg.BackButton) tg.BackButton.show();
+    if (window.MiniAppBack) window.MiniAppBack.set(back);
   }
 
   function startParam() {
@@ -660,11 +660,8 @@
         tg.expand();
       } catch (e) { /* */ }
       if (tg.onEvent) tg.onEvent('themeChanged', function () { applyTheme(); render(); });
-      if (tg.BackButton && tg.BackButton.onClick) {
-        // Один обработчик на страницу, даже если boot позовут ещё раз.
-        if (tg.BackButton.offClick) tg.BackButton.offClick(back);
-        tg.BackButton.onClick(back);
-      }
+      // Одна нативная «назад» на страницу: помощник сам не вешает обработчик дважды.
+      if (window.MiniAppBack) window.MiniAppBack.set(back);
     }
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && state.sheet) return closeSheet();

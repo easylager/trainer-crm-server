@@ -329,6 +329,8 @@
   /* ── Общие куски ─────────────────────────────────────────────────── */
 
   function backBtn(label) {
+    // В Telegram «назад» — нативная стрелка в шапке (MiniAppBack); своя кнопка только в браузере.
+    if (window.MiniAppBack && window.MiniAppBack.isNative()) return '';
     return '<button type="button" class="back" data-act="back">‹ ' + esc(label) + '</button>';
   }
 
@@ -1602,6 +1604,13 @@
     }
   }
 
+  function syncBack() {
+    var Back = window.MiniAppBack;
+    if (!Back) return;
+    if (S.view !== 'list' || S.stack.length || CAME_FROM) Back.set(back);
+    else Back.clear();
+  }
+
   function render() {
     if (S.view === 'book') capturePhone(S.book, appEl);
     var html;
@@ -1612,6 +1621,7 @@
     else if (S.view === 'reqsent') html = renderReqSent();
     else html = renderList();
     appEl.innerHTML = '<div class="tsw-view">' + html + '</div>';
+    syncBack();
     syncTabBar();
     if (S.view === 'book' && S.book) wirePhone(S.book);
     if (S.view === 'sent' || (S.view === 'trainer' && S.waBlock)) BC.bindWriteAccessBlock(appEl);

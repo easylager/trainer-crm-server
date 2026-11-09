@@ -118,6 +118,34 @@ describe('«‹ Назад» на корне витрины', () => {
   });
 });
 
+describe('нативная «назад» Telegram (MiniAppBack)', () => {
+  const stub = () => {
+    const log = { set: [], clear: 0 };
+    return { log, isNative: () => true, set: (fn) => { log.set.push(fn); return true; }, clear: () => { log.clear += 1; } };
+  };
+
+  it('на карточке тренера своей кнопки нет, «назад» — нативная и ведёт в список', async () => {
+    const back = stub();
+    const h = boot({ historyLength: 1, showcase: { items: [trainer(1), trainer(2)] }, session: PHONE, routes: [slotsRoute], miniAppBack: back });
+    await tick();
+    assert.equal(back.log.set.length, 0, 'корень без истории — стрелки нет');
+    assert.ok(back.log.clear > 0);
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    assert.equal(backHtml(h), null);
+    assert.ok(back.log.set.length > 0, 'внутри витрины стрелка включена');
+    back.log.set[back.log.set.length - 1]();
+    assert.equal(h.S.view, 'list');
+  });
+
+  it('если пришли с другого экрана, стрелка есть и на списке', async () => {
+    const back = stub();
+    boot({ historyLength: 3, showcase: { items: [trainer(1), trainer(2)] }, session: PHONE, miniAppBack: back });
+    await tick();
+    assert.ok(back.log.set.length > 0);
+  });
+});
+
 describe('прямая ссылка на тренера (?trainer_id=)', () => {
   it('пришли с катка/«Поиска» — «‹ Назад» возвращает туда, а не в список', async () => {
     const h = boot({ search: '?trainer_id=2&arena_id=3', historyLength: 4, showcase: { items: [trainer(1), trainer(2)] }, session: PHONE, routes: [slotsRoute] });

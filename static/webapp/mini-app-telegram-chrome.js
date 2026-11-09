@@ -343,19 +343,51 @@
 })(window);
 
 /**
- * Telegram Mini App: keep native header as close (X), not BackButton.
- * Calling WebApp.BackButton.show() replaces the X with a system back arrow — avoid that globally.
+ * Кнопка «назад» — одна на всё приложение: нативная стрелка в шапке Telegram.
+ * Экран говорит MiniAppBack.set(handler) («тут есть назад, и он делает вот это») или
+ * MiniAppBack.clear() (корневой экран). Собственных кнопок «назад» внутри страницы нет;
+ * isNative() — для запасного пути вне Telegram (браузер: там есть своя «назад»).
  */
+window.MiniAppBack = (function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var current = null;
+  var wired = false;
+
+  function isNative() {
+    if (!tg || !tg.initData || !tg.BackButton) return false;
+    return typeof tg.isVersionAtLeast === 'function' ? tg.isVersionAtLeast('6.1') : true;
+  }
+
+  function onClick() {
+    if (current) current();
+  }
+
+  function set(handler) {
+    if (!isNative() || typeof handler !== 'function') return false;
+    current = handler;
+    try {
+      if (!wired) {
+        tg.BackButton.onClick(onClick);
+        wired = true;
+      }
+      tg.BackButton.show();
+    } catch (e) { return false; }
+    return true;
+  }
+
+  function clear() {
+    current = null;
+    if (!isNative()) return;
+    try { tg.BackButton.hide(); } catch (e) { /* старый клиент */ }
+  }
+
+  return { set: set, clear: clear, isNative: isNative };
+})();
+
 (function () {
   if (window.MiniAppRuntime) window.MiniAppRuntime.ready();
-  var tg = window.Telegram && window.Telegram.WebApp;
-  if (!tg) return;
-  if (tg.BackButton) {
-    tg.BackButton.hide();
-    try {
-      tg.BackButton.onClick(function () {});
-    } catch (e) { /* noop */ }
-  }
+  // Экран, который не просил «назад», стартует без стрелки.
+  if (window.MiniAppBack) window.MiniAppBack.clear();
 })();
 
 /**
