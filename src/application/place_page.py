@@ -1528,7 +1528,9 @@ def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
 
     kicker, headline = schedule_wait_lines(card)
     watch = links.get("watch")
-    kicker_html = f'<p class="b-wait__kicker">{_esc(kicker)}</p>' if kicker else ""
+    # Одна фраза, а не надзаголовок + второй заголовок: «Новое расписание: обычно по пятницам».
+    lead = f'<span class="b-wait__lead">{_esc(kicker)}:</span> ' if kicker else ""
+    headline = headline[:1].lower() + headline[1:] if kicker else headline
     bell = ""
     if watch:
         bell = (
@@ -1537,7 +1539,7 @@ def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
             f'{icon_svg("bell")}{_esc(t("schedule.bell_site_cta"))}</a>'
             f'<p class="b-wait__note">{_esc(t("schedule.bell_note"))}</p>'
         )
-    return f'<div class="b-wait">{kicker_html}<p class="b-wait__title">{_esc(headline)}</p>{bell}</div>'
+    return f'<div class="b-wait"><p class="b-wait__title">{lead}{_esc(headline)}</p>{bell}</div>'
 
 
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
@@ -1545,7 +1547,7 @@ def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *,
     del title
     if _schedule_waits(card):
         # Касса и телефон остаются под колокольчиком: они полезны и без расписания.
-        return f"{_b_schedule_wait(card, links)}{_b_buy(links)}{_b_call(card, links)}"
+        return f"{_b_schedule_wait(card, links)}{_b_buy(links)}{_b_call(card, links, dark=False)}"
     buy = _b_buy(links)
     call = _b_call(card, links)
     if call:

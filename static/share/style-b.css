@@ -1199,10 +1199,8 @@ body[data-client-shell] .tg-out { display: none !important; }
 
 /* TASK-330: пустая карточка катка, который ведёт расписание — привычка катка и колокольчик. */
 .b-wait { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-.b-wait__kicker {
-  margin: 0; font: 600 11px/1 var(--g-font); letter-spacing: .08em; text-transform: uppercase; color: var(--g-muted);
-}
-.b-wait__title { margin: 4px 0 0; font: 700 24px/1.15 var(--g-font); color: var(--g-ink); text-wrap: balance; }
+.b-wait__title { margin: 0; font-size: 17px; line-height: 1.35; font-weight: 600; color: var(--g-ink); text-wrap: balance; }
+.b-wait__lead { color: var(--g-muted); font-weight: 500; }
 .b-wait__sub { margin: 0 0 6px; font-size: 15px; line-height: 1.4; color: var(--g-muted); }
 .b-wait__cta { gap: 10px; }
 .b-wait__note { margin: 0; font-size: 13px; line-height: 1.4; text-align: center; color: var(--g-muted); }
