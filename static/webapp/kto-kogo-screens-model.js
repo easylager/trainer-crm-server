@@ -730,6 +730,18 @@
     return out;
   }
 
+  /**
+   * Срок, с которым форма «Новая лига» остаётся после загрузки списка сроков. Пока список не пришёл,
+   * выбор не трогаем: в нём есть только «Свои даты», и откат на него переключал форму навсегда.
+   * Выбранное окно ушло из списка (плей-офф прошёл) — берём первый открытый срок.
+   */
+  function settleTerm(term, options) {
+    if (!options) return term;
+    var choices = termChoices(options);
+    if (choices.length && choices.every(function (c) { return c.term !== term; })) return choices[0].term;
+    return term;
+  }
+
   /** Одна строка «что считаем» для карточки «Как будет». */
   function scopePhrase(form) {
     if (form.scope === 'dinamo') return 'Матчи Динамо-Минск';
@@ -1168,6 +1180,7 @@
     termsError: termsError,
     formError: formError,
     termChoices: termChoices,
+    settleTerm: settleTerm,
     scopePhrase: scopePhrase,
     termsSummary: termsSummary,
     leagueCrownLine: leagueCrownLine,
