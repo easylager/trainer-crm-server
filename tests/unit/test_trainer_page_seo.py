@@ -41,21 +41,20 @@ def test_title_uses_public_city_not_the_internal_region_label() -> None:
     assert "Glideclub" not in title
 
 
-def test_description_two_directions_drops_the_second_rink_and_keeps_price() -> None:
+def test_description_two_directions_keeps_both_rinks_when_they_fit() -> None:
     d = page_description(_page())
     assert d == (
         "Александр Гаевский — тренер по катанию на коньках в Минске: с нуля и для уже катающихся. "
-        "Занимается в Замок. От 41,87 BYN за занятие, запись в Telegram."
+        "Катки: Замок, Минск-Арена. От 41,87 BYN за занятие, запись в Telegram."
     )
     assert len(d) <= DESCRIPTION_LIMIT
-    assert "Минск-Арена" not in d
 
 
 def test_description_one_direction_keeps_both_rinks_and_price() -> None:
     d = page_description(_page(directions=[{"key": "zero"}]))
     assert d == (
         "Александр Гаевский — тренер по катанию на коньках в Минске: с нуля. "
-        "Занимается в Замок и Минск-Арена. От 41,87 BYN за занятие, запись в Telegram."
+        "Катки: Замок, Минск-Арена. От 41,87 BYN за занятие, запись в Telegram."
     )
 
 
@@ -63,17 +62,18 @@ def test_description_keeps_two_rinks_when_there_is_no_price() -> None:
     d = page_description(_page(directions=[{"key": "zero"}], min_price=None))
     assert d == (
         "Александр Гаевский — тренер по катанию на коньках в Минске: с нуля. "
-        "Занимается в Замок и Минск-Арена. Запись в Telegram."
+        "Катки: Замок, Минск-Арена. Запись в Telegram."
     )
 
 
-def test_description_three_directions_drops_price_before_the_rink() -> None:
+def test_description_three_directions_drops_the_second_rink_and_keeps_price() -> None:
     d = page_description(_page(directions=[{"key": "hock"}, {"key": "zero"}, {"key": "better"}]))
     assert d == (
         "Александр Гаевский — тренер по катанию на коньках в Минске: "
-        "с нуля, для уже катающихся и хоккейное катание. Занимается в Замок. Запись в Telegram."
+        "с нуля, для уже катающихся и хоккейное катание. Каток: Замок. От 41,87 BYN за занятие, запись в Telegram."
     )
-    assert "BYN" not in d
+    assert "Минск-Арена" not in d
+    assert len(d) <= DESCRIPTION_LIMIT
 
 
 def test_description_spb_rubles_and_public_city() -> None:
@@ -88,7 +88,7 @@ def test_description_spb_rubles_and_public_city() -> None:
     )
     assert d == (
         "Мария Соколова — тренер по катанию на коньках в Санкт-Петербурге: фигурное катание. "
-        "Занимается в Ледовый дворец. От 1500 руб. за занятие, запись в Telegram."
+        "Каток: Ледовый дворец. От 1500 руб. за занятие, запись в Telegram."
     )
     assert "Санкт-Петербург/ЛО" not in d
 
@@ -105,7 +105,7 @@ def test_description_skips_a_venue_without_ice() -> None:
         )
     )
     assert "Лыжероллерная" not in d
-    assert "Занимается в ТЦ Замок." in d
+    assert "Каток: ТЦ Замок." in d
     assert d.count("«") == d.count("»")
 
 

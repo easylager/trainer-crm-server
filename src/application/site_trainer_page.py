@@ -846,7 +846,7 @@ def _price_from(page: Mapping[str, Any]) -> str:
 
 
 def page_description(page: Mapping[str, Any]) -> str:
-    """«Имя — тренер … в Минске: с нуля. Занимается в ТЦ Замок. От 25 BYN за занятие, запись в Telegram.»
+    """«Имя — тренер … в Минске: с нуля. Каток: ТЦ Замок. От 25 BYN за занятие, запись в Telegram.»
 
     Не влезает — сначала второй каток, потом цена, потом лишние направления.
     Каток либо целиком, либо никак: имя не режем и кавычки в названии не рвём.
@@ -867,8 +867,8 @@ def page_description(page: Mapping[str, Any]) -> str:
         if n <= 0 or n > len(arenas):
             return ""
         if n == 1:
-            return f" Занимается в {arenas[0]}."
-        return f" Занимается в {arenas[0]} и {arenas[1]}."
+            return f" Каток: {arenas[0]}."
+        return f" Катки: {arenas[0]}, {arenas[1]}."
 
     def tail(with_price: bool) -> str:
         if with_price and price:

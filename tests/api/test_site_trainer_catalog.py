@@ -271,7 +271,8 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     # Лид на странице остаётся общим. В сниппете — только направления, которые реально есть.
     assert "Учат кататься с нуля и ставят технику. Есть фигурное катание и хоккей." in all_r.text
     meta = re.search(r'name="description" content="([^"]*)"', all_r.text).group(1)
-    assert "учат" in meta and "с нуля" in meta and "хоккейное катание" in meta
+    assert "по катанию на коньках" in meta and "с нуля" in meta and "хоккейное катание" in meta
+    assert "учат" not in meta
     assert "фигурное" not in meta and "…" not in meta and meta.endswith("Запись в Telegram.")
     assert "Оплата тренеру на месте." not in re.search(r'<p class="tcat-lead">(.*?)</p>', all_r.text).group(1)
     # Сверху — с онлайн-записью: A первая; окно — ссылка в запись Mini App через учётный прокси.
@@ -384,7 +385,7 @@ async def test_city_with_one_trainer_has_no_tabs_or_filter(app_use_test_db, db_s
     assert len(_cards(html)) == 1 and f"{first} Тренерова" in html
     assert "tcat-tabs" not in html and "Где удобно заниматься?" not in html
     assert "Тренер по катанию на коньках" in html
-    assert "1 тренер учит" in html
+    assert "1 тренер по катанию на коньках" in html
     assert "Сверху — тренеры" not in html
 
 

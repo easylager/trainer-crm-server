@@ -494,7 +494,22 @@ def _city_public_locative(city_name: str) -> tuple[str, str | None]:
 
 
 def _present_direction_phrases(data: Mapping[str, Any]) -> list[str]:
-    return [d.seo for d in DIRECTIONS if d.seo and listed_trainers(data, d)]
+    """«с нуля, для уже катающихся, фигурное и хоккейное катание» — только то, что есть в городе.
+
+    Фигурное и хоккейное делят слово «катание», чтобы не повторять его дважды.
+    """
+    present = {d.key for d in DIRECTIONS if d.seo and listed_trainers(data, d)}
+    bits: list[str] = []
+    if "zero" in present:
+        bits.append("с нуля")
+    if "better" in present:
+        bits.append("для уже катающихся")
+    skating = [label for key, label in (("fig", "фигурное"), ("hock", "хоккейное")) if key in present]
+    if len(skating) == 2:
+        bits.append("фигурное и хоккейное катание")
+    elif skating:
+        bits.append(f"{skating[0]} катание")
+    return bits
 
 
 def fit_meta(text_: str, limit: int) -> str:
@@ -522,8 +537,9 @@ def catalog_description(data: Mapping[str, Any], direction: Direction) -> str:
         phrases = _present_direction_phrases(data)
         clause = f": {_join_catalog(phrases)}" if phrases else ""
         if n:
-            teaches = _teaches(n)
-            head = f"В {loc} {teaches} кататься на коньках" if loc else f"{public} — {teaches} кататься на коньках"
+            noun = plural_ru(n, "тренер", "тренера", "тренеров")
+            who = f"{n} {noun} по катанию на коньках"
+            head = f"В {loc} {who}" if loc else f"{public} — {who}"
             text_ = f"{head}{clause}. Запись в Telegram."
         elif loc:
             text_ = f"В {loc} пока нет тренеров по катанию на коньках."
@@ -546,6 +562,9 @@ def catalog_description(data: Mapping[str, Any], direction: Direction) -> str:
 def _join_catalog(parts: Sequence[str]) -> str:
     if len(parts) <= 1:
         return "".join(parts)
+    # «фигурное и хоккейное катание» уже содержит «и» — перед ним запятая, не второе «и».
+    if " и " in parts[-1]:
+        return ", ".join(parts)
     return ", ".join(parts[:-1]) + " и " + parts[-1]
 
 
