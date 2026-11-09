@@ -1271,7 +1271,7 @@ async def send_via_client_bot(chat_id: int, text_body: str, buttons: list[list[d
                 logger.info("kto-kogo notice to %s: 429, retry later (%ss)", chat_id, exc.retry_after)
                 return RETRY
             await asyncio.sleep(exc.retry_after)
-        except (TelegramNetworkError, TelegramServerError, asyncio.TimeoutError):
+        except (TimeoutError, TelegramNetworkError, TelegramServerError):
             logger.info("kto-kogo notice to %s: temporary error, retry later", chat_id, exc_info=True)
             return RETRY
         except Exception:  # noqa: BLE001 — BadRequest и прочее постоянное: не повторяем
