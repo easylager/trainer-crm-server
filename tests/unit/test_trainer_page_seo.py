@@ -36,6 +36,25 @@ def test_title_adds_brand_only_when_the_whole_line_fits() -> None:
     assert page_heading(_page()) == long
 
 
+def test_title_names_the_only_direction() -> None:
+    fig = page_title(_page(name="Анна Орлова", directions=[{"key": "fig"}]))
+    assert fig == "Анна Орлова — тренер по фигурному катанию в Минске"
+    hock = page_title(_page(name="Олег Жук", directions=[{"key": "hock"}]))
+    assert hock == "Олег Жук — тренер по хоккейному катанию в Минске · Glideclub"
+    spb = page_title(_page(name="Мария Соколова", city_name="Санкт-Петербург/ЛО", directions=[{"key": "fig"}]))
+    assert spb == "Мария Соколова — тренер по фигурному катанию в Санкт-Петербурге"
+    assert len(hock) <= TITLE_LIMIT
+
+
+def test_title_with_several_directions_or_a_skill_level_stays_general() -> None:
+    general = "Влад Сак — тренер по катанию на коньках в Минске · Glideclub"
+    assert page_title(_page(name="Влад Сак", directions=[{"key": "fig"}, {"key": "hock"}])) == general
+    assert page_title(_page(name="Влад Сак", directions=[{"key": "zero"}])) == general
+    assert page_title(_page(name="Влад Сак", directions=[])) == general
+    # H1 и JSON-LD остаются общими.
+    assert page_heading(_page(directions=[{"key": "fig"}])).endswith("тренер по катанию на коньках в Минске")
+
+
 def test_unknown_city_is_not_declined_into_the_nominative() -> None:
     assert city_locative("Заславль") is None
     phrase = trainer_place_phrase("Заславль")
@@ -157,3 +176,17 @@ def test_jsonld_job_title_matches_the_heading_phrase() -> None:
     assert "тренер по катанию на коньках в Санкт-Петербурге" in payload
     assert "Санкт-Петербург/ЛО" not in payload
     assert page_heading(page).endswith("тренер по катанию на коньках в Санкт-Петербурге")
+
+
+def test_description_price_says_group_or_pass_like_the_card() -> None:
+    group = page_description(_page(directions=[{"key": "zero"}], min_price=(2500, "BYN"), min_price_basis="group"))
+    assert "От 25 BYN в группе, запись в Telegram." in group
+    assert "за занятие" not in group
+    pass_ = page_description(_page(directions=[{"key": "zero"}], min_price=(4000, "BYN"), min_price_basis="pass"))
+    assert "От 40 BYN по абонементу, запись в Telegram." in pass_
+    assert "за занятие" not in pass_
+    single = page_description(_page(directions=[{"key": "zero"}], min_price=(5000, "BYN"), min_price_basis="single"))
+    assert "От 50 BYN за занятие, запись в Telegram." in single
+    # Основание не передано — прежнее поведение.
+    assert "От 41,87 BYN за занятие" in page_description(_page())
+    assert len(group) <= DESCRIPTION_LIMIT and len(pass_) <= DESCRIPTION_LIMIT

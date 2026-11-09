@@ -43,7 +43,7 @@ from src.application.catalog_directions import (  # noqa: F401 — реэксп�
 )
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.style_b import esc
-from src.shared.city_locative import city_locative
+from src.shared.city_locative import city_locative, warn_if_no_locative
 from src.shared.ru_text import trainer_rating_parts
 from src.shared.html_template import fill_placeholders, json_for_script
 from src.shared.public_display import format_public_name
@@ -369,17 +369,43 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
 # ── Что показать во вкладке ──────────────────────────────────────────
 
 
-def direction_min_price(trainer: Mapping[str, Any], direction: Direction) -> tuple[int, str] | None:
-    """«от» тренера в направлении (во «Всех» — по всем направлениям) — ``trainer_min_price``.
+def direction_min_offer(trainer: Mapping[str, Any], direction: Direction) -> tuple[int, str, str] | None:
+    """«от» тренера в направлении (во «Всех» — по всем направлениям): копейки, валюта, основание.
 
     Кандидаты — услуги направления (тарифы/цена, групповая) и абонементы тренера, покрывающие
-    хоть одну из них. Ролики и ОФП/СФП — не направления, в «от» не входят.
+    хоть одну из них. Ролики и ОФП/СФП — не направления, в «от» не входят. Основание
+    (``trainer_min_price.BASIS_*``) говорит, что за занятие: обычное, групповое или абонемент.
     """
-    from src.application.trainer_min_price import trainer_min_session_price
+    from src.application.trainer_min_price import trainer_min_session_offer
 
     by_dir = trainer["services_by_dir"]
     svcs = [s for k in ([direction.key] if direction is not ALL else list(by_dir)) for s in by_dir.get(k, [])]
-    return trainer_min_session_price({"services": svcs, "passes": trainer.get("passes") or []})
+    return trainer_min_session_offer({"services": svcs, "passes": trainer.get("passes") or []})
+
+
+def direction_min_price(trainer: Mapping[str, Any], direction: Direction) -> tuple[int, str] | None:
+    """``direction_min_offer`` без основания — «от» тренера в направлении."""
+    found = direction_min_offer(trainer, direction)
+    return (found[0], found[1]) if found else None
+
+
+def best_offer(trainers: Sequence[Mapping[str, Any]], direction: Direction) -> tuple[int, str, str] | None:
+    """Самое дешёвое «от» среди тренеров; при равной цене — обычное занятие, потом групповое, потом абонемент."""
+    from src.application.trainer_min_price import basis_rank
+
+    offers = [o for o in (direction_min_offer(t, direction) for t in trainers) if o]
+    return min(offers, key=lambda o: (o[0], basis_rank(o[2]), o[1])) if offers else None
+
+
+def offer_phrase(offer: tuple[int, str, str], *, capital: bool = False) -> str:
+    """«от 25 BYN в группе», «от 40 BYN по абонементу», «от 50 BYN за занятие» — как на карточке тренера."""
+    from src.application.trainer_min_price import BASIS_PHRASE
+
+    amount = format_price_minor(offer[0], offer[1])
+    if not amount:
+        return ""
+    phrase = f"от {amount} {BASIS_PHRASE.get(offer[2], BASIS_PHRASE['single'])}"
+    return phrase[:1].upper() + phrase[1:] if capital else phrase
 
 
 def min_price_by_direction(trainer: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
@@ -435,15 +461,23 @@ def _id_set(data: Mapping[str, Any], direction: Direction) -> frozenset[int]:
     return frozenset(t["id"] for t in data["trainers"] if is_listed(t, direction))
 
 
-def indexable(data: Mapping[str, Any], direction: Direction) -> bool:
-    """В индексе, пока на странице есть тренеры и свой запрос.
+MIN_TRAINERS_FOR_OWN_INDEX = 3
 
-    «Все» — «тренер по катанию на коньках в городе». Направление со своим H1
-    («Научиться кататься на коньках с нуля» и остальные) остаётся, даже если
-    тренеры те же, что во «Всех». Пустая вкладка своего смысла не имеет.
-    noindex не ставим вместе с canonical на другой адрес.
+
+def indexable(data: Mapping[str, Any], direction: Direction) -> bool:
+    """В индексе ли страница.
+
+    «Все» — пока в городе есть тренеры. Направление — только когда у него есть свой состав:
+    он отличается от «Всех» или в нём не меньше ``MIN_TRAINERS_FOR_OWN_INDEX`` тренеров. Иначе это
+    копия «Всех» с другим заголовком: ``noindex, follow``, canonical на себя, вне sitemap.
+    Пустая вкладка в индексе не нужна ни при каком составе «Всех».
     """
-    return bool(_id_set(data, direction))
+    ids = _id_set(data, direction)
+    if not ids:
+        return False
+    if direction is ALL:
+        return True
+    return ids != _id_set(data, ALL) or len(ids) >= MIN_TRAINERS_FOR_OWN_INDEX
 
 
 def sitemap_paths(data: Mapping[str, Any]) -> list[str]:
@@ -452,6 +486,7 @@ def sitemap_paths(data: Mapping[str, Any]) -> list[str]:
 
 
 async def _profile_updated_at(session: AsyncSession, trainer_ids: Sequence[int]) -> dict[int, datetime]:
+    """Правка анкеты тренера. Услуги, цены, абонементы и катки тоже её двигают (триггеры, миграция 0317)."""
     if not trainer_ids:
         return {}
     rows = (
@@ -463,8 +498,35 @@ async def _profile_updated_at(session: AsyncSession, trainer_ids: Sequence[int])
     return {int(tid): stamp for tid, stamp in rows if isinstance(stamp, datetime)}
 
 
+async def _arena_updated_at(session: AsyncSession, arena_ids: Sequence[int]) -> dict[int, datetime]:
+    """Правка карточки катка (название, фото, адрес) — то, что видно в карточке тренера и в «Где проходят занятия»."""
+    if not arena_ids:
+        return {}
+    rows = (
+        await session.execute(
+            text("SELECT arena_id, updated_at FROM arena_profiles WHERE arena_id = ANY(:ids)"),
+            {"ids": list(arena_ids)},
+        )
+    ).all()
+    return {int(aid): stamp for aid, stamp in rows if isinstance(stamp, datetime)}
+
+
+def page_lastmod(
+    data: Mapping[str, Any],
+    direction: Direction,
+    trainer_stamps: Mapping[int, datetime],
+    arena_stamps: Mapping[int, datetime],
+) -> datetime | None:
+    """Самая свежая дата среди тренеров страницы (профиль, услуги, цены) и их катков в этом городе."""
+    listed = {int(t["id"]): t for t in listed_trainers(data, direction)}
+    fresh = [trainer_stamps[i] for i in listed if i in trainer_stamps]
+    for trainer in listed.values():
+        fresh.extend(arena_stamps[int(a["id"])] for a in trainer["arenas"] if int(a["id"]) in arena_stamps)
+    return max(fresh) if fresh else None
+
+
 async def sitemap_rows(session: AsyncSession) -> list[tuple[str, datetime | None]]:
-    """Пути каталога и lastmod — самая свежая анкета тренера на этой странице."""
+    """Пути каталога и lastmod — самая свежая правка тренеров страницы и их катков в городе."""
     from src.application.ice_city_day import list_public_cities
     from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 
@@ -483,15 +545,14 @@ async def sitemap_rows(session: AsyncSession) -> list[tuple[str, datetime | None
     for city in await list_public_cities(session):
         if int(city["id"]) not in city_ids:
             continue
+        warn_if_no_locative(str(city["name"]), where="sitemap")
         data = await load_city_catalog(session, city)
-        stamps = await _profile_updated_at(session, [int(t["id"]) for t in data["trainers"]])
+        trainer_stamps = await _profile_updated_at(session, [int(t["id"]) for t in data["trainers"]])
+        arena_stamps = await _arena_updated_at(session, list(data["arenas"]))
         name = str(data["city"]["name"])
         for direction in (ALL, *DIRECTIONS):
-            if not indexable(data, direction):
-                continue
-            listed = _id_set(data, direction)
-            fresh = [stamps[i] for i in listed if i in stamps]
-            out.append((catalog_path(name, direction), max(fresh) if fresh else None))
+            if indexable(data, direction):
+                out.append((catalog_path(name, direction), page_lastmod(data, direction, trainer_stamps, arena_stamps)))
     return out
 
 
@@ -575,12 +636,10 @@ def catalog_description(data: Mapping[str, Any], direction: Direction) -> str:
 
 
 def _direction_price_clause(data: Mapping[str, Any], direction: Direction) -> str:
-    """«, от 25 BYN за занятие» — только если у направления есть цена."""
-    prices = [p for p in (direction_min_price(t, direction) for t in listed_trainers(data, direction)) if p]
-    if not prices:
-        return ""
-    amount = format_price_minor(*min(prices))
-    return f", от {amount} за занятие" if amount else ""
+    """«, от 25 BYN в группе» — как на карточке; только если у направления есть цена."""
+    offer = best_offer(listed_trainers(data, direction), direction)
+    phrase = offer_phrase(offer) if offer else ""
+    return f", {phrase}" if phrase else ""
 
 
 def catalog_title(h1: str, in_city: str) -> str:
@@ -657,30 +716,25 @@ def _arenas_check(arenas: Sequence[Mapping[str, Any]]) -> str:
     return "Каток: " + ", ".join(names)
 
 
-def _min_price_basis(t: Mapping[str, Any], cents: int) -> str:
+def _min_price_basis(t: Mapping[str, Any], direction: Direction) -> str:
     """Пометка к «от», если минимум дают не обычные занятия: иначе «от 30» спорит с 45/50 на странице."""
-    from src.application.trainer_min_price import service_price_from
+    from src.application.trainer_min_price import BASIS_LABEL
 
-    svcs = [s for rows in t["services_by_dir"].values() for s in rows]
-    singles = [p for p in (service_price_from(s) for s in svcs) if p is not None]
-    if singles and min(singles) <= cents:
-        return ""
-    if any(int(s.get("group_price_cents") or 0) == cents for s in svcs):
-        return "в группе"
-    return "по абонементу"
+    found = direction_min_offer(t, direction)
+    return BASIS_LABEL.get(found[2], "") if found else ""
 
 
 def _price_html(t: Mapping[str, Any], direction: Direction) -> str:
     if direction is ALL:
         label = "Занятие"
         found = direction_min_price(t, ALL)
-        basis = _min_price_basis(t, found[0]) if found else ""
+        basis = _min_price_basis(t, direction) if found else ""
         note = f" <small>{esc(basis)}</small>" if basis else ""
         val = f'<div class="tc-val">от {esc(_money(*found))}{note}</div>' if found else ""
     else:
         label = "Занятие · " + direction.short
         found = direction_min_price(t, direction)
-        basis = _min_price_basis(t, found[0]) if found else ""
+        basis = _min_price_basis(t, direction) if found else ""
         note = f" <small>{esc(basis)}</small>" if basis else ""
         head_val = f'<div class="tc-val">от {esc(_money(*found))}{note}</div>' if found else ""
         tiers = price_tiers(t["services_by_dir"].get(direction.key, []))
@@ -888,6 +942,8 @@ def render_catalog_page(
     if arena_id is not None and arena_id not in arenas:
         arena_id = None
     everyone = listed_trainers(data, ALL)
+    if everyone:
+        warn_if_no_locative(city_name, where="catalog page")
     one = len(everyone) == 1
     pool = listed_trainers(data, direction)
     shown = listed_trainers(data, direction, arena_id)
@@ -897,13 +953,14 @@ def render_catalog_page(
 
     public_city = format_public_name(city_name)
     h1 = "Тренер по катанию на коньках" if one and direction is ALL else direction.h1
-    prices = [p for p in (direction_min_price(t, direction) for t in shown) if p]
+    low = best_offer(shown, direction)
     facts: list[str] = []
     if shown:
         facts = [f"<span><b>{esc(_n_trainers(len(shown)))}</b></span>"]
-        if prices:
-            low = min(prices)
-            facts.append(f"<span>от <b>{esc(_money(*low))}</b> за занятие</span>")
+        if low:
+            from src.application.trainer_min_price import BASIS_PHRASE
+
+            facts.append(f"<span>от <b>{esc(_money(low[0], low[1]))}</b> {esc(BASIS_PHRASE[low[2]])}</span>")
         facts.append("<span>оплата на месте</span>")
     crumbs_html = (
         '<nav class="tcat-crumbs" aria-label="Навигация">'

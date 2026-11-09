@@ -334,13 +334,19 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert len(hcards) == 1 and "50 BYN <small>ребёнок</small>" in hcards[0]
     assert "Хоккейное катание" in hock.text and "Мне 35" not in hock.text
     # «от» вкладки и «Все» — с абонементом на занятие, дробь как есть.
-    assert "от <b>41,87 BYN</b> за занятие" in hock.text and "от <b>41,87 BYN</b> за занятие" in all_r.text
+    assert "от <b>41,87\u00a0BYN</b> по абонементу" in hock.text and "от <b>41,87\u00a0BYN</b> по абонементу" in all_r.text
+    hock_meta = re.search(r'name="description" content="([^"]*)"', hock.text).group(1)
+    assert "от 41,87\u00a0BYN по абонементу" in hock_meta or "от 41,87 BYN по абонементу" in hock_meta
+    assert "за занятие" not in hock_meta
     # Пустое направление — своего состава нет, в индексе ему нечего делать. Canonical — свой адрес.
     assert 'content="noindex, follow"' in fig.text and not _cards(fig.text)
     assert f'rel="canonical" href="https://glide.example{base}/figurnoe"' in fig.text
-    # «С нуля» совпадает со «Всеми» по людям, но запрос свой — страница в индексе, canonical на себя.
-    assert 'content="index, follow"' in zero.text
+    # «С нуля» совпадает со «Всеми» по людям (двое) — копия «Всех»: noindex, follow, canonical на себя.
+    assert 'content="noindex, follow"' in zero.text
     assert f'rel="canonical" href="https://glide.example{base}/s-nulya"' in zero.text
+    # «С клюшкой» — один тренер из двух: свой состав, в индексе.
+    assert 'content="index, follow"' in hock.text
+    assert f'rel="canonical" href="https://glide.example{base}/s-klyushkoy"' in hock.text
     assert 'content="index, follow"' in all_r.text
     assert f'rel="canonical" href="https://glide.example{base}"' in all_r.text
     # В JSON-LD — канонические адреса тренеров, без ?via=.
@@ -392,13 +398,80 @@ async def test_sitemap_lists_only_directions_with_trainers(app_use_test_db, db_s
         all_html = (await client.get(f"/c/{c['slug']}/trenery")).text
     base = f"https://glide.example/c/{c['slug']}/trenery"
     assert f"<loc>{base}</loc>" in xml
-    assert f"<loc>{base}/s-nulya</loc>" in xml
+    # «С нуля» — те же двое, что во «Всех»: вне sitemap. «Уже катаюсь» и «С клюшкой» — свой состав.
+    assert f"<loc>{base}/s-nulya</loc>" not in xml
     assert f"<loc>{base}/uzhe-katayus</loc>" in xml
     assert f"<loc>{base}/s-klyushkoy</loc>" in xml
     assert f"<loc>{base}/figurnoe</loc>" not in xml
     assert re.search(rf"<loc>{re.escape(base)}</loc><lastmod>\d{{4}}-\d{{2}}-\d{{2}}T", xml)
     assert re.search(r"<loc>https://glide\.example/t/[^<]+</loc><lastmod>\d{4}-\d{2}-\d{2}T", xml)
     assert 'content="index, follow"' in all_html
+
+
+def _lastmod(xml: str, loc: str) -> str | None:
+    m = re.search(rf"<loc>{re.escape(loc)}</loc><lastmod>([^<]+)</lastmod>", xml)
+    return m.group(1) if m else None
+
+
+@pytest.mark.asyncio
+async def test_sitemap_lastmod_is_the_freshest_change_of_the_page_trainers(app_use_test_db, db_session) -> None:
+    """Профиль, услуги, цены и катки тренеров страницы двигают lastmod каталога и направления — каждой своей."""
+    from datetime import datetime, timezone
+
+    async with _client() as client:
+        c = await _city(db_session, client)
+        base = f"https://glide.example/c/{c['slug']}/trenery"
+        ids = c["ids"]
+        old = "2026-01-01T00:00:00Z"
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        async def freeze() -> None:
+            # Прямая правка профиля триггеров не запускает: возвращаем «старую» метку.
+            await db_session.execute(
+                text("UPDATE trainer_profiles SET updated_at = :t WHERE trainer_id = ANY(:ids)"),
+                {"t": datetime(2026, 1, 1, tzinfo=timezone.utc), "ids": list(ids.values())},
+            )
+            await db_session.execute(
+                text("UPDATE arena_profiles SET updated_at = :t WHERE arena_id = ANY(:a)"),
+                {"t": datetime(2026, 1, 1, tzinfo=timezone.utc), "a": [c["arena_id"], c["other_arena"]]},
+            )
+            await db_session.commit()
+
+        async def lastmods() -> dict[str, str | None]:
+            xml = (await client.get("/sitemap.xml")).text
+            return {k: _lastmod(xml, f"{base}{k}") for k in ("", "/uzhe-katayus", "/s-klyushkoy")}
+
+        await freeze()
+        assert await lastmods() == {"": old, "/uzhe-katayus": old, "/s-klyushkoy": old}
+
+        # Цена у тренера A (с нуля + хоккей): «Все» и «С клюшкой» свежее, «Уже катаюсь» (только B) — нет.
+        await db_session.execute(
+            text("UPDATE trainer_service_price_variants SET price_cents = price_cents + 100 WHERE trainer_id = :t"),
+            {"t": ids["A"]},
+        )
+        await db_session.commit()
+        got = await lastmods()
+        assert got[""].startswith(today) and got["/s-klyushkoy"].startswith(today) and got["/uzhe-katayus"] == old
+
+        # Цена услуги «Уже катаюсь» у тренера B: свежее «Уже катаюсь» и «Все», «С клюшкой» (A) — нет.
+        await freeze()
+        await db_session.execute(
+            text("UPDATE trainer_services SET price_cents = 3000 WHERE trainer_id = :t AND service_id = 2"),
+            {"t": ids["B"]},
+        )
+        await db_session.commit()
+        got = await lastmods()
+        assert got["/uzhe-katayus"].startswith(today) and got[""].startswith(today) and got["/s-klyushkoy"] == old
+
+        # Каток B (второй): его карточка правилась в июне — «Все» и «Уже катаюсь» берут июнь, «С клюшкой» (A) — нет.
+        await freeze()
+        await db_session.execute(
+            text("UPDATE arena_profiles SET updated_at = :t WHERE arena_id = :a"),
+            {"t": datetime(2026, 6, 1, tzinfo=timezone.utc), "a": c["other_arena"]},
+        )
+        await db_session.commit()
+        got = await lastmods()
+        assert got[""] == "2026-06-01T00:00:00Z" and got["/s-klyushkoy"] == old
 
 
 @pytest.mark.asyncio

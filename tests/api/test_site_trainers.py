@@ -63,6 +63,30 @@ def test_min_session_price_takes_tariffs_group_and_pass() -> None:
     assert trainer_min_session_price({"services": [{"price_cents": 150000, "currency_code": "RUB"}]}) == (150000, "RUB")
 
 
+def test_min_session_offer_says_what_the_minimum_is() -> None:
+    from src.application.trainer_min_price import (
+        BASIS_GROUP,
+        BASIS_PASS,
+        BASIS_SINGLE,
+        trainer_min_session_offer,
+    )
+
+    svc = {"service_id": 1, "currency_code": "BYN", "price_cents": 5000, "group_price_cents": 2500}
+    assert trainer_min_session_offer({"services": [svc]}) == (2500, "BYN", BASIS_GROUP)
+    every = {"per_session_cents": 4000, "service_ids": None}
+    assert trainer_min_session_offer({"services": [{**svc, "group_price_cents": None}], "passes": [every]}) == (
+        4000,
+        "BYN",
+        BASIS_PASS,
+    )
+    # Равная цена — обычное занятие честнее группового, групповое — абонемента.
+    assert trainer_min_session_offer({"services": [{**svc, "group_price_cents": 5000}]}) == (5000, "BYN", BASIS_SINGLE)
+    assert trainer_min_session_offer(
+        {"services": [{**svc, "price_cents": 6000}], "passes": [{"per_session_cents": 2500, "service_ids": None}]}
+    ) == (2500, "BYN", BASIS_GROUP)
+    assert trainer_min_session_offer({"services": [], "passes": [every]}) is None
+
+
 def test_trainer_line_shows_cheapest_session() -> None:
     trainer = {
         "services": [{"service_name": "Обучение катанию «с нуля»", "price_cents": 5500}],

@@ -19,7 +19,10 @@ def _trainer(tid: int, keys: list[str]) -> dict:
     return {
         "id": tid,
         "order": tid,
-        "arenas": [{"id": 1}],
+        "name": f"Тренер {tid}",
+        "initial": "Т",
+        "path": f"/t/{tid}-trener",
+        "arenas": [{"id": 1, "name": "Каток"}],
         "services_by_dir": {key: [{"price_cents": 1000}] for key in keys},
         "passes": [],
         "windows": [],
@@ -27,7 +30,8 @@ def _trainer(tid: int, keys: list[str]) -> dict:
 
 
 def _data(city: str, trainers: list[dict]) -> dict:
-    return {"city": {"id": 1, "name": city}, "trainers": trainers, "arenas": {}}
+    arena = {"id": 1, "name": "Каток", "city_name": city, "slug": None, "rental_minor": None}
+    return {"city": {"id": 1, "name": city}, "trainers": trainers, "arenas": {1: arena}}
 
 
 def test_one_trainer_teaches_in_the_singular() -> None:
@@ -63,13 +67,47 @@ def test_spb_catalog_uses_the_public_locative() -> None:
     assert "Санкт-Петербург/ЛО" not in text
 
 
-def test_direction_page_with_the_same_trainers_stays_in_the_index() -> None:
+def test_direction_page_with_the_same_trainers_goes_to_noindex() -> None:
+    """Состав направления совпал со «Всеми» и тренеров меньше трёх — копия «Всех»: не в индекс."""
     data = _data("Минск", [_trainer(1, ["zero"]), _trainer(2, ["zero"])])
     zero = direction_by_slug("s-nulya")
     assert zero is not None
     assert indexable(data, ALL)
-    assert indexable(data, zero)
+    assert not indexable(data, zero)
     assert not indexable(data, direction_by_slug("figurnoe"))
+    assert "/c/minsk/trenery/s-nulya" not in sitemap_paths(data)
+    assert "/c/minsk/trenery" in sitemap_paths(data)
+
+    html = render_catalog_page(data, zero, base_url="https://glideclub.by")
+    assert '<meta name="robots" content="noindex, follow"' in html
+    assert '<link rel="canonical" href="https://glideclub.by/c/minsk/trenery/s-nulya"' in html
+    # «Все» с теми же двумя тренерами остаётся в индексе.
+    all_html = render_catalog_page(data, ALL, base_url="https://glideclub.by")
+    assert '<meta name="robots" content="index, follow"' in all_html
+
+
+def test_direction_with_its_own_roster_or_three_trainers_stays_in_the_index() -> None:
+    zero = direction_by_slug("s-nulya")
+    hock = direction_by_slug("s-klyushkoy")
+    # Другой состав: «С нуля» — двое из трёх, «С клюшкой» — один.
+    mixed = _data("Минск", [_trainer(1, ["zero"]), _trainer(2, ["zero"]), _trainer(3, ["hock"])])
+    assert indexable(mixed, zero) and indexable(mixed, hock)
+    paths = sitemap_paths(mixed)
+    assert "/c/minsk/trenery/s-nulya" in paths and "/c/minsk/trenery/s-klyushkoy" in paths
+    html = render_catalog_page(mixed, zero, base_url="https://glideclub.by")
+    assert '<meta name="robots" content="index, follow"' in html
+    # Тот же состав, что во «Всех», но тренеров трое — в индексе.
+    three = _data("Минск", [_trainer(i, ["zero"]) for i in (1, 2, 3)])
+    assert indexable(three, zero)
+    assert "/c/minsk/trenery/s-nulya" in sitemap_paths(three)
+    # Двое — нет, один — нет.
+    assert not indexable(_data("Минск", [_trainer(i, ["zero"]) for i in (1, 2)]), zero)
+    assert not indexable(_data("Минск", [_trainer(1, ["zero"])]), zero)
+
+
+def test_direction_description_for_two_trainers_keeps_the_snippet_wording() -> None:
+    data = _data("Минск", [_trainer(1, ["zero"]), _trainer(2, ["zero"])])
+    zero = direction_by_slug("s-nulya")
     assert catalog_description(data, zero) == (
         "Научиться кататься на коньках с нуля в Минске. 2 тренера учат, от 10 BYN за занятие. Запись в Telegram."
     )
@@ -141,3 +179,121 @@ def test_breadcrumb_and_jsonld_use_the_public_city_name() -> None:
     assert "Санкт-Петербург/ЛО" not in html
     assert ">Санкт-Петербург<" in html
     assert '"name": "Санкт-Петербург"' in html
+
+
+def _offer_trainer(tid: int, *, price=None, group=None, per_session=None) -> dict:
+    svc: dict = {"service_id": 1, "currency_code": "BYN"}
+    if price:
+        svc["price_cents"] = price
+    if group:
+        svc["group_price_cents"] = group
+    passes = [{"per_session_cents": per_session, "service_ids": None}] if per_session else []
+    return {
+        "id": tid,
+        "order": tid,
+        "name": f"Тренер {tid}",
+        "initial": "Т",
+        "path": f"/t/{tid}-trener",
+        "arenas": [{"id": 1, "name": "Каток"}],
+        "services_by_dir": {"zero": [svc]},
+        "passes": passes,
+        "windows": [],
+    }
+
+
+def test_direction_snippet_says_group_when_the_minimum_is_a_group_price() -> None:
+    zero = direction_by_slug("s-nulya")
+    data = _data("Минск", [_offer_trainer(1, price=5000, group=2500)])
+    text = catalog_description(data, zero)
+    assert "от 25 BYN в группе" in text
+    assert "за занятие" not in text
+
+
+def test_direction_snippet_says_pass_when_the_minimum_is_a_pass_session() -> None:
+    zero = direction_by_slug("s-nulya")
+    data = _data("Минск", [_offer_trainer(1, price=5000, per_session=4000)])
+    text = catalog_description(data, zero)
+    assert "от 40 BYN по абонементу" in text
+    assert "за занятие" not in text
+
+
+def test_direction_snippet_keeps_the_single_session_when_it_is_the_cheapest() -> None:
+    zero = direction_by_slug("s-nulya")
+    # Групповая и абонемент дороже обычного занятия: «от 30 BYN за занятие».
+    data = _data("Минск", [_offer_trainer(1, price=3000, group=3500, per_session=4000)])
+    assert "от 30 BYN за занятие" in catalog_description(data, zero)
+    # Цена одна и та же в группе и у обычного занятия — честнее обычное.
+    tie = _data("Минск", [_offer_trainer(1, price=3000, group=3000)])
+    assert "от 30 BYN за занятие" in catalog_description(tie, zero)
+
+
+def test_direction_snippet_takes_the_basis_of_the_cheapest_trainer() -> None:
+    zero = direction_by_slug("s-nulya")
+    data = _data("Минск", [_offer_trainer(1, price=3000), _offer_trainer(2, price=5000, group=2500)])
+    assert "от 25 BYN в группе" in catalog_description(data, zero)
+
+
+def test_card_and_hero_say_the_same_as_the_snippet() -> None:
+    zero = direction_by_slug("s-nulya")
+    data = _data("Минск", [_offer_trainer(1, price=5000, group=2500)])
+    html = render_catalog_page(data, zero, base_url="https://glideclub.by")
+    assert "от <b>25\u00a0BYN</b> в группе" in html
+    assert "<small>в группе</small>" in html
+
+
+def test_lastmod_is_the_freshest_of_profile_and_rinks_of_the_page_trainers() -> None:
+    from datetime import datetime, timezone
+
+    from src.application.site_trainer_catalog import page_lastmod
+
+    def at(day: int) -> datetime:
+        return datetime(2026, 11, day, tzinfo=timezone.utc)
+
+    t1 = {**_trainer(1, ["zero"]), "arenas": [{"id": 10}]}
+    t2 = {**_trainer(2, ["hock"]), "arenas": [{"id": 20}]}
+    t3 = {**_trainer(3, ["zero", "hock"]), "arenas": [{"id": 10}]}
+    data = _data("Минск", [t1, t2, t3])
+    trainer_stamps = {1: at(2), 2: at(9), 3: at(3)}
+    arena_stamps = {10: at(5), 20: at(1)}
+    # «Все» — самая свежая дата всех: профиль тренера 2.
+    assert page_lastmod(data, ALL, trainer_stamps, arena_stamps) == at(9)
+    # «С нуля» — тренеры 1 и 3 и каток 10: каток свежее обоих профилей.
+    assert page_lastmod(data, direction_by_slug("s-nulya"), trainer_stamps, arena_stamps) == at(5)
+    # «С клюшкой» — тренеры 2 и 3.
+    assert page_lastmod(data, direction_by_slug("s-klyushkoy"), trainer_stamps, arena_stamps) == at(9)
+    # Каток другого тренера в свежесть направления не входит.
+    assert page_lastmod(data, direction_by_slug("s-nulya"), {1: at(2), 3: at(3)}, {20: at(30)}) == at(3)
+    assert page_lastmod(data, ALL, {}, {}) is None
+
+
+def test_missing_locative_logs_a_warning_once(caplog) -> None:
+    import logging
+
+    from src.shared import city_locative as cl
+
+    cl._WARNED.discard("Заславль")
+    with caplog.at_level(logging.WARNING, logger="src.shared.city_locative"):
+        cl.warn_if_no_locative("Заславль", where="test")
+        cl.warn_if_no_locative("Заславль", where="test")
+        cl.warn_if_no_locative("Минск", where="test")
+        cl.warn_if_no_locative("Санкт-Петербург/ЛО", where="test")
+    messages = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(messages) == 1
+    assert "Заславль" in messages[0] and "no prepositional case" in messages[0]
+
+
+def test_catalog_page_of_a_city_without_locative_warns(caplog) -> None:
+    import logging
+
+    from src.shared import city_locative as cl
+
+    cl._WARNED.discard("Заславль")
+    data = _data("Заславль", [_trainer(1, ["zero"])])
+    with caplog.at_level(logging.WARNING, logger="src.shared.city_locative"):
+        render_catalog_page(data, ALL, base_url="https://glideclub.by")
+    assert any("Заславль" in r.getMessage() for r in caplog.records)
+    cl._WARNED.discard("Заславль")
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="src.shared.city_locative"):
+        render_catalog_page(_data("Заславль", []), ALL, base_url="https://glideclub.by")
+    assert not caplog.records

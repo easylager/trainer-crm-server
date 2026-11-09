@@ -49,7 +49,7 @@ from src.application.site_trainers import trainer_initial, trainer_line, trainer
 from src.application.style_b import esc
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL, trainer_is_listed
 from src.shared.ru_text import trainer_rating_caption, trainer_rating_parts, trainer_rating_score, trainer_rating_summary
-from src.shared.city_locative import city_locative
+from src.shared.city_locative import city_locative, warn_if_no_locative
 from src.shared.html_template import fill_placeholders
 from src.shared.public_display import format_public_name
 
@@ -506,7 +506,7 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
     from src.application.arena_public_use_cases import _trainer_windows_on_arena
     from src.application.style_b import b_photo_url, media_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
-    from src.application.trainer_min_price import enrich_min_session_price
+    from src.application.trainer_min_price import enrich_min_session_price, trainer_min_session_offer
     from src.application.trainer_use_cases import get_trainer
     from src.shared.notification_hours import NOTIFICATION_TZ
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
@@ -519,7 +519,7 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         await session.execute(text("SELECT telegram_username FROM trainers WHERE id = :id"), {"id": int(trainer_id)})
     ).scalar()
     body = sanitize_trainer_for_public_catalog(raw)
-    await enrich_min_session_price(session, [body])
+    offers = await enrich_min_session_price(session, [body])
     services = [dict(s) for s in body.get("services") or []]
     await load_service_directions(session, services)
     directions, other = group_services(services)
@@ -555,11 +555,16 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         a["rental_minor"] = rentals.get(a["id"])
         a["peers"] = peer_counts.get(a["id"], 0)
     city = await _catalog_city(session, int(trainer_id), profile.get("city_id"))
+    if city and listed:
+        warn_if_no_locative(str(city["name"]), where="trainer page")
     primary = direction_by_key(directions[0]["key"]) if directions else None
     peers = await _peers(session, int(trainer_id), city["id"], primary) if city and primary and listed else []
     photos = body.get("photos") or []
     big_photo = b_photo_url((photos[0] or {}).get("file_key")) if photos else None
     first_name = str(profile.get("first_name") or "").strip()
+    min_offer = trainer_min_session_offer(
+        {"services": body.get("services") or [], "passes": offers.get(int(trainer_id), [])}
+    )
     from src.shared.phone_guard import sanitize_public_phone
 
     return {
@@ -574,6 +579,7 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
             if body.get("min_session_price_cents")
             else None
         ),
+        "min_price_basis": min_offer[2] if min_offer else None,
         "listed": listed,
         "can_book": can_book,
         "contact_url": contact_url(int(trainer_id), username, listed=listed),
@@ -784,15 +790,15 @@ def primary_cta(
 # ── SEO ──────────────────────────────────────────────────────────────
 
 
-def trainer_place_phrase(city_name: str) -> str:
-    """«тренер по катанию на коньках в Минске».
+def trainer_place_phrase(city_name: str, topic: str = "") -> str:
+    """«тренер по катанию на коньках в Минске»; с ``topic`` — «тренер по фигурному катанию в Минске».
 
     Город — публичное имя в предложном: «Санкт-Петербург/ЛО» → «в Санкт-Петербурге».
     """
     raw = str(city_name or "").strip()
     public = format_public_name(raw)
     loc = city_locative(public) or city_locative(raw)
-    core = "тренер по катанию на коньках"
+    core = f"тренер по {topic}" if topic else "тренер по катанию на коньках"
     if loc:
         return f"{core} в {loc}"
     return core
@@ -803,9 +809,21 @@ def page_heading(page: Mapping[str, Any]) -> str:
     return f"{page['name']} — {trainer_place_phrase(str(page.get('city_name') or ''))}"
 
 
+def _single_topic(page: Mapping[str, Any]) -> str:
+    """«фигурному катанию», если у тренера одно направление и у него есть свой предмет; иначе пусто."""
+    keys = {str(d.get("key")) for d in page.get("directions") or []}
+    if len(keys) != 1:
+        return ""
+    return next((d.topic for d in DIRECTIONS if d.key in keys), "")
+
+
 def page_title(page: Mapping[str, Any]) -> str:
-    """К title добавляется « · Glideclub», только если вся строка помещается в 60 знаков."""
-    base = page_heading(page)
+    """«Имя — тренер по фигурному катанию в Минске» с одним направлением, общая фраза — с несколькими.
+
+    К title добавляется « · Glideclub», только если вся строка помещается в 60 знаков.
+    """
+    place = trainer_place_phrase(str(page.get("city_name") or ""), _single_topic(page))
+    base = f"{page['name']} — {place}"
     branded = f"{base} · Glideclub"
     return branded if len(branded) <= TITLE_LIMIT else base
 
@@ -836,11 +854,14 @@ def _ice_arena_names(page: Mapping[str, Any]) -> list[str]:
 
 
 def _price_from(page: Mapping[str, Any]) -> str:
+    """«От 25 BYN в группе» / «От 40 BYN по абонементу» / «От 50 BYN за занятие» — как на карточке каталога."""
+    from src.application.site_trainer_catalog import offer_phrase
+    from src.application.trainer_min_price import BASIS_SINGLE
+
     price = page.get("min_price")
     if not price or not price[0]:
         return ""
-    amount = format_price_minor(int(price[0]), str(price[1]))
-    return f"От {amount} за занятие" if amount else ""
+    return offer_phrase((int(price[0]), str(price[1]), str(page.get("min_price_basis") or BASIS_SINGLE)), capital=True)
 
 
 def page_description(page: Mapping[str, Any]) -> str:

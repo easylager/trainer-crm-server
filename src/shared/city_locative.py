@@ -7,6 +7,10 @@
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 _LOCATIVE: dict[str, str] = {
     "Барановичи": "Барановичах",
     "Берёза": "Берёзе",
@@ -54,3 +58,28 @@ def city_locative(name: str) -> str | None:
         if known.replace("ё", "е").casefold() == folded:
             return value
     return None
+
+
+_WARNED: set[str] = set()
+
+
+def warn_if_no_locative(city_name: str, *, where: str) -> None:
+    """Предупреждение в лог: у города с опубликованным тренером нет предложного падежа.
+
+    Без него заголовок и сниппет честно обходятся без «в Минске», но выдача теряет запрос с городом —
+    такой город надо добавить в таблицу выше. Один раз на город за процесс, чтобы не засорять лог.
+    """
+    from src.shared.public_display import format_public_name
+
+    raw = (city_name or "").strip()
+    if not raw or raw in _WARNED:
+        return
+    if city_locative(raw) or city_locative(format_public_name(raw)):
+        return
+    _WARNED.add(raw)
+    logger.warning(
+        "city_locative: no prepositional case for city %r with a published trainer (%s); "
+        "titles and snippets fall back to the bare phrase — add it to src/shared/city_locative.py",
+        raw,
+        where,
+    )

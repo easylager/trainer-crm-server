@@ -749,3 +749,48 @@ async def test_save_heart_leads_to_telegram_and_is_absent_on_trainers_own_link(a
     m = re.search(r'<a class="tp-save" href="([^"]+)"', html)
     assert m and f"startapp=trainer_{tid}_i_save" in m.group(1).replace("&amp;", "&")
     assert 'class="tp-save"' not in own and "_i_request" not in own
+
+
+@pytest.mark.asyncio
+async def test_page_title_names_the_only_direction_and_snippet_price_matches_the_card(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    from src.shared import city_locative
+    from tests.api.test_site_trainer_catalog import _set_services
+
+    def meta(html: str) -> tuple[str, str]:
+        title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)
+        description = re.search(r'name="description" content="([^"]*)"', html).group(1)
+        return title.replace("\xa0", " "), description.replace("\xa0", " ")
+
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=None)
+        monkeypatch.setitem(city_locative._LOCATIVE, place["city_name"], "Плейсске")
+        path = trainer_path(tid, name)
+        # Одно направление (фигурное): групповая 25 дешевле тарифа 50 и абонемента 41,87.
+        await _set_services(db_session, tid, {3: [("adult", 5000)]})
+        await db_session.execute(
+            text("UPDATE trainer_services SET group_price_cents = 2500 WHERE trainer_id = :t"), {"t": tid}
+        )
+        await db_session.commit()
+        title, description = meta((await client.get(path)).text)
+        assert title.startswith(f"{name} — тренер по фигурному катанию в Плейсске")
+        assert "От 25 BYN в группе, запись в Telegram." in description and "за занятие" not in description
+
+        # Групповой нет — минимум даёт абонемент 670/16.
+        await db_session.execute(text("UPDATE trainer_services SET group_price_cents = NULL WHERE trainer_id = :t"), {"t": tid})
+        await db_session.commit()
+        description = meta((await client.get(path)).text)[1]
+        assert "От 41,87 BYN по абонементу, запись в Telegram." in description and "за занятие" not in description
+
+        # Абонемента нет — обычное занятие.
+        await db_session.execute(text("DELETE FROM trainer_pass_products WHERE trainer_id = :t"), {"t": tid})
+        await db_session.commit()
+        description = meta((await client.get(path)).text)[1]
+        assert "От 50 BYN за занятие, запись в Telegram." in description
+
+        # Два направления — общий шаблон.
+        await _set_services(db_session, tid, {3: [("adult", 5000)], 4: [("adult", 5500)]})
+        await db_session.commit()
+        title = meta((await client.get(path)).text)[0]
+        assert title.startswith(f"{name} — тренер по катанию на коньках в Плейсске")
