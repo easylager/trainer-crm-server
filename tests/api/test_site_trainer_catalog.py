@@ -73,7 +73,11 @@ def test_catalog_links_carry_site_catalog_source() -> None:
 
 def test_price_tiers_by_tariffs() -> None:
     def svc(*tiers, cents=None):
-        return {"currency_code": "BYN", "price_cents": cents, "price_tiers": [{"tier_kind": k, "price_cents": c} for k, c in tiers]}
+        return {
+            "currency_code": "BYN",
+            "price_cents": cents,
+            "price_tiers": [{"tier_kind": k, "price_cents": c} for k, c in tiers],
+        }
 
     nb = " "
     assert price_tiers([svc(("child", 4500), ("adult", 5000), ("adult_and_child", 6500))]) == [
@@ -96,9 +100,16 @@ def test_direction_min_price_takes_group_and_covering_passes() -> None:
             "price_tiers": [{"tier_kind": k, "price_cents": c} for k, c in tiers],
         }
 
-    zero, hock, better = direction_by_slug("s-nulya"), direction_by_slug("s-klyushkoy"), direction_by_slug("uzhe-katayus")
+    zero, hock, better = (
+        direction_by_slug("s-nulya"),
+        direction_by_slug("s-klyushkoy"),
+        direction_by_slug("uzhe-katayus"),
+    )
     t = {
-        "services_by_dir": {"zero": [svc(1, ("child", 4500), ("adult", 5000), group=2500)], "hock": [svc(4, ("adult", 5500))]},
+        "services_by_dir": {
+            "zero": [svc(1, ("child", 4500), ("adult", 5000), group=2500)],
+            "hock": [svc(4, ("adult", 5500))],
+        },
         "passes": [{"per_session_cents": 4187, "service_ids": (4,)}],
     }
     # Групповая 25 у «С нуля»; абонемент только на «Хоккейное» — у «С клюшкой», не у «С нуля».
@@ -109,7 +120,10 @@ def test_direction_min_price_takes_group_and_covering_passes() -> None:
     assert direction_min_price(only_hockey_pass, zero) == (5000, "BYN")
     assert direction_min_price(only_hockey_pass, ALL) == (4187, "BYN")
     # Абонемент без услуг — на все услуги тренера.
-    every = {"services_by_dir": {"zero": [svc(1, ("adult", 5000))]}, "passes": [{"per_session_cents": 4187, "service_ids": None}]}
+    every = {
+        "services_by_dir": {"zero": [svc(1, ("adult", 5000))]},
+        "passes": [{"per_session_cents": 4187, "service_ids": None}],
+    }
     assert direction_min_price(every, zero) == (4187, "BYN")
     # Ключи — как у вкладок Mini App.
     assert min_price_by_direction(t) == {
@@ -133,7 +147,10 @@ def test_all_tab_price_says_when_minimum_is_group_or_pass() -> None:
 
     group = {"services_by_dir": {"zero": [svc(("child", 4500), ("adult", 5000), group=3000)]}, "passes": []}
     assert "от 30\xa0BYN <small>в группе</small>" in _price_html(group, ALL)
-    by_pass = {"services_by_dir": {"zero": [svc(("adult", 5000))]}, "passes": [{"per_session_cents": 4000, "service_ids": None}]}
+    by_pass = {
+        "services_by_dir": {"zero": [svc(("adult", 5000))]},
+        "passes": [{"per_session_cents": 4000, "service_ids": None}],
+    }
     assert "от 40\xa0BYN <small>по абонементу</small>" in _price_html(by_pass, ALL)
     single = {"services_by_dir": {"zero": [svc(("child", 4500), ("adult", 5000), group=6000)]}, "passes": []}
     html = _price_html(single, ALL)
@@ -204,11 +221,15 @@ async def _city(db_session, client) -> dict:
         {"t": ids["B"], "a": other_arena},
     )
     await db_session.execute(
-        text("UPDATE trainer_profiles SET rating_avg = 5.0, rating_count = 2, experience_years = 6 WHERE trainer_id = :t"),
+        text(
+            "UPDATE trainer_profiles SET rating_avg = 5.0, rating_count = 2, experience_years = 6 WHERE trainer_id = :t"
+        ),
         {"t": ids["A"]},
     )
     await db_session.execute(
-        text("UPDATE trainer_profiles SET rating_avg = 4.7, rating_count = 3, education = 'Высшее профильное' WHERE trainer_id = :t"),
+        text(
+            "UPDATE trainer_profiles SET rating_avg = 4.7, rating_count = 3, education = 'Высшее профильное' WHERE trainer_id = :t"
+        ),
         {"t": ids["B"]},
     )
     await _ensure_trainer_subscription_tier(db_session, ids["A"], SUBSCRIPTION_TIER_ONLINE)
@@ -247,16 +268,21 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert _tab(html, "С клюшкой") == "1" and _tab(html, "Фигурное") is None
     assert f'href="{base}/s-klyushkoy"' in html
     assert "Научиться кататься на коньках с нуля" in html and "Мне 35 — не поздно начинать?" in html
-    # Лид «Все» не обещает «ставят ход»; оплата на месте остаётся в шаге записи и в meta description.
+    # Лид на странице остаётся общим. В сниппете — только направления, которые реально есть.
     assert "Учат кататься с нуля и ставят технику. Есть фигурное катание и хоккей." in all_r.text
-    assert 'name="description" content="Учат кататься с нуля и ставят технику.' in all_r.text
+    meta = re.search(r'name="description" content="([^"]*)"', all_r.text).group(1)
+    assert "учат" in meta and "с нуля" in meta and "хоккейное катание" in meta
+    assert "фигурное" not in meta and "…" not in meta and meta.endswith("Запись в Telegram.")
     assert "Оплата тренеру на месте." not in re.search(r'<p class="tcat-lead">(.*?)</p>', all_r.text).group(1)
     # Сверху — с онлайн-записью: A первая; окно — ссылка в запись Mini App через учётный прокси.
     cards = _cards(html)
     assert names["A"] in cards[0] and names["B"] in cards[1]
     assert f'href="{trainer_path(ids["A"], names["A"])}?via=k' in cards[0]
     # Время — сразу запись на этот слот (TASK-357), источник — «каталог сайта».
-    assert re.search(rf"startapp=trainer_{ids['A']}_s_[1-9][0-9]*_v_k[1-9]", cards[0]) and "surface=trainer_catalog" in cards[0]
+    assert (
+        re.search(rf"startapp=trainer_{ids['A']}_s_[1-9][0-9]*_v_k[1-9]", cards[0])
+        and "surface=trainer_catalog" in cards[0]
+    )
     assert 'class="tc-slot"' in cards[0]
     # Цена — по тарифам направления; без цены — честно.
     assert "45 BYN <small>ребёнок</small>" in cards[0] and "50 BYN <small>взрослый</small>" in cards[0]
@@ -282,11 +308,12 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert "Хоккейное катание" in hock.text and "Мне 35" not in hock.text
     # «от» вкладки и «Все» — с абонементом на занятие, дробь как есть.
     assert "от <b>41,87 BYN</b> за занятие" in hock.text and "от <b>41,87 BYN</b> за занятие" in all_r.text
-    # Пустое направление — страница есть, но не в индексе.
+    # Пустое направление — своего состава нет, в индексе ему нечего делать. Canonical — свой адрес.
     assert 'content="noindex, follow"' in fig.text and not _cards(fig.text)
-    # «С нуля» повторяет «Все» тем же составом: закрыто, canonical ведёт на «Все».
-    assert 'content="noindex, follow"' in zero.text
-    assert f'rel="canonical" href="https://glide.example{base}"' in zero.text
+    assert f'rel="canonical" href="https://glide.example{base}/figurnoe"' in fig.text
+    # «С нуля» совпадает со «Всеми» по людям, но запрос свой — страница в индексе, canonical на себя.
+    assert 'content="index, follow"' in zero.text
+    assert f'rel="canonical" href="https://glide.example{base}/s-nulya"' in zero.text
     assert 'content="index, follow"' in all_r.text
     assert f'rel="canonical" href="https://glide.example{base}"' in all_r.text
     # В JSON-LD — канонические адреса тренеров, без ?via=.
@@ -306,7 +333,7 @@ async def test_arena_filter_canonical_and_empty_state(app_use_test_db, db_sessio
     # Второй каток — только B; canonical без фильтра; вкладки несут фильтр.
     cards = _cards(other.text)
     assert len(cards) == 1 and names["B"] in cards[0]
-    assert f'rel="canonical" href="https://glide.example{base}"' in other.text
+    assert f'rel="canonical" href="https://glide.example{base}/s-nulya"' in other.text
     assert f'href="{base}/uzhe-katayus?arena={c["other_arena"]}"' in other.text
     assert "Где удобно заниматься?" in other.text and 'aria-label="Сбросить каток"' in other.text
     # Пустое состояние фильтра: вкладку сам не переключает, предлагает два выхода.
@@ -338,11 +365,12 @@ async def test_sitemap_lists_only_directions_with_trainers(app_use_test_db, db_s
         all_html = (await client.get(f"/c/{c['slug']}/trenery")).text
     base = f"https://glide.example/c/{c['slug']}/trenery"
     assert f"<loc>{base}</loc>" in xml
-    assert f"<loc>{base}/s-nulya</loc>" not in xml
+    assert f"<loc>{base}/s-nulya</loc>" in xml
     assert f"<loc>{base}/uzhe-katayus</loc>" in xml
     assert f"<loc>{base}/s-klyushkoy</loc>" in xml
     assert f"<loc>{base}/figurnoe</loc>" not in xml
-    # «Все» — главная страница каталога: в индексе всегда; «С нуля» её дубль — только noindex.
+    assert re.search(rf"<loc>{re.escape(base)}</loc><lastmod>\d{{4}}-\d{{2}}-\d{{2}}T", xml)
+    assert re.search(r"<loc>https://glide\.example/t/[^<]+</loc><lastmod>\d{4}-\d{2}-\d{2}T", xml)
     assert 'content="index, follow"' in all_html
 
 
@@ -356,6 +384,7 @@ async def test_city_with_one_trainer_has_no_tabs_or_filter(app_use_test_db, db_s
     assert len(_cards(html)) == 1 and f"{first} Тренерова" in html
     assert "tcat-tabs" not in html and "Где удобно заниматься?" not in html
     assert "Тренер по катанию на коньках" in html
+    assert "1 тренер учит" in html
     assert "Сверху — тренеры" not in html
 
 
@@ -372,7 +401,9 @@ async def _two_city_trainer(db_session, client) -> dict:
     b = await _place(db_session)
     tid = await _trainer_on(db_session, client, a, first_name=f"Двагорода{uuid.uuid4().hex[:4]}")
     await db_session.execute(
-        text("INSERT INTO trainer_arenas (trainer_id, arena_id, is_public) VALUES (:t, :a, true) ON CONFLICT DO NOTHING"),
+        text(
+            "INSERT INTO trainer_arenas (trainer_id, arena_id, is_public) VALUES (:t, :a, true) ON CONFLICT DO NOTHING"
+        ),
         {"t": tid, "a": b["arena_id"]},
     )
     await db_session.execute(
@@ -456,7 +487,9 @@ async def test_city_catalog_hides_window_on_unpublished_primary_arena(app_use_te
         await db_session.execute(
             text("UPDATE trainers SET primary_arena_id = :a WHERE id = :t"), {"a": t["a"]["arena_id"], "t": t["tid"]}
         )
-        await db_session.execute(text("UPDATE arenas SET is_confirmed = false WHERE id = :a"), {"a": t["a"]["arena_id"]})
+        await db_session.execute(
+            text("UPDATE arenas SET is_confirmed = false WHERE id = :a"), {"a": t["a"]["arena_id"]}
+        )
         await _slot(db_session, t["tid"], days=2, hour=13, arena_id=None)
         await db_session.commit()
         html_a = (await client.get(f"/c/{city_slug(t['a']['city_name'])}/trenery")).text
@@ -478,7 +511,9 @@ def test_window_in_city_hides_only_known_other_city() -> None:
 def test_split_service_summary_and_service_title() -> None:
     from src.application.catalog_directions import service_title, split_service_summary
 
-    hook, body = split_service_summary("Если вы почти не стояли на льду.\n\nСпокойный старт: равновесие.\nВторая строка.")
+    hook, body = split_service_summary(
+        "Если вы почти не стояли на льду.\n\nСпокойный старт: равновесие.\nВторая строка."
+    )
     assert hook == "Если вы почти не стояли на льду."
     assert body == "Спокойный старт: равновесие.\nВторая строка."
     assert split_service_summary(None) == ("", "") and split_service_summary("  \n ") == ("", "")
@@ -494,9 +529,20 @@ def test_card_has_save_heart_and_request_when_no_time() -> None:
     from src.application.site_trainer_catalog import _card_html
 
     t = {
-        "id": 9, "name": "Анна Тренерова", "initial": "А", "path": "/t/9-anna", "photo_url": None, "services_by_dir": {},
-        "arenas": [], "about": None, "education": None, "experience_years": None, "windows": [], "can_book": True,
-        "contact_url": "https://t.me/anna", "services": [],
+        "id": 9,
+        "name": "Анна Тренерова",
+        "initial": "А",
+        "path": "/t/9-anna",
+        "photo_url": None,
+        "services_by_dir": {},
+        "arenas": [],
+        "about": None,
+        "education": None,
+        "experience_years": None,
+        "windows": [],
+        "can_book": True,
+        "contact_url": "https://t.me/anna",
+        "services": [],
     }
     html = _card_html(t, ALL, base_url="https://glide.example", city_id=1, arena_id=None)
     assert 'class="tc-save"' in html and "_i_save" in html.replace("&amp;", "&")

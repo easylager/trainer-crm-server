@@ -16,6 +16,7 @@ vertical ice): таблица направлений и их тексты — ``
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -44,6 +45,7 @@ from src.application.ice_city_day import city_slug, format_price_minor, plural_r
 from src.application.style_b import esc
 from src.shared.city_locative import city_locative
 from src.shared.html_template import fill_placeholders, json_for_script
+from src.shared.public_display import format_public_name
 
 CATALOG_SURFACE = "trainer_catalog"
 _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
@@ -55,6 +57,8 @@ CARD_WINDOWS = 3
 ARENAS_SHOWN = 6
 #: Оценку показываем, когда оценок хотя бы столько (решение владельца).
 RATING_MIN_COUNT = 3
+#: Сниппет каталога — тот же потолок, что у страницы тренера.
+DESCRIPTION_LIMIT = 165
 
 
 # ── Запись ───────────────────────────────────────────────────────────
@@ -116,9 +120,9 @@ async def _ice_arenas(
     if not trainer_ids:
         return {}
     rows = (
-        await session.execute(
-            text(
-                f"""
+        (
+            await session.execute(
+                text(f"""
                 SELECT ta.trainer_id, a.id, a.name, c.name AS city_name,
                        CASE WHEN {SITEMAP_PLACE_WHERE_SQL} THEN p.slug END AS slug
                 FROM trainer_arenas ta
@@ -130,11 +134,13 @@ async def _ice_arenas(
                   AND COALESCE(a.venue_type, 'ice') = 'ice'
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
                 ORDER BY ta.trainer_id, a.sort_order NULLS LAST, a.id
-                """
-            ),
-            {"tids": trainer_ids, "city": int(city_id) if city_id is not None else None, **public_scope_params()},
+                """),
+                {"tids": trainer_ids, "city": int(city_id) if city_id is not None else None, **public_scope_params()},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     out: dict[int, list[dict[str, Any]]] = {}
     for r in rows:
         name = str(r["name"] or "").strip()
@@ -150,15 +156,13 @@ async def _rentals(session: AsyncSession, arena_ids: Sequence[int]) -> dict[int,
     if not arena_ids:
         return {}
     rows = await session.execute(
-        text(
-            """
+        text("""
             SELECT arena_id, MIN(price_rental_minor)
             FROM ice_sessions
             WHERE arena_id = ANY(:ids) AND status = 'active' AND price_rental_minor > 0
               AND ends_at_utc > NOW() AND starts_at_utc < NOW() + INTERVAL '14 days'
             GROUP BY arena_id
-            """
-        ),
+            """),
         {"ids": list(arena_ids)},
     )
     return {int(a): int(m) for a, m in rows.fetchall() if m is not None}
@@ -217,9 +221,9 @@ async def _primary_public_arenas(
     if not trainer_ids:
         return {}
     rows = (
-        await session.execute(
-            text(
-                f"""
+        (
+            await session.execute(
+                text(f"""
                 SELECT t.id AS trainer_id, a.id, a.name
                 FROM trainers t
                 JOIN arenas a ON a.id = t.primary_arena_id
@@ -230,14 +234,14 @@ async def _primary_public_arenas(
                   AND NOT EXISTS (SELECT 1 FROM trainer_arenas ta
                                   WHERE ta.trainer_id = t.id AND ta.arena_id = a.id AND NOT COALESCE(ta.is_public, true))
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
-                """
-            ),
-            {"tids": trainer_ids, "city": int(city_id), **public_scope_params()},
+                """),
+                {"tids": trainer_ids, "city": int(city_id), **public_scope_params()},
+            )
         )
-    ).mappings().all()
-    return {
-        int(r["trainer_id"]): [{"id": int(r["id"]), "name": str(r["name"] or "").strip()}] for r in rows
-    }
+        .mappings()
+        .all()
+    )
+    return {int(r["trainer_id"]): [{"id": int(r["id"]), "name": str(r["name"] or "").strip()}] for r in rows}
 
 
 def city_windows(
@@ -416,20 +420,15 @@ def _id_set(data: Mapping[str, Any], direction: Direction) -> frozenset[int]:
     return frozenset(t["id"] for t in data["trainers"] if is_listed(t, direction))
 
 
-def duplicates_all(data: Mapping[str, Any], direction: Direction) -> bool:
-    """Направление с тем же составом, что и «Все» (в Минске все пятеро — «С нуля»): дубль главной страницы."""
-    if direction is ALL:
-        return False
-    ids = _id_set(data, direction)
-    return bool(ids) and ids == _id_set(data, ALL)
-
-
 def indexable(data: Mapping[str, Any], direction: Direction) -> bool:
-    """«Все» — главная страница под «тренер по катанию на коньках {город}», в индексе всегда, пока есть
-    тренеры. Направление — если есть тренеры и состав не совпадает со «Всеми» (иначе noindex, canonical на «Все»)."""
-    if not _id_set(data, direction):
-        return False
-    return not duplicates_all(data, direction)
+    """В индексе, пока на странице есть тренеры и свой запрос.
+
+    «Все» — «тренер по катанию на коньках в городе». Направление со своим H1
+    («Научиться кататься на коньках с нуля» и остальные) остаётся, даже если
+    тренеры те же, что во «Всех». Пустая вкладка своего смысла не имеет.
+    noindex не ставим вместе с canonical на другой адрес.
+    """
+    return bool(_id_set(data, direction))
 
 
 def sitemap_paths(data: Mapping[str, Any]) -> list[str]:
@@ -437,8 +436,20 @@ def sitemap_paths(data: Mapping[str, Any]) -> list[str]:
     return [catalog_path(name, d) for d in (ALL, *DIRECTIONS) if indexable(data, d)]
 
 
-async def sitemap_rows(session: AsyncSession) -> list[str]:
-    """Пути каталога для sitemap: города, где есть опубликованные тренеры, × направления с тренерами."""
+async def _profile_updated_at(session: AsyncSession, trainer_ids: Sequence[int]) -> dict[int, datetime]:
+    if not trainer_ids:
+        return {}
+    rows = (
+        await session.execute(
+            text("SELECT trainer_id, updated_at FROM trainer_profiles WHERE trainer_id = ANY(:ids)"),
+            {"ids": list(trainer_ids)},
+        )
+    ).all()
+    return {int(tid): stamp for tid, stamp in rows if isinstance(stamp, datetime)}
+
+
+async def sitemap_rows(session: AsyncSession) -> list[tuple[str, datetime | None]]:
+    """Пути каталога и lastmod — самая свежая анкета тренера на этой странице."""
     from src.application.ice_city_day import list_public_cities
     from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 
@@ -453,11 +464,89 @@ async def sitemap_rows(session: AsyncSession) -> list[str]:
             )
         ).fetchall()
     }
-    out: list[str] = []
+    out: list[tuple[str, datetime | None]] = []
     for city in await list_public_cities(session):
-        if int(city["id"]) in city_ids:
-            out.extend(sitemap_paths(await load_city_catalog(session, city)))
+        if int(city["id"]) not in city_ids:
+            continue
+        data = await load_city_catalog(session, city)
+        stamps = await _profile_updated_at(session, [int(t["id"]) for t in data["trainers"]])
+        name = str(data["city"]["name"])
+        for direction in (ALL, *DIRECTIONS):
+            if not indexable(data, direction):
+                continue
+            listed = _id_set(data, direction)
+            fresh = [stamps[i] for i in listed if i in stamps]
+            out.append((catalog_path(name, direction), max(fresh) if fresh else None))
     return out
+
+
+def _teaches(n: int) -> str:
+    """«1 тренер учит», «2 тренера учат», «5 тренеров учат»."""
+    noun = plural_ru(n, "тренер", "тренера", "тренеров")
+    verb = "учит" if noun == "тренер" else "учат"
+    return f"{n} {noun} {verb}"
+
+
+def _city_public_locative(city_name: str) -> tuple[str, str | None]:
+    raw = str(city_name or "").strip()
+    public = format_public_name(raw)
+    return public, city_locative(public) or city_locative(raw)
+
+
+def _present_direction_phrases(data: Mapping[str, Any]) -> list[str]:
+    return [d.seo for d in DIRECTIONS if d.seo and listed_trainers(data, d)]
+
+
+def fit_meta(text_: str, limit: int) -> str:
+    """Режем по границе слова и заканчиваем точкой. Многоточия нет, «Запись в Telegram.» держим."""
+    if len(text_) <= limit:
+        return text_
+    ending = " Запись в Telegram."
+    if text_.endswith(ending) and len(ending) < limit:
+        room = limit - len(ending)
+        head = text_[: -len(ending)].rstrip()
+        if len(head) > room:
+            head = head[:room].rsplit(" ", 1)[0].rstrip(" ,;:—-")
+        if head and not head.endswith("."):
+            head += "."
+        return head + ending
+    cut = text_[:limit].rsplit(" ", 1)[0].rstrip(" ,;:—-")
+    return cut if cut.endswith(".") else f"{cut}."
+
+
+def catalog_description(data: Mapping[str, Any], direction: Direction) -> str:
+    """Сниппет каталога: город, живое число, только направления, которые в городе есть."""
+    public, loc = _city_public_locative(str(data["city"]["name"]))
+    n = len(listed_trainers(data, direction))
+    if direction is ALL:
+        phrases = _present_direction_phrases(data)
+        clause = f": {_join_catalog(phrases)}" if phrases else ""
+        if n:
+            teaches = _teaches(n)
+            head = f"В {loc} {teaches} кататься на коньках" if loc else f"{public} — {teaches} кататься на коньках"
+            text_ = f"{head}{clause}. Запись в Telegram."
+        elif loc:
+            text_ = f"В {loc} пока нет тренеров по катанию на коньках."
+        else:
+            text_ = f"{public} — тренеров по катанию на коньках пока нет."
+        return fit_meta(text_, DESCRIPTION_LIMIT)
+    if loc:
+        head = f"{direction.h1} в {loc}"
+    elif public:
+        head = f"{direction.h1} — {public}"
+    else:
+        head = direction.h1
+    if n:
+        text_ = f"{head}. {_teaches(n)}. Запись в Telegram."
+    else:
+        text_ = f"{head}. Тренеров пока нет."
+    return fit_meta(text_, DESCRIPTION_LIMIT)
+
+
+def _join_catalog(parts: Sequence[str]) -> str:
+    if len(parts) <= 1:
+        return "".join(parts)
+    return ", ".join(parts[:-1]) + " и " + parts[-1]
 
 
 # ── Вёрстка ──────────────────────────────────────────────────────────
@@ -480,7 +569,9 @@ def price_tiers(services: Sequence[Mapping[str, Any]]) -> list[tuple[str, str]] 
     """
     for svc in services:
         cur = str(svc.get("currency_code") or "BYN")
-        tiers = {str(t.get("tier_kind")): int(t["price_cents"]) for t in svc.get("price_tiers") or [] if t.get("price_cents")}
+        tiers = {
+            str(t.get("tier_kind")): int(t["price_cents"]) for t in svc.get("price_tiers") or [] if t.get("price_cents")
+        }
         child, adult = tiers.get("child"), tiers.get("adult")
         if child and adult:
             if child == adult:
@@ -562,9 +653,7 @@ def _window_label(w: Mapping[str, Any]) -> str:
 _ICON_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
-def _card_html(
-    t: Mapping[str, Any], direction: Direction, *, base_url: str, city_id: int, arena_id: int | None
-) -> str:
+def _card_html(t: Mapping[str, Any], direction: Direction, *, base_url: str, city_id: int, arena_id: int | None) -> str:
     photo = t.get("photo_url")
     ph = (
         f'<img class="tc-ph" src="{esc(photo)}" alt="" width="128" height="148" loading="lazy" decoding="async" />'
@@ -581,9 +670,7 @@ def _card_html(
     dirs_text = " · ".join(dirs)
     dirs_html = f'<div class="tc-dirs">{esc(dirs_text[:1].upper() + dirs_text[1:])}</div>' if dirs_text else ""
     checks = [c for c in (t.get("education"), _arenas_check(t["arenas"])) if c]
-    checks_html = (
-        '<ul class="tc-checks">' + "".join(f"<li>{esc(c)}</li>" for c in checks) + "</ul>" if checks else ""
-    )
+    checks_html = '<ul class="tc-checks">' + "".join(f"<li>{esc(c)}</li>" for c in checks) + "</ul>" if checks else ""
     about = f'<p class="tc-about">{esc(t["about"])}</p>' if t.get("about") else ""
     wins = _card_windows(t, arena_id)[:CARD_WINDOWS]
     book = booking_url(base_url, int(t["id"]), city_id=city_id) if wins else None
@@ -645,7 +732,9 @@ def _faq_answer(q: str, a: str | None, ctx: Mapping[str, Any]) -> str | None:
         n = ctx["pairs"]
         if not n:
             return None
-        return esc(f"Да, у {n} {plural_ru(n, 'тренера', 'тренеров', 'тренеров')} есть цена «взрослый + ребёнок» — она на странице тренера.")
+        return esc(
+            f"Да, у {n} {plural_ru(n, 'тренера', 'тренеров', 'тренеров')} есть цена «взрослый + ребёнок» — она на странице тренера."
+        )
     if q == _Q_PLAY:
         return f'Расписание ОХМ — в разделе «С клюшкой» на <a href="{esc(ctx["city_href"])}">странице города</a>.'
     return None
@@ -729,7 +818,13 @@ def render_catalog_page(
     from src.application.public_analytics import public_analytics_head_html_from_settings
     from src.application.public_site_footer import render_site_footer_html
     from src.application.public_web_cta import public_page_view_beacon_script
-    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, media_url, public_fonts_head_html
+    from src.application.style_b import (
+        COMPONENTS_VERSION,
+        STYLE_VERSION,
+        TOKENS_VERSION,
+        media_url,
+        public_fonts_head_html,
+    )
 
     base = (base_url or "").rstrip("/")
     city = data["city"]
@@ -745,7 +840,7 @@ def render_catalog_page(
     pool = listed_trainers(data, direction)
     shown = listed_trainers(data, direction, arena_id)
     own_url = f"{base}{catalog_path(city_name, direction)}"
-    canonical = f"{base}{catalog_path(city_name, ALL)}" if duplicates_all(data, direction) else own_url
+    canonical = own_url
     city_href = f"/c/{city_slug(city_name)}"
 
     h1 = "Тренер по катанию на коньках" if one and direction is ALL else direction.h1
@@ -791,9 +886,11 @@ def render_catalog_page(
         controls += '<p class="tcat-sortnote">Сверху — тренеры с онлайн-записью, по ближайшему свободному времени.</p>'
 
     if shown:
-        grid = '<div class="tcat-grid">' + "".join(
-            _card_html(t, direction, base_url=base, city_id=city_id, arena_id=arena_id) for t in shown
-        ) + "</div>"
+        grid = (
+            '<div class="tcat-grid">'
+            + "".join(_card_html(t, direction, base_url=base, city_id=city_id, arena_id=arena_id) for t in shown)
+            + "</div>"
+        )
         grid += (
             '<div class="tcat-request"><b>Не подошло время?</b>'
             "<span>Напишите тренеру — он предложит своё.</span></div>"
@@ -808,7 +905,7 @@ def render_catalog_page(
         else:
             grid = (
                 f'<div class="tcat-empty"><b>{esc(aname)}: тренеров «{esc(direction.tab)}» здесь пока нет</b>'
-                f'<span>Посмотрите всех тренеров этого катка или тренеров «{esc(direction.tab)}» на других катках.</span>'
+                f"<span>Посмотрите всех тренеров этого катка или тренеров «{esc(direction.tab)}» на других катках.</span>"
                 '<div class="tcat-empty__act">'
                 f'<a class="tcat-ghost" href="{esc(catalog_path(city_name, ALL, arena_id=arena_id))}">Все тренеры этого катка</a>'
                 f'<a class="tcat-ghost" href="{esc(catalog_path(city_name, direction))}">«{esc(direction.tab)}» на всех катках</a>'
@@ -828,7 +925,9 @@ def render_catalog_page(
         body += _sec(
             "Что будет после записи",
             '<div class="tcat-after">'
-            + "".join(f"<div><i>{i}</i><b>{esc(b)}</b><span>{esc(s)}</span></div>" for i, (b, s) in enumerate(_AFTER, 1))
+            + "".join(
+                f"<div><i>{i}</i><b>{esc(b)}</b><span>{esc(s)}</span></div>" for i, (b, s) in enumerate(_AFTER, 1)
+            )
             + "</div>",
         )
     body += _sec(
@@ -861,14 +960,16 @@ def render_catalog_page(
             faq_items.append((q, ans))
     body += _sec(
         "Частые вопросы",
-        '<div class="tcat-faq">'
-        + "".join(
-            f'<details{" open" if i == 0 else ""}><summary>{esc(q)}</summary><p>{a}</p></details>'
-            for i, (q, a) in enumerate(faq_items)
-        )
-        + "</div>"
-        if faq_items
-        else "",
+        (
+            '<div class="tcat-faq">'
+            + "".join(
+                f'<details{" open" if i == 0 else ""}><summary>{esc(q)}</summary><p>{a}</p></details>'
+                for i, (q, a) in enumerate(faq_items)
+            )
+            + "</div>"
+            if faq_items
+            else ""
+        ),
     )
 
     cards = []
@@ -916,23 +1017,17 @@ def render_catalog_page(
     if not one and everyone:
         body += _DIALOG_SCRIPT
 
-    crumbs = [("Glideclub", f"{base}/"), (city_name, f"{base}{city_href}"), ("Тренеры", f"{base}{catalog_path(city_name)}")]
+    crumbs = [
+        ("Glideclub", f"{base}/"),
+        (city_name, f"{base}{city_href}"),
+        ("Тренеры", f"{base}{catalog_path(city_name)}"),
+    ]
     if direction is not ALL:
         crumbs.append((direction.crumb, own_url))
     body += breadcrumb_script(own_url, crumbs)
 
     title = f"{h1} {in_city} · Glideclub".replace(" ", " ")
-    desc_bits = [direction.lead]
-    if pool:
-        ps = [p for p in (direction_min_price(t, direction) for t in pool) if p]
-        desc_bits.append(
-            _n_trainers(len(pool)).replace(" ", " ")
-            + (f", от {_money(*min(ps))} за занятие".replace(" ", " ") if ps else "")
-            + ". Запись в Telegram, оплата тренеру на месте."
-        )
-    description = " ".join(desc_bits)
-    if len(description) > 155:
-        description = description[:154].rstrip() + "…"
+    description = catalog_description(data, direction)
     ld = {
         "@context": "https://schema.org",
         "@type": "ItemList",
@@ -977,4 +1072,3 @@ def render_catalog_page(
 def parse_arena_param(raw: str | None) -> int | None:
     value = (raw or "").strip()
     return int(value) if re.fullmatch(r"[1-9][0-9]{0,8}", value) else None
-

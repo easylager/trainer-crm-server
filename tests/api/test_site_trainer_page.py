@@ -71,7 +71,7 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
     assert resp.status_code == 200
     html = resp.text
     assert api["can_book"] is True
-    assert f'<h1 class="tp-name">{name}</h1>' in html
+    assert f'<h1 class="tp-name">{name}<span class="tp-trade"> — тренер по катанию на коньках' in html
     assert 'content="index, follow"' in html
     assert f'rel="canonical" href="https://glide.example{path}"' in html
     assert '"@type": "Person"' in html
@@ -647,7 +647,7 @@ def test_horizontal_strip_gets_scroll_arrows_hooked_to_page_script() -> None:
 
     html = _scroller('<div class="tp-more">x</div>')
     assert html.startswith('<div class="tp-scroller" data-scroller><div class="tp-more">')
-    assert 'tp-arrow--prev' in html and 'tp-arrow--next' in html
+    assert "tp-arrow--prev" in html and "tp-arrow--next" in html
     assert "data-scroller" in _SCROLLER_SCRIPT and "has-next" in _SCROLLER_SCRIPT
 
 
