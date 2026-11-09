@@ -3460,12 +3460,20 @@ async def run_hockey_matches_loop() -> None:
                     if await result_window_open(session, now=now):
                         delay = HOCKEY_RESULT_WINDOW_INTERVAL_SEC
                 # Сообщения бота «Кто кого» (TASK-334 S6) — после коммита: гонка уже закрыта, если был финал.
-                from src.application.hockey_notices import deliver, deliver_league_notices, send_via_client_bot
-
-                counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot)
-                counts["league_notices"] = await deliver_league_notices(
-                    async_session_factory, now=now, send=send_via_client_bot
+                from src.application.hockey_notices import (
+                    close_client_bot,
+                    deliver,
+                    deliver_league_notices,
+                    send_via_client_bot,
                 )
+
+                try:
+                    counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot)
+                    counts["league_notices"] = await deliver_league_notices(
+                        async_session_factory, now=now, send=send_via_client_bot
+                    )
+                finally:
+                    await close_client_bot()  # один Bot на проход: сессию закрываем, а не держим между тиками
                 if calendar_due and not counts["calendar_failed"]:
                     last_calendar = now
                     health.ok("календарь матчей")
