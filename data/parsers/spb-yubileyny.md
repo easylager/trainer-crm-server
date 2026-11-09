@@ -9,7 +9,14 @@
 - currency: RUB
 - requires_by_egress: false
 
-## Sources
+## Sources (current, 2026-11-09)
+- Сайт переделан: `/afisha/katok/` теперь отдаёт кассу `/rink/` (Bitrix-шаблон `redesign`). Старые страницы `?event=<id>` и поля `Дата:/Время:/Цена:` пропали — v1-парсер на живом сайте давал 0 сеансов.
+- `https://www.yubi.ru/rink/` — продукт в `<h1>` («Тренировка на льду»), ссылки на даты `/rink/?date=YYYY-MM-DD`, активная дата `btn-date-rink is-active`. Карточка сеанса: `card-rink__time`, `card-rink__duration` («60 мин»), кнопка `data-id` (ID билета, ключ идемпотентности) и `data-price` (рубли).
+- Правила на странице: «Прокат коньков не предусмотрен», «Билеты обмену и возврату не подлежат, кроме тех случаев, когда докатка отменена со стороны площадки» — тот же продукт, что «Часовая спортивная докатка», kind = `public_skate`, подпись «Тренировка на льду — свои коньки».
+- Защита: другой `<h1>` — ошибка прогона; страница показывает не ту дату — день пропускается; дубли `data-id` схлопываются; сеанс через полночь отбрасывается.
+- Фикстура: `data/fixtures/spb-yubileyny/rink.html` (активна 10.11) + `rink-2026-11-12.html`, `rink-2026-11-14.html`, `rink-2026-11-15.html`; 13 сеансов по 800 ₽.
+
+## Sources (v1, до редизайна — история)
 
 - schedule (список событий): https://www.yubi.ru/afisha/katok/ ← карточки «Часовая спортивная докатка» со ссылками `?event=<id>`
 - schedule (цена/зал/дата на конкретное событие): https://www.yubi.ru/afisha/katok/chasovaya_sportivnaya_dokatka.../?event=<id> ← **primary** для цены, не сводная `/price/`
@@ -19,14 +26,13 @@
 
 ```json
 {
-  "listing_url": "https://www.yubi.ru/afisha/katok/",
-  "event_url_pattern": "https://www.yubi.ru/afisha/katok/{slug}/?event={id}",
+  "listing_url": "https://www.yubi.ru/rink/",
+  "day_url_pattern": "https://www.yubi.ru/rink/?date={date}",
+  "session_title": "Тренировка на льду",
   "timezone": "Europe/Moscow",
   "currency_code": "RUB",
   "kind": "public_skate",
   "default_duration_minutes": 60,
-  "price_source": "per_event_page",
-  "price_source_not": "https://www.yubi.ru/afisha/katok/price/",
   "prices_already_minor": true,
   "requires_by_egress": false
 }

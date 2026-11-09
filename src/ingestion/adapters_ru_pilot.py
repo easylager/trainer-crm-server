@@ -176,83 +176,79 @@ class LedovyyDvoretsHtmlParser(IceParser):
 
 # --- spb-yubileyny ---------------------------------------------------------
 
-_YUBILEYNY_EVENT_URL = re.compile(r"(https://www\.yubi\.ru/afisha/katok/\S*?\?event=(\d+))")
-_YUBILEYNY_DATE = re.compile(rf"Дата:\s*(\d{{1,2}})\s+({_MONTH_ALT})\s+(\d{{4}})")
-_YUBILEYNY_TIME = re.compile(r"Время:\s*(\d{1,2}:\d{2})")
-_YUBILEYNY_ARENA = re.compile(r"Арена:\s*([^\n]+)")
-_YUBILEYNY_PRICE = re.compile(r"Цена:\s*(\d+)\s*р")
+_YUBILEYNY_TITLE = re.compile(r"<h1[^>]*>\s*(.*?)\s*</h1>", re.S)
+_YUBILEYNY_DATE_LINK = re.compile(r'href="/rink/\?date=(\d{4}-\d{2}-\d{2})"')
+_YUBILEYNY_ACTIVE_DATE = re.compile(r'class="btn-date-rink is-active[^"]*"\s*href="/rink/\?date=(\d{4}-\d{2}-\d{2})"')
+_YUBILEYNY_CARD = re.compile(
+    r'card-rink__time">\s*(\d{1,2}):(\d{2})\s*</div>\s*<div class="card-rink__duration">\s*(\d+)\s*мин\s*</div>'
+    r'.*?data-id="(\d+)"\s+data-price="(\d+)"',
+    re.S,
+)
+_YUBILEYNY_NO_RENTAL = "Прокат коньков не предусмотрен"
 
 
-async def _load_yubileyny_event(job: ParserJob, *, event_id: str, url: str) -> str:
+async def _load_yubileyny_day(job: ParserJob, *, day: str) -> str:
     fixture_dir = job.config.get("fixture_dir")
     if fixture_dir:
-        path = Path(str(fixture_dir)) / f"event-{event_id}.md"
-        return path.read_text(encoding="utf-8")
-    return await fetch_http_text(url)
+        return (Path(str(fixture_dir)) / f"rink-{day}.html").read_text(encoding="utf-8")
+    return await fetch_http_text(str(job.config["day_url_pattern"]).format(date=day))
 
 
 class YubileynyAfishaParser(IceParser):
     """СК «Юбилейный», СПб (spb-yubileyny.md, arena_id=97).
 
-    Event-driven afisha, not a weekly grid: the listing page links to one
-    page per event (``?event=<id>``), and only the event page carries a
-    reliable price for that specific session — the site's summary price
-    page and the listing footer both quote different, stale numbers (see
-    spec §8). ``event_id`` is the natural idempotency key.
-
-    Source fixtures are reader-proxy markdown captures (see
-    ``LedovyyDvoretsHtmlParser`` docstring for the same network-sandbox
-    caveat); the event pages themselves are already clean
-    ``Дата:``/``Время:``/``Арена:``/``Цена:`` field text, so this extraction
-    is exact against ``expected.json``.
+    Ticket shop ``/rink/``: one page per date (``?date=YYYY-MM-DD``) listing the
+    sessions of the single product named in ``<h1>`` («Тренировка на льду», the old
+    «Часовая спортивная докатка»). Each card gives start time, duration, ticket
+    ``data-id`` and ``data-price`` (whole rubles). A page whose ``<h1>`` is not the
+    expected product raises — another product must not be published as skating; a
+    page showing another date than requested is skipped.
     """
 
     parser_key = "yubileyny_afisha_html_v1"
 
     async def extract(self, job: ParserJob) -> Extraction:
-        listing = await load_source_text(job, filename="katok-listing.md", url_keys=("listing_url",))
-        duration = int(job.config.get("default_duration_minutes") or 60)
-        title = str(job.config.get("session_title") or "Часовая спортивная докатка")
-        events: dict[str, str] = {}
-        for url, event_id in _YUBILEYNY_EVENT_URL.findall(listing):
-            events.setdefault(event_id, url)
+        listing = await load_source_text(job, filename="rink.html", url_keys=("listing_url",))
+        title = str(job.config.get("session_title") or "Тренировка на льду")
+        pages: dict[str, str] = {}
+        active = _YUBILEYNY_ACTIVE_DATE.search(listing)
+        if active:
+            pages[active.group(1)] = listing
+        for day in dict.fromkeys(_YUBILEYNY_DATE_LINK.findall(listing)):
+            if day not in pages:
+                pages[day] = await _load_yubileyny_day(job, day=day)
+        if not pages:
+            raise ValueError("yubileyny: no dates on /rink/")
         slots: list[ExtractedSlot] = []
-        raw_events: dict[str, str] = {}
-        for event_id, url in events.items():
-            event_text = await _load_yubileyny_event(job, event_id=event_id, url=url)
-            raw_events[event_id] = event_text
-            date_match = _YUBILEYNY_DATE.search(event_text)
-            time_match = _YUBILEYNY_TIME.search(event_text)
-            price_match = _YUBILEYNY_PRICE.search(event_text)
-            if not date_match or not time_match:
+        seen: set[str] = set()
+        for day, page in pages.items():
+            heading = _YUBILEYNY_TITLE.search(page)
+            if not heading or html_lib.unescape(heading.group(1)).strip() != title:
+                raise ValueError(f"yubileyny: unexpected product on {day}: {heading and heading.group(1)!r}")
+            shown = _YUBILEYNY_ACTIVE_DATE.search(page)
+            if not shown or shown.group(1) != day:
                 continue
-            day, month_name, year = date_match.groups()
-            local_date = date(int(year), _MONTHS_RU[month_name], int(day)).isoformat()
-            arena_match = _YUBILEYNY_ARENA.search(event_text)
-            arena_name = arena_match.group(1).strip() if arena_match else None
-            label = f"{title} — {arena_name} арена" if arena_name else title
-            adult = parse_price_to_minor(price_match.group(1), already_minor=False) if price_match else None
-            start = time_match.group(1)
-            hour, minute = (int(part) for part in start.split(":"))
-            end_minutes = hour * 60 + minute + duration
-            end = f"{(end_minutes // 60) % 24:02d}:{end_minutes % 60:02d}"
-            slots.append(
-                ExtractedSlot(
-                    local_date=local_date,
-                    starts_at_local=start,
-                    ends_at_local=end,
-                    kind_raw="public_skate",
-                    price_adult=adult,
-                    price_child=None,
-                    price_rental=None,
-                    session_label=label,
-                    age_note="0+, без возрастных ограничений",
-                    source_id=event_id,
-                    external_url=url,
+            no_rental = _YUBILEYNY_NO_RENTAL in page
+            for hour, minute, duration, ticket_id, price in _YUBILEYNY_CARD.findall(page):
+                end_minutes = int(hour) * 60 + int(minute) + int(duration)
+                if ticket_id in seen or end_minutes > 24 * 60:
+                    continue
+                seen.add(ticket_id)
+                slots.append(
+                    ExtractedSlot(
+                        local_date=day,
+                        starts_at_local=f"{int(hour):02d}:{minute}",
+                        ends_at_local=f"{end_minutes // 60:02d}:{end_minutes % 60:02d}",
+                        kind_raw="public_skate",
+                        price_adult=int(price) * 100,
+                        price_child=None,
+                        price_rental=None,
+                        session_label=f"{title} — свои коньки" if no_rental else title,
+                        source_id=ticket_id,
+                        external_url=str(job.config["day_url_pattern"]).format(date=day),
+                    )
                 )
-            )
-        snapshot: dict[str, Any] = {"listing": listing, "events": raw_events}
-        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=snapshot, slots=slots)
+        return Extraction(arena_id=job.arena_id, parser_key=self.parser_key, snapshot=pages, slots=slots)
 
 
 # --- spb-baltic-arena -------------------------------------------------------
