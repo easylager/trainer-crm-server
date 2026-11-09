@@ -735,6 +735,32 @@ class ShansArenaHtmlParser(IceParser):
 
 _PARNAS_DAY = re.compile(rf"([А-Яа-я]+),?\s*(\d{{1,2}})\s+({_MONTH_ALT})\n([^\n]*)")
 _PARNAS_SLOT = re.compile(r"(\d{1,2})[.:](\d{2})\s*-\s*(\d{1,2})[.:](\d{2})(?:\((\d+)\s*р)?")
+_PARNAS_MARKER = "Расписание массовых катаний"
+# Tilda T521 rows on the live page: date cell and slot cell share one ``li_*__<id>``.
+_PARNAS_TILDA_ROW = re.compile(r'field="li_date__(\d+)"[^>]*>(.*?)</div>.*?field="li_text__\1"[^>]*>(.*?)</div>', re.S)
+
+
+def parnas_schedule_text(source: str) -> str:
+    """Day line + slot line per day, from the live HTML page or the innerText fixture.
+
+    A plain GET now gets the real page (no DDoS-Guard challenge), i.e. HTML without the
+    newlines ``_PARNAS_DAY`` relies on — read the T521 rows instead. No schedule heading
+    means the page changed: raise rather than publish an empty week.
+    """
+    if "<div" not in source:
+        if _PARNAS_MARKER not in source:
+            raise ValueError("parnas: schedule heading missing")
+        return source
+    if _PARNAS_MARKER not in html_lib.unescape(re.sub(r"<[^>]+>", " ", source)):
+        raise ValueError("parnas: schedule heading missing")
+    rows = []
+    for _id, day, slots in _PARNAS_TILDA_ROW.findall(source):
+        day_text = " ".join(html_lib.unescape(re.sub(r"<[^>]+>", " ", day)).split())
+        slot_text = " ".join(html_lib.unescape(re.sub(r"<[^>]+>", " ", slots)).split())
+        rows.append(f"{day_text}\n{slot_text}")
+    return "\n".join(rows) + "\n"
+
+
 
 
 class ParnasArenaTextParser(IceParser):
@@ -769,7 +795,7 @@ class ParnasArenaTextParser(IceParser):
     parser_key = "parnasarena_text_v1"
 
     async def extract(self, job: ParserJob) -> Extraction:
-        text = await load_source_text(job, filename="schedule.md", url_keys=("url",))
+        text = parnas_schedule_text(await load_source_text(job, filename="schedule.md", url_keys=("url",)))
         year = parser_reference_date(job.config).year
         base_price = job.config.get("base_price_adult_minor")
         rental = job.config.get("rental_price_flat_minor")

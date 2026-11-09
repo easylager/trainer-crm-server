@@ -96,3 +96,6 @@ Snapshot 2026-09-19 — page showed the week of 14.09–20.09, 10 slots. Full se
 `data/fixtures/spb-parnas-arena/` — `schedule.md` (a reader-proxy plain-text capture of
 the schedule + price section, captured 2026-09-19 via a real browser) + `expected.json`
 (10 sessions, hand-extracted from the same text independently of the parser code).
+
+## Live HTML (2026-11-09)
+- Обычный GET теперь отдаёт настоящую страницу без DDoS-Guard; парсер читает Tilda-строки T521 (`li_date__N` / `li_text__N`). Нет заголовка «Расписание массовых катаний» — ошибка прогона, а не пустая неделя. Фикстура: `data/fixtures/spb-parnas-arena-live/schedule.md` (HTML, 16 сеансов 09–15.11.2026).
