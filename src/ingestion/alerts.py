@@ -152,8 +152,9 @@ async def send_ice_health_to_admins(
     event: str,
     settings: Any = None,
     bot_factory: Callable[[str], Any] | None = None,
+    reply_markup: Any = None,
 ) -> bool | None:
-    """Отправить текст в админ-бот.
+    """Отправить текст в админ-бот (``reply_markup`` — кнопки под сообщением, если нужны).
 
     True — ушло хотя бы в один чат; False — настроенная доставка не удалась;
     None — без токена или получателей записали только в лог.
@@ -181,10 +182,11 @@ async def send_ice_health_to_admins(
 
     bot = bot_factory(token)
     delivered = False
+    extra = {} if reply_markup is None else {"reply_markup": reply_markup}
     try:
         for chat_id in chat_ids:
             try:
-                await bot.send_message(chat_id=chat_id, text=text_body, disable_web_page_preview=True)
+                await bot.send_message(chat_id=chat_id, text=text_body, disable_web_page_preview=True, **extra)
                 delivered = True
             except Exception:
                 logger.exception("failed ice health %s chat_id=%s", event, chat_id)

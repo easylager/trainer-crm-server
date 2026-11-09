@@ -11,7 +11,8 @@
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
@@ -34,6 +35,7 @@ from src.application.hockey_slices import (
 from src.ingestion.hockey_sources import MINSK_TZ
 
 NAME_MAX = 28
+STAKE_MAX = 80
 MAX_MEMBERS = 100
 MAX_LEAGUES_PER_PLAYER = 20
 # Список «мои лиги»: закончившиеся показываем ещё столько дней и не больше стольких лиг (таблица считается на каждую).
@@ -88,6 +90,8 @@ class League:
     term_kind: str = "season"
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+    image_key: str | None = None  # картинка лиги в хранилище (TASK-361)
+    stake_text: str | None = None  # «на что играем»
 
     @property
     def match_scope(self) -> Scope:
@@ -109,6 +113,8 @@ class LeagueSummary:
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     active: bool = True
+    image_key: str | None = None
+    stake_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -137,6 +143,24 @@ def clean_name(name: str) -> str:
     return cleaned
 
 
+# Невидимые знаки формата (нулевая ширина, управление направлением письма) прячут текст и подменяют порядок букв:
+# убираем. Соединители ZWJ/ZWNJ нужны составным символам и письмам вроде персидского — их оставляем.
+_KEEP_INVISIBLE = frozenset("\u200c\u200d")
+
+
+def clean_stake(value: str | None) -> str | None:
+    """Строка «на что играем»: пробелы и переводы строк сжаты, невидимые знаки убраны. Пусто — ``None`` (строки нет)."""
+    raw = "".join(
+        ch
+        for ch in (value or "")
+        if ch.isspace() or ch in _KEEP_INVISIBLE or unicodedata.category(ch) not in ("Cc", "Cf", "Cs")
+    )
+    cleaned = " ".join(raw.split())
+    if len(cleaned) > STAKE_MAX:
+        raise ValueError(f"Строка до {STAKE_MAX} символов")
+    return cleaned or None
+
+
 def new_invite_code() -> str:
     return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(_CODE_LEN))
 
@@ -158,12 +182,13 @@ _COUNT_MY_LEAGUES = text("""
     WHERE mb.player_key = :player_key AND l.ends_at > :now
     """)
 
-_LEAGUE_COLUMNS = "id, name, invite_code, owner_key, scope, clubs, term_kind, starts_at, ends_at"
+_LEAGUE_COLUMNS = "id, name, invite_code, owner_key, scope, clubs, term_kind, starts_at, ends_at, image_key, stake_text"
 
 _INSERT_LEAGUE = text(f"""
     INSERT INTO hockey_leagues (name, owner_key, invite_code, scope, clubs, term_kind, starts_at, ends_at,
-                                extended_from)
-    VALUES (:name, :owner_key, :invite_code, :scope, :clubs, :term_kind, :starts_at, :ends_at, :extended_from)
+                                extended_from, image_key, stake_text)
+    VALUES (:name, :owner_key, :invite_code, :scope, :clubs, :term_kind, :starts_at, :ends_at, :extended_from,
+            :image_key, :stake_text)
     RETURNING {_LEAGUE_COLUMNS}
     """)
 
@@ -209,7 +234,11 @@ _DELETE_LEAGUE = text("DELETE FROM hockey_leagues WHERE id = :league_id")
 # Короны ссылаются на лигу с ON DELETE CASCADE: лигу с коронами удалять нельзя, она уходит в архив.
 _HAS_CROWNS = text("SELECT EXISTS (SELECT 1 FROM hockey_crowns WHERE league_id = :league_id)")
 
-_RENAME = text("UPDATE hockey_leagues SET name = :name, updated_at = now() WHERE id = :league_id")
+_UPDATE_TEXTS = text("""
+    UPDATE hockey_leagues SET name = :name, stake_text = :stake_text, updated_at = now() WHERE id = :league_id
+    """)
+
+_SET_IMAGE = text("UPDATE hockey_leagues SET image_key = :image_key, updated_at = now() WHERE id = :league_id")
 
 # Очки каждого участника за матчи гонки, начавшиеся после его вступления; у кого их нет — ноль.
 _LEAGUE_TABLE = text("""
@@ -240,10 +269,11 @@ _LEAGUE_TABLE = text("""
 # среди равных — позже кончающиеся. Выдаём по-прежнему в порядке вступления.
 _MY_LEAGUES = text("""
     SELECT t.id, t.name, t.invite_code, t.is_owner, t.scope, t.clubs, t.term_kind, t.starts_at, t.ends_at,
+           t.image_key, t.stake_text,
            (SELECT COUNT(*) FROM hockey_league_members x WHERE x.league_id = t.id)::int AS members
     FROM (
         SELECT l.id, l.name, l.invite_code, (l.owner_key = :player_key) AS is_owner,
-               l.scope, l.clubs, l.term_kind, l.starts_at, l.ends_at, me.joined_at
+               l.scope, l.clubs, l.term_kind, l.starts_at, l.ends_at, l.image_key, l.stake_text, me.joined_at
         FROM hockey_leagues AS l
         JOIN hockey_league_members AS me ON me.league_id = l.id AND me.player_key = :player_key
         WHERE (CAST(:ids AS bigint[]) IS NULL OR l.id = ANY(CAST(:ids AS bigint[])))
@@ -441,7 +471,14 @@ async def _check_league_quota(session: AsyncSession, player_key: int, *, now: da
 
 
 async def _insert_league(
-    session: AsyncSession, *, owner_key: int, name: str, terms: Terms, extended_from: int | None = None
+    session: AsyncSession,
+    *,
+    owner_key: int,
+    name: str,
+    terms: Terms,
+    extended_from: int | None = None,
+    image_key: str | None = None,
+    stake_text: str | None = None,
 ) -> League:
     for _ in range(5):
         try:
@@ -459,6 +496,8 @@ async def _insert_league(
                             "starts_at": terms.starts_at,
                             "ends_at": terms.ends_at,
                             "extended_from": extended_from,
+                            "image_key": image_key,
+                            "stake_text": stake_text,
                         },
                     )
                 ).one()
@@ -476,14 +515,18 @@ async def create_league(
     name: str,
     terms: Terms | None = None,
     now: datetime | None = None,
+    stake_text: str | None = None,
 ) -> League:
-    """Новая лига; создатель — первый участник. Без ``terms`` — «Динамо-Минск, до конца сезона»."""
+    """Новая лига; создатель — первый участник. Без ``terms`` — «Динамо-Минск, до конца сезона».
+
+    ``stake_text`` — «на что играем» (необязательно); картинку владелец добавляет отдельным запросом."""
     now = _utc(now or datetime.now(timezone.utc))
     name = clean_name(name)
+    stake = clean_stake(stake_text)
     terms = terms or build_terms(scope=DEFAULT_SCOPE, term="season", now=now)
     await _ensure_player(session, owner_key, owner_name)
     await _check_league_quota(session, owner_key, now=now)
-    league = await _insert_league(session, owner_key=owner_key, name=name, terms=terms)
+    league = await _insert_league(session, owner_key=owner_key, name=name, terms=terms, stake_text=stake)
     await session.execute(_ADD_MEMBER, {"league_id": league.id, "player_key": owner_key})
     return league
 
@@ -555,7 +598,16 @@ async def extend_league(
     # Сам владелец обязан попасть в продолжение: без места в квоте лигу не создаём (иначе она осиротеет).
     await _check_league_quota(session, player_key, now=now)
     terms = terms or _next_terms(league, now=now)
-    fresh = await _insert_league(session, owner_key=player_key, name=league.name, terms=terms, extended_from=league.id)
+    # Лицо лиги переходит в продолжение: то же название, та же картинка (файл общий, см. ``release_image``), та же строка.
+    fresh = await _insert_league(
+        session,
+        owner_key=player_key,
+        name=league.name,
+        terms=terms,
+        extended_from=league.id,
+        image_key=league.image_key,
+        stake_text=league.stake_text,
+    )
     joined = max(_utc(now), terms.starts_at) if terms.starts_at > _utc(now) else _utc(now)
     for key in (await session.execute(_MEMBERS_OF, {"league_id": league_id})).scalars().all():
         try:
@@ -629,13 +681,59 @@ async def leave_league(session: AsyncSession, *, league_id: int, player_key: int
     return "left"
 
 
-async def rename_league(session: AsyncSession, *, league_id: int, player_key: int, name: str) -> League:
+_UNSET: object = object()
+
+
+async def update_league(
+    session: AsyncSession,
+    *,
+    league_id: int,
+    player_key: int,
+    name: str | object = _UNSET,
+    stake_text: str | None | object = _UNSET,
+) -> League:
+    """Поменять название и/или строку «на что играем» — только владелец. Не переданное остаётся как было;
+    пустая строка «на что играем» убирает её."""
     league = await _member_league(session, league_id, player_key)
     if league.owner_key != player_key:
         raise PermissionError(league_id)
-    name = clean_name(name)
-    await session.execute(_RENAME, {"league_id": league_id, "name": name})
-    return League(**{**league.__dict__, "name": name})
+    if name is _UNSET and stake_text is _UNSET:
+        raise ValueError("Нечего менять")
+    new_name = league.name if name is _UNSET else clean_name(name)  # type: ignore[arg-type]
+    new_stake = league.stake_text if stake_text is _UNSET else clean_stake(stake_text)  # type: ignore[arg-type]
+    await session.execute(_UPDATE_TEXTS, {"league_id": league_id, "name": new_name, "stake_text": new_stake})
+    return replace(league, name=new_name, stake_text=new_stake)
+
+
+async def rename_league(session: AsyncSession, *, league_id: int, player_key: int, name: str) -> League:
+    return await update_league(session, league_id=league_id, player_key=player_key, name=name)
+
+
+async def owned_league(session: AsyncSession, *, league_id: int, player_key: int) -> League:
+    """Лига, которую игрок вправе менять: ``LookupError`` — нет такой, ``PermissionError`` — не участник или не владелец."""
+    league = await _member_league(session, league_id, player_key, lock=False)
+    if league.owner_key != player_key:
+        raise PermissionError(league_id)
+    return league
+
+
+async def set_league_image(
+    session: AsyncSession, *, league_id: int, player_key: int, image_key: str | None
+) -> tuple[League, str | None]:
+    """Поставить картинку лиги (``None`` — убрать). Только владелец. Возвращает (лига, прежний ключ):
+    файл прежней картинки убирает вызывающий после commit (``release_image``)."""
+    league = await _member_league(session, league_id, player_key)
+    if league.owner_key != player_key:
+        raise PermissionError(league_id)
+    await session.execute(_SET_IMAGE, {"league_id": league_id, "image_key": image_key})
+    return replace(league, image_key=image_key), league.image_key
+
+
+_IMAGE_KEY_OF = text("SELECT image_key FROM hockey_leagues WHERE id = :league_id")
+
+
+async def league_image_key(session: AsyncSession, league_id: int) -> str | None:
+    return (await session.execute(_IMAGE_KEY_OF, {"league_id": league_id})).scalar_one_or_none()
 
 
 async def league_table(
@@ -820,6 +918,8 @@ async def player_leagues(
             term_kind=record.term_kind,
             starts_at=record.starts_at,
             ends_at=record.ends_at,
+            image_key=record.image_key,
+            stake_text=record.stake_text,
         )
         rank = points = None
         if with_rank:
@@ -841,19 +941,28 @@ async def player_leagues(
                 starts_at=record.starts_at,
                 ends_at=record.ends_at,
                 active=_utc(record.ends_at) > now_utc,
+                image_key=record.image_key,
+                stake_text=record.stake_text,
             )
         )
     return out
 
 
 async def league_preview(session: AsyncSession, code: str, *, names: int = 6) -> dict | None:
-    """Для приглашения: название, сколько людей и первые имена. Без таблицы и без ключей игроков."""
+    """Для приглашения: название, сколько людей и первые имена, лицо лиги. Без таблицы и без ключей игроков."""
     league = await league_by_code(session, code)
     if league is None:
         return None
     members = (await session.execute(_MEMBER_COUNT, {"league_id": league.id})).scalar_one()
     shown = (await session.execute(_PREVIEW_NAMES, {"league_id": league.id, "limit": names})).scalars().all()
-    return {"name": league.name, "invite_code": league.invite_code, "members": int(members), "names": list(shown)}
+    return {
+        "name": league.name,
+        "invite_code": league.invite_code,
+        "members": int(members),
+        "names": list(shown),
+        "image_key": league.image_key,
+        "stake_text": league.stake_text,
+    }
 
 
 async def friends_picks(
@@ -926,8 +1035,14 @@ __all__ = [
     "MAX_LEAGUES_PER_PLAYER",
     "MAX_MEMBERS",
     "TooManyLeagues",
+    "STAKE_MAX",
     "clean_name",
+    "clean_stake",
     "create_league",
+    "league_image_key",
+    "owned_league",
+    "set_league_image",
+    "update_league",
     "friends_moves",
     "friends_picks",
     "AlreadyExtended",

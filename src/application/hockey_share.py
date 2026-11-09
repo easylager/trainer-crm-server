@@ -49,6 +49,8 @@ class LeagueCard:
     names: list[str]
     next_match: str | None
     version: str
+    image_key: str | None = None  # картинка лиги в хранилище — фон шапки карточки (TASK-361)
+    stake_text: str | None = None
 
 
 async def result_card(session: AsyncSession, *, player_key: int, match_id: int) -> ResultCard | None:
@@ -81,7 +83,11 @@ async def league_card(session: AsyncSession, code: str, *, now: datetime) -> Lea
         members=int(preview["members"]),
         names=names,
         next_match=upcoming,
-        version=league_card_version(preview["name"], int(preview["members"]), names, upcoming),
+        version=league_card_version(
+            preview["name"], int(preview["members"]), names, upcoming, preview.get("image_key"), preview.get("stake_text")
+        ),
+        image_key=preview.get("image_key"),
+        stake_text=preview.get("stake_text"),
     )
 
 

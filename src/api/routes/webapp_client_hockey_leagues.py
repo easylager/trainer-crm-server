@@ -5,13 +5,21 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Literal, NoReturn
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_hockey import _player_name
+from src.application import hockey_league_reports as league_reports
+from src.application.hockey_league_images import (
+    MAX_UPLOAD_BYTES,
+    LeagueImageError,
+    image_urls,
+    release_image,
+    store_league_image,
+)
 from src.application.hockey_leagues import (
     FEW_MATCHES,
     MONTHLY_CROWN_TERMS,
@@ -26,13 +34,16 @@ from src.application.hockey_leagues import (
     create_league,
     extend_league,
     join_league,
+    league_image_key,
     league_table,
     league_titles,
     leave_league,
     matches_in_terms,
+    owned_league,
     player_leagues,
-    rename_league,
+    set_league_image,
     term_options,
+    update_league,
 )
 from src.application.hockey_races import crown_counts, league_crown_wall, race_summary
 from src.application.hockey_share import record_card_event
@@ -47,6 +58,7 @@ _LEAGUE_FULL = "В лиге уже 100 человек"
 _NOT_FOUND = "Лига не найдена"
 _FORBIDDEN = "Нет доступа к этой лиге"
 _ALREADY_EXTENDED = "Лига уже продлена — вы из продолжения вышли"
+_OWN_LEAGUE_REPORT = "Это твоя лига — картинку и текст можно поменять в настройках"
 
 
 class TermsBody(BaseModel):
@@ -64,6 +76,7 @@ class CreateLeagueBody(BaseModel):
     name: str
     display_name: str | None = None
     terms: TermsBody | None = None
+    stake_text: str | None = None  # «на что играем»; картинка грузится отдельно: POST .../{id}/image
 
 
 class ExtendLeagueBody(BaseModel):
@@ -77,8 +90,11 @@ class JoinLeagueBody(BaseModel):
     from_card: Literal["result", "league"] | None = None
 
 
-class RenameLeagueBody(BaseModel):
-    name: str
+class PatchLeagueBody(BaseModel):
+    """Что поменять в лиге. Не переданное остаётся; ``stake_text`` пустой или ``null`` — убрать строку."""
+
+    name: str | None = None
+    stake_text: str | None = None
 
 
 def invite_url_for_code(code: str) -> str | None:
@@ -108,6 +124,12 @@ def _raise_league(exc: Exception) -> NoReturn:
     raise exc
 
 
+def _identity_out(image_key: str | None, stake_text: str | None) -> dict:
+    """Лицо лиги: адреса картинки (основной и для списка) и строка «на что играем»; нет — ``None``."""
+    url, thumb = image_urls(image_key)
+    return {"image_url": url, "image_thumb_url": thumb, "stake_text": stake_text}
+
+
 def _summary_out(row: LeagueSummary) -> dict:
     return {
         "id": row.id,
@@ -118,6 +140,7 @@ def _summary_out(row: LeagueSummary) -> dict:
         "my_points": row.my_points,
         "invite_url": invite_url_for_code(row.invite_code),
         **_terms_out(row.scope, row.clubs, row.term_kind, row.starts_at, row.ends_at),
+        **_identity_out(row.image_key, row.stake_text),
         "active": row.active,
     }
 
@@ -171,6 +194,7 @@ async def _created_out(session: AsyncSession, league: League, player_key: int, n
         "my_points": mine.points,
         "invite_url": invite_url_for_code(league.invite_code),
         **_terms_out(league.scope, league.clubs, league.term_kind, league.starts_at, league.ends_at),
+        **_identity_out(league.image_key, league.stake_text),
         "active": _aware_end(league.ends_at) > now,
     }
 
@@ -213,6 +237,7 @@ async def post_client_hockey_league(
             name=body.name,
             terms=terms,
             now=now,
+            stake_text=body.stake_text,
         )
         payload = await _created_out(session, league, player_key, now)
         payload.update(await _terms_hint(session, league, now))
@@ -324,6 +349,7 @@ async def get_client_hockey_league(
         "is_owner": summary.is_owner,
         "invite_url": invite_url_for_code(summary.invite_code),
         **_terms_out(summary.scope, summary.clubs, summary.term_kind, summary.starts_at, summary.ends_at),
+        **_identity_out(summary.image_key, summary.stake_text),
         "active": summary.active,
         "period": None if chosen is None else {"key": chosen.key, "title": chosen.title},
         "race": await race_summary(session, now=now),
@@ -335,19 +361,95 @@ async def get_client_hockey_league(
 @router.patch("/client/hockey/leagues/{league_id}")
 async def patch_client_hockey_league(
     league_id: int,
-    body: RenameLeagueBody,
+    body: PatchLeagueBody,
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    """Название и «на что играем» — только владелец; в теле только то, что меняем."""
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
+    changes = {field: getattr(body, field) for field in ("name", "stake_text") if field in body.model_fields_set}
+    if "name" in changes and changes["name"] is None:
+        changes["name"] = ""  # «null» вместо названия — то же, что пустое: «Назови лигу»
     try:
-        league = await rename_league(session, league_id=league_id, player_key=player_key, name=body.name)
+        league = await update_league(session, league_id=league_id, player_key=player_key, **changes)
         payload = await _created_out(session, league, player_key, now)
     except (ValueError, LookupError, PermissionError) as exc:
         _raise_league(exc)
     await session.commit()
     return payload
+
+
+@router.post("/client/hockey/leagues/{league_id}/image")
+async def post_client_hockey_league_image(
+    league_id: int,
+    file: UploadFile = File(...),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Картинка лиги (JPEG, PNG или WEBP до 5 МБ) — только владелец. Заменяет прежнюю; без премодерации."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        await owned_league(session, league_id=league_id, player_key=player_key)  # чужому файл даже не читаем
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
+    try:
+        new_key = await store_league_image(league_id, raw)
+    except LeagueImageError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    try:
+        league, previous = await set_league_image(session, league_id=league_id, player_key=player_key, image_key=new_key)
+        payload = await _created_out(session, league, player_key, now)
+    except (LookupError, PermissionError) as exc:
+        await release_image(session, new_key)  # пока файл ждал, лигу удалили или передали: он никому не нужен
+        _raise_league(exc)
+    await session.commit()
+    await release_image(session, previous)
+    return payload
+
+
+@router.delete("/client/hockey/leagues/{league_id}/image")
+async def delete_client_hockey_league_image(
+    league_id: int,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Убрать картинку лиги — только владелец. Нет картинки — ничего не меняется."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league, previous = await set_league_image(session, league_id=league_id, player_key=player_key, image_key=None)
+        payload = await _created_out(session, league, player_key, now)
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    await session.commit()
+    await release_image(session, previous)
+    return payload
+
+
+@router.post("/client/hockey/leagues/{league_id}/report")
+async def post_client_hockey_league_report(
+    league_id: int,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Пожаловаться на лигу: участник, не владелец. Админам уходит одно сообщение в сутки на лигу."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        report = await league_reports.report_league(session, league_id=league_id, reporter_key=player_key, now=now)
+    except league_reports.OwnLeagueReport as exc:
+        raise HTTPException(status_code=403, detail=_OWN_LEAGUE_REPORT) from exc
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    await session.commit()
+    if report.alert and await league_reports.notify_admins(report) is False:
+        # Не дошло до админов: пусть следующая жалоба попробует ещё раз, а не ждёт суток.
+        await league_reports.unmark_alerted(session, report.id)
+        await session.commit()
+    return {"ok": True}
 
 
 @router.delete("/client/hockey/leagues/{league_id}/membership")
@@ -357,11 +459,14 @@ async def delete_client_hockey_league_membership(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     player_key = client_catalog_telegram_key(principal)
+    image_key = await league_image_key(session, league_id)
     try:
         result = await leave_league(session, league_id=league_id, player_key=player_key)
     except (LookupError, PermissionError) as exc:
         _raise_league(exc)
     await session.commit()
+    if result == "deleted":  # лигу удалили вместе с последним участником: картинка больше никому не нужна
+        await release_image(session, image_key)
     return {"result": result}
 
 
