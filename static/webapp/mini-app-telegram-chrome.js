@@ -384,10 +384,37 @@ window.MiniAppBack = (function () {
   return { set: set, clear: clear, isNative: isNative };
 })();
 
+/**
+ * Клиентские экраны с шапкой ``.client-mini-nav`` (и «Записи» с ``.cb-detail-back``) уже умеют сами
+ * решать, нужна ли «назад»: показывают ``#btnBack`` или прячут его (атрибут hidden) и вешают свой
+ * обработчик. Мост отражает это в нативную стрелку: кнопка видна — стрелка включена и нажимает
+ * ``#btnBack``; кнопка спрятана — стрелки нет. Саму кнопку в Telegram скрываем стилем.
+ */
+function bridgeLegacyBackButton() {
+  var Back = window.MiniAppBack;
+  var btn = document.getElementById('btnBack');
+  if (!Back || !btn || !Back.isNative()) return;
+  if (!btn.closest('.client-mini-nav') && !btn.classList.contains('cb-detail-back')) return;
+  var style = document.createElement('style');
+  // #backFromEdit — второй «назад» внутри «Заявок»: тот же переход делает #btnBack.
+  style.textContent = '#btnBack, #backFromEdit { display: none !important; }';
+  document.head.appendChild(style);
+  function sync() {
+    if (btn.hidden) Back.clear();
+    else Back.set(function () { btn.click(); });
+  }
+  sync();
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(sync).observe(btn, { attributes: true, attributeFilter: ['hidden'] });
+  }
+}
+
 (function () {
   if (window.MiniAppRuntime) window.MiniAppRuntime.ready();
   // Экран, который не просил «назад», стартует без стрелки.
   if (window.MiniAppBack) window.MiniAppBack.clear();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bridgeLegacyBackButton);
+  else bridgeLegacyBackButton();
 })();
 
 /**

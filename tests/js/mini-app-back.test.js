@@ -78,3 +78,47 @@ describe('MiniAppBack', () => {
     }
   });
 });
+
+describe('мост старого #btnBack', () => {
+  const bridge = src.slice(src.indexOf('function bridgeLegacyBackButton'), src.indexOf('(function () {\n  if (window.MiniAppRuntime)'));
+
+  function page({ hidden, inNav = true }) {
+    const f = fakeTg();
+    const clicks = [];
+    const observers = [];
+    const btn = {
+      hidden,
+      classList: { contains: () => false },
+      closest: (sel) => (inNav && sel === '.client-mini-nav' ? {} : null),
+      click: () => clicks.push(1),
+    };
+    const win = { Telegram: { WebApp: f.tg } };
+    const ctx = {
+      window: win,
+      document: { getElementById: () => btn, createElement: () => ({}), head: { appendChild() {} } },
+      MutationObserver: function (cb) { observers.push(cb); this.observe = () => {}; },
+    };
+    vm.runInNewContext(block + bridge + '\nbridgeLegacyBackButton();', ctx);
+    return { f, btn, clicks, observers };
+  }
+
+  it('кнопка видна — стрелка включена и нажимает #btnBack', () => {
+    const p = page({ hidden: false });
+    assert.ok(p.f.calls.includes('show'));
+    p.f.click();
+    assert.equal(p.clicks.length, 1);
+  });
+
+  it('кнопка спрятана — стрелки нет, а когда страница её покажет — появляется', () => {
+    const p = page({ hidden: true });
+    assert.ok(!p.f.calls.includes('show'));
+    p.btn.hidden = false;
+    p.observers[0]();
+    assert.ok(p.f.calls.includes('show'));
+  });
+
+  it('не трогает страницы без клиентской шапки', () => {
+    const p = page({ hidden: false, inNav: false });
+    assert.ok(!p.f.calls.includes('show'));
+  });
+});
