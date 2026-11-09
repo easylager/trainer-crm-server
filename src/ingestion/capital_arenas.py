@@ -310,6 +310,18 @@ ARENAS: list[SeedArena] = [
         "shuvalovskyled_html_v1",
         _MOW,
     ),
+    SeedArena(
+        178,
+        "Санкт-Петербург/ЛО",
+        "Ледовая арена Гололёд",
+        "Красное Село, улица Свободы, 15",
+        59.729436,
+        30.081129,
+        "ledovaya-arena-gololed",
+        True,
+        "gololed_html_v1",
+        _MOW,
+    ),
 ]
 
 
