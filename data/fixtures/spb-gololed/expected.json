@@ -1,0 +1,466 @@
+{
+  "run_date": "2026-11-09",
+  "now_utc": "2026-11-09T06:00:00+00:00",
+  "sessions": [
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13564"
+    },
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13565"
+    },
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "11:15",
+      "ends_at_local": "12:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13566"
+    },
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "12:30",
+      "ends_at_local": "13:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13567"
+    },
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "13:45",
+      "ends_at_local": "14:45",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13568"
+    },
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "15:00",
+      "ends_at_local": "16:00",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13569"
+    },
+    {
+      "local_date": "2026-11-10",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13576"
+    },
+    {
+      "local_date": "2026-11-10",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13577"
+    },
+    {
+      "local_date": "2026-11-10",
+      "starts_at_local": "11:30",
+      "ends_at_local": "12:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13578"
+    },
+    {
+      "local_date": "2026-11-10",
+      "starts_at_local": "12:45",
+      "ends_at_local": "13:45",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13579"
+    },
+    {
+      "local_date": "2026-11-10",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13580"
+    },
+    {
+      "local_date": "2026-11-11",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13588"
+    },
+    {
+      "local_date": "2026-11-11",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13589"
+    },
+    {
+      "local_date": "2026-11-11",
+      "starts_at_local": "11:30",
+      "ends_at_local": "12:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13590"
+    },
+    {
+      "local_date": "2026-11-11",
+      "starts_at_local": "12:45",
+      "ends_at_local": "13:45",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13591"
+    },
+    {
+      "local_date": "2026-11-11",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13592"
+    },
+    {
+      "local_date": "2026-11-12",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13606"
+    },
+    {
+      "local_date": "2026-11-12",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13607"
+    },
+    {
+      "local_date": "2026-11-12",
+      "starts_at_local": "11:30",
+      "ends_at_local": "12:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13608"
+    },
+    {
+      "local_date": "2026-11-12",
+      "starts_at_local": "12:45",
+      "ends_at_local": "13:45",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13609"
+    },
+    {
+      "local_date": "2026-11-12",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13610"
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13618"
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13619"
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "11:30",
+      "ends_at_local": "12:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13620"
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "12:45",
+      "ends_at_local": "13:45",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13621"
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13622"
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "21:30",
+      "ends_at_local": "22:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13628"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "08:00",
+      "ends_at_local": "09:00",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13629"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "13:30",
+      "ends_at_local": "14:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13633"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "16:30",
+      "ends_at_local": "17:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13636"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "17:45",
+      "ends_at_local": "18:45",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13637"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "19:00",
+      "ends_at_local": "20:00",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13638"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "20:15",
+      "ends_at_local": "21:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13751"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "21:30",
+      "ends_at_local": "22:30",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13639"
+    },
+    {
+      "local_date": "2026-11-15",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13640"
+    },
+    {
+      "local_date": "2026-11-15",
+      "starts_at_local": "12:45",
+      "ends_at_local": "13:45",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13643"
+    },
+    {
+      "local_date": "2026-11-15",
+      "starts_at_local": "14:00",
+      "ends_at_local": "15:00",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13644"
+    },
+    {
+      "local_date": "2026-11-15",
+      "starts_at_local": "15:15",
+      "ends_at_local": "16:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13645"
+    },
+    {
+      "local_date": "2026-11-15",
+      "starts_at_local": "20:15",
+      "ends_at_local": "21:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13649"
+    },
+    {
+      "local_date": "2026-11-15",
+      "starts_at_local": "21:30",
+      "ends_at_local": "22:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13650"
+    },
+    {
+      "local_date": "2026-11-16",
+      "starts_at_local": "09:00",
+      "ends_at_local": "10:00",
+      "kind": "hockey_practice",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13652"
+    },
+    {
+      "local_date": "2026-11-16",
+      "starts_at_local": "10:15",
+      "ends_at_local": "11:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13653"
+    },
+    {
+      "local_date": "2026-11-16",
+      "starts_at_local": "11:15",
+      "ends_at_local": "12:15",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13654"
+    },
+    {
+      "local_date": "2026-11-16",
+      "starts_at_local": "12:30",
+      "ends_at_local": "13:30",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13655"
+    },
+    {
+      "local_date": "2026-11-16",
+      "starts_at_local": "13:45",
+      "ends_at_local": "14:45",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13656"
+    },
+    {
+      "local_date": "2026-11-16",
+      "starts_at_local": "15:00",
+      "ends_at_local": "16:00",
+      "kind": "public_skate",
+      "price_adult_minor": 65000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "source_id": "gololed:13657"
+    }
+  ]
+}

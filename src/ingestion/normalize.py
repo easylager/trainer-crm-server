@@ -282,6 +282,7 @@ class IceSessionNormalizer:
                     "capacity_note": raw.capacity_note,
                     "hall": raw.hall,
                     "price_tiers": _clean_price_tiers(raw.price_tiers),
+                    "price_note": raw.price_note,
                     "external_url": raw.external_url,
                 },
             )
@@ -302,6 +303,8 @@ class IceSessionNormalizer:
                 bucket["hall"] = raw.hall
             if raw.capacity_note and not bucket["capacity_note"]:
                 bucket["capacity_note"] = raw.capacity_note
+            if raw.price_note and not bucket.get("price_note"):
+                bucket["price_note"] = raw.price_note
             if raw.source_id and not bucket["source_id"]:
                 bucket["source_id"] = raw.source_id
 
@@ -348,6 +351,7 @@ class IceSessionNormalizer:
                     capacity_note=_clip_text(bucket["capacity_note"], _CAPACITY_NOTE_MAX_LEN),
                     hall=_clip_text(bucket.get("hall"), 64),
                     price_tiers=bucket.get("price_tiers"),
+                    price_note=_clip_text(bucket.get("price_note"), 256),
                     external_url=_safe_external_url(bucket["external_url"]),
                     source_id=_safe_source_id(bucket["source_id"]),
                     schedule_basis=session_basis,

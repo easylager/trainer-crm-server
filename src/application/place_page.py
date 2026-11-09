@@ -222,6 +222,15 @@ def slot_price(slot: Mapping[str, Any]) -> str:
     return format_price_minor(minor, currency)
 
 
+# Окно свободного катания с почасовым билетом («Билет на 1 час, вход в любое время с … до …»):
+# сумма без «/час» читается как цена всего окна.
+_HOURLY_TICKET_NOTE = re.compile(r"^\s*билет на 1 час\b", re.IGNORECASE)
+
+
+def _price_unit(slot: Mapping[str, Any]) -> str:
+    return "/час" if _HOURLY_TICKET_NOTE.match(str(slot.get("price_note") or "")) else ""
+
+
 def slot_plan_prices(slot: Mapping[str, Any]) -> tuple[list[tuple[str, str]], str]:
     """Цены билета колонками: подпись и сумма. Примечание — отдельно, не в сетке."""
     currency = str(slot.get("currency_code") or "BYN")
@@ -239,7 +248,8 @@ def slot_plan_prices(slot: Mapping[str, Any]) -> tuple[list[tuple[str, str]], st
         parts.append(("Детский", format_price_minor(slot["price_child_minor"], currency)))
     if slot.get("price_rental_minor") is not None:
         parts.append(("Прокат", format_price_minor(slot["price_rental_minor"], currency)))
-    return parts, str(slot.get("price_note") or "").strip()
+    unit = _price_unit(slot)
+    return [(label, value + unit) for label, value in parts], str(slot.get("price_note") or "").strip()
 
 
 def slot_price_lines(slot: Mapping[str, Any]) -> list[str]:
@@ -257,6 +267,8 @@ def slot_price_lines(slot: Mapping[str, Any]) -> list[str]:
         lines.append(f"Детский — {format_price_minor(slot['price_child_minor'], currency)}")
     if slot.get("price_rental_minor") is not None:
         lines.append(f"Прокат коньков — {format_price_minor(slot['price_rental_minor'], currency)}")
+    unit = _price_unit(slot)
+    lines = [line + unit for line in lines]
     note = str(slot.get("price_note") or "").strip()
     if note:
         lines.append(note)
@@ -1824,7 +1836,8 @@ def _b_kind_parts(
         sh, sm = (int(x) for x in start.split(":"))
         eh, em = (int(x) for x in end.split(":"))
         minutes = (eh * 60 + em) - (sh * 60 + sm)
-        if minutes > 0:
+        # Окно свободного катания (дольше 2 ч) — не «285 мин»: на что билет, скажет price_note.
+        if 0 < minutes <= 120:
             aside_bits.append(f"{minutes} мин")
     except ValueError:
         pass

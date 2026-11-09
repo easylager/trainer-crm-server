@@ -70,7 +70,8 @@ _LEDOVYY_DVORETS_CONFIG = {
 }
 
 _YUBILEYNY_CONFIG = {
-    "listing_url": "https://www.yubi.ru/afisha/katok/",
+    "listing_url": "https://www.yubi.ru/rink/",
+    "day_url_pattern": "https://www.yubi.ru/rink/?date={date}",
     "timezone": "Europe/Moscow",
     "currency_code": "RUB",
     "kind": "public_skate",
@@ -371,12 +372,12 @@ async def test_ledovyy_dvorets_day_evening_price_cutoff() -> None:
 async def test_yubileyny_matches_expected_events() -> None:
     job = _yubileyny_job()
     expected = _load_expected("spb-yubileyny")
-    now = datetime(2026, 9, 18, 6, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 9, 14, 0, tzinfo=timezone.utc)
     extraction = await YubileynyAfishaParser().extract(job)
-    assert {slot.source_id for slot in extraction.slots} == {"11206", "11207", "11208"}
+    assert len({slot.source_id for slot in extraction.slots}) == len(extraction.slots) == 13
     slots = IceSessionValidator().validate(IceSessionNormalizer().normalize(extraction, job, now=now))
 
-    assert len(slots) == len(expected["sessions"]) == 3
+    assert len(slots) == len(expected["sessions"]) == 13
     by_key = {(slot.local_date, slot.starts_at_local): slot for slot in slots}
     for gold in expected["sessions"]:
         key = (date.fromisoformat(gold["local_date"]), time.fromisoformat(gold["starts_at_local"]))
@@ -387,8 +388,33 @@ async def test_yubileyny_matches_expected_events() -> None:
         assert slot.price_adult_minor == gold["price_adult_minor"] == 80000
         assert slot.price_child_minor is None
         assert slot.price_rental_minor is None
-        assert slot.session_label == gold["session_label"] == "Часовая спортивная докатка — Малая арена"
-        assert slot.age_note == gold["age_note"]
+        assert slot.session_label == gold["session_label"] == "Тренировка на льду — свои коньки"
+
+
+@pytest.mark.asyncio
+async def test_yubileyny_other_product_raises(tmp_path) -> None:
+    src = _FIXTURES / "spb-yubileyny"
+    for f in src.glob("rink*.html"):
+        (tmp_path / f.name).write_text(
+            f.read_text(encoding="utf-8").replace("Тренировка на льду</h1>", "Хоккей</h1>"), encoding="utf-8"
+        )
+    job = _yubileyny_job()
+    job.config["fixture_dir"] = str(tmp_path)
+    with pytest.raises(ValueError, match="unexpected product"):
+        await YubileynyAfishaParser().extract(job)
+
+
+@pytest.mark.asyncio
+async def test_yubileyny_skips_page_showing_another_date(tmp_path) -> None:
+    src = _FIXTURES / "spb-yubileyny"
+    for f in src.glob("rink*.html"):
+        (tmp_path / f.name).write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "rink-2026-11-14.html").write_text((src / "rink.html").read_text(encoding="utf-8"), encoding="utf-8")
+    job = _yubileyny_job()
+    job.config["fixture_dir"] = str(tmp_path)
+    extraction = await YubileynyAfishaParser().extract(job)
+    assert "2026-11-14" not in {slot.local_date for slot in extraction.slots}
+    assert len(extraction.slots) == 12
 
 
 @pytest.mark.asyncio

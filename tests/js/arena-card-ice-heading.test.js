@@ -145,3 +145,38 @@ describe('speed oval mass areas', () => {
     assert.equal(M.sessionHall({ kind: 'public_skate', hall: 'Хоккейная площадка' }), 'Хоккейная площадка');
   });
 });
+
+describe('open skating window (Айс Град: 11:45–16:30, билет на час)', () => {
+  const now = new Date('2098-12-31T00:00:00Z');
+  const win = {
+    id: 7, kind: 'public_skate', local_date: '2099-01-01', starts_at_local: '11:45', ends_at_local: '16:30',
+    currency_code: 'RUB', price_adult_minor: 60000, price_child_minor: 50000,
+    price_tiers: [{ label: 'Взрослый с прокатом', minor: 90000 }],
+    price_note: 'Билет на 1 час, вход в любое время с 11:45 до 16:30',
+  };
+
+  it('shows «до 16:30» and the ticket note instead of «285 мин»', () => {
+    const g = M.showtimesForDay({ sessions: [win], now }).groups[0];
+    assert.equal(g.duration, 'до 16:30');
+    assert.match(g.note, /Билет на 1 час, вход в любое время с 11:45 до 16:30/);
+  });
+
+  it('marks every price of an hourly window as «/час»', () => {
+    const g = M.showtimesForDay({ sessions: [win], now }).groups[0];
+    assert.ok(g.prices.length >= 3);
+    g.prices.forEach((p) => assert.match(p.value, /\/час$/));
+  });
+
+  it('leaves ordinary sessions and whole-night windows without «/час»', () => {
+    const plain = Object.assign({}, win, { id: 8, ends_at_local: '12:45', price_note: null });
+    const night = Object.assign({}, win, {
+      id: 9, starts_at_local: '23:30', ends_at_local: '05:30', price_note: 'Билет на всю ночь катаний',
+    });
+    const groups = M.showtimesForDay({ sessions: [plain], now }).groups;
+    assert.equal(groups[0].duration, '60 мин');
+    groups[0].prices.forEach((p) => assert.doesNotMatch(p.value, /час/));
+    const ng = M.showtimesForDay({ sessions: [night], now }).groups[0];
+    ng.prices.forEach((p) => assert.doesNotMatch(p.value, /час/));
+    assert.match(ng.note, /всю ночь/);
+  });
+});

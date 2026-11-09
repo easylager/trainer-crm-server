@@ -96,6 +96,7 @@ def _drop_database(admin_url: str) -> None:
 # Prod public identity. Literals on purpose: deriving this from ARENAS would not catch a wrong slug.
 # (parser_key, city, slug, arena_id)
 _PROD_BINDINGS: tuple[tuple[str, str, str, int], ...] = (
+    ("aysgrad_html_v1", "Санкт-Петербург/ЛО", "ays-grad", 188),
     ("balticarena_html_v1", "Санкт-Петербург/ЛО", "baltik-arena", 192),
     ("baranovichi_lds_v1", "Барановичи", "baranovichi-lds", 23),
     ("bobruisk_arena_v1", "Бобруйск", "bobruisk-arena", 38),
@@ -104,6 +105,7 @@ _PROD_BINDINGS: tuple[tuple[str, str, str, int], ...] = (
     ("chizhovka_html_v1", "Минск", "chizhovka", 6),
     ("diamond_html_v1", "Минск", "minsk-diamond", 7),
     ("dinamoyunior_html_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-dinamo-yunior", 173),
+    ("gololed_html_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-gololed", 178),
     ("gomel_lds_v1", "Гомель", "gomel-lds", 33),
     ("gorki_lds_v1", "Горки", "gorki-lds", 32),
     ("grandice_json_v1", "Санкт-Петербург/ЛО", "ld-grand-kanon-ays", 99),
@@ -130,6 +132,7 @@ _PROD_BINDINGS: tuple[tuple[str, str, str, int], ...] = (
     ("ozerki_gcal_v1", "Санкт-Петербург/ЛО", "ledovaya-arena-ozerki", 101),
     ("parnasarena_text_v1", "Санкт-Петербург/ЛО", "tsentr-ledovykh-vidov-sporta-parnas", 174),
     ("pinsk_volna_v1", "Пинск", "pinsk-volna", 24),
+    ("raketa_ledokat_v1", "Санкт-Петербург/ЛО", "arena-raketa", 171),
     ("raubichi_html_v1", "Раубичи", "raubichi-rcop", 15),
     ("shansarena_html_v1", "Санкт-Петербург/ЛО", "ledovyy-kompleks-shans-arena", 100),
     ("shklov_arena_v1", "Шклов", "shklov-arena", 42),
@@ -188,7 +191,7 @@ async def _bind(async_url: str, expected: dict[str, tuple[str, str, int]]) -> No
     regional = build_regional_job_seeds()
     seeds = [*minsk, *regional]
     assert {seed.parser_key for seed in seeds} == set(expected)
-    assert len(seeds) == 44
+    assert len(seeds) == 47
     for seed in seeds:
         city_name, slug, _arena_id = expected[seed.parser_key]
         assert seed.config["city_name"] == city_name
@@ -228,8 +231,8 @@ async def test_fresh_database_binds_every_parser_job() -> None:
         raise RuntimeError(BIND_DB)
     expected = _expected()
     _assert_seed_lists_match_prod_table(expected)
-    assert len(expected) == 44
-    assert len(arenas_by_parser_key(CAPITAL_ARENAS)) == 24
+    assert len(expected) == 47
+    assert len(arenas_by_parser_key(CAPITAL_ARENAS)) == 27
     assert len(arenas_by_parser_key(REGIONAL_ARENAS)) == 20
 
     base_sync = _sync_url_from_settings()

@@ -1,0 +1,352 @@
+{
+  "run_date": "2026-11-09",
+  "now_utc": "2026-11-09T06:00:00+00:00",
+  "sessions": [
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "10:30",
+      "ends_at_local": "11:30",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-09",
+      "starts_at_local": "11:45",
+      "ends_at_local": "16:30",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 11:45 до 16:30"
+    },
+    {
+      "local_date": "2026-11-10",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-10",
+      "starts_at_local": "10:30",
+      "ends_at_local": "11:30",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-10",
+      "starts_at_local": "11:45",
+      "ends_at_local": "16:30",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 11:45 до 16:30"
+    },
+    {
+      "local_date": "2026-11-11",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-11",
+      "starts_at_local": "10:30",
+      "ends_at_local": "11:30",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-11",
+      "starts_at_local": "11:45",
+      "ends_at_local": "17:45",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 11:45 до 17:45"
+    },
+    {
+      "local_date": "2026-11-12",
+      "starts_at_local": "10:45",
+      "ends_at_local": "11:45",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-12",
+      "starts_at_local": "12:00",
+      "ends_at_local": "16:45",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 12:00 до 16:45"
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "10:30",
+      "ends_at_local": "11:30",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-13",
+      "starts_at_local": "11:45",
+      "ends_at_local": "16:30",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 11:45 до 16:30"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "09:15",
+      "ends_at_local": "10:15",
+      "kind": "hockey_practice",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": null,
+      "age_note": null,
+      "price_note": null
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "11:45",
+      "ends_at_local": "16:45",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 11:45 до 16:45"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "17:00",
+      "ends_at_local": "20:00",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 17:00 до 20:00"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "20:15",
+      "ends_at_local": "23:15",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 20:15 до 23:15"
+    },
+    {
+      "local_date": "2026-11-14",
+      "starts_at_local": "23:30",
+      "ends_at_local": "05:30",
+      "kind": "public_skate",
+      "session_label": "Ночное катание",
+      "price_adult_minor": 80000,
+      "price_child_minor": null,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "С прокатом",
+          "minor": 115000
+        }
+      ],
+      "age_note": null,
+      "price_note": "Билет на всю ночь катаний, только в кассе катка"
+    },
+    {
+      "local_date": "2026-11-15",
+      "starts_at_local": "13:00",
+      "ends_at_local": "16:30",
+      "kind": "public_skate",
+      "session_label": null,
+      "price_adult_minor": 60000,
+      "price_child_minor": 50000,
+      "price_rental_minor": null,
+      "price_tiers": [
+        {
+          "label": "Взрослый с прокатом",
+          "minor": 90000
+        },
+        {
+          "label": "Детский с прокатом",
+          "minor": 70000
+        }
+      ],
+      "age_note": "Детский — до 12 лет",
+      "price_note": "Билет на 1 час, вход в любое время с 13:00 до 16:30"
+    }
+  ]
+}

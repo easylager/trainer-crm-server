@@ -999,11 +999,19 @@
       var v = t && formatMinor(t.minor, cur);
       if (v && t.label) out.push({ label: String(t.label), value: v.withCurrency });
     });
-    if (out.length && !adult && !child) return out;
+    if (out.length && !adult && !child) {
+      return withPriceUnit(out, session, function (c, unit) { return { label: c.label, value: c.value + unit }; });
+    }
     if (adult) out.push({ label: child ? 'Взрослый' : 'Билет', value: adult.withCurrency });
     if (child) out.push({ label: 'Детский', value: child.withCurrency });
     if (rental) out.push({ label: 'Прокат', value: rental.withCurrency });
-    return out;
+    return withPriceUnit(out, session, function (c, unit) { return { label: c.label, value: c.value + unit }; });
+  }
+
+  // Окно свободного катания с почасовым билетом: сумма без «/час» читается как цена всего окна.
+  function withPriceUnit(list, session, apply) {
+    if (!/^\s*билет на 1 час(?=[\s,.]|$)/i.test(String((session && session.price_note) || ''))) return list;
+    return list.map(function (item) { return apply(item, '/час'); });
   }
 
   /** Подпись к детскому тарифу: «до 16 лет» без контекста непонятна родителям. */
@@ -1154,9 +1162,14 @@
         index[key] = groups.length;
         groups.push({
           title: iceKindLabel(s),
-          duration: dur ? dur + ' мин' : '',
+          // Окно свободного катания (дольше 2 ч): длительность сеанса тут не по делу — «до 16:30»,
+          // а на сколько билет, говорит price_note («Билет на 1 час в любое время окна»).
+          duration: dur > 120 ? 'до ' + hhmm(s.ends_at_local) : dur ? dur + ' мин' : '',
           prices: priceChips(s),
-          note: formatChildTicketAgeNote(notes.length === 1 ? notes[0] : s.age_note),
+          note: [
+            formatChildTicketAgeNote(notes.length === 1 ? notes[0] : s.age_note),
+            String(s.price_note || '').trim(),
+          ].filter(Boolean).join(' · '),
           times: [],
         });
       }
