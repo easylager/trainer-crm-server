@@ -346,7 +346,8 @@
    * единственным открытым, день считается по следующему матчу.
    */
   function dayMatches(list, now, exceptId) {
-    var rest = (list || []).filter(function (m) { return m.id !== exceptId; });
+    var skip = Array.isArray(exceptId) ? exceptId : [exceptId];
+    var rest = (list || []).filter(function (m) { return skip.indexOf(m.id) < 0; });
     var open = rest.filter(function (m) { return m.open; }).sort(function (a, b) { return a.starts_at < b.starts_at ? -1 : 1; });
     if (!open.length) return null;
     var first = dayKey(open[0].starts_at);
@@ -801,6 +802,298 @@
     return lines;
   }
 
+  // ---------- «Матчи и мои ходы» (TASK-359) ----------
+
+  /** Те же числа, что MATCH_LIVE_FOR и MATCH_STALE_AFTER в hockey_game.py: часы сервера и клиента не должны расходиться. */
+  var LIVE_FOR_MS = 3 * 3600 * 1000;
+  var STALE_AFTER_MS = 3 * 86400 * 1000;
+
+  function startMs(m) {
+    return new Date(m.starts_at).getTime();
+  }
+
+  /**
+   * Фаза матча: upcoming | live | waiting | done | cancelled. Основа — серверная m.phase (знает про запомненный итог),
+   * клиент лишь двигает её по часам: экран, открытый до старта, сам переходит в «идёт», а «идёт» через три часа — в «ждём итог».
+   */
+  function matchPhase(m, now) {
+    if (m.status === 'cancelled') return 'cancelled';
+    if (m.status === 'final') return 'done';
+    var t = (now || new Date()).getTime();
+    var start = startMs(m);
+    if (t < start) return 'upcoming';
+    if (m.status === 'review' || m.phase === 'waiting') return 'waiting';
+    return t - start < LIVE_FOR_MS ? 'live' : 'waiting';
+  }
+
+  /** Итога нет больше трёх суток: автоматика уже не подтвердит. Такая строка уходит из «ждём итог» в «Сыграли». */
+  function isStale(m, now) {
+    return matchPhase(m, now) === 'waiting' && (now || new Date()).getTime() - startMs(m) >= STALE_AFTER_MS;
+  }
+
+  function byStart(a, b) {
+    return startMs(a) - startMs(b) || a.id - b.id;
+  }
+
+  /** Мои ходы на начавшихся матчах без итога: идущие первыми, дальше ждущие итога. Для хаба игры и сводки. */
+  function pendingMatches(list, now) {
+    var live = [];
+    var waiting = [];
+    (list || []).forEach(function (m) {
+      if (!m.my_pick) return;
+      var ph = matchPhase(m, now);
+      if (ph === 'live') live.push(m);
+      else if (ph === 'waiting' && !isStale(m, now)) waiting.push(m);
+    });
+    return live.sort(byStart).concat(waiting.sort(byStart));
+  }
+
+  /** Заголовок блока хаба: «ТВОЯ КОМАНДА · ЖДЁМ ИТОГ», «ИДЁТ», «ИДЁТ И ЖДЁМ ИТОГ». */
+  function pendingHead(items, club, now) {
+    var live = items.some(function (m) { return matchPhase(m, now) === 'live'; });
+    var waiting = items.some(function (m) { return matchPhase(m, now) === 'waiting'; });
+    var what = live && waiting ? 'ИДЁТ И ЖДЁМ ИТОГ' : live ? 'ИДЁТ' : 'ЖДЁМ ИТОГ';
+    var mine = !!club && items.some(function (m) { return m.home_team === club || m.away_team === club; });
+    return (mine ? 'ТВОЯ КОМАНДА · ' : '') + what;
+  }
+
+  var WAIT_NOTE = 'Итог подтверждаем по двум проверкам.';
+  /** Подпись под «Идёт и ждём итог»: про бота — только если игрок включил сообщения в чате. */
+  function waitNote(remindOn) {
+    return WAIT_NOTE + (remindOn ? ' Пришлём результат сюда и в бота.' : ' Результат появится здесь.');
+  }
+
+  function relDay(iso, now) {
+    var diff = Base.dayIndex(Base.minskParts(new Date(iso))) - Base.dayIndex(Base.minskParts(now || new Date()));
+    return diff === 0 ? 'СЕГОДНЯ' : diff === 1 ? 'ЗАВТРА' : diff === -1 ? 'ВЧЕРА' : '';
+  }
+
+  /** «СЕГОДНЯ, ПН 9 НОЯБРЯ» · «ЗАВТРА, ВТ 10 НОЯБРЯ» · «ВЧЕРА, ВС 8 НОЯБРЯ» · «ЧТ 5 НОЯБРЯ». */
+  function dayHeading(iso, now) {
+    var p = Base.minskParts(new Date(iso));
+    var date = WEEKDAY_SHORT_UP[p.wd] + ' ' + p.d + ' ' + Base.MONTHS[p.m - 1].toUpperCase();
+    var rel = relDay(iso, now);
+    return rel ? rel + ', ' + date : date;
+  }
+
+  /** Шапка строки: «ЗАВТРА 19:00 · ЭКСТРАЛИГА · МИНСК», «ВС 8 НОЯБРЯ · 17:00 · КХЛ». У перенесённого время в центре, в шапке день. */
+  function rowLabel(m, phase, now, moved) {
+    var p = Base.minskParts(new Date(m.starts_at));
+    var time = Base.time(p);
+    var rel = relDay(m.starts_at, now);
+    var date = WEEKDAY_SHORT_UP[p.wd] + ' ' + p.d + ' ' + Base.MONTHS[p.m - 1].toUpperCase();
+    var when = moved ? [date] : rel === 'СЕГОДНЯ' || rel === 'ЗАВТРА' ? [rel + ' ' + time] : [date, time];
+    var parts = when.concat([leagueUp(m)]);
+    if (phase === 'upcoming' && m.city) parts.push(String(m.city).toUpperCase());
+    return parts.join(' · ');
+  }
+
+  function moveText(m) {
+    var pick = m.my_pick;
+    var team = clubShort(m[pick.side].name);
+    return pick.home_score != null && pick.away_score != null ? team + ' · ' + pick.home_score + ':' + pick.away_score : team;
+  }
+
+  var NO_MOVE = 'ты не ходил';
+  var AFTER_RESULT = 'Очки — после итога';
+
+  /** Подпись под счётом сыгранного матча: «итог», «в овертайме», «по буллитам». */
+  function decidedCaption(decidedIn) {
+    return decidedIn === 'ot' ? 'в овертайме' : decidedIn === 'so' ? 'по буллитам' : 'итог';
+  }
+
+  /** Очки сыгранного хода с козырем: золото только за «в точку» (базовые 50), ноль — нейтральная плашка. */
+  function pointsChip(m) {
+    var pick = m.my_pick;
+    var total = m.my_points != null ? m.my_points : Base.totalPoints(pick);
+    if (total == null) return { kind: 'note', text: 'Считаем очки' };
+    var trump = !!pick.doubled;
+    if (total === 0) return { kind: 'points', tone: 'zero', text: '0 · не угадал', trump: trump };
+    if (pick.points === Base.POINTS.exact) return { kind: 'points', tone: 'exact', text: '+' + total + ' В ТОЧКУ', trump: trump };
+    return { kind: 'points', tone: 'pos', text: '+' + total, trump: trump };
+  }
+
+  function movedFrom(m) {
+    return m.moved_from && !isNaN(Date.parse(m.moved_from)) ? m.moved_from : '';
+  }
+
+  /**
+   * Всё, что рисует строка списка, одним объектом: рисовать остаётся только DOM.
+   * chip: live | wait | moved | cancelled (значок в шапке); center: {big, cap}; move: {text, muted}; right: button | note | points | none.
+   * Счёта в «ждём итог» нет, очков до итога нет, срока не обещаем (правила игры и AC-004).
+   */
+  function rowModel(m, now) {
+    now = now || new Date();
+    var phase = matchPhase(m, now);
+    var stale = isStale(m, now);
+    var mine = !!m.my_pick;
+    var moved = phase === 'upcoming' && !!movedFrom(m);
+    var out = { id: m.id, phase: phase, stale: stale, chip: null, label: '', center: { big: '', cap: '' }, move: { label: 'ТВОЙ ХОД', text: '', muted: false }, right: { kind: 'none' }, struck: false };
+    out.label = rowLabel(m, phase, now, moved);
+    out.move.text = mine ? moveText(m) : '';
+    if (phase === 'upcoming') {
+      var open = !!m.open;
+      if (moved) out.chip = { kind: 'moved', text: 'ПЕРЕНЕСЁН' };
+      out.center = { big: timeOnly(m.starts_at), cap: moved ? 'было ' + timeOnly(m.moved_from) : open ? 'ход открыт' : 'ходы закрыты' };
+      if (!mine) {
+        out.move.text = 'ещё не выбран';
+        out.move.muted = true;
+      }
+      out.right = open ? { kind: 'button', text: mine ? 'Изменить' : 'Сделать ход', gold: !mine } : { kind: 'note', text: 'Ходы закрыты' };
+    } else if (phase === 'live') {
+      out.chip = { kind: 'live', text: 'ИДЁТ' };
+      out.center = m.live && m.live.home_score != null ? { big: m.live.home_score + ':' + m.live.away_score, cap: 'по ходу игры' } : { big: '—:—', cap: 'идёт матч' };
+      if (mine) out.right = { kind: 'note', text: AFTER_RESULT };
+    } else if (phase === 'waiting') {
+      out.chip = { kind: 'wait', text: stale ? 'БЕЗ ИТОГА' : 'ЖДЁМ ИТОГ' };
+      out.center = { big: '—:—', cap: stale ? 'итог не подтверждён' : 'итог уточняем' };
+      if (mine) out.right = { kind: 'note', text: AFTER_RESULT };
+    } else if (phase === 'done') {
+      var r = m.result;
+      out.center = r ? { big: r.home_score + ':' + r.away_score, cap: decidedCaption(r.decided_in) } : { big: '—:—', cap: 'итог' };
+      if (mine) out.right = pointsChip(m);
+    } else {
+      out.chip = { kind: 'cancelled', text: 'ОТМЕНЁН' };
+      out.center = { big: '—', cap: 'матч отменён' };
+      out.struck = true;
+      if (mine) {
+        out.move.text = 'ход снят';
+        out.move.muted = true;
+        out.right = { kind: 'note', text: 'В очки не входит' };
+      }
+    }
+    if (!mine && phase !== 'upcoming') {
+      out.move.text = NO_MOVE;
+      out.move.muted = true;
+    }
+    return out;
+  }
+
+  function byDay(list, now) {
+    var days = [];
+    var index = {};
+    list.forEach(function (m) {
+      var key = dayKey(m.starts_at);
+      if (!index[key]) {
+        index[key] = { day: key, head: dayHeading(m.starts_at, now), items: [] };
+        days.push(index[key]);
+      }
+      index[key].items.push(m);
+    });
+    return days;
+  }
+
+  /**
+   * Список по секциям: active — идёт и ждём итог (идущие, затем ждущие), upcoming — впереди по дням,
+   * done — сыграли по дням от новых к старым (сюда же матчи без итога старше трёх суток и прошедшие отменённые).
+   */
+  function groupMatches(items, now) {
+    now = now || new Date();
+    var live = [];
+    var waiting = [];
+    var upcoming = [];
+    var done = [];
+    (items || []).forEach(function (m) {
+      var ph = matchPhase(m, now);
+      if (ph === 'live') live.push(m);
+      else if (ph === 'waiting' && !isStale(m, now)) waiting.push(m);
+      else if (ph === 'upcoming' || (ph === 'cancelled' && startMs(m) > now.getTime())) upcoming.push(m);
+      else done.push(m);
+    });
+    return {
+      active: live.sort(byStart).concat(waiting.sort(byStart)),
+      upcoming: byDay(upcoming.sort(byStart), now),
+      done: byDay(done.sort(function (a, b) { return byStart(b, a); }), now),
+    };
+  }
+
+  /** Две цифры сводки (DEC-001): «ждут итога N» и «очки · R-е место» из me. Процентов нет. */
+  function matchesSummary(me, awaiting) {
+    var n = awaiting || 0;
+    var pts = me ? me.points : 0;
+    var place = me && me.rank ? me.rank + '-е' + NBSP + 'место' : 'пока без места';
+    return {
+      awaiting: String(n),
+      awaitingLabel: n === 1 ? 'ждёт итога' : 'ждут итога',
+      points: spaced(pts),
+      pointsLabel: Base.plural(pts, 'очко', 'очка', 'очков') + ' · ' + place,
+    };
+  }
+
+  /** Подпись секции «Сыграли»: «14 ходов» — ходы с начисленными очками за сезон (me.played), не число матчей. */
+  function playedCount(me) {
+    return me ? movesWord(me.played) : '';
+  }
+
+  /** Строка под названием входа из хаба и профиля: «3 ждут итога · 12-е место». */
+  function entryLine(awaiting, me) {
+    var parts = [];
+    if (awaiting) parts.push(awaiting + NBSP + (awaiting === 1 ? 'ждёт итога' : 'ждут итога'));
+    if (me && me.rank) parts.push(me.rank + '-е' + NBSP + 'место');
+    return parts.join(' · ') || 'Статус каждого хода';
+  }
+
+  var MATCHES_TITLE = 'Матчи и мои ходы';
+  var ENTRY_TITLE = 'Все матчи и мои ходы';
+  var MATCHES_EMPTY = {
+    label: 'ПОКА ПУСТО',
+    head: 'Здесь будут твои ходы и их итоги',
+    text: 'Выбери победителя ближайшего матча, и он появится в этом списке.',
+    cta: 'К ближайшему матчу',
+  };
+
+  /** Новый игрок: в «Мои ходы» нет ни одного хода и подгружать нечего — вместо списка пустое состояние. */
+  function matchesEmpty(items, hasMore) {
+    return !hasMore && !(items || []).some(function (m) { return m.my_pick; });
+  }
+
+  /** Куда ведёт «К ближайшему матчу»: ближайший открытый матч, иначе — хаб (null). */
+  function nearestOpen(items) {
+    return (items || []).filter(function (m) { return m.open && m.status === 'scheduled'; }).sort(byStart)[0] || null;
+  }
+
+  function cursorParts(cursor) {
+    var m = /^(\d+)_(\d+)$/.exec(cursor || '');
+    return m ? { t: Math.floor(Number(m[1]) / 1000), id: Number(m[2]) } : null;
+  }
+
+  function isHistory(m, now) {
+    var ph = matchPhase(m, now);
+    return ph === 'done' || isStale(m, now) || (ph === 'cancelled' && startMs(m) <= now.getTime());
+  }
+
+  /**
+   * Свежая первая страница поверх уже загруженного списка: то, что игрок подгрузил кнопкой «Показать раньше»,
+   * остаётся, остальное заменяется ответом. prev — {items, hasMore, cursor} или null, history — ответ сервера.
+   */
+  function mergeMatchList(prev, items, history, now) {
+    now = now || new Date();
+    history = history || {};
+    var out = items.slice();
+    var next = { hasMore: !!history.has_more, cursor: history.next_before || null };
+    var floor = history.has_more ? cursorParts(history.next_before) : null;
+    if (prev && prev.items && prev.cursor && floor) {
+      var seen = {};
+      items.forEach(function (m) { seen[m.id] = true; });
+      var older = prev.items.filter(function (m) {
+        return !seen[m.id] && isHistory(m, now) && (startMs(m) < floor.t || (startMs(m) === floor.t && m.id < floor.id));
+      });
+      if (older.length) {
+        out = out.concat(older);
+        next = { hasMore: !!prev.hasMore, cursor: prev.cursor };
+      }
+    }
+    return { items: out.sort(byStart), hasMore: next.hasMore, cursor: next.cursor };
+  }
+
+  /** Страница «Показать раньше»: дописывается к списку, дубли отбрасываются. */
+  function appendMatchPage(prev, items, history) {
+    var seen = {};
+    (prev.items || []).forEach(function (m) { seen[m.id] = true; });
+    var add = items.filter(function (m) { return !seen[m.id]; });
+    return { items: (prev.items || []).concat(add).sort(byStart), hasMore: !!(history && history.has_more), cursor: (history && history.next_before) || null };
+  }
+
   var api = {
     clubName: clubName,
     clubGen: clubGen,
@@ -882,6 +1175,24 @@
     inviteText: inviteText,
     crownLabel: crownLabel,
     seasonTitleLine: seasonTitleLine,
+    matchPhase: matchPhase,
+    isStale: isStale,
+    pendingMatches: pendingMatches,
+    pendingHead: pendingHead,
+    waitNote: waitNote,
+    dayHeading: dayHeading,
+    rowModel: rowModel,
+    groupMatches: groupMatches,
+    matchesSummary: matchesSummary,
+    playedCount: playedCount,
+    entryLine: entryLine,
+    matchesEmpty: matchesEmpty,
+    nearestOpen: nearestOpen,
+    mergeMatchList: mergeMatchList,
+    appendMatchPage: appendMatchPage,
+    MATCHES_TITLE: MATCHES_TITLE,
+    ENTRY_TITLE: ENTRY_TITLE,
+    MATCHES_EMPTY: MATCHES_EMPTY,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
