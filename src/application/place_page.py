@@ -1500,20 +1500,13 @@ def _b_buy(links: Mapping[str, Any]) -> str:
     )
 
 
-def schedule_wait_lines(card: Mapping[str, Any]) -> tuple[str, str]:
-    """TASK-330: (надзаголовок, заголовок) пустой карточки — привычка катка, без дат.
+def schedule_wait_line() -> str:
+    """Заголовок пустой карточки: только факт «расписания нет». Дня и ритма не обещаем.
 
-    Та же логика, что ``scheduleWaitView`` в Mini App (arena-card-model.js), один словарь.
+    «Привычка» катка (``schedule_habit``) — день, когда каток выкладывает расписание, а читатель
+    слышал в этом «сеансы по пятницам». Слоты идут не только в этот день, так что не показываем.
     """
-    raw = card.get("schedule_habit")
-    habit: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
-    level = habit.get("level")
-    weekday = habit.get("weekday")
-    if level == "day" and isinstance(weekday, int) and not isinstance(weekday, bool) and 0 <= weekday <= 6:
-        return t("schedule.wait_kicker"), t("schedule.habit_day", day=t(f"schedule.dow_{weekday}"))
-    if level == "week":
-        return t("schedule.wait_kicker"), t("schedule.habit_week")
-    return "", t("schedule.wait_none")
+    return t("schedule.wait_none")
 
 
 def _schedule_waits(card: Mapping[str, Any]) -> bool:
@@ -1523,14 +1516,11 @@ def _schedule_waits(card: Mapping[str, Any]) -> bool:
 
 
 def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
-    """TASK-330: привычка катка и колокольчик в Telegram (бот ставит его по /start watch_<id>)."""
+    """TASK-330: «расписания пока нет» и колокольчик в Telegram (бот ставит его по /start watch_<id>)."""
     from src.application.catalog_icons import icon_svg
 
-    kicker, headline = schedule_wait_lines(card)
+    headline = schedule_wait_line()
     watch = links.get("watch")
-    # Одна фраза, а не надзаголовок + второй заголовок: «Новое расписание: обычно по пятницам».
-    lead = f'<span class="b-wait__lead">{_esc(kicker)}:</span> ' if kicker else ""
-    headline = headline[:1].lower() + headline[1:] if kicker else headline
     bell = ""
     if watch:
         bell = (
@@ -1539,7 +1529,7 @@ def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
             f'{icon_svg("bell")}{_esc(t("schedule.bell_site_cta"))}</a>'
             f'<p class="b-wait__note">{_esc(t("schedule.bell_note"))}</p>'
         )
-    return f'<div class="b-wait"><p class="b-wait__title">{lead}{_esc(headline)}</p>{bell}</div>'
+    return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{bell}</div>'
 
 
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:

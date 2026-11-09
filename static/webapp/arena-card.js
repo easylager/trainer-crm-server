@@ -1668,7 +1668,6 @@
       '<p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
       '<div class="arena-wait">' +
       '<div class="arena-wait__head">' +
-      (w.kicker ? '<p class="arena-wait__kicker">' + esc(w.kicker) + '</p>' : '') +
       '<p class="arena-wait__title">' + esc(w.title) + '</p>' +
       (canWatch ? '<p class="arena-wait__sub">' + esc(w.sub) + '</p>' : '') +
       '</div>' +
