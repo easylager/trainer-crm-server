@@ -3445,6 +3445,13 @@ async def run_hockey_matches_loop() -> None:
                 await notify_new_reviews(
                     async_session_factory, now=datetime.now(timezone.utc), send=send_card_to_admins
                 )
+                # Матч с ходами остался scheduled без итога дольше 4 часов (ни ручной проверки, ни алерта) —
+                # одно сообщение админам с кнопкой «Поправить» (TASK-359).
+                from src.application.hockey_stuck import notify_stuck_results
+
+                await notify_stuck_results(
+                    async_session_factory, now=datetime.now(timezone.utc), send=send_card_to_admins
+                )
             if settings.hockey_matches_enabled:
                 now = datetime.now(timezone.utc)
                 calendar_due = last_calendar is None or now - last_calendar >= HOCKEY_CALENDAR_EVERY
