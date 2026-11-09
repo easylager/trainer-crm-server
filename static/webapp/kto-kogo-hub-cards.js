@@ -210,10 +210,32 @@
     return h('div', { class: 'kk-dr' }, kids);
   }
 
+  // ---------- начался, итога нет (TASK-359) ----------
+
+  /** Мои ходы на начавшихся матчах без итога: матч не пропадает из хаба между стартом и подтверждением итога. */
+  function pendingList() {
+    return S.pendingMatches(state.matches, new Date());
+  }
+
+  function pendingSection() {
+    if (!state.hubReady || !K.matchRows) return null;
+    var items = pendingList();
+    if (!items.length) return null;
+    var now = new Date();
+    var club = state.profile && state.profile.club ? state.profile.club.name : null;
+    return h('div', { class: 'kk-sec' }, [
+      h('div', { class: 'kk-sec__head' }, [h('h2', { class: 'kk-lbl kk-lbl--h', text: S.pendingHead(items, club, now) })]),
+      h('div', { class: 'kk-ml-list' }, items.slice(0, 3).map(function (m) { return K.matchRows.row(m, now); })),
+    ]);
+  }
+
   function daySection() {
     if (!state.hubReady) return h('div', { class: 'kk-skel kk-skel--card' });
     var hero = current();
-    var d = S.dayMatches(state.matches, new Date(), hero ? hero.match.id : null);
+    // Матчи из блока «ждём итог» и «Твоя команда» в день не повторяются.
+    var shown = pendingList().map(function (m) { return m.id; });
+    if (hero) shown.push(hero.match.id);
+    var d = S.dayMatches(state.matches, new Date(), shown);
     if (!d && !hero && !state.matches.length && state.matchesFailed) return K.retryCard('Матчи не загрузились.', function () { K.reset('hub', {}); });
     if (!d) return hero ? null : K.emptyCard('МАТЧИ ДНЯ', 'Ближайших матчей пока нет — календарь обновится, как только клубы их назначат.');
     return h('div', { class: 'kk-sec' }, [
@@ -251,5 +273,5 @@
     ], 'kk-sheet--pts');
   }
 
-  K.hubCards = { hero: heroCard, day: daySection, pointsLink: pointsLink, pointsSheet: pointsSheet };
+  K.hubCards = { hero: heroCard, pending: pendingSection, day: daySection, pointsLink: pointsLink, pointsSheet: pointsSheet };
 })();

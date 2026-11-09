@@ -497,3 +497,84 @@ body.kk-dark .kk-cn { --kk-coin-shadow: rgba(0, 0, 0, 0.55); }
   .kk-cp__strip.is-run { animation: none; transform: translateY(calc(var(--kk-n) * var(--kk-reel-h) * -1)); }
   .kk-cp__stamp.is-pop { animation: none; }
 }
+
+/* ===== matches list (TASK-359) ===== */
+/* Макет: .ai/handoff/design-kk/matches. «Идёт» — единственное место с красной точкой, это не результат; плашка очков — мягкая. */
+.kk-mc, .kk-ml, .kk-ml-go { --kk-live: #c0262d; --kk-pos-bg: #e0f0dc; --kk-pos-ink: #0b5a2c; }
+body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #ff8a8d; --kk-pos-bg: #24364a; --kk-pos-ink: #7ee0a1; }
+
+.kk-main.kk-ml { padding: 16px 16px 28px; gap: 16px; }
+.kk-ml .kk-h1 { font-size: 19px; line-height: 1.1; }
+
+.kk-ml-sum { background: var(--kk-card); border-radius: 24px; padding: 16px; display: flex; gap: 12px; }
+.kk-ml-sum__c { flex: 1; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; min-width: 0; }
+.kk-ml-sum__c b { font: 400 24px/1 var(--kk-display); font-variant-numeric: normal; }
+.kk-ml-sum__c span { font: 500 12px/1.2 var(--kk-text); color: var(--kk-muted); }
+
+.kk-ml-tabs { display: flex; gap: 4px; padding: 4px; background: var(--kk-chip); border-radius: 16px; }
+.kk-ml-tab { flex: 1; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--kk-soft); font: 600 14px/1 var(--kk-text); }
+.kk-ml-tab.is-on { background: var(--kk-card); color: var(--kk-ink); font-weight: 800; }
+
+/* Видимая плашка 40 px, а зона нажатия 44: рамка прозрачная и под фоном не закрашивается. */
+.kk-ml-chips { display: flex; gap: 6px; margin: -2px; overflow-x: auto; }
+.kk-ml-chip { flex: none; height: 44px; padding: 0 16px; border: 2px solid transparent; background-clip: padding-box; border-radius: 22px; background-color: var(--kk-chip); color: var(--kk-ink); font: 700 13px/1 var(--kk-text); }
+.kk-ml-chip.is-on { background-color: var(--kk-ink); color: var(--kk-card); }
+
+.kk-ml-sec { display: flex; flex-direction: column; gap: 6px; }
+.kk-ml-sh { display: flex; align-items: baseline; justify-content: space-between; }
+.kk-ml-h2 { margin: 0; font: 600 12px/1 var(--kk-text); letter-spacing: 0.06em; color: var(--kk-muted); }
+.kk-ml-cnt { font: 600 12px/1 var(--kk-text); color: var(--kk-muted); }
+.kk-ml-note { margin: 0; font: 400 13px/1.4 var(--kk-text); color: var(--kk-soft); }
+.kk-ml-day { padding-top: 4px; font: 700 12px/1 var(--kk-text); letter-spacing: 0.06em; color: var(--kk-soft); }
+.kk-ml-list { display: flex; flex-direction: column; gap: 12px; }
+.kk-ml-more { height: 52px; border: 0; border-radius: 16px; background: var(--kk-chip); color: var(--kk-ink); font: 700 15px/1 var(--kk-text); }
+.kk-ml-more:disabled { color: var(--kk-muted); }
+
+.kk-ml-empty { padding: 20px 16px; gap: 12px; align-items: flex-start; }
+.kk-ml-empty__tag { background: var(--kk-gold); color: var(--kk-on-gold); font: 400 13px/1 var(--kk-display); padding: 8px 11px; border-radius: 10px; }
+.kk-ml-empty__h { font: 700 17px/1.25 var(--kk-text); }
+
+/* Вход из хаба игры и профиля */
+.kk-ml-go { width: 100%; min-height: 64px; border: 0; border-radius: 20px; background: var(--kk-card); color: var(--kk-ink); padding: 12px 14px; display: flex; align-items: center; gap: 12px; text-align: left; }
+.kk-ml-go__ic { width: 44px; height: 44px; border-radius: 14px; background: var(--kk-chip); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.kk-ml-go__t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.kk-ml-go__t b { font: 700 15px/1.2 var(--kk-text); }
+.kk-ml-go__t span { font: 400 13px/1.2 var(--kk-text); color: var(--kk-muted); }
+.kk-ml-go__n { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px; background: var(--kk-gold); color: var(--kk-on-gold); font: 800 12px/24px var(--kk-text); text-align: center; flex: none; }
+.kk-ml-go > svg { flex: none; color: var(--kk-muted); }
+
+/* Строка матча: общая для списка и блока «ждём итог» в хабе */
+.kk-mc { background: var(--kk-card); border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.kk-mc__open { width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; display: flex; flex-direction: column; gap: 10px; }
+.kk-mc__bar { min-height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kk-mc__lbl { min-width: 0; font: 600 11px/1.3 var(--kk-text); letter-spacing: 0.06em; color: var(--kk-muted); overflow-wrap: anywhere; }
+.kk-mc__chip { flex: none; height: 26px; padding: 0 10px; border-radius: 13px; display: inline-flex; align-items: center; gap: 6px; background: var(--kk-chip); color: var(--kk-ink); font: 800 11px/1 var(--kk-text); letter-spacing: 0.06em; }
+.kk-mc__chip--wait { background: var(--kk-crownbg); color: var(--kk-crownink); }
+.kk-mc__chip--cancelled { color: var(--kk-soft); }
+.kk-mc__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--kk-live); }
+.kk-mc__teams { display: flex; align-items: center; gap: 6px; }
+.kk-mc__t { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.kk-mc__t--r { justify-content: flex-end; text-align: right; }
+/* Имя переносится по словам, а не посреди слова: колонка 79 px, «Локомотив» занимает почти всю. */
+.kk-mc__n { min-width: 0; font: 700 14px/1.15 var(--kk-text); color: var(--kk-ink); overflow-wrap: break-word; word-break: normal; hyphens: manual; }
+.kk-mc__n.is-struck { text-decoration: line-through; }
+.kk-mc__c { width: 80px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.kk-mc__big { font: 400 20px/1 var(--kk-display); font-variant-numeric: normal; white-space: nowrap; }
+.kk-mc__cap { font: 500 11px/1.2 var(--kk-text); color: var(--kk-muted); text-align: center; }
+.kk-mc__foot { border-top: 1px solid var(--kk-line); padding-top: 10px; min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.kk-mc__mv { min-width: 0; display: flex; flex-direction: column; gap: 3px; margin-right: auto; }
+.kk-mc__ml { font: 600 11px/1 var(--kk-text); letter-spacing: 0.06em; color: var(--kk-muted); }
+.kk-mc__mt { font: 700 14px/1.2 var(--kk-text); color: var(--kk-ink); overflow-wrap: anywhere; }
+.kk-mc__mt.is-muted { color: var(--kk-muted); }
+.kk-mc__note { max-width: 130px; font: 400 12px/1.3 var(--kk-text); color: var(--kk-muted); text-align: right; }
+.kk-mc__coin { flex: none; display: inline-flex; }
+.kk-mc__coin:empty { display: none; }
+.kk-mc__btn { flex: none; height: 44px; padding: 0 16px; border: 0; border-radius: 14px; background: var(--kk-chip); color: var(--kk-ink); font: 600 14px/1 var(--kk-text); }
+.kk-mc__btn.is-gold { padding: 0 18px; background: var(--kk-gold); color: var(--kk-on-gold); font-weight: 700; }
+.kk-mc__pts { flex: none; display: inline-flex; align-items: center; gap: 8px; }
+.kk-mc__p { height: 32px; padding: 0 12px; border-radius: 16px; display: inline-flex; align-items: center; font: 800 14px/1 var(--kk-text); white-space: nowrap; }
+.kk-mc__p--pos { background: var(--kk-pos-bg); color: var(--kk-pos-ink); }
+.kk-mc__p--exact { background: var(--kk-gold); color: var(--kk-on-gold); }
+.kk-mc__p--zero { background: var(--kk-chip); color: var(--kk-soft); }
+.kk-mc__x { display: inline-flex; align-items: center; gap: 3px; font: 800 12px/1 var(--kk-text); color: var(--kk-soft); }
+.kk-mc--cancelled .kk-mc__big { color: var(--kk-muted); }

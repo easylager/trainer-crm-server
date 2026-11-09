@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field
@@ -11,16 +11,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.application.hockey_game import (
+    HISTORY_MAX,
+    HISTORY_PAGE,
     DoubleUnavailable,
     Pick,
     PicksClosed,
     Standing,
+    awaiting_count,
     live_points,
     make_pick,
+    match_phase,
+    match_stale,
     my_double,
     my_doubles,
+    my_points,
     pick_open,
-    player_matches,
+    player_match_list,
     set_double,
 )
 from src.application.hockey_hub import hub_card, mark_result_seen
@@ -48,8 +54,6 @@ from src.shared.telegram_webapp import parse_user_json_from_init_data
 
 router = APIRouter(tags=["webapp"])
 
-_MATCH_WINDOW = timedelta(days=3)
-_LIST_LIMIT = 20
 _TABLE_LIMIT = 50
 
 
@@ -156,6 +160,7 @@ def _match_out(
         my_pick = _pick_out(
             row["pick_side"], row["pick_home_score"], row["pick_away_score"], row["pick_points"], row["pick_doubled"]
         )
+    phase = match_phase(row["status"], starts_at, now, has_probe=bool(row.get("has_probe")))
     return {
         "id": row["id"],
         "home_team": row["home_team"],
@@ -180,6 +185,11 @@ def _match_out(
         "sides": {"home": row["home_picks"], "away": row["away_picks"]},
         "friends": friends,
         "race_final": row["id"] == final_id,
+        # Серверная фаза (TASK-359): upcoming | live | waiting | done | cancelled. «stale» — итога нет больше трёх суток.
+        "phase": phase,
+        "stale": match_stale(phase, starts_at, now),
+        # Очки хода с козырем: у ``my_pick.points`` базовые, здесь — итог, который видит игрок.
+        "my_points": my_points(row["pick_points"], bool(row["pick_doubled"])) if my_pick else None,
         "league": row.get("league"),
         "arena": row.get("arena"),
         "city": row.get("city"),
@@ -193,20 +203,39 @@ def _match_out(
 async def get_client_hockey_matches(
     club: str | None = Query(None, description="только матчи клуба, дома и в гостях"),
     league: str = Query("khl", pattern="^(khl|extraliga|all)$", description="khl — Динамо (по умолчанию)"),
+    mode: str = Query("all", pattern="^(mine|all)$", description="mine — матчи с моим ходом и все будущие"),
+    before: str | None = Query(None, max_length=64, description="курсор «раньше» из history.next_before"),
+    limit: int = Query(HISTORY_PAGE, ge=1, le=HISTORY_MAX, description="сколько сыгранных матчей на странице"),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    """Матчи игры: идёт и ждём итог, впереди, сыгранные страницами (TASK-359).
+
+    Первая страница отдаёт все начавшиеся без итога, ближайшие будущие и последние сыгранные: прошедшие не
+    вытесняют будущее. ``before`` — следующая страница сыгранных; в ответе тогда только ``items`` и ``history``.
+    """
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
-    rows = await player_matches(
-        session,
-        player_key,
-        since=now - _MATCH_WINDOW,
-        limit=_LIST_LIMIT,
-        club=club,
-        league=None if league == "all" else league,
-    )
+    try:
+        page = await player_match_list(
+            session,
+            player_key,
+            now=now,
+            mode=mode,
+            club=club,
+            league=None if league == "all" else league,
+            before=before,
+            limit=limit,
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный курсор") from None
+    rows = page["rows"]
+    history = {"has_more": page["has_more"], "next_before": page["next_before"]}
     ids = [int(row["id"]) for row in rows]
+    if before:
+        # Подгрузка истории: друзья и козырь нужны только первому экрану, страница отдаёт сами матчи.
+        empty = {"home": [], "away": []}
+        return {"items": [_match_out(row, now=now, friends=empty) for row in rows], "history": history}
     friends = await friends_picks(session, player_key=player_key, match_ids=ids)
     moves = await friends_moves(session, player_key=player_key, match_ids=ids, now=now)
     race = await race_summary(session, now=now)
@@ -217,6 +246,8 @@ async def get_client_hockey_matches(
             _match_out(row, now=now, friends=friends[int(row["id"])], final_id=final_id, moves=moves[int(row["id"])])
             for row in rows
         ],
+        "history": history,
+        "awaiting": await awaiting_count(session, player_key, now=now),
         "me": _standing_me(await _my_season_row(session, player_key, now)),
         "race": race,
         "double": await my_double(session, player_key=player_key, now=now),

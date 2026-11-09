@@ -173,7 +173,9 @@
           ]),
           fanCard(),
           K.hubCards.hero(),
+          K.hubCards.pending(),
           K.hubCards.day(),
+          state.hubReady && K.matchRows ? K.matchRows.link() : null,
           K.hubCards.pointsLink(),
           peaksBlock(),
           leaguesSection(),
@@ -358,6 +360,7 @@
           h('div', { class: 'kk-duels' }, p.duels.map(function (d) { return h('span', { class: 'kk-cr kk-cr--c' }, [d.display_name, h('b', { text: d.won + ':' + d.lost })]); })),
         ]));
       }
+      if (K.matchRows) main.appendChild(K.matchRows.link());
       var league = (state.leagues || []).filter(function (l) { return l.active; })[0];
       main.appendChild(h('div', { class: 'kk-two' }, [
         h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { if (league) K.shareCard({ card: 'league', league_id: league.id }, league.invite_url, S.inviteText(league.name, league)); else K.go('leagueNew', {}); }, text: league ? 'Позвать в лигу' : 'Создать лигу' }),

@@ -17,6 +17,14 @@ NOW = datetime(2026, 10, 20, 12, 0, tzinfo=MINSK_TZ)
 SASHA, KATYA = 9102991, 9102992
 
 
+def test_choose_mode_waiting_sits_between_result_and_before() -> None:
+    """TASK-359: «ждём итог» важнее приглашения на следующий матч и уступает только непросмотренному итогу."""
+    assert choose_mode(unseen_result=True, upcoming=True, suppress=False, waiting=True) == "result"
+    assert choose_mode(unseen_result=False, upcoming=True, suppress=False, waiting=True) == "waiting"
+    assert choose_mode(unseen_result=False, upcoming=True, suppress=True, waiting=True) == "waiting"
+    assert choose_mode(unseen_result=False, upcoming=False, suppress=False, waiting=False) is None
+
+
 def test_choose_mode_result_beats_upcoming_and_streak_hides_only_before() -> None:
     assert choose_mode(unseen_result=True, upcoming=True, suppress=True) == "result"
     assert choose_mode(unseen_result=False, upcoming=True, suppress=False) == "before"
@@ -283,3 +291,49 @@ async def test_hidden_game_keeps_home_event_and_drops_away_and_results(db_sessio
     )
     card = await hub_card(db_session, SASHA, now=NOW)
     assert card["mode"] == "before" and card["is_home"] is True
+
+
+@pytest.mark.asyncio
+async def test_started_match_with_my_pick_stays_in_the_slot_until_the_result(db_session, monkeypatch) -> None:
+    """TASK-359: между стартом и итогом карточка не пропадает: идёт → ждём итог → итог."""
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    away = await _match(db_session, "wait-away", NOW - timedelta(hours=5), home="Барыс", away="Динамо-Минск")
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=away, side="away", now=NOW - timedelta(hours=8)
+    )
+    nxt = await _match(db_session, "wait-next", NOW + timedelta(hours=20), home="Барыс", away="Динамо-Минск")
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["mode"] == "waiting" and card["match"]["id"] == away
+    assert card["match"]["open"] is False and card["match"]["result"] is None
+    assert card["my_pick"]["side"] == "away"
+    # Итог пришёл — карточка не пропала, а стала итогом; открыл — вернулось приглашение.
+    await _final(db_session, away, at=NOW - timedelta(minutes=10))
+    await score_finished_matches(db_session, now=NOW)
+    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] == "result"
+    await mark_result_seen(db_session, player_key=SASHA, match_id=away, now=NOW)
+    assert (await hub_card(db_session, SASHA, now=NOW))["match"]["id"] == nxt
+
+
+@pytest.mark.asyncio
+async def test_waiting_follows_the_live_window_without_a_gap(db_session, monkeypatch) -> None:
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    home = await _match(db_session, "wait-home", NOW - timedelta(hours=1))
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=home, side="home", now=NOW - timedelta(hours=4)
+    )
+    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] == "live"
+    after = await hub_card(db_session, SASHA, now=NOW + timedelta(hours=3))
+    assert after["mode"] == "waiting" and after["match"]["id"] == home
+
+
+@pytest.mark.asyncio
+async def test_waiting_needs_my_pick_and_expires_after_three_days(db_session) -> None:
+    started = await _match(db_session, "wait-nopick", NOW - timedelta(hours=5), home="Барыс", away="Динамо-Минск")
+    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=started, side="home", now=NOW - timedelta(hours=8)
+    )
+    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] == "waiting"
+    assert (await hub_card(db_session, SASHA, now=NOW + timedelta(days=3)))["mode"] is None
+    await db_session.execute(text("UPDATE hockey_matches SET status = 'review' WHERE id = :id"), {"id": started})
+    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] == "waiting"

@@ -57,6 +57,19 @@ describe('тёмная тема: токены владельца и контра
     assert.deepEqual(low, []);
   });
 
+  it('экран матчей (TASK-359): очки и точка «идёт» читаются в обеих темах', () => {
+    const light = tokens('.kk-mc, .kk-ml, .kk-ml-go');
+    const night = Object.assign({}, light, tokens('body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go'));
+    const base = tokens('.kk');
+    const themes = [[Object.assign({}, base, light), light], [Object.assign({}, dark, night), night]];
+    for (const [t] of themes) {
+      assert.ok(ratio(t['kk-pos-ink'], t['kk-pos-bg']) >= 4.5, 'очки: ' + ratio(t['kk-pos-ink'], t['kk-pos-bg']).toFixed(2));
+      assert.ok(ratio(t['kk-live'], t['kk-chip']) >= 3, 'точка «идёт»: ' + ratio(t['kk-live'], t['kk-chip']).toFixed(2));
+      assert.ok(ratio(t['kk-soft'], t['kk-chip']) >= 4.5, 'ноль и «отменён» на плашке');
+      assert.ok(ratio(t['kk-crownink'], t['kk-crownbg']) >= 4.5, '«ждём итог» на плашке');
+    }
+  });
+
   it('красный и зелёный не применяются к результатам', () => {
     const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
     const users = rules.split('}').filter((r) => /var\(--kk-(win|lose)\)/.test(r) && !/^\s*(body\.kk-dark )?\.kk\s*\{/.test(r.trim() + '{'));
