@@ -22,6 +22,9 @@ body.kk-dark .kk {
 html, body { margin: 0; }
 body { background: #f2f5fa; }
 body.kk-dark { background: #17212b; }
+/* Быстрые повторные тапы (+/− у счёта, стороны) не должны масштабировать страницу; щипок остаётся. */
+.kk, .kk * { touch-action: manipulation; }
+.kk button, .kk [role='button'] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 button, input { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 button { cursor: pointer; }
