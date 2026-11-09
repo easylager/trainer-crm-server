@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.hockey_game import DEFAULT_PLAYER_NAME, POINTS_EXACT, POINTS_WINNER
 from src.application.hockey_slices import (
     DINAMO,
+    MAX_YEAR,
+    MIN_YEAR,
     Period,
     Scope,
     crown_eligible,
@@ -327,6 +329,10 @@ def build_terms(
         start, end = period.since, period.until
     elif term == "weeks4":
         start, end = today, today + timedelta(days=28)
+    elif term in ("playoff", "dates") and any(
+        v is not None and not MIN_YEAR <= v.year <= MAX_YEAR for v in (starts_at, ends_at)
+    ):
+        raise InvalidTerms("Такие даты не подходят")
     elif term == "playoff":
         year = season.until.astimezone(MINSK_TZ).year
         start = _as_instant(starts_at) if starts_at else datetime(year, *PLAYOFF_FROM, tzinfo=MINSK_TZ)
@@ -380,6 +386,8 @@ def term_options(*, now: datetime) -> dict:
 def _parse_month(raw: str) -> Period:
     try:
         year, mon = (int(x) for x in raw.split("-"))
+        if not MIN_YEAR <= year <= MAX_YEAR:
+            raise ValueError(raw)
         return month_period(date(year, mon, 1))
     except (ValueError, TypeError):
         raise InvalidTerms("Месяц в формате 2026-12") from None

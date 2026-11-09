@@ -38,6 +38,8 @@ PEAK_MIN_MOVES = 3
 PEAKS_LIMIT = 3
 NEIGHBORS = 2
 _PERIOD_RE = re.compile(r"^(\d{4})-(\d{2})$")
+# Годы вне этого окна — мусор из запроса: date/astimezone на краях календаря падают OverflowError (500).
+MIN_YEAR, MAX_YEAR = 2020, 2100
 
 
 def _utc(value: datetime) -> datetime:
@@ -83,7 +85,7 @@ def parse_period(raw: str | None, now: datetime) -> Period:
     if value == KIND_MONTH:
         return current_month_period(now)
     found = _PERIOD_RE.match(value)
-    if found and 1 <= int(found.group(2)) <= 12:
+    if found and 1 <= int(found.group(2)) <= 12 and MIN_YEAR <= int(found.group(1)) <= MAX_YEAR:
         return month_period(date(int(found.group(1)), int(found.group(2)), 1))
     raise ValueError(f"unknown period: {raw!r}")
 
@@ -468,6 +470,8 @@ __all__ = [
     "DINAMO",
     "FIRST_RACE_MONTH",
     "KIND_MONTH",
+    "MAX_YEAR",
+    "MIN_YEAR",
     "KIND_SEASON",
     "Period",
     "Row",

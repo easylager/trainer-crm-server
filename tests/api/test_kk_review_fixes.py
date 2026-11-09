@@ -185,3 +185,28 @@ async def test_c_extend_again_after_owner_left_extension_is_not_500(app_use_test
             assert left.status_code == 200, left.text
             again = await client.post(f"/api/webapp/client/hockey/leagues/{league.id}/extend", json={})
     assert again.status_code == 409, again.text
+
+
+@pytest.mark.parametrize("raw", ["0001-01", "1999-12", "9999-12", "2101-01"])
+def test_d_parse_period_rejects_absurd_years(raw: str) -> None:
+    from src.application.hockey_slices import parse_period
+
+    with pytest.raises(ValueError):
+        parse_period(raw, NOV)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"term": "month", "month": "0001-01"},
+        {"term": "month", "month": "9999-12"},
+        {"term": "dates", "starts_at": datetime(1, 1, 1).date(), "ends_at": datetime(2026, 12, 1).date()},
+        {"term": "dates", "starts_at": datetime(2026, 11, 20).date(), "ends_at": datetime(9999, 12, 31).date()},
+        {"term": "playoff", "starts_at": datetime(1, 1, 1).date(), "ends_at": datetime(2027, 4, 1).date()},
+    ],
+)
+def test_d_build_terms_rejects_absurd_years_with_invalid_terms(kwargs: dict) -> None:
+    from src.application.hockey_leagues import InvalidTerms, build_terms
+
+    with pytest.raises(InvalidTerms):
+        build_terms(scope="dinamo", now=NOV, **kwargs)
