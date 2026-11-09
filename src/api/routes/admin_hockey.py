@@ -13,6 +13,7 @@ from src.api.miniapp_auth.deps import get_admin_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
 from src.application.hockey_game import score_finished_matches
 from src.application.hockey_matches import STATUS_REVIEW, MatchRow, list_matches, set_manual_result
+from src.application.hockey_promo import promo_report
 
 router = APIRouter(tags=["webapp-admin-hockey"])
 
@@ -95,3 +96,13 @@ async def get_admin_extraliga_subscriptions(
     from src.application.hockey_event import kk_subscription_counts
 
     return {"items": await kk_subscription_counts(session)}
+
+
+@router.get("/admin/hockey/promo")
+async def get_admin_hockey_promo(
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Рекламные метки «Кто кого»: заходов, новых игроков, сделавших ход, вернувшихся в другой день."""
+    del principal
+    return {"items": await promo_report(session)}

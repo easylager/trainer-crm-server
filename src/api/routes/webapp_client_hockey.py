@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
@@ -58,6 +58,8 @@ class PickBody(BaseModel):
     home_score: int | None = None
     away_score: int | None = None
     display_name: str | None = None
+    # Рекламная метка (kks_<метка>): учитывается только первому ходу нового игрока, мусор игнорируется.
+    src: str | None = Field(None, max_length=64)
 
 
 def _aware(value: datetime) -> datetime:
@@ -267,6 +269,7 @@ async def put_client_hockey_pick(
             side=body.side,
             home_score=body.home_score,
             away_score=body.away_score,
+            src=body.src,
             now=now,
         )
     except ValueError as exc:

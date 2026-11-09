@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
@@ -21,6 +21,7 @@ from src.api.miniapp_auth import (
     client_catalog_telegram_key,
     get_client_miniapp_principal,
 )
+from src.application.hockey_promo import record_entry
 from src.application.hockey_cards import (
     CARD_SIZE,
     crown_caption,
@@ -235,4 +236,20 @@ async def post_client_hockey_card_opened(
 ) -> None:
     """Игру открыли с карточки в чате. Кто — не храним, только сколько."""
     await record_card_event(session, kind="opened", card=body.card)
+    await session.commit()
+
+
+class EntryBody(BaseModel):
+    src: str = Field("", max_length=64)
+
+
+@router.post("/client/hockey/entry", status_code=204)
+async def post_client_hockey_entry(
+    body: EntryBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Заход по рекламной метке (kks_<метка>). Фронт зовёт раз за сессию; кто — не храним, только метку."""
+    del principal
+    await record_entry(session, body.src)
     await session.commit()

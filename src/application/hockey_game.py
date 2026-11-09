@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.hockey_promo import clean_src
 from src.application.hockey_slices_sql import SCOPE_SQL
 from src.ingestion.hockey_sources import MINSK_TZ
 
@@ -149,8 +150,8 @@ def normalize_pick(
 
 
 _PLAYER_UPSERT = text("""
-    INSERT INTO hockey_players (player_key, display_name)
-    VALUES (:player_key, :display_name)
+    INSERT INTO hockey_players (player_key, display_name, first_src)
+    VALUES (:player_key, :display_name, :first_src)
     ON CONFLICT (player_key) DO UPDATE
     SET display_name = EXCLUDED.display_name, updated_at = now()
     WHERE hockey_players.display_name IS DISTINCT FROM EXCLUDED.display_name
@@ -237,6 +238,7 @@ async def make_pick(
     side: str | None = None,
     home_score: int | None = None,
     away_score: int | None = None,
+    src: str | None = None,
     now: datetime,
 ) -> Pick:
     """Записать или заменить ход игрока. Срок проверяется здесь, на сервере, а не в интерфейсе."""
@@ -247,7 +249,10 @@ async def make_pick(
     if not pick_open(match.status, match.starts_at, now):
         raise PicksClosed(match_id)
     name = (display_name or "").strip()[:40] or DEFAULT_PLAYER_NAME
-    await session.execute(_PLAYER_UPSERT, {"player_key": player_key, "display_name": name})
+    # Рекламная метка пишется только при создании игрока: ON CONFLICT first_src не трогает.
+    await session.execute(
+        _PLAYER_UPSERT, {"player_key": player_key, "display_name": name, "first_src": clean_src(src)}
+    )
     row = (
         await session.execute(
             _PICK_UPSERT,

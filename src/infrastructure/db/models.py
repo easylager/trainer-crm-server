@@ -615,8 +615,21 @@ class HockeyPlayer(Base):
 
     player_key: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=False)
     display_name: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Рекламная метка первого хода (миграция 0312): пишется при создании игрока, потом не меняется.
+    first_src: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyEntryEvent(Base):
+    """Заход в «Кто кого» по рекламной метке: только метка и время, без ключа игрока (миграция 0312)."""
+
+    __tablename__ = "hockey_entry_events"
+    __table_args__ = (Index("ix_hockey_entry_events_src", "src", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    src: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class HockeyPlayerPrefs(Base):
