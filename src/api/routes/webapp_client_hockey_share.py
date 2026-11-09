@@ -142,7 +142,9 @@ async def post_client_hockey_share(
         res = await race_result(session, player_key=player_key, race=race)
         crown_league = res["league"]["id"] if res["league"] else None
         data = await crown_card_data(session, race_id=race.id, league_id=crown_league)
-        assert data is not None
+        if data is None:
+            # В лиге за этот месяц никого не короновали (никто не играл): хвастаться нечем.
+            raise HTTPException(status_code=404, detail="Корон за этот месяц нет")
         caption = crown_caption(
             title=data["title"],
             where="в " + data["where"] if crown_league else "в общей таблице",

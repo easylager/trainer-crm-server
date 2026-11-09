@@ -597,7 +597,7 @@ async def race_summary(session: AsyncSession, *, now: datetime, club: str = DINA
 # ---------- короны: счётчики, стена, итоги ----------
 
 _WALL = text("""
-    SELECT c.period_start, c.race_id, pl.display_name, c.player_key
+    SELECT c.period_start, c.race_id, pl.display_name
     FROM hockey_crowns AS c
     JOIN hockey_players AS pl ON pl.player_key = c.player_key
     WHERE c.league_id = :league_id AND c.kind = 'league_month' AND c.period_start >= :first
@@ -607,6 +607,11 @@ _WALL = text("""
 _WALL_CLOSED = text("""
     SELECT period_start FROM hockey_closures
     WHERE kind = 'league_month' AND league_id = :league_id AND period_start >= :first
+    """)
+
+_RACE_CROWN_LEAGUES = text("""
+    SELECT DISTINCT league_id FROM hockey_crowns
+    WHERE race_id = :race_id AND kind = 'league_month' AND league_id IS NOT NULL
     """)
 
 _FRESH_RESULT = text(f"""
@@ -668,7 +673,8 @@ async def league_crown_wall(session: AsyncSession, *, league_id: int, now: datet
     winners: dict[datetime, dict] = {}
     for r in (await session.execute(_WALL, {"league_id": league_id, "first": first})).all():
         item = winners.setdefault(_utc(r.period_start), {"race_id": r.race_id, "winners": []})
-        item["winners"].append({"player_key": r.player_key, "display_name": r.display_name})
+        # Наружу уходит только имя: player_key — это Telegram-id, стене он не нужен.
+        item["winners"].append({"display_name": r.display_name})
     closed = {
         _utc(r.period_start)
         for r in (await session.execute(_WALL_CLOSED, {"league_id": league_id, "first": first})).all()
@@ -753,6 +759,9 @@ async def race_result(session: AsyncSession, *, player_key: int, race: Race) -> 
 
     period = Period(PERIOD_MONTH, race.starts_at, race.ends_at, "", race.title)
     leagues = [x for x in await player_leagues(session, player_key=player_key, now=race.starts_at) if x.members > 1]
+    # Лучшая лига — среди тех, где за этот месяц выдали корону: место «сейчас» в тихой лиге ничего не значит.
+    crowned = set((await session.execute(_RACE_CROWN_LEAGUES, {"race_id": race.id})).scalars().all())
+    leagues = [x for x in leagues if x.id in crowned] or leagues
     league = min(leagues, key=lambda x: (x.my_rank, -x.my_points, x.id)) if leagues else None
     if league is not None:
         rows = await league_table(
