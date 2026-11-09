@@ -9,7 +9,9 @@ from src.application.site_trainer_page import (
     page_description,
     page_heading,
     page_title,
+    trainer_place_phrase,
 )
+from src.shared.city_locative import city_locative
 
 
 def _page(**over):
@@ -32,6 +34,13 @@ def test_title_adds_brand_only_when_the_whole_line_fits() -> None:
     assert long == "Александр Гаевский — тренер по катанию на коньках в Минске"
     assert "Glideclub" not in long
     assert page_heading(_page()) == long
+
+
+def test_unknown_city_is_not_declined_into_the_nominative() -> None:
+    assert city_locative("Заславль") is None
+    phrase = trainer_place_phrase("Заславль")
+    assert phrase == "тренер по катанию на коньках"
+    assert "в Заславль" not in phrase
 
 
 def test_title_uses_public_city_not_the_internal_region_label() -> None:

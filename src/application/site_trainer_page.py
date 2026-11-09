@@ -794,8 +794,6 @@ def trainer_place_phrase(city_name: str) -> str:
     core = "тренер по катанию на коньках"
     if loc:
         return f"{core} в {loc}"
-    if public:
-        return f"{core} в {public}"
     return core
 
 
@@ -1650,7 +1648,7 @@ def render_trainer_page(
     if city:
         crumbs_html = (
             '<nav class="tp-crumbs" aria-label="Навигация">'
-            f'<a href="/c/{esc(city_slug(city["name"]))}">{esc(city["name"])}</a> › '
+            f'<a href="/c/{esc(city_slug(city["name"]))}">{esc(format_public_name(str(city["name"])))}</a> › '
             f'<a href="{esc(catalog_path(city["name"]))}">Тренеры</a> › <span>{esc(page["name"])}</span></nav>'
         )
     card = _price_card(page, app=app, cta=cta, via=via)
@@ -1675,7 +1673,7 @@ def render_trainer_page(
     )
     crumbs = [("Glideclub", f"{base}/")]
     if city:
-        crumbs.append((str(city["name"]), f"{base}/c/{city_slug(str(city['name']))}"))
+        crumbs.append((format_public_name(str(city["name"])), f"{base}/c/{city_slug(str(city['name']))}"))
         crumbs.append(("Тренеры", f"{base}{catalog_path(str(city['name']))}"))
     crumbs.append((str(page["name"]), canonical))
     body += breadcrumb_script(canonical, crumbs)

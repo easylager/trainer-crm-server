@@ -58,6 +58,7 @@ CARD_WINDOWS = 3
 ARENAS_SHOWN = 6
 #: Сниппет каталога — тот же потолок, что у страницы тренера.
 DESCRIPTION_LIMIT = 165
+TITLE_LIMIT = 60
 
 
 # ── Запись ───────────────────────────────────────────────────────────
@@ -479,13 +480,6 @@ async def sitemap_rows(session: AsyncSession) -> list[tuple[str, datetime | None
     return out
 
 
-def _teaches(n: int) -> str:
-    """«1 тренер учит», «2 тренера учат», «5 тренеров учат»."""
-    noun = plural_ru(n, "тренер", "тренера", "тренеров")
-    verb = "учит" if noun == "тренер" else "учат"
-    return f"{n} {noun} {verb}"
-
-
 def _city_public_locative(city_name: str) -> tuple[str, str | None]:
     raw = str(city_name or "").strip()
     public = format_public_name(raw)
@@ -552,10 +546,27 @@ def catalog_description(data: Mapping[str, Any], direction: Direction) -> str:
     else:
         head = direction.h1
     if n:
-        text_ = f"{head}. {_teaches(n)}. Запись в Telegram."
+        noun = plural_ru(n, "тренер", "тренера", "тренеров")
+        text_ = f"{head}: {n} {noun}{_direction_price_clause(data, direction)}. Запись в Telegram."
     else:
         text_ = f"{head}. Тренеров пока нет."
     return fit_meta(text_, DESCRIPTION_LIMIT)
+
+
+def _direction_price_clause(data: Mapping[str, Any], direction: Direction) -> str:
+    """«, от 25 BYN за занятие» — только если у направления есть цена."""
+    prices = [p for p in (direction_min_price(t, direction) for t in listed_trainers(data, direction)) if p]
+    if not prices:
+        return ""
+    amount = format_price_minor(*min(prices))
+    return f", от {amount} за занятие" if amount else ""
+
+
+def catalog_title(h1: str, in_city: str) -> str:
+    """« · Glideclub» в конце, только если весь title не длиннее 60 знаков."""
+    base = f"{h1} {in_city}".replace("\u00a0", " ").strip()
+    branded = f"{base} · Glideclub"
+    return branded if len(branded) <= TITLE_LIMIT else base
 
 
 def _join_catalog(parts: Sequence[str]) -> str:
@@ -845,8 +856,8 @@ def render_catalog_page(
     city = data["city"]
     city_name = str(city["name"])
     city_id = int(city["id"])
-    loc = city_locative(city_name)
-    in_city = f"в {loc}" if loc else city_name
+    public_city, loc = _city_public_locative(city_name)
+    in_city = f"в {loc}" if loc else public_city
     arenas = data["arenas"]
     if arena_id is not None and arena_id not in arenas:
         arena_id = None
@@ -867,7 +878,7 @@ def render_catalog_page(
     facts.append("<span>оплата на месте</span>")
     crumbs_html = (
         '<nav class="tcat-crumbs" aria-label="Навигация">'
-        f'<a href="{esc(city_href)}">{esc(city_name)}</a> › '
+        f'<a href="{esc(city_href)}">{esc(public_city)}</a> › '
         + (
             f'<a href="{esc(catalog_path(city_name))}">Тренеры</a> › <span>{esc(direction.crumb)}</span>'
             if direction is not ALL
@@ -877,7 +888,7 @@ def render_catalog_page(
     )
     hero = (
         '<section class="tcat-hero">'
-        f'<span class="tcat-eyebrow">Учиться с тренером · {esc(city_name)}</span>'
+        f'<span class="tcat-eyebrow">Учиться с тренером · {esc(public_city)}</span>'
         f'<h1 class="tcat-h1">{esc(h1)} <em>{esc(in_city)}</em></h1>'
         f'<p class="tcat-lead">{esc(direction.lead)}</p>'
         f'<div class="tcat-facts">{"".join(facts)}</div></section>'
@@ -1034,14 +1045,14 @@ def render_catalog_page(
 
     crumbs = [
         ("Glideclub", f"{base}/"),
-        (city_name, f"{base}{city_href}"),
+        (public_city, f"{base}{city_href}"),
         ("Тренеры", f"{base}{catalog_path(city_name)}"),
     ]
     if direction is not ALL:
         crumbs.append((direction.crumb, own_url))
     body += breadcrumb_script(own_url, crumbs)
 
-    title = f"{h1} {in_city} · Glideclub".replace(" ", " ")
+    title = catalog_title(h1, in_city)
     description = catalog_description(data, direction)
     ld = {
         "@context": "https://schema.org",
