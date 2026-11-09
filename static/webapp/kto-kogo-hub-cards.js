@@ -30,6 +30,7 @@
 
   function tapSide(m, side) {
     if (!m.open) return openMatch(m);
+    if (K.coin && K.coin.busy(m)) return; // монета крутится: выбор делает она, пропуск — тап по ней
     var draft = state.drafts[m.id] || null;
     if (!S.sideTapSends(m.my_pick, draft, side)) return;
     clearTimeout(timers[m.id]);
@@ -92,10 +93,11 @@
   }
 
   function teamBtn(m, side, eff) {
-    var on = eff.side === side;
+    var cs = K.coin && K.coin.side(m, side); // бросок монеты идёт: кнопка рисуется по его кадру, а не по ходу
+    var on = cs ? cs.on : eff.side === side;
     return h('button', {
       type: 'button',
-      class: 'kk-ht' + (on ? ' is-on' : ''),
+      class: 'kk-ht' + (on ? ' is-on' : '') + (cs ? cs.cls : ''),
       'aria-pressed': on ? 'true' : 'false',
       'aria-label': 'Победит ' + nm(m[side]),
       onclick: function () { tapSide(m, side); },
@@ -129,13 +131,21 @@
     var doubled = !!(m.my_pick && m.my_pick.doubled);
     var bg = (club ? club.color : (m.away_team === M.DINAMO ? m.away : m.home).color) || M.NEUTRAL;
     var sum = eff.side ? S.moveSummary(eff, doubled, nm(m[eff.side])) : null;
+    var coin = K.coin ? K.coin.button(m) : null;
+    var coinBusy = !!(K.coin && K.coin.busy(m));
     var kids = [
       K.sticker(hero.tag),
-      h('button', { type: 'button', class: 'kk-hm', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); }, text: S.heroMeta(m) }),
+      h('div', { class: 'kk-hrow' }, [
+        h('button', { type: 'button', class: 'kk-hm', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); }, text: S.heroMeta(m) }),
+        coin,
+      ]),
       h('div', { class: 'kk-two kk-two--hero' }, [teamBtn(m, 'home', eff), teamBtn(m, 'away', eff)]),
+      K.coin ? K.coin.panel(m) : null,
     ];
-    if (!eff.side) kids.push(h('span', { class: 'kk-hh', text: 'Тапни, кто победит.' }));
-    else {
+    // Пока крутится монета, подсказка и счёт молчат: барабаны показывает блок выше.
+    if (!eff.side) {
+      if (!coinBusy) kids.push(h('span', { class: 'kk-hh', text: 'Тапни, кто победит.' }));
+    } else if (!coinBusy) {
       kids.push(h('div', { class: 'kk-hbox' }, [
         h('div', { class: 'kk-hbox__head' }, [
           h('span', { class: 'kk-hbox__t', text: 'Точный счёт' }),
@@ -155,10 +165,11 @@
   // ---------- матчи дня ----------
 
   function dayTeam(m, side, eff, colors) {
-    var on = eff.side === side;
+    var cs = K.coin && K.coin.side(m, side); // бросок монеты идёт: кнопка рисуется по его кадру, а не по ходу
+    var on = cs ? cs.on : eff.side === side;
     return h('button', {
       type: 'button',
-      class: 'kk-dt' + (on ? ' is-on' : '') + (m.open ? '' : ' is-off'),
+      class: 'kk-dt' + (on ? ' is-on' : '') + (m.open ? '' : ' is-off') + (cs ? cs.cls : ''),
       'aria-pressed': on ? 'true' : 'false',
       'aria-label': 'Победит ' + nm(m[side]),
       'aria-disabled': m.open ? null : 'true',
@@ -173,15 +184,19 @@
     var time = m.open || m.status === 'scheduled' || m.status === 'review' ? S.timeOnly(m.starts_at) : m.result ? m.result.home_score + ':' + m.result.away_score : '';
     var where = [mixed && m.league !== 'extraliga' ? 'КХЛ' : null, m.city || m.arena].filter(Boolean).join(' · ');
     var kids = [
-      h('button', { type: 'button', class: 'kk-dh', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); } }, [
-        h('b', { class: 'kk-dh__t', text: time }),
-        h('span', { class: 'kk-dh__w', text: where }),
+      h('div', { class: 'kk-dhr' }, [
+        h('button', { type: 'button', class: 'kk-dh', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); } }, [
+          h('b', { class: 'kk-dh__t', text: time }),
+          h('span', { class: 'kk-dh__w', text: where }),
+        ]),
+        K.coin ? K.coin.button(m) : null,
       ]),
       h('div', { class: 'kk-two kk-two--day' }, [dayTeam(m, 'home', eff, colors), dayTeam(m, 'away', eff, colors)]),
     ];
     var moved = M.movedLine(m);
     if (moved) kids.push(h('span', { class: 'kk-moved', text: moved }));
-    if (m.open && eff.side) {
+    if (K.coin) kids.push(K.coin.panel(m));
+    if (m.open && eff.side && !(K.coin && K.coin.busy(m))) {
       if (!state.scoreOpen[m.id] && !eff.score) {
         kids.push(h('button', { type: 'button', class: 'kk-dofr', onclick: function () { state.scoreOpen[m.id] = true; K.render(); } }, [
           h('span', { text: 'Угадать точный счёт' }),
