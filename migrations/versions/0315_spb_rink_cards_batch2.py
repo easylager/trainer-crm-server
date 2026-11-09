@@ -4,8 +4,8 @@ Facts are taken from each rink's own site on 2026-11-09; sources and anything le
 ``data/arena-cards/ru/spb-*.md``. Unknown stays unset. Same write rules as 0311: text, phone and
 site replace the import; socials, amenities, visit_info and visit_info.facts are merged.
 
-Revision ID: 0313_spb_rink_cards_batch2
-Revises: 0312_ice_sessions_open_window
+Revision ID: 0315_spb_rink_cards_batch2
+Revises: 0314_ice_sessions_open_window
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ import json
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0313_spb_rink_cards_batch2"
-down_revision = "0312_ice_sessions_open_window"
+revision = "0315_spb_rink_cards_batch2"
+down_revision = "0314_ice_sessions_open_window"
 branch_labels = None
 depends_on = None
 

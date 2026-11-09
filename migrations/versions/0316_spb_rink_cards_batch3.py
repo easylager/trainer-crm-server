@@ -5,8 +5,8 @@ approved 17.08.2026); sources and anything left out are in ``data/arena-cards/ru
 Unknown stays unset. Same write rules as 0311: text, phone and site replace the import; socials,
 amenities, visit_info and visit_info.facts are merged.
 
-Revision ID: 0314_spb_rink_cards_batch3
-Revises: 0313_spb_rink_cards_batch2
+Revision ID: 0316_spb_rink_cards_batch3
+Revises: 0315_spb_rink_cards_batch2
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ import json
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0314_spb_rink_cards_batch3"
-down_revision = "0313_spb_rink_cards_batch2"
+revision = "0316_spb_rink_cards_batch3"
+down_revision = "0315_spb_rink_cards_batch2"
 branch_labels = None
 depends_on = None
 

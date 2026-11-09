@@ -3,7 +3,7 @@
 - slug: aysburg-arena
 - verified_at: 2026-11-09
 - verified_by: Devin (официальный сайт, прямой запрос)
-- migration: 0314_spb_rink_cards_batch3
+- migration: 0316_spb_rink_cards_batch3
 
 ## Sources
 - https://iceburgarena.ru/ — 2023 год, 5031 м², полноразмерная арена, 13 раздевалок (2 комфорт-класса), итальянский ресторан с видом на лёд, VK vk.ru/iceburgarena.

@@ -3,7 +3,7 @@
 - slug: ledovaya-arena-magnit
 - verified_at: 2026-11-09
 - verified_by: Devin (официальный сайт, прямой запрос)
-- migration: 0311_spb_rink_cards_batch1
+- migration: 0313_spb_rink_cards_batch1
 
 ## Source
 - http://magnit-arena.ru/ (блок «Цены на услуги»)

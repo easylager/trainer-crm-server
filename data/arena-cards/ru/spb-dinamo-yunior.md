@@ -3,7 +3,7 @@
 - slug: ledovaya-arena-dinamo-yunior
 - verified_at: 2026-11-09
 - verified_by: Devin (официальный сайт, прямой запрос)
-- migration: 0314_spb_rink_cards_batch3
+- migration: 0316_spb_rink_cards_batch3
 
 ## Sources
 - https://shorspb.ru/Skating — «Каждую субботу в 21:00-22:00 … ул. Фаворского, д.7», билет 500 руб./час, прокат 300 руб. за пару/час, «Заточки коньков нет», «Камеры хранения нет», «Принимается только безналичная оплата», «Количество мест ограничено», телефон +7 (812) 246-9212.

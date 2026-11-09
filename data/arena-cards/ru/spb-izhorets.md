@@ -3,7 +3,7 @@
 - slug: izhorets
 - verified_at: 2026-11-09
 - verified_by: Devin (официальный сайт, прямой запрос)
-- migration: 0314_spb_rink_cards_batch3
+- migration: 0316_spb_rink_cards_batch3
 
 ## Sources
 - https://izhorets.ru/objects/fok-izhorets/ (#fok-ice) — виды катания, прокат и «помощники фигуриста», заточка, «Дети до 10 лет посещают массовое катание со взрослым, оплатившим катание», «Расписание сеансов уточняйте перед визитом», администратор ФОК +7 (812) 645-75-33, 10:00–22:00, Telegram t.me/sokizhorets.

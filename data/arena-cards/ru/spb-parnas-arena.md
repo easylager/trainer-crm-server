@@ -3,7 +3,7 @@
 - slug: tsentr-ledovykh-vidov-sporta-parnas
 - verified_at: 2026-11-09
 - verified_by: Devin (официальный сайт, прямой запрос)
-- migration: 0313_spb_rink_cards_batch2
+- migration: 0315_spb_rink_cards_batch2
 
 ## Source
 - https://parnas-arena.ru/, /massovie-kataniya, /zatochka-konkov, /zatochka-i-prokat, /nochniye-kataniya

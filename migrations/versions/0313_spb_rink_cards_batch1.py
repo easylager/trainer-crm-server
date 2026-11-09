@@ -8,8 +8,8 @@ The card text, phone and site replace what the import left; socials, amenities, 
 and visit_info.facts are merged. Downgrade removes the visit_info keys and amenities this migration
 set; the old text, phone and site are not restored (the import kept none worth keeping).
 
-Revision ID: 0311_spb_rink_cards_batch1
-Revises: 0310_admin_journey_hidden
+Revision ID: 0313_spb_rink_cards_batch1
+Revises: 0312_kk_promo_src
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ import json
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0311_spb_rink_cards_batch1"
-down_revision = "0310_admin_journey_hidden"
+revision = "0313_spb_rink_cards_batch1"
+down_revision = "0312_kk_promo_src"
 branch_labels = None
 depends_on = None
 

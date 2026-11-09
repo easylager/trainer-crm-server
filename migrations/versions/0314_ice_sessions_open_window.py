@@ -4,16 +4,16 @@
 катания) допускается только для массовых видов и только с price_note: клиент должен
 видеть, на сколько его билет, а не думать, что 600 ₽ — за всё окно.
 
-Revision ID: 0312_ice_sessions_open_window
-Revises: 0311_spb_rink_cards_batch1
+Revision ID: 0314_ice_sessions_open_window
+Revises: 0313_spb_rink_cards_batch1
 """
 
 from __future__ import annotations
 
 from alembic import op
 
-revision = "0312_ice_sessions_open_window"
-down_revision = "0311_spb_rink_cards_batch1"
+revision = "0314_ice_sessions_open_window"
+down_revision = "0313_spb_rink_cards_batch1"
 branch_labels = None
 depends_on = None
 

@@ -3,7 +3,7 @@
 - slug: skk-yubileynyy
 - verified_at: 2026-11-09
 - verified_by: Devin (официальный сайт, прямой запрос)
-- migration: 0314_spb_rink_cards_batch3
+- migration: 0316_spb_rink_cards_batch3
 
 ## Sources
 - https://www.yubi.ru/rink/ (и `?date=YYYY-MM-DD`) — касса «Тренировка на льду»: 60 мин, 800 ₽, «Прокат коньков не предусмотрен», правила обмена/возврата, раздевалки на 1 этаже, входы (дверь №1 / №62 / №55), телефон +7 (812) 507-11-11, Telegram t.me/yubileny_ru.
