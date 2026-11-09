@@ -15,6 +15,7 @@ from src.api.routes.webapp_client_hockey import _player_name
 from src.application.hockey_leagues import (
     FEW_MATCHES,
     MONTHLY_CROWN_TERMS,
+    AlreadyExtended,
     InvalidTerms,
     League,
     LeagueFull,
@@ -45,6 +46,7 @@ _TOO_MANY = "Можно состоять максимум в 20 лигах"
 _LEAGUE_FULL = "В лиге уже 100 человек"
 _NOT_FOUND = "Лига не найдена"
 _FORBIDDEN = "Нет доступа к этой лиге"
+_ALREADY_EXTENDED = "Лига уже продлена — вы из продолжения вышли"
 
 
 class TermsBody(BaseModel):
@@ -99,6 +101,8 @@ def _raise_league(exc: Exception) -> NoReturn:
         raise HTTPException(status_code=409, detail=_LEAGUE_FULL) from exc
     if isinstance(exc, TooManyLeagues):
         raise HTTPException(status_code=409, detail=_TOO_MANY) from exc
+    if isinstance(exc, AlreadyExtended):
+        raise HTTPException(status_code=409, detail=_ALREADY_EXTENDED) from exc
     if isinstance(exc, PermissionError):
         raise HTTPException(status_code=403, detail=_FORBIDDEN) from exc
     raise exc
@@ -372,7 +376,7 @@ async def post_client_hockey_league_extend(
         league, created = await extend_league(session, league_id=league_id, player_key=player_key, now=now, terms=terms)
         payload = await _created_out(session, league, player_key, now)
         payload.update(await _terms_hint(session, league, now))
-    except (ValueError, LookupError, PermissionError, TooManyLeagues) as exc:
+    except (ValueError, LookupError, PermissionError, TooManyLeagues, AlreadyExtended) as exc:
         _raise_league(exc)
     await session.commit()
     return {**payload, "created": created}

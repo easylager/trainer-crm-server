@@ -55,6 +55,10 @@ class TooManyLeagues(Exception):
     """Игрок уже в максимуме лиг."""
 
 
+class AlreadyExtended(Exception):
+    """Лига уже продлена, а продлевающий из продолжения вышел: показать ему чужую лигу нельзя."""
+
+
 class InvalidTerms(ValueError):
     """Набор команд или срок лиги не годятся (текст — для человека)."""
 
@@ -518,7 +522,11 @@ async def extend_league(
         raise PermissionError(league_id)
     existing = (await session.execute(_EXTENSION_OF, {"league_id": league_id})).one_or_none()
     if existing is not None:
+        if not (await session.execute(_IS_MEMBER, {"league_id": existing.id, "player_key": player_key})).first():
+            raise AlreadyExtended(league_id)
         return _league(existing), False
+    # Сам владелец обязан попасть в продолжение: без места в квоте лигу не создаём (иначе она осиротеет).
+    await _check_league_quota(session, player_key, now=now)
     terms = terms or _next_terms(league, now=now)
     fresh = await _insert_league(session, owner_key=player_key, name=league.name, terms=terms, extended_from=league.id)
     joined = max(_utc(now), terms.starts_at) if terms.starts_at > _utc(now) else _utc(now)
@@ -847,6 +855,7 @@ __all__ = [
     "create_league",
     "friends_moves",
     "friends_picks",
+    "AlreadyExtended",
     "join_by_code",
     "league_by_code",
     "league_preview",

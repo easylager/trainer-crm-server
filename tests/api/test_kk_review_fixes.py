@@ -140,3 +140,48 @@ async def test_b_race_result_picks_league_with_crown(app_use_test_db, db_session
 
     res = await race_result(db_session, player_key=ME, race=race)
     assert res["league"]["id"] == played.id
+
+
+@pytest.mark.asyncio
+async def test_c_extend_owner_over_quota_is_409_and_leaves_no_orphan(app_use_test_db, db_session) -> None:
+    """Владелец в 20 лигах: «Продлить» — понятный 409, а не лига без владельца и не 500."""
+    from src.application.hockey_leagues import MAX_LEAGUES_PER_PLAYER
+
+    league = await _league_with(db_session, ME, "Саша", "Старая", (FRIEND, "Катя"))
+    # Старая лига закончилась и квоту не держит; остальные 20 — держат.
+    await db_session.execute(
+        text("UPDATE hockey_leagues SET ends_at = :at WHERE id = :l"),
+        {"at": datetime.now(timezone.utc) - timedelta(days=1), "l": league.id},
+    )
+    for i in range(MAX_LEAGUES_PER_PLAYER):
+        await create_league(db_session, owner_key=ME, owner_name="Саша", name=f"Л{i}")
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            r = await client.post(f"/api/webapp/client/hockey/leagues/{league.id}/extend", json={})
+    assert r.status_code == 409, r.text
+    orphans = (
+        await db_session.execute(text("SELECT COUNT(*) FROM hockey_leagues WHERE extended_from = :l"), {"l": league.id})
+    ).scalar_one()
+    assert orphans == 0
+
+
+@pytest.mark.asyncio
+async def test_c_extend_again_after_owner_left_extension_is_not_500(app_use_test_db, db_session) -> None:
+    """Продление есть, а владелец из него вышел: повтор «Продлить» отвечает понятной ошибкой, не 500."""
+    league = await _league_with(db_session, ME, "Саша", "Старая", (FRIEND, "Катя"))
+    await db_session.execute(
+        text("UPDATE hockey_leagues SET ends_at = :at WHERE id = :l"),
+        {"at": datetime.now(timezone.utc) - timedelta(days=1), "l": league.id},
+    )
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            first = await client.post(f"/api/webapp/client/hockey/leagues/{league.id}/extend", json={})
+            assert first.status_code == 200, first.text
+            left = await client.delete(f"/api/webapp/client/hockey/leagues/{first.json()['id']}/membership")
+            assert left.status_code == 200, left.text
+            again = await client.post(f"/api/webapp/client/hockey/leagues/{league.id}/extend", json={})
+    assert again.status_code == 409, again.text
