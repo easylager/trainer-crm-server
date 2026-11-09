@@ -118,10 +118,10 @@
     steps.push({ at: runAt, phase: 'reels', hl: null, side: target.side, run: true });
     steps.push({ at: total, phase: 'done', hl: null, side: target.side, run: true });
     steps.forEach(function (s) { s.at = r1(s.at * k); });
+    // Только стопы барабанов: «успех» в конце даёт сохранение хода (sendPick в kto-kogo.js), второй раз не вибрируем.
     var haptics = [
       { at: r1((runAt + T.homeReel) * k), kind: 'impact' },
       { at: r1((runAt + T.awayReel) * k), kind: 'impact' },
-      { at: r1(total * k), kind: 'success' },
     ];
     var marks = steps.map(function (s) { return s.at; }).concat(haptics.map(function (x) { return x.at; }));
     marks = marks.filter(function (v, i) { return marks.indexOf(v) === i; }).sort(function (a, b) { return a - b; });
@@ -175,7 +175,7 @@
    * Всё внешнее приходит параметрами, поэтому её гоняют в тестах на поддельных часах:
    *   rng, now, setTimer, clearTimer, reducedMotion() — окружение;
    *   shortAfter — сколько бросков идут полной версией;
-   *   onChange(key) — пора перерисовать, onHaptic('impact' | 'success'), onFinish(key, target) — сохранить ход.
+   *   onChange(key) — пора перерисовать, onHaptic('impact') на стопе барабана, onFinish(key, target) — сохранить ход.
    */
   function createCoin(o) {
     o = o || {};
@@ -237,7 +237,6 @@
       if (run) {
         var cur = run;
         if (cur.key === key) {
-          onHaptic('success');
           finish(cur);
           return 'skip';
         }
@@ -248,7 +247,6 @@
       throws++;
       if (reduced()) {
         results[key] = target;
-        onHaptic('success');
         onFinish(key, target);
         onChange(key);
         return 'instant';

@@ -227,13 +227,12 @@ describe('шкала броска', () => {
     });
   });
 
-  it('вибрация: лёгкий удар на стопе каждого барабана и «успех» в самом конце', () => {
+  it('вибрация: только лёгкий удар на стопе каждого барабана, «успеха» в плане нет (его даёт сохранение хода)', () => {
     const p = C.plan(target);
-    assert.deepEqual(p.haptics.map((x) => x.kind), ['impact', 'impact', 'success']);
+    assert.deepEqual(p.haptics.map((x) => x.kind), ['impact', 'impact']);
     assert.equal(p.haptics[0].at, p.runAt + p.reelMs.home);
     assert.equal(p.haptics[1].at, p.runAt + p.reelMs.away);
-    assert.equal(p.haptics[2].at, p.total);
-    assert.ok(p.haptics[0].at < p.haptics[1].at && p.haptics[1].at < p.haptics[2].at);
+    assert.ok(p.haptics[0].at < p.haptics[1].at && p.haptics[1].at < p.total);
   });
 
   it('nextMark ведёт по шагам и вибрации, после конца — null', () => {
@@ -274,7 +273,7 @@ describe('машина состояний', () => {
     assert.deepEqual(phases, ['flip', 'choose', 'reels', 'finished']);
   });
 
-  it('вибрация в срок: два удара на стопах барабанов, «успех» в конце, больше ничего', () => {
+  it('вибрация в срок: два удара на стопах барабанов, больше ничего', () => {
     const { ck, log, coin } = rig();
     coin.press(1);
     ck.advance(6000);
@@ -282,8 +281,8 @@ describe('машина состояний', () => {
     assert.deepEqual(log.haptic, [
       { kind: 'impact', at: p.haptics[0].at },
       { kind: 'impact', at: p.haptics[1].at },
-      { kind: 'success', at: p.total },
     ]);
+    assert.equal(log.finish.length, 1, 'ход при этом сохраняется: «успех» даёт само сохранение');
   });
 
   it('перерисовка просится только когда меняется шаг, а не на каждый удар вибрации', () => {
@@ -295,7 +294,7 @@ describe('машина состояний', () => {
     assert.equal(log.change.length, 1 + (p.steps.length - 1) + 0);
   });
 
-  it('тап во время броска пропускает: результат сразу, ход сохраняется один раз, «успех» один раз', () => {
+  it('тап во время броска пропускает: результат сразу, ход сохраняется один раз, монета сама не вибрирует', () => {
     const { ck, log, coin } = rig();
     coin.press(1);
     ck.advance(2000);
@@ -304,10 +303,10 @@ describe('машина состояний', () => {
     assert.equal(log.finish.length, 1);
     assert.deepEqual(log.finish[0].target, { side: 'home', home: 3, away: 1 });
     assert.equal(log.finish[0].at, 2000);
-    assert.deepEqual(log.haptic, [{ kind: 'success', at: 2000 }]);
+    assert.deepEqual(log.haptic, [], 'пропущенные стопы барабанов не вибрируют');
     ck.advance(10000);
     assert.equal(log.finish.length, 1, 'после пропуска таймеры не сохраняют второй раз');
-    assert.equal(log.haptic.length, 1);
+    assert.deepEqual(log.haptic, []);
   });
 
   it('пропуск сразу после тапа и «Крутануть ещё» после результата', () => {
@@ -324,7 +323,7 @@ describe('машина состояний', () => {
     assert.deepEqual(coin.result(1), log.finish[1].target);
   });
 
-  it('reduced motion: сразу результат, анимации нет, ход сохраняется, вибрация «успех»', () => {
+  it('reduced motion: сразу результат, анимации нет, ход сохраняется, монета не вибрирует', () => {
     const { ck, log, coin } = rig({ reduced: true });
     assert.equal(coin.press(3), 'instant');
     assert.equal(coin.busy(), false);
@@ -332,7 +331,7 @@ describe('машина состояний', () => {
     assert.equal(ck.pending(), 0);
     assert.equal(log.finish.length, 1);
     assert.deepEqual(coin.result(3), { side: 'home', home: 3, away: 1 });
-    assert.deepEqual(log.haptic, [{ kind: 'success', at: 0 }]);
+    assert.deepEqual(log.haptic, []);
     assert.ok(log.change.length >= 1);
   });
 
@@ -402,7 +401,7 @@ describe('машина состояний', () => {
     ck.advance(1000);
     ck.advance(20000);
     assert.equal(log.finish.length, 1);
-    assert.deepEqual(log.haptic.map((h) => h.kind), ['impact', 'impact', 'success']);
+    assert.deepEqual(log.haptic.map((h) => h.kind), ['impact', 'impact']);
   });
 
   it('кадр в любой момент восстанавливается по времени: перерисовка экрана не сбивает анимацию', () => {
@@ -545,7 +544,7 @@ describe('подключение и вёрстка', () => {
     assert.ok(/aria-live/.test(view));
     assert.ok(/HapticFeedback/.test(view));
     assert.ok(/impactOccurred\('light'\)|impactOccurred\("light"\)/.test(view));
-    assert.ok(/notificationOccurred\('success'\)/.test(view));
+    assert.ok(!/notificationOccurred/.test(view), 'успех в конце даёт сохранение хода, не монета');
     assert.ok(/prefers-reduced-motion/.test(view));
   });
 });

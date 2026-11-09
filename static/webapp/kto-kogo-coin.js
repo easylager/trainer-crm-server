@@ -32,12 +32,11 @@
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
-  function buzz(kind) {
+  /** Лёгкий удар на стопе барабана. «Успех» в конце не наш: его даёт сохранение хода (sendPick в kto-kogo.js). */
+  function buzz() {
     try {
       var hf = K.tg && K.tg.HapticFeedback;
-      if (!hf) return;
-      if (kind === 'success') hf.notificationOccurred('success');
-      else hf.impactOccurred('light');
+      if (hf) hf.impactOccurred('light');
     } catch (e) { /* старый клиент без вибрации */ }
   }
 
