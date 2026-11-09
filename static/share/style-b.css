@@ -1163,6 +1163,9 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-more-row[open] > summary > .b-icon { transform: rotate(180deg); }
 .b-more-row__body { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; }
 .b-more-row--solo { margin-top: 10px; background: var(--g-surface); border-radius: var(--g-r-card); box-shadow: var(--g-shadow); }
+.b-promos { display: grid; gap: 12px; }
+.b-promo { display: grid; gap: 2px; font-size: 14px; }
+.b-promo__w { font-size: 12px; font-weight: 600; color: var(--g-muted); }
 .b-more-lead { margin: 0; font-size: 14px; color: var(--g-ink-2); }
 .b-ptable { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .b-ptable th { font-size: 12px; font-weight: 600; color: var(--g-muted); text-align: right; padding: 0 0 6px 8px; }

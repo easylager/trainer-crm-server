@@ -108,6 +108,16 @@ async def test_ohm_is_a_tab_of_the_ice_block(app_use_test_db, db_session) -> Non
 
 
 @pytest.mark.asyncio
+async def test_arena_can_rename_its_ice_tab(app_use_test_db, db_session) -> None:
+    place = await _rink(db_session, visit={**VISIT, "ice_tab_labels": {"ohm": "Любительский хоккей"}}, ohm=True)
+    async with _client() as client:
+        html = (await client.get(place["path"])).text
+    labels = dict(re.findall(r'<label for="icetab-([a-z]+)" class="b-seg__i[^"]*"[^>]*>([^<]+)</label>', html))
+    assert labels["ohm"] == "Любительский хоккей"
+    assert labels["skate"] == "Массовое катание"
+
+
+@pytest.mark.asyncio
 async def test_search_markup_carries_prices_and_amenities(app_use_test_db, db_session) -> None:
     place = await _rink(db_session, visit=VISIT)
     async with _client() as client:

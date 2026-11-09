@@ -1898,13 +1898,16 @@ def _b_ice(
         _title, skate_body, buy = skate
         tabs.append(("skate", t("kind.public_skate"), skate_body, ""))
     tabs.extend(extras)
+    visit = view["card"].get("visit_info")
+    renamed = (visit.get("ice_tab_labels") if isinstance(visit, Mapping) else None) or {}
+    tabs = [(key, renamed.get(key) or label, body_, aside_) for key, label, body_, aside_ in tabs]
     radios = "".join(
         f'<input type="radio" name="icetab" id="icetab-{key}" class="b-icetabs__r"{" checked" if i == 0 else ""}>'
         for i, (key, _l, _b, _a) in enumerate(tabs)
     )
     labels = "".join(
         f'<label for="icetab-{key}" class="b-seg__i b-seg__i--{key}" title="{_esc(label)}">'
-        f"{_esc(_ICE_TAB_SHORT.get(key, label) if len(tabs) > 2 else label)}</label>"
+        f"{_esc(renamed.get(key) or (_ICE_TAB_SHORT.get(key, label) if len(tabs) > 2 else label))}</label>"
         for key, label, _b, _a in tabs
     )
     panes = "".join(
