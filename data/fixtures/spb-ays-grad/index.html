@@ -1,0 +1,2952 @@
+
+
+
+
+
+
+<!DOCTYPE HTML>
+<html lang="ru" class="lang-ru site-ru">
+<head>
+	<link rel="manifest" href="//static.lpgenerator.ru/media/pushNotification/manifest.json">
+	<script type="text/javascript" src="//static.lpgenerator.ru/media/pushNotification/push.js"></script>
+
+    
+
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+
+    
+    <title>Айс-Град</title>
+    <meta name="keywords" content=""/>
+    <meta name="description" content=""/>
+    <meta name="robots" content="INDEX, FOLLOW"/>
+
+    <meta property="og:image" content="" />
+    <meta property="og:title" content="Айс-Град" />
+    <meta property="og:description" content="" />
+
+    <!--/sprypay.tag.check:8540efe212c820be4b787b6cd217cc52/-->
+    
+    
+    
+
+    
+    
+		
+			<link rel="shortcut icon" type="image/png" href="https://media.lpgenerator.ru/favicons/554465/1597745297.ico" />
+			<link rel="icon" type="image/png" href="https://media.lpgenerator.ru/favicons/554465/1597745297.ico" />
+		
+
+    
+
+
+	<!-- LPG global declaration -->
+    <script type="text/javascript" src="//static.lpgenerator.ru/media/app/dsn/ru/texts.js?v=11124"></script>
+    
+    <script type="text/javascript" src="//static.lpgenerator.ru/media/dist/landings/lpgCore.js?v=11124"></script>
+
+	<script>
+		LPG.accountId = +'0';
+		LPG.accountPhone = '';
+		LPG.accountFirstName = '';
+        LPG.user = {
+            dateJoined: ''
+        };
+
+		window.callpyLogin = LPG.accountId;
+		window.callpyUserId = 'b6627797169ece686417503494024e01';
+
+		LPG.MEDIA_URL	= '//media.lpgenerator.ru/';
+		LPG.STATIC_URL	= '//static.lpgenerator.ru/media/';
+		LPG.STATIC_V	= '11124';
+		LPG.REG_LANG	= 'ru';
+		LPG.LOCALE		= 'ru';
+
+		LPG.namespace('LPG.config');
+		LPG.config.tutorialToggle = {
+			url: '/editor/tutorial/toggle/'
+		};
+		LPG.config.isTutorial = true;
+		LPG.config.fixedMenu = {
+			alwaysVisible: false
+		};
+		
+		LPG.config.mmSeen = true;
+		LPG.config.isSocialSetup = false;
+		LPG.config.mmAddAnswerUrl = '/main_marketing_add_answer/';
+
+		LPG.namespace('LPG.path');
+		LPG.path = {
+			staticUrl:	'//static.lpgenerator.ru/media/'
+		};
+	</script>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noty/3.1.4/noty.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/noty/3.1.4/noty.min.js"></script>
+
+<script>
+
+function PopUpServices(event) {
+  event.preventDefault();
+
+  var notification = new Noty({
+    type: 'success',
+    layout: 'topRight',
+    theme: 'bootstrap-v4',
+    text: '<div style="display: flex; align-items: center;">' +
+            '<img src="//static.lpgenerator.ru/media/css/images/chelik.png" alt="Icon" style="width: 100px; height: 100px; margin-right: 10px;">' +
+            '<div style="flex: 1;">' +
+              '<div style="font-size: 16px; line-height: 1.1;">Мы обновили раздел «Услуги»!</div>' +
+              '<div style="font-size: 12px; line-height: 1.1; margin-top: 8px;"><a href="https://lpgenerator.ru/services">Перейдите, чтобы узнать, что нового</a></div>' +
+            '</div>' +
+          '</div>',
+    progressBar: true,
+    closeWith: ['click']
+  }).show();
+
+  document.addEventListener('mousedown', function(e) {
+    if (e.target.closest('.noty_bar') === null) {
+      notification.close();
+    }
+  });
+}
+
+</script>
+
+	
+
+    
+    <script type="text/javascript" src="//static.lpgenerator.ru/media/dist/landings/vendors.min.js?v=11124"></script>
+    
+		<script>
+			var redirect = false;
+		</script>
+		
+    
+
+    <link type="text/css" rel="stylesheet" href="//static.lpgenerator.ru/media/ckeditor-4.3.4/plugins/fontAwesome/css/font-awesome.min.css"/>
+
+    
+
+    <link href="//static.lpgenerator.ru/media/css/global/screen.css?v=11124" rel="stylesheet" type="text/css" media="screen,projection" />
+    
+
+    <!--[if lt IE 8]>
+    <link href="//static.lpgenerator.ru/media/css/ie.css?v=11124" rel="stylesheet" type="text/css" media="screen,projection" />
+    <![endif]-->
+	
+
+
+
+
+	
+
+    
+        <script type="text/javascript">
+            jq_144 = jQuery.noConflict(true);
+        </script>
+    
+
+    
+
+    
+    <link href="//static.lpgenerator.ru/media/css/public.css?v=11124" rel="stylesheet" type="text/css" media="screen,projection" />
+    
+        <style class="page__variant-css">.body-pageVariant,
+.preview-main-container {
+    font-family: Arial, Helvetica, sans-serif;
+}
+.page_container {
+    width: 960px;
+    background: 0% 0% no-repeat #ffffff ;     height: 100%;
+}
+#middle_container { width: 960px; }
+.preview-main-container,
+.main-container {
+    migrated: 1;
+    text-mode-pp: on;
+    background-repeat: no-repeat;
+    background-no-scroll: on;
+    bg-color: ffffff;
+    min-height: 6931px;
+    width: 960;
+    z-index: 101;
+    bg-pos: 0% 0%;
+    anchor-id: #block-page;
+    font-family: Arial, Helvetica, sans-serif;
+    bg-repeat: no-repeat; 
+}
+.preview-main-container {
+    min-width: 960px !important;
+}
+</style>
+    
+    
+        
+          <link rel="stylesheet" href="//static.lpgenerator.ru/media/css/upgrade/widget/gallery.css?v=11124" type="text/css" media="screen" />
+        
+    
+        
+          <link rel="stylesheet" href="//static.lpgenerator.ru/media/css/upgrade/widget/popup.css?v=11124" type="text/css" media="screen" />
+        
+    
+        
+          <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Alegreya:400|Yanone+Kaffeesatz:400|Gabriela:400|Arsenal:400|Fira+Sans:400|Montserrat:400|Balsamiq+Sans:400|Andika:400&amp;subset=cyrillic" type="text/css" media="screen" />
+        
+    
+    <script type="text/javascript" src="//static.lpgenerator.ru/media/js/upgrade/manager.js?v=11124"></script>
+
+    <link type="text/css" rel="stylesheet" href="//static.lpgenerator.ru/media/app/src/editor/widgets/animation/resource/css/animation.css" />
+
+
+    
+    <script type="text/javascript">
+      var variantId = 2314114;
+    </script>
+    <style>
+#block-new18 ul.widget-timer {
+    margin-left: 11px !important;
+  
+}
+#block-new18 ul.widget-timer .digits {
+    background-image: none !important;
+    width: 21px !important;
+    color:#ffb862 !important;
+}
+#block-new18 {
+    height: 130px!important;
+    width: 260px!important;
+    margin-top: -4px;
+}
+#block-new18 ul.widget-timer .separator {
+    width: 40px !important;
+   color:#ffb862 !important;
+   margin-top: -4px !important;
+}
+#block-new18 ul.widget-timer li {
+    font-family:'PT Sans Caption', sans-serif;
+    font-size: 30px !important;
+    font-weight: 300 !important;
+   color:#ffb862 !important;
+}
+#block-new18 ul.widget-timer .label {
+    opacity:0;
+}
+
+</style> <!-- Yandex.Metrika counter -->
+<script type="text/javascript" >
+   (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+   m[i].l=1*new Date();k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+   (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+
+   ym(56882098, "init", {
+        clickmap:true,
+        trackLinks:true,
+        accurateTrackBounce:true,
+        webvisor:true
+   });
+</script>
+<noscript><div><img src="https://mc.yandex.ru/watch/56882098" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
+    
+
+	<script>
+		/**GLOBAL VARS*/
+        LPG.config.csrfToken = "<input type='hidden' name='csrfmiddlewaretoken' value='qDW1vKTfAwi6Ydnc8eeD0vBb8qXM66aWf4bd5TxH4WmX4oPqjuR0w53ax5fGyKxA' />";
+        LPG.config.isFbPage = false;
+        LPG.config.isMobilePage = false;
+        LPG.config.tyPageUrl = '';
+        LPG.texts = {
+            errors: {
+                validation: {
+                    email: 'Введите корректный email',
+                    url: 'Введите корректный URL',
+                    value: 'Введите корректное значение',
+                    required: 'Обязательное поле',
+                }
+            }
+        };
+	</script>
+
+    
+
+
+    
+
+    
+
+    <script type="text/javascript" src="//static.lpgenerator.ru/media/js/lpg/_init.js"></script>
+<script type="text/javascript" src="//static.lpgenerator.ru/media/js/lpg/extensions/array.js"></script>
+<script type="text/javascript" src="//static.lpgenerator.ru/media/js/lpg/utils/elements.js"></script>
+
+</head>
+<body style="" class="reg_lang-ru body-editor body-pageVariant">
+
+
+
+
+
+    <script type="text/javascript" src="//static.lpgenerator.ru/media/dist/landings/landingScriptsBefore.js?v=11124"></script>
+
+    <script>
+jq_144('#block-new313').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new297').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script>
+
+
+
+
+    
+        
+            <div id="lpg__oldBrowserWarning" class="lpg__oldBrowserWarning">
+                <div class="lpg__oldBrowserWarning_container">
+                    <table>
+                        <tbody>
+                        <tr>
+                            <td width="40">
+                                <div class="lpg__oldBrowserWarning__ico_alert"></div>
+                            </td>
+                            <td>
+                                <noindex>
+                                    Уважаемый посетитель! Вы используете устаревший браузер, чтобы страница работала правильно, рекомендуется использовать современный браузер.
+                                </noindex>
+                            </td>
+                            <td style="vertical-align:top;"><div id="lpg__oldBrowserWarning__closeX" class="lpg__oldBrowserWarning__ico_closeX"></div></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <script>
+                (function () {
+                    var warningElem = document.getElementById('lpg__oldBrowserWarning');
+
+                    function showWarning() {
+                        warningElem.style.display = 'block';
+                        document.getElementById('lpg__oldBrowserWarning__closeX').onclick = hideWarning;
+                    }
+                    function hideWarning() {
+                        warningElem.style.display = 'none';
+                    }
+
+                    if ( bowser.msie		&&	bowser.version <= 9 )	{ showWarning(); }
+                    if ( bowser.opera		&&	bowser.version <= 30 )	{ showWarning(); }
+                    if ( bowser.firefox		&&	bowser.version <= 35 )	{ showWarning(); }
+                    if ( bowser.safari		&&	bowser.version <= 7 )	{ showWarning(); }
+                }());
+            </script>
+        
+    
+
+
+
+
+    
+
+	
+
+
+    
+
+    
+
+    
+
+    <div class="container preview-main-container" style="">
+    
+    
+    <div id="loading_bar" class="formSending" style="display: none;">
+        <div class="vmidHolder"></div>
+        <div class="loadingBar__loaderWrapper">
+            <div class="loadingBar__loader"></div>
+            <div class="loadingBar__text loadingBar__text-formSending">Отправка...</div>
+        </div>
+    </div>
+
+    
+        <div id="block-new1009" style="position: absolute; display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;capture: on;container: on;top: 6606px;height: 300px;width: 100%;z-index: 1;anchor-id: #block-new1009;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new918" style="position: absolute; display: block;position: absolute;background-position: 50% 0%;background-repeat: no-repeat;border-width: 1px;capture: on;container: on;top: 5113px;height: 689px;width: 100%;z-index: 1;anchor-id: #block-new918;background-color: #ffffff;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new574" style="position: absolute; display: block;position: absolute;background-position: 50% 0%;background-repeat: no-repeat;border-width: 1px;capture: on;container: on;top: 672px;height: 477px;width: 100%;z-index: 1;anchor-id: #block-new574;background-color: #ffffff;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new982" style="position: absolute; display: block;position: absolute;background-position: 50% 0%;background-repeat: no-repeat;border-width: 1px;background-image: url(//media.lpgenerator.ru/images/57561/fon_bKseMHd.png#size_3000x1114);container: on;top: 4370px;height: 743px;width: 100%;z-index: 1;anchor-id: #block-new982;background-color: #ffffff;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new788" style="position: absolute; display: block;position: absolute;background-position: 50% 0%;background-repeat: no-repeat;border-width: 1px;background-image: url(//media.lpgenerator.ru/images/57561/fon_bKseMHd.png#size_3000x1114);capture: on;container: on;top: 1149px;height: 1085px;width: 100%;z-index: 1;anchor-id: #block-new788;background-color: #ffffff;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new770" style="position: absolute; display: block;position: absolute;background-position: 50% 100%;background-repeat: no-repeat;border-width: 1px;background-image: url(//media.lpgenerator.ru/images/57561/fon_9Z3FZ81.jpg#size_2600x634);capture: on;container: on;background-size: cover;top: 5802px;height: 804px;width: 100%;z-index: 1;parallax: on;background-attachment: fixed;fullcover: on;anchor-id: #block-new770;background-color: #ffffff;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new528" style="position: absolute; display: block;position: absolute;background-position: 50% 100%;background-repeat: no-repeat;border-width: 1px;background-image: url(//media.lpgenerator.ru/images/57561/fon_9Z3FZ81.jpg#size_2600x634);capture: on;container: on;background-size: cover;height: 672px;width: 100%;z-index: 1;parallax: on;background-attachment: fixed;fullcover: on;anchor-id: #block-new528;background-color: #faebd7;left: 0;top: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new760" style="position: absolute; display: block;position: absolute;background-position: 50% 0%;background-repeat: no-repeat;border-width: 1px;capture: on;container: on;top: 2234px;height: 721px;width: 100%;z-index: 1;anchor-id: #block-new760;background-color: #ffffff;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new1010" style="position: absolute; display: block;position: absolute;background-position: 50% 100%;background-repeat: no-repeat;border-width: 1px;background-image: url(//media.lpgenerator.ru/images/57561/fon_9Z3FZ81.jpg#size_2600x634);background-size: cover;top: 3664px;height: 706px;width: 100%;z-index: 1;fullcover: on;anchor-id: #block-new1010;background-color: #ffffff;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+        <div id="block-new886" style="position: absolute; display: block;position: absolute;background-position: 50% 0%;background-repeat: no-repeat;border-width: 1px;background-image: url(//media.lpgenerator.ru/images/57561/fon_bKseMHd.png#size_3000x1114);capture: on;container: on;top: 2955px;height: 709px;width: 100%;z-index: 1;anchor-id: #block-new886;background-color: #ffffff;left: 0;opacity: NaN;" class="outer-section"></div>
+    
+    <div id="fb-root"></div>
+    <div id="preview" class="page_container" style="margin: 0 auto; position: relative; ">
+        
+
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new992" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4397px;height: 72px;width: 960px;z-index: 103;anchor-id: #block-new992;left: 0;">
+              <p style="text-align: center;"><span style="font-family: roboto, sans-serif; font-size: 36px; color: rgb(0, 0, 0); text-transform: uppercase;">&nbsp; ЧАС ХОККЕЯ - 600 руб.</span></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new993"> #block-new993 { anchor-id: #block-new993; position: absolute; top: 609px;left: 11px;width: 153px; text-align: center; background-color: #; z-index: 318; height: 27px; border-radius: 7px; } #block-new993 > a { display: block; text-decoration: none; cursor: pointer; width: 153px; color: #000; font-size: 20px; box-sizing: border-box; line-height: 27px; height: 27px; padding-right: 11.8px; padding-left: 11.8px; font-family: Alegreya; font-weight: bold; } #block-new993:hover { background-color: #3eb5f1; } </style>
+        
+        
+        
+          <div class="block block-button is-button" id="block-new993" >
+              <a href="#"
+   target="_self"
+   data-label="РАСПИСАНИЕ"
+        ><span class="button__text">РАСПИСАНИЕ</span></a>
+
+
+
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-videos is-videos" id="block-new1045" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;width: 560px;height: 315px;top: 6176px;z-index: 469;anchor-id: #block-new1045;left: 0;">
+              
+
+
+
+
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new307"> #block-new307 { anchor-id: #block-new307; position: absolute; top: 605px;left: 834px;width: 127px; text-align: center; background-color: #; z-index: 318; height: 30px; border-radius: 7px; } #block-new307 > a { display: block; text-decoration: none; cursor: pointer; width: 127px; color: #000; font-size: 20px; box-sizing: border-box; line-height: 30px; height: 30px; padding-right: 11.8px; padding-left: 11.8px; font-family: Alegreya; font-weight: bold; } #block-new307:hover { background-color: #3eb5f1; } </style>
+        
+        
+        
+          <div class="block block-button is-button" id="block-new307" >
+              <a href="#"
+   target="_self"
+   data-label="КОНТАКТЫ"
+        ><span class="button__text">КОНТАКТЫ</span></a>
+
+
+
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new759"> #block-new759  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 7px;height: 57px;width: 160px;z-index: 430;anchor-id: #block-new759;left: 12.390625px;}#block-new759 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new759" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/logo-kopiya.png#size_743x266"
+        alt=""
+        width="160"
+        height="57" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new994" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4942px;height: 198px;width: 150px;z-index: 284;anchor-id: #block-new994;left: 118px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size: 16px;"></span></p>
+
+<p style="text-align: center;"><b>10 НОЯБРЯ</b></p>
+
+<p style="text-align: center;"><b>ВТОРНИК</b></p>
+
+<p style="text-align: center;"><b>09:15-10:15</b></p>
+
+<p style="text-align: center;"><strong>10:30-11:30</strong></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1042" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4939px;height: 156px;width: 150px;z-index: 284;anchor-id: #block-new1042;left: 820px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size: 16px;"></span></p>
+
+<p style="text-align: center;"><b>15 НОЯБРЯ</b></p>
+
+<p style="text-align: center;"><b>ВОСКРЕСЕНЬЕ</b></p>
+
+<p style="text-align: center;"><b>НЕТ</b></p>
+
+<p style="text-align: center; line-height: 1;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new756"> #block-new756  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 2342px;height: 98px;width: 218px;z-index: 103;anchor-id: #block-new756;left: -2px;}#block-new756 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new756" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/f1_lkACsyt.png#size_424x191"
+        alt=""
+        width="218"
+        height="98" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new757"> #block-new757  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 2373px;height: 533px;width: 480px;z-index: 106;anchor-id: #block-new757;left: 427px;}#block-new757 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new757" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/pl-f_u7ZBfXR.jpg#size_462x450"
+        alt=""
+        width="480"
+        height="533" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new848"> #block-new848  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1915px;height: 58px;width: 128px;z-index: 109;anchor-id: #block-new848;left: 416px;}#block-new848 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new848" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/4_ykVipiI.png#size_128x58"
+        alt=""
+        width="128"
+        height="58" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new583" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1015px;height: 72px;width: 141px;z-index: 109;anchor-id: #block-new583;raw-css: line-height: 18px;;left: 603px;; line-height: 18px;">
+              <p style="text-align: center; line-height: 1;"><font color="#978175" face="roboto, sans-serif"><span style="font-size: 18px; line-height: 1;">Бесплатный инструктор по выходным</span></font></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new874" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1832px;height: 58px;width: 103px;z-index: 110;anchor-id: #block-new874;raw-css: line-height: 18px;;left: 122px;; line-height: 18px;">
+              <p style="text-align: center;"><font color="#ff3300" face="roboto, sans-serif"><span style="font-size: 18px;">Массовые катания</span></font></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1003" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3814px;height: 100px;width: 960px;z-index: 103;anchor-id: #block-new1003;left: 0;">
+              <p style="text-align: center; line-height: 1;"><i style="color: rgb(204, 51, 0); font-size: 36px;">7 НОЯБРЯ ОТКРЫВАЕМ СЕЗОН НОЧНЫХ КАТАНИЙ!</i></p>
+
+<p style="text-align: center; line-height: 1;"><span style="font-size:28px;"><em><font color="#cc3300">ночь с субботы на воскресенье</font></em></span></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1000" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4941px;height: 228px;width: 150px;z-index: 284;anchor-id: #block-new1000;left: -17px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size: 16px;"></span></p>
+
+<p style="text-align: center;"><b>09 НОЯБРЯ</b></p>
+
+<p style="text-align: center;"><b>ПОНЕДЕЛЬНИК</b></p>
+
+<p style="text-align: center;"><b>09:15-10:15</b></p>
+
+<p style="text-align: center;"><b>10:30-11:30</b></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center; line-height: 1;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new1006"> #block-new1006 { anchor-id: #block-new1006; position: absolute; top: 609px;left: 580px;width: 236px; text-align: center; background-color: #; z-index: 318; height: 26px; border-radius: 7px; } #block-new1006 > a { display: block; text-decoration: none; cursor: pointer; width: 236px; color: #000; font-size: 20px; box-sizing: border-box; line-height: 26px; height: 26px; padding-right: 11.8px; padding-left: 11.8px; font-family: Alegreya; font-weight: bold; } #block-new1006:hover { background-color: #3eb5f1; } </style>
+        
+        
+        
+          <div class="block block-button is-button" id="block-new1006" >
+              <a href="#"
+   target="_self"
+   data-label="НОЧНЫЕ КАТАНИЯ"
+        ><span class="button__text">НОЧНЫЕ КАТАНИЯ</span></a>
+
+
+
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new265" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3336px;height: 309px;width: 128px;z-index: 214;anchor-id: #block-new265;left: 1px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size:16px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size: 14px;"><b>09 НОЯБРЯ</b></span></p>
+
+<p style="text-align: center;"><span style="font-size:12px;"><strong><span style="line-height: 1;">ПОНЕДЕЛЬНИК</span></strong></span></p>
+
+<p style="text-align: center;"><strong>11:45-16:30</strong></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new348"> #block-new348 { anchor-id: #block-new348; position: absolute; top: 2828px;left: 491px;width: 350px; text-align: center; background-color: #fa7b10; z-index: 250; height: 50px; border-radius: 7px; } #block-new348 > a { display: block; text-decoration: none; cursor: pointer; width: 350px; color: #ffffff; font-size: 22px; box-sizing: border-box; line-height: 50px; height: 50px; padding-right: 11.8px; padding-left: 11.8px; font-weight: bold; } #block-new348:hover { background-color: #3eb5f1; } </style>
+        
+        
+        
+          <div class="block block-button is-submit" id="block-new348" >
+              <a href="#fire_form_new347"
+   target=""
+   data-label="Перейти к оплате"
+        ><span class="button__text">Перейти к оплате</span></a>
+
+
+
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-form is-form" id="block-new347" style="display: block;position: absolute;width: 334px;top: 2437px;left: 502px;height: auto;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;">
+              <form action="/var/2314114/form/action/" method="post" enctype="multipart/form-data" class="our_form" id="formnew347"><input name='is_payment_lead' value='true' type='hidden'><div style='display:none;' name='paymentSettings'>{"pay_system":967,"items":[{"count":1,"cost":600,"name":"Взрослый билет","description":"Взрослый билет"},{"count":1,"cost":500,"name":"Детский билет","description":"Детский билет"},{"count":1,"cost":900,"name":"Взрослый с прокатом ","description":"Взрослый с прокатом "},{"count":1,"cost":700,"name":"Детский с прокатом","description":"Детский с прокатом"}],"fail_url":"","success_url":"","pay_system_settings":{"system_account_id":"parkru","name":"онлайн","deleted":false,"id":967,"currency":"RUB","system_type":"robo","additional_data":{"secret_key":"REDACTED","secret_key_2":"udoTkAvVy1r8fPWv8p59","tax":"none","test_mode":false}},"fail_message":"Оплата не прошла","type":"robo","success_message":"Оплата прошла"}</div><script>if (document.location.search.match(/rev=(\d+)/)) {var form = document.getElementById("formnew347");form.setAttribute("action", form.getAttribute("action")+"?rev="+RegExp.$1);}</script><style>#block-new347 label.main {
+clear: left; width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 input::-webkit-input-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 input:-moz-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 input:-ms-input-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 textarea::-webkit-input-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 textarea:-moz-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 textarea:-ms-input-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 select::-webkit-input-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 select:-moz-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 select:-ms-input-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 option::-webkit-input-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 option:-moz-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 option:-ms-input-placeholder {
+padding: 0;width: 450px;float: top;font-family: Arial, Helvetica, sans-serif;font-weight: normal;display: inline-block;color: #000;font-size: 16px;vertical-align: top;height: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 .input {
+display: block;
+margin: 0 0 0 0;
+height: 42px;
+width: 322px!important;
+border-radius: 7px; width: -118px;height: 42px;font-size: 16px;color: #000;display: inline-block;border-width: 1px;border-radius: 7px;border-color: #898989;font-weight: normal;margin-bottom: 7px;border-style: solid;background-color: #ffffff !important;font-family: Arial, Helvetica, sans-serif;focus-color: #53a7ec;left: 0;top: 0;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+padding: 0 5px !important;;
+}
+#block-new347 .input:focus {
+border-color: rgba(83, 167, 236, 0.6);
+-webkit-box-shadow: inset 0 1px 1px rgba(83, 167, 236, 0.075), 0 0 8px rgba(83, 167, 236, 0.8);
+-moz-box-shadow: inset 0 1px 1px rgba(83, 167, 236, 0.075), 0 0 8px rgba(83, 167, 236, 0.8);
+box-shadow: inset 0 1px 1px rgba(83, 167, 236, 0.075), 0 0 8px rgba(83, 167, 236, 0.8);
+}
+#block-new347 select.input {
+display: block;
+height: 42px;
+padding: 0 1px !important; padding-right: 0 !important;;
+width: 331px!important;
+box-sizing: unset!important;
+}
+#block-new347 input.input {
+display: block;
+height: 42px !important;
+width: 322px!important;
+box-shadow: none;
+}
+#block-new347 input:required {
+box-shadow: none;
+}
+#block-new347 input:invalid {
+box-shadow: none;
+}
+#block-new347 input[type="checkbox"] {
+margin-right: 5px;
+}
+#block-new347 input[type="radio"] {
+margin-right: 5px;
+}
+#block-new347 textarea.input {
+display: block;
+width: 322px!important;
+margin-right: 0 !important;
+padding: ;
+}
+#block-new347 .radio {
+display: block; font-family: Arial, Helvetica, sans-serif;font-size: 16px;color: #fff0f5;font-weight: normal;height: auto;width: auto;left: 0;top: 0;background-color: transparent;background-image: none;background-position: 0% 0%;background-repeat: no-repeat;;
+}
+#block-new347 .input_block {
+display: block;
+margin-bottom: 7px;
+margin-left: 0;
+}
+#block-new347 {
+z-index: 371;
+}
+#block-new347 input {
+padding: 0; margin: 0; ;
+}
+#block-new347 label {
+margin: 0;
+padding: 0;
+}
+#block-new347 .radio label {
+font-weight: inherit;
+}
+#block-new347 .column50 {
+width: 50%;
+float: left;
+}
+#block-new347 .column50.column50_1 .cont {
+padding-right: 10px;
+}
+#block-new347 .column50.column50_2 .cont {
+padding-left: 10px;
+}
+#block-new347 .column50 .input {
+margin-top: 0;
+}
+#block-new347 .form-list-item {
+display: inline-block;
+}
+#block-new347 .form-list-item.form-list-columns-1 {
+width: 100%;
+}
+#block-new347 .form-list-item.form-list-columns-2 {
+width: 50%;
+}
+#block-new347 .form-list-item.form-list-columns-3 {
+width: 33%;
+}
+</style><div class="step step-0" data-button="" style="display: block"><div class="cont " data-name="widget_1" data-default="" data-column="1" data-label="Взрослый билет с прокатом коньков" data-ordering="1" data-type="input"><label for="widget_1" class="main">Взрослый билет с прокатом коньков</label><input type="text" class="input" name="widget_1" value=""  /></div>
+<div class="cont " data-name="widget_2" data-default="" data-column="1" data-label="Детский билет с прокатом коньков" data-ordering="2" data-type="input"><label for="widget_2" class="main">Детский билет с прокатом коньков</label><input type="text" class="input" name="widget_2" value=""  /></div>
+<div class="cont " data-name="widget_3" data-default="" data-column="1" data-label="Взрослый билет без проката коньков" data-ordering="3" data-type="input"><label for="widget_3" class="main">Взрослый билет без проката коньков</label><input type="text" class="input" name="widget_3" value=""  /></div>
+<div class="cont " data-name="widget_4" data-default="" data-column="1" data-label="Детский билет без проката коньков" data-ordering="4" data-type="input"><label for="widget_4" class="main">Детский билет без проката коньков</label><input type="text" class="input" name="widget_4" value=""  /></div>
+<div class="cont " data-name="widget_5" data-ordering="5" data-required="1" data-default="" data-label="Email для чека" data-type="email" data-email="1"><label for="widget_5" class="main">Email для чека*</label><input type="email" class="input" name="widget_5" value="" required /></div>
+</div>
+</form><div class="message"><a class="redirect" href=""></a></div>
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1008" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1020px;height: 45px;width: 189px;z-index: 109;anchor-id: #block-new1008;raw-css: line-height: 18px;;left: 392px;; line-height: 18px;">
+              <p style="text-align: center; line-height: 0.2;"><font color="#978175" face="roboto, sans-serif"><span style="font-size: 18px;">Возможна аренда</span></font></p>
+
+<p style="text-align: center; line-height: 0.2;"><font color="#978175" face="roboto, sans-serif"><span style="font-size: 18px;">ледового поля</span></font></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new341"> #block-new341 { anchor-id: #block-new341; position: absolute; top: 6632px;left: 338px;width: 283px; text-align: center; background-color: #; z-index: 369; height: 33px; border-color: #045169; border-style: solid; border-radius: 6px; } #block-new341 > a { display: block; text-decoration: none; cursor: pointer; width: 283px; color: #a9a9a9; font-size: 14px; box-sizing: border-box; line-height: 33px; height: 33px; padding-right: 12.5px; padding-left: 12.5px; font-family: Verdana; font-weight: normal; } #overlay-block-new341 .widget.popup {
+padding: 50px;width: 480px;background-color: #f5f5f5;background-image: url();background-position: 0 0;background-repeat: no-repeat;border-color: #fff;border-width: 0px;border-style: solid;border-radius: 5px;
+}
+#overlay-block-new341 .widget.popup > .close{
+
+}
+#overlay-block-new341 .line.b1595842366417 {
+font-size: 26px;font-family: Arial, Helvetica, sans-serif;color: #2c2c2c;text-align: center;padding-bottom: 28px;
+}
+#overlay-block-new341 .line.b1595842379727 .styledText{
+height: 150px;
+}
+#overlay-block-new341 .line.b1595842379727 {
+padding-bottom: 0px;
+}
+ </style>
+        
+        
+        
+          <div class="block block-popupv2 is-popupv2" id="block-new341" >
+              <a href=""
+   target=""
+   data-label="ПУБЛИЧНАЯ ОФЕРТА"
+        ><span class="button__text">ПУБЛИЧНАЯ ОФЕРТА</span></a>
+
+
+
+
+
+
+<div class="widget popup">
+    <a class="close"></a>
+    <form method="post" target="iframe-block-new341" id="formblock-new341">
+    
+        <div  class=" line text b1595842366417">Публичная оферта
+</div>
+    
+        <div  class=" line bigText b1595842379727"><div class="styledText"><p><span style="font-size:10px"><span style="font-family:arial,helvetica,sans-serif"></span></span></p>
+
+<p><strong>ПУБЛИЧНАЯ ОФЕРТА</strong></p>
+
+<p><strong>&nbsp;о заключении договора об оказании услуг</strong></p>
+
+<p>&nbsp;</p>
+
+<p><strong>Общие положения</strong></p>
+
+<p>В настоящей Публичной оферте содержатся условия заключения Договора об оказании услуг (далее по тексту - &laquo;Договор об оказании услуг&raquo; и/или &laquo;Договор&raquo;). Настоящей офертой признается предложение, адресованное одному или нескольким конкретным лицам, которое достаточно определенно и выражает намерение лица, сделавшего предложение, считать себя заключившим Договор с адресатом, которым будет принято предложение.</p>
+
+<p>Совершение указанных в настоящей Оферте действий является подтверждением согласия обеих Сторон заключить Договор об оказании услуг на условиях, в порядке и объеме, изложенных в настоящей Оферте.</p>
+
+<p>Нижеизложенный текст Публичной оферты является официальным публичным предложением Исполнителя, адресованный заинтересованному кругу лиц заключить Договор об оказании услуг в соответствии с положениями пункта 2 статьи 437 Гражданского кодекса РФ.</p>
+
+<p>Договор об оказании услуг считается заключенным и приобретает силу с момента совершения Сторонами действий, предусмотренных в настоящей Оферте, и, означающих безоговорочное, а также полное принятие всех условий настоящей Оферты без каких-либо изъятий или ограничений на условиях присоединения.</p>
+
+<p>&nbsp;</p>
+
+<p><strong>Термины и определения:</strong></p>
+
+<p><strong>Договор</strong> &ndash; текст настоящей Оферты с Приложениями, являющимися неотъемлемой частью настоящей Оферты, акцептованный Заказчиком путем совершения конклюдентных действий, предусмотренных настоящей Офертой.</p>
+
+<p><strong>Конклюдентные действия &mdash; это</strong> поведение, которое выражает согласие с предложением контрагента заключить, изменить или расторгнуть договор. Действия состоят в полном или частичном выполнении условий, которые предложил контрагент.</p>
+
+<p><strong>Сайт Исполнителя в сети &laquo;Интернет&raquo;</strong> &ndash; совокупность программ для электронных вычислительных машин и иной информации, содержащейся в информационной системе, доступ к которой обеспечивается посредством сети &laquo;Интернет&raquo; по доменному имени и сетевому адресу: https://www.parkskazokspb.ru/</p>
+
+<p><strong>Стороны Договора (Стороны)</strong> &ndash; Исполнитель и Заказчик.</p>
+
+<p><strong>Услуга</strong> &ndash; услуга, оказываемая Исполнителем Заказчику в порядке и на условиях, установленных настоящей Офертой.</p>
+
+<p>&nbsp;</p>
+
+<p>Предмет Договора</p>
+
+<p>Исполнитель обязуется оказать Заказчику Услуги, а Заказчик обязуется оплатить их в размере, порядке и сроки, установленные настоящим Договором.</p>
+
+<p>Наименование, количество, порядок и иные условия оказания Услуг определяются на основании сведений Исполнителя при оформлении заявки Заказчиком, либо устанавливаются на сайте Исполнителя в сети &laquo;Интернет&raquo; https://www.parkskazokspb.ru/</p>
+
+<p>Исполнитель оказывает Услуги по настоящему Договору лично, либо с привлечением третьих лиц, при этом за действия третьих лиц Исполнитель отвечает перед Заказчиком как за свои собственные.</p>
+
+<p>Договор заключается путем акцепта настоящей Оферты через совершение конклюдентных действий, выраженных в:</p>
+
+<p>действиях, связанных с регистрацией учетной записи на Сайте Исполнителя в сети &laquo;Интернет&raquo; при наличии необходимости регистрации учетной записи;</p>
+
+<p>оформлении и направлении Заказчиком заявки в адрес Исполнителя для оказания Услуг;</p>
+
+<p>действиях, связанных с оплатой Услуг Заказчиком;</p>
+
+<p>действиях, связанных с оказанием Услуг Исполнителем.</p>
+
+<p>Данный перечень неисчерпывающий, могут быть и другие действия, которые ясно выражают намерение лица принять предложение контрагента.</p>
+
+<p>&nbsp;</p>
+
+<p><strong>Права и обязанности Сторон</strong></p>
+
+<p>&nbsp;</p>
+
+<p>&nbsp;Права и обязанности Исполнителя:</p>
+
+<p>Исполнитель обязуется оказать Услуги в соответствии с положениями настоящего Договора, в сроки и объеме, указанные в настоящем Договоре и (или) в порядке, указанном на Сайте Исполнителя.</p>
+
+<p>Исполнитель обязуется предоставлять Заказчику доступ к разделам Сайта, необходимым для получения информации, согласно пункту 2.1. Договора.</p>
+
+<p>Исполнитель несет ответственность за хранение и обработку персональных данных Заказчика, обеспечивает сохранение конфиденциальности этих данных и использует их исключительно для качественного оказания Услуг Заказчику.</p>
+
+<p>Исполнитель оставляет за собой право изменять сроки (период) оказания Услуг и условия настоящей Оферты в одностороннем порядке без предварительного уведомления Заказчика, публикуя указанные изменения на Сайте Исполнителя в сети &laquo;Интернет&raquo;.</p>
+
+<p>При этом новые / измененные условия, указываемые на Сайте, действуют только в отношении вновь заключаемых Договоров.</p>
+
+<p>&nbsp;Права и обязанности Заказчика:</p>
+
+<p>Заказчик обязан предоставлять достоверную информацию о себе при получении соответствующих Услуг.</p>
+
+<p>&nbsp;Заказчик обязуется не воспроизводить, не повторять, не копировать, не продавать, а также не использовать в каких бы то ни было целях информацию и материалы, ставшие ему доступными в связи с оказанием Услуг, за исключением личного использования непосредственно самим Заказчиком без предоставления в какой-либо форме доступа каким-либо третьим лицам.</p>
+
+<p>Заказчик обязуется принять Услуги, оказанные Исполнителем;</p>
+
+<p>Заказчик вправе потребовать от Исполнителя вернуть денежные средства за неоказанные услуги, некачественно оказанные услуги, услуги, оказанные с нарушением сроков оказания, а также, если Заказчик решил отказаться от услуг по причинам, не связанным с нарушением обязательств со стороны Исполнителя, исключительно по основаниям, предусмотренным действующим законодательством Российской Федерации.</p>
+
+<p>Заказчик гарантирует, что все условия Договора ему понятны; Заказчик принимает условия без оговорок, а также в полном объеме.</p>
+
+<p style="margin-left:1.0cm">&nbsp;</p>
+
+<p>Цена и порядок расчетов</p>
+
+<p>Стоимость услуг Исполнителя, оказываемых Заказчиком и порядок их оплаты, определяются на основании сведений Исполнителя при оформлении заявки Заказчиком либо устанавливаются на Сайте Исполнителя в сети &laquo;Интернет&raquo;: https://www.parkskazokspb.ru/</p>
+
+<p>Все расчеты по Договору производятся в безналичном порядке.</p>
+
+<p style="margin-left:18.0pt">&nbsp;</p>
+
+<p>Конфиденциальность и безопасность</p>
+
+<p>При реализации настоящего Договора Стороны обеспечивают конфиденциальность и безопасность персональных данных в соответствии с актуальной редакцией ФЗ от 27.07.2006 г. № 152-ФЗ &laquo;О персональных данных&raquo; и ФЗ от 27.07.2006 г. № 149-ФЗ &laquo;Об информации, информационных технологиях и о защите информации&raquo;.</p>
+
+<p>Стороны обязуются сохранять конфиденциальность информации, полученной в ходе исполнения настоящего Договора, и принять все возможные меры, чтобы предохранить полученную информацию от разглашения.</p>
+
+<p>Под конфиденциальной информацией понимается любая информация, передаваемая Исполнителем и Заказчиком в процессе реализации Договора и подлежащая защите, исключения указаны ниже.</p>
+
+<p>Такая информация может содержаться в предоставляемых Исполнителю локальных нормативных актах, договорах, письмах, отчетах, аналитических материалах, результатах исследований, схемах, графиках, спецификациях и других документах, оформленных как на бумажных, так и на электронных носителях.</p>
+
+<p>&nbsp;</p>
+
+<p>Форс-мажор</p>
+
+<p>Стороны освобождаются от ответственности за неисполнение или ненадлежащее исполнение обязательств по Договору, если надлежащее исполнение оказалось невозможным вследствие непреодолимой силы, то есть чрезвычайных и непредотвратимых при данных условиях обстоятельств, под которыми понимаются: запретные действия властей, эпидемии, блокада, эмбарго, землетрясения, наводнения, пожары или другие стихийные бедствия.</p>
+
+<p>В случае наступления этих обстоятельств Сторона обязана в течение 30 (Тридцати) рабочих дней уведомить об этом другую Сторону.</p>
+
+<p>Документ, выданный уполномоченным государственным органом, является достаточным подтверждением наличия и продолжительности действия непреодолимой силы.</p>
+
+<p>Если обстоятельства непреодолимой силы продолжают действовать более 60 (Шестидесяти) рабочих дней, то каждая Сторона вправе отказаться от настоящего Договора в одностороннем порядке.</p>
+
+<p><strong>Ответственность Сторон</strong></p>
+
+<p>В случае неисполнения и/или ненадлежащего исполнения своих обязательств по Договору, Стороны несут ответственность в соответствии с условиями настоящей Оферты.</p>
+
+<p>Исполнитель не несет ответственности за неисполнение и/или ненадлежащее исполнение обязательств по Договору, если такое неисполнение и/или ненадлежащее исполнение произошло по вине Заказчика.</p>
+
+<p>Сторона, не исполнившая или ненадлежащим образом исполнившая обязательства по Договору, обязана возместить другой Стороне причиненные такими нарушениями убытки.</p>
+
+<p><strong>Срок действия настоящей Оферты</strong></p>
+
+<p>Оферта вступает в силу с момента размещения на Сайте Исполнителя и действует до момента её отзыва Исполнителем.</p>
+
+<p>Исполнитель оставляет за собой право внести изменения в условия Оферты и/или отозвать Оферту в любой момент по своему усмотрению. Сведения об изменении или отзыве Оферты доводятся до Заказчика по выбору Исполнителя посредством размещения на сайте Исполнителя в сети &laquo;Интернет&raquo;, в Личном кабинете Заказчика, либо путем направления соответствующего уведомления на электронный или почтовый адрес, указанный Заказчиком при заключении Договора или в ходе его исполнения.</p>
+
+<p>Договор вступает в силу с момента Акцепта условий Оферты Заказчиком и действует до полного исполнения Сторонами обязательств по Договору.</p>
+
+<p>Изменения, внесенные Исполнителем в Договор и опубликованные на сайте в форме актуализированной Оферты, считаются принятыми Заказчиком в полном объеме.</p>
+
+<p>&nbsp;</p>
+
+<p>&nbsp;</p>
+
+<p>Дополнительные условия</p>
+
+<p>Договор, его заключение и исполнение регулируется действующим законодательством Российской Федерации. Все вопросы, не урегулированные настоящей Офертой или урегулированные не полностью, регулируются в соответствии с материальным правом Российской Федерации.</p>
+
+<p>В случае возникновения спора, который может возникнуть между Сторонами в ходе исполнения ими своих обязательств по Договору, заключенному на условиях настоящей Оферты, Стороны обязаны урегулировать спор мирным путем до начала судебного разбирательства.</p>
+
+<p>Судебное разбирательство осуществляется в соответствии с законодательством Российской Федерации.</p>
+
+<p>Споры или разногласия, по которым Стороны не достигли договоренности, подлежат разрешению в соответствии с законодательством РФ. Досудебный порядок урегулирования спора является обязательным.</p>
+
+<p>В качестве языка Договора, заключаемого на условиях настоящей Оферты, а также языка, используемого при любом взаимодействии Сторон (включая ведение переписки, предоставление требований / уведомлений / разъяснений, предоставление документов и т. д.), Стороны определили русский язык.</p>
+
+<p>Все документы, подлежащие предоставлению в соответствии с условиями настоящей Оферты, должны быть составлены на русском языке либо иметь перевод на русский язык, удостоверенный в установленном порядке.</p>
+
+<p>Бездействие одной из Сторон в случае нарушения условий настоящей Оферты не лишает права заинтересованной Стороны осуществлять защиту своих интересов позднее, а также не означает отказа от своих прав в случае совершения одной из Сторон подобных либо сходных нарушений в будущем.</p>
+
+<p>Если на Сайте Исполнителя в сети &laquo;Интернет&raquo; есть ссылки на другие веб-сайты и материалы третьих лиц, такие ссылки размещены исключительно в целях информирования, и Исполнитель не имеет контроля в отношении содержания таких сайтов или материалов. Исполнитель не несет ответственность за любые убытки или ущерб, которые могут возникнуть в результате использования таких ссылок.</p>
+
+<p style="margin-left:1.0cm">&nbsp;</p>
+
+<p><strong>Реквизиты Исполнителя</strong><br />
+&nbsp;</p>
+
+<p>Полное наименование: Хачатурова Мадлена Грантовна</p>
+
+<p>ИНН: 780225146584</p>
+
+<p>ОГРН/ОГРНИП: 324470400133794</p>
+
+<p>Контактный телефон: +7 921 996-61-94 Контактный e-mail: parkskazok00@mail.ru</p>
+
+<p><span style="font-size:10px"><span style="font-family:arial,helvetica,sans-serif"></span></span></p>
+</div>
+</div>
+    
+        
+
+		<input type="hidden" rel="excluded_integrations" data-label="excluded_integrations" style="display:none;" value="[]">
+		
+    </form>
+    <div class="confirmation"></div>
+</div>
+<iframe width="0" height="0" name="iframe-block-new341"></iframe>
+<script>
+(function(jq, scriptData){
+jq(function(){ widget.on(scriptData); });
+})(jq_144, {"id":"block-new341","onLoad":"popup","action":"message","payment":{},"showActions":{"showEvent":null,"seconds":10,"animation":null,"pixels":500},"version":"2","isShowPrivacyCheckbox":false});
+</script>
+          </div>
+        
+    
+        
+            <style id="block-style-new306"> #block-new306 { anchor-id: #block-new306; position: absolute; top: 608px;left: 180px;width: 120px; text-align: center; background-color: #; z-index: 318; height: 27px; border-radius: 7px; } #block-new306 > a { display: block; text-decoration: none; cursor: pointer; width: 120px; color: #000; font-size: 20px; box-sizing: border-box; line-height: 27px; height: 27px; padding-right: 11.8px; padding-left: 11.8px; font-family: Alegreya; font-weight: bold; } #block-new306:hover { background-color: #3eb5f1; } </style>
+        
+        
+        
+          <div class="block block-button is-button" id="block-new306" >
+              <a href="#"
+   target="_self"
+   data-label="ЦЕНЫ"
+        ><span class="button__text">ЦЕНЫ</span></a>
+
+
+
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new957"> #block-new957  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 6250px;height: 273px;width: 210px;z-index: 455;anchor-id: #block-new957;left: 689.90625px;}#block-new957 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new957" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/f1excwaig.png#size_380x492"
+        alt=""
+        width="210"
+        height="273" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-videos is-videos" id="block-new1046" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;width: 560px;height: 315px;left: 200px;top: 5256px;z-index: 470;anchor-id: #block-new1046;">
+              
+
+
+
+
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-videos is-videos" id="block-new1047" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;width: 560px;height: 315px;left: 200px;top: 5256px;z-index: 471;anchor-id: #block-new1047;">
+              
+
+
+    
+
+     <div id="rutube-player__block-new1047">
+        <iframe width="560" height="315" src="//rutube.ru/play/embed/36ebbb4f05ddc00445d6fec93570e660/" frameborder="0" allow="clipboard-write;; encrypted-media" allowfullscreen></iframe>
+     </div>
+
+     <style>
+            #rutube-player__block-new1047 {
+                position: relative;
+                display: block;
+                width: 560px;
+                height: 315px;
+            }
+     </style>
+
+
+
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1044" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1170px;height: 165px;width: 960px;z-index: 103;anchor-id: #block-new1044;left: 0;">
+              <p style="text-align: center;"><font color="#000000" face="roboto, sans-serif"><span style="font-size: 34px; text-transform: uppercase;">СЕЗОН НОЧНЫХ КАТАНИЙ ОТКРЫТ!</span></font></p>
+
+<p style="text-align: center;"><span style="font-size:28px;"><font color="#000000" face="roboto, sans-serif">НОЧНЫЕ КАТАНИЯ ПРОВОДЯТСЯ КАЖДУЮ СУББОТУ 23:30-05:30</font></span></p>
+
+<p style="text-align: center;"><em><font color="#000000" face="roboto, sans-serif">НОЧЬ С СУББОТЫ НА ВОСКРЕСЕНЬЕ</font></em></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new911" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 2986px;height: 69px;width: 960px;z-index: 103;anchor-id: #block-new911;left: 0;">
+              <p style="text-align: center;"><font color="#000000" face="roboto, sans-serif"><span style="font-size: 34px; text-transform: uppercase;">НАШИ ЦЕНЫ</span></font></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new916" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 2325px;height: 43px;width: 300px;z-index: 108;anchor-id: #block-new916;raw-css: line-height: 22px;;left: 517px;; line-height: 22px;">
+              <p style="text-align: center;"><font color="#000000" face="roboto, sans-serif"><span style="font-size: 21px;">Укажите количество билетов</span></font></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-videos is-videos" id="block-new1043" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 5400px;height: 315px;width: 560px;z-index: 464;anchor-id: #block-new1043;left: 200px;">
+              
+
+
+
+
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new914"> #block-new914  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 2686px;height: 98px;width: 218px;z-index: 103;anchor-id: #block-new914;left: 739px;}#block-new914 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new914" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/f1_lkACsyt.png#size_424x191"
+        alt=""
+        width="218"
+        height="98" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new915"> #block-new915  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 2758px;height: 98px;width: 218px;z-index: 103;anchor-id: #block-new915;left: 27px;}#block-new915 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new915" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/f1_lkACsyt.png#size_424x191"
+        alt=""
+        width="218"
+        height="98" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-map is-map" id="block-new110" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 5926px;height: 526px;width: 546px;z-index: 100;anchor-id: #block-new110;left: 19px;">
+              <div id="new110_map" style="width:100%; height: 100%;"></div>
+
+<script>
+    (function () {
+        var addMapLoaderToPage = function () {
+            var renderMap = function () {
+                yandexMap.render( "new110_map", [59.884099, 30.438722], 13, 'e4d205c1-2329-4b37-b7b9-3cd21c25a8ce' );
+            };
+            if (!window.yandexMapLoader) {
+                LPG.utils.addScriptToPage({
+                    src: LPG.path.staticUrl + 'js/upgrade/files/yandexMap.js',
+                    callback: renderMap,
+                    isRefresh: false
+                });
+            } else {
+                renderMap();
+            }
+        };
+        if (document.readyState !== 'complete') {
+            window.addEventListener('load', addMapLoaderToPage);
+        } else {
+            addMapLoaderToPage();
+        }
+    })();
+</script>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new872" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1438px;height: 58px;width: 108px;z-index: 110;anchor-id: #block-new872;raw-css: line-height: 18px;;left: 338px;; line-height: 18px;">
+              <p style="text-align: center;"><span style="color:#ff3300;"><span style="font-size:18px;"><font face="roboto, sans-serif">Час хоккея для всех</font></span></span></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-langBlock is-langBlock" id="block-langBlock" style="">
+              <script>LPG.LOCALE = 'ru';</script>
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new232" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3094px;height: 166px;width: 455px;z-index: 214;anchor-id: #block-new232;left: -7.078125px;">
+              <p style="line-height: 1.3; text-align: center;"><span style="font-size:22px;"><span style="font-family:verdana,geneva,sans-serif;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;">СО СВОИМИ КОНЬКАМИ</span></span></span></span></span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="font-size:18px;"><span style="font-family:verdana,geneva,sans-serif;">600 р./час за взрослый билет&nbsp;</span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="font-size:18px;"><span style="font-family:verdana,geneva,sans-serif;">500 р./час за детский билет*&nbsp;</span></span></p>
+
+<p style="line-height: 1.3;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new986"> #block-new986 { display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4487px;height: 376px;width: 853px;z-index: 105;anchor-id: #block-new986;left: 63px; }
+#block-new986 .widget.gallery img{max-width: 376px;max-height: 376px;border: none;vertical-align: top;}#block-new986 .widget.gallery div.img{width: 376px;height: 376px;}#block-new986 .widget.gallery .bg{width: 376px;height: 376px;border: none;}#block-new986 .widget.gallery{width: 853px;}#block-new986 .widget.gallery .gallery-wrapper{margin: 0 42px;background-color: #;height: 400px;}#block-new986 .widget.gallery .gallery-image{width:376px;margin-left: 17px;}#block-new986 .widget.gallery .gallery-prev{background:url(//media.lpgenerator.ru/images/57561/sl-l_z5HIoXA.png#size_22x35) 0 0 no-repeat;width: 22px;height: 35px;margin-top: 170.5px;}#block-new986 .widget.gallery .gallery-next{background:url(//media.lpgenerator.ru/images/57561/sl-r_lVXXA78.png#size_22x35) 0 0 no-repeat;width: 22px;height: 35px;margin-top: 170.5px;}#block-new986 .widget.gallery .gallery-wrapper{height:376px;} </style>
+        
+        
+        
+          <div class="block block-gallery is-gallery" id="block-new986" >
+              <div class="widget gallery">
+    
+    <div class="gallery-prev"></div>
+    <div class="gallery-next"></div>
+    
+    <div class="gallery-wrapper">
+        <div class="gallery-container">
+            
+                <a
+                        
+                        class="gallery-image">
+                    <div class="img">
+                        <img src="//media.lpgenerator.ru/images/554465/chr63250.jpg#size_376x376" />
+                    </div>
+                </a>
+            
+                <a
+                        
+                        class="gallery-image">
+                    <div class="img">
+                        <img src="//media.lpgenerator.ru/images/554465/chr63258_eCBNF4X.jpg#size_376x376" />
+                    </div>
+                </a>
+            
+                <a
+                        
+                        class="gallery-image">
+                    <div class="img">
+                        <img src="//media.lpgenerator.ru/images/554465/chr63253.jpg#size_376x376" />
+                    </div>
+                </a>
+            
+                <a
+                        
+                        class="gallery-image">
+                    <div class="img">
+                        <img src="//media.lpgenerator.ru/images/554465/chr63261_eF1aAMH.jpg#size_376x376" />
+                    </div>
+                </a>
+            
+        </div>
+    </div>
+</div><script>
+(function(jq, scriptData){
+jq(function(){ widget.on(scriptData); });
+})(jq_144, {"id":"block-new986","onLoad":"gallery","scrollTime":0});
+</script>
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new989" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4881px;height: 72px;width: 960px;z-index: 103;anchor-id: #block-new989;left: 0;">
+              <p style="text-align: center;"><span style="font-family: roboto, sans-serif; font-size: 36px; color: rgb(0, 0, 0); text-transform: uppercase;">&nbsp; ЧАС ХОККЕЯ - расписание&nbsp;</span></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new824"> #block-new824  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1391px;height: 131px;width: 130px;z-index: 107;anchor-id: #block-new824;left: 726px;}#block-new824 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new824" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/pl_jrdUsZ7.png#size_127x131"
+        alt=""
+        width="130"
+        height="131" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new531"> #block-new531  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 154px;height: 392px;width: 523px;z-index: 106;anchor-id: #block-new531;left: 416px;}#block-new531 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new531" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/pl_EAnYjuf.png#size_523x392"
+        alt=""
+        width="523"
+        height="392" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new532" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 309px;height: 109px;width: 523px;z-index: 123;anchor-id: #block-new532;raw-css: line-height: 36px;;left: 418px;; line-height: 36px;">
+              <p style="text-align: center;"><font color="#000000" face="roboto, sans-serif"><span style="font-size: 38px; text-transform: uppercase;">ЛЕДОВЫЙ КАТОК</span></font></p>
+
+<p style="text-align: center;"><font color="#000000" face="roboto, sans-serif"><span style="font-size: 38px; text-transform: uppercase;">В ПАРКЕ БАБУШКИНА</span></font></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new533" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 13px;height: 23px;width: 229px;z-index: 104;anchor-id: #block-new533;left: 731px;">
+              <p style="text-align: right;"><span style="color:#0b0a17; font-weight: 300;"><span style="font-size:22px;"><span style="font-family:roboto,sans-serif;">+7 812 565-09-99</span></span></span></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new534"> #block-new534  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 76px;height: 492px;width: 380px;z-index: 105;anchor-id: #block-new534;left: 23px;}#block-new534 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new534" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/f1_eXCwAiG.png#size_380x492"
+        alt=""
+        width="380"
+        height="492" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-animationBlock is-animationBlock" id="block-animationBlock" style="">
+              <script>window.blocksAnimatation.set({"new528":{"include":["new993","new759","new531","new532","new533","new534","new529","new307","new306","new1006","new973","new440"],"hover":{},"scroll":{},"area":"section"},"new574":{"include":["new583","new1028","new1029","new1023","new1024","new1025","new1026","new1027","new1008","new592","new593"],"hover":{},"scroll":{},"area":"section"},"new788":{"hover":{},"include":["new1044","new824","new822","new803","new804","new805","new799","new862","new873","new872","new875","new874","new877","new876","new848"],"scroll":{},"area":"section"},"new760":{"hover":{},"include":["new756","new757","new348","new347","new916","new915","new914","new908","new959","new706","new350"],"scroll":{},"area":"section"},"new886":{"hover":{},"include":["new911","new232","new1033","new1031","new1037","new1036","new1035","new1034","new885","new265","new974","new353","new960"],"scroll":{},"area":"section"},"new1010":{"include":["new1030","new1007","new1021","new1003"],"hover":{},"scroll":{},"area":"section"},"new982":{"include":["new992","new994","new1040","new986","new989","new1039","new1038","new1042","new1000","new1041"],"hover":{},"scroll":{},"area":"section"},"new918":{"include":["new1043","new881","new882","new884","new1046","new1047"],"hover":{},"scroll":{},"area":"section"},"new770":{"hover":{},"include":["new110","new313","new957","new785","new783","new81","new360","new1045"],"scroll":{},"area":"section"},"new1009":{"include":["new341","new339"],"hover":{},"scroll":{},"area":"section"},"new992":{"hover":{},"scroll":{}},"new993":{"hover":{},"scroll":{}},"new759":{"hover":{},"scroll":{}},"new994":{"hover":{},"scroll":{}},"new756":{"hover":{},"scroll":{}},"new757":{"hover":{},"scroll":{}},"new583":{"hover":{},"scroll":{}},"new348":{"hover":{},"scroll":{}},"new341":{"hover":{},"scroll":{}},"new1044":{"hover":{},"scroll":{}},"new911":{"hover":{},"scroll":{}},"new916":{"hover":{},"scroll":{}},"new1043":{"hover":{},"scroll":{}},"new1040":{"hover":{},"scroll":{}},"new915":{"hover":{},"scroll":{}},"new110":{"hover":{},"scroll":{}},"new914":{"hover":{},"scroll":{}},"new232":{"hover":{},"scroll":{}},"new986":{"hover":{},"scroll":{}},"new989":{"hover":{},"scroll":{}},"new1039":{"hover":{},"scroll":{}},"new531":{"hover":{},"scroll":{}},"new532":{"hover":{},"scroll":{}},"new533":{"hover":{},"scroll":{}},"new534":{"hover":{},"scroll":{}},"new908":{"hover":{},"scroll":{}},"new824":{"hover":{},"scroll":{}},"new1038":{"hover":{},"scroll":{}},"new822":{"hover":{},"scroll":{}},"new1033":{"hover":{},"scroll":{}},"new1031":{"hover":{},"scroll":{}},"new1030":{"hover":{},"scroll":{}},"new1037":{"hover":{},"scroll":{}},"new1036":{"hover":{},"scroll":{}},"new1035":{"hover":{},"scroll":{}},"new1034":{"hover":{},"scroll":{}},"new1007":{"hover":{},"scroll":{}},"new529":{"hover":{},"scroll":{}},"new1028":{"hover":{},"scroll":{}},"new1029":{"hover":{},"scroll":{}},"new1021":{"hover":{},"scroll":{}},"new1023":{"hover":{},"scroll":{}},"new1024":{"hover":{},"scroll":{}},"new1025":{"hover":{},"scroll":{}},"new1026":{"hover":{},"scroll":{}},"new1027":{"hover":{},"scroll":{}},"new313":{"hover":{},"scroll":{}},"new881":{"hover":{},"scroll":{}},"new882":{"hover":{},"scroll":{}},"new884":{"hover":{},"scroll":{}},"new885":{"hover":{},"scroll":{}},"new803":{"hover":{},"scroll":{}},"new804":{"hover":{},"scroll":{}},"new805":{"hover":{},"scroll":{}},"new307":{"hover":{},"scroll":{}},"new306":{"hover":{},"scroll":{}},"new1042":{"hover":{},"scroll":{}},"new1003":{"hover":{},"scroll":{}},"new1000":{"hover":{},"scroll":{}},"new1006":{"hover":{},"scroll":{}},"new265":{"hover":{},"scroll":{}},"new1008":{"hover":{},"scroll":{}},"new957":{"hover":{},"scroll":{}},"new799":{"hover":{},"scroll":{}},"new959":{"hover":{},"scroll":{}},"new706":{"hover":{},"scroll":{}},"new862":{"hover":{},"scroll":{}},"new785":{"hover":{},"scroll":{}},"new81":{"hover":{},"scroll":{}},"new360":{"hover":{},"scroll":{}},"new973":{"hover":{},"scroll":{}},"new974":{"hover":{},"scroll":{}},"new1041":{"hover":{},"scroll":{}},"new873":{"hover":{},"scroll":{}},"new872":{"hover":{},"scroll":{}},"new875":{"hover":{},"scroll":{}},"new874":{"hover":{},"scroll":{}},"new877":{"hover":{},"scroll":{}},"new876":{"hover":{},"scroll":{}},"new592":{"hover":{},"scroll":{}},"new593":{"hover":{},"scroll":{}},"new350":{"hover":{},"scroll":{}},"new353":{"hover":{},"scroll":{}},"new440":{"hover":{},"scroll":{}},"new848":{"hover":{},"scroll":{}},"new960":{"hover":{},"scroll":{}},"new339":{"hover":{},"scroll":{}},"new1045":{"scroll":{},"hover":{}},"new1046":{"scroll":{},"hover":{}},"new1047":{"scroll":{},"hover":{}}});</script>
+          </div>
+        
+    
+        
+            <style id="block-style-new875"> #block-new875  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1786px;height: 131px;width: 130px;z-index: 107;anchor-id: #block-new875;left: 108px;}#block-new875 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new875" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/pl_jrdUsZ7.png#size_127x131"
+        alt=""
+        width="130"
+        height="131" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new908"> #block-new908  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 2417px;height: 98px;width: 218px;z-index: 103;anchor-id: #block-new908;left: 735px;}#block-new908 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new908" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/f1_lkACsyt.png#size_424x191"
+        alt=""
+        width="218"
+        height="98" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1039" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4940px;height: 228px;width: 150px;z-index: 284;anchor-id: #block-new1039;left: 405px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size: 16px;"></span></p>
+
+<p style="text-align: center;"><b>12 НОЯБРЯ</b></p>
+
+<p style="text-align: center;"><b>ЧЕТВЕРГ</b></p>
+
+<p style="text-align: center;"><b>10:45-11:45</b></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center; line-height: 1;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1038" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4940px;height: 198px;width: 150px;z-index: 284;anchor-id: #block-new1038;left: 260px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size: 16px;"></span></p>
+
+<p style="text-align: center;"><b>11 НОЯБРЯ</b></p>
+
+<p style="text-align: center;"><b>СРЕДА</b></p>
+
+<p style="text-align: center;"><b>09:15-10:15</b></p>
+
+<p style="text-align: center;"><b>10:30-11:30</b></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new822"> #block-new822  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1549px;height: 58px;width: 128px;z-index: 109;anchor-id: #block-new822;left: 416px;}#block-new822 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new822" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/4_ykVipiI.png#size_128x58"
+        alt=""
+        width="128"
+        height="58" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1033" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3337px;height: 201px;width: 155px;z-index: 214;anchor-id: #block-new1033;left: 260px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size:16px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;">11 НОЯБРЯ</span></strong></span></p>
+
+<p style="text-align: center;"><strong>СРЕДА</strong></p>
+
+<p style="text-align: center;"><span style="font-size:12px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><strong><span style="line-height: 1;">11:45-17:45</span></strong></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1031" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3660px;height: 157px;width: 971px;z-index: 214;anchor-id: #block-new1031;left: -6px;">
+              <p style="line-height: 1.3; text-align: center;">&nbsp;</p>
+
+<p style="line-height: 0.7; text-align: center;"><span style="font-size: 20px; line-height: 0.7;"><i>Возможны изменения в расписании!</i></span></p>
+
+<p style="line-height: 0.7; text-align: center;"><span style="font-size: 20px;"><i>Перед посещением рекомендуем обновить браузер и проверить расписание повторно.</i></span></p>
+
+<p style="line-height: 0.7; text-align: center;"><span style="font-size: 20px;"><i>Также можно уточнить время по телефону:&nbsp;+7 (931) 350-59-93&nbsp;</i></span></p>
+
+<p style="line-height: 0.7;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1030" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4173px;height: 162px;width: 862px;z-index: 214;anchor-id: #block-new1030;left: 49px;">
+              <p style="line-height: 1.3; text-align: center;"><span style="color:#cc3300;"><span style="font-size:22px;"><span style="font-family:verdana,geneva,sans-serif;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;">ВОЗМОЖНА АРЕНДА ЛЕДОВОГО ПОЛЯ.</span></span></span></span></span></span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="color:#cc3300;"><span style="font-size:22px;"><span style="font-family:verdana,geneva,sans-serif;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="font-size:18px;"><em>По вопросам аренды обращайтесь с 10:00 до 18:30 по телефону: +8(812)5650999</em></span></span></span></span></span></span></span></span></p>
+
+<p style="line-height: 1.3; text-align: center;">&nbsp;</p>
+
+<p style="line-height: 1.3;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1037" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3337px;height: 201px;width: 155px;z-index: 214;anchor-id: #block-new1037;left: 800px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size:16px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;">15 НОЯБРЯ</span></strong></span></p>
+
+<p style="text-align: center;"><strong>ВОСКРЕСЕНЬЕ</strong></p>
+
+<p style="text-align: center;"><span style="font-size:12px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><strong><span style="line-height: 1;">13:00-16:30</span></strong></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1036" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3337px;height: 309px;width: 155px;z-index: 214;anchor-id: #block-new1036;left: 680px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size:16px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;">14 НОЯБРЯ</span></strong></span></p>
+
+<p style="text-align: center;"><strong>СУББОТА</strong></p>
+
+<p style="text-align: center;"><strong>11:45-16:45</strong></p>
+
+<p style="text-align: center;"><strong>17:00-20:00</strong></p>
+
+<p style="text-align: center;"><strong>20:15-23:15</strong></p>
+
+<p style="text-align: center;"><strong>НОЧНЫЕ КАТАНИЯ</strong></p>
+
+<p style="text-align: center;"><strong>23:30-05:30</strong></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1035" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3337px;height: 165px;width: 155px;z-index: 214;anchor-id: #block-new1035;left: 543px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size:16px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;">13 НОЯБРЯ</span></strong></span></p>
+
+<p style="text-align: center;"><strong>ПЯТНИЦА</strong></p>
+
+<p style="text-align: center;"><span style="font-size:12px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><strong><span style="line-height: 1;">11:45-16:30</span></strong></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1034" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3340px;height: 237px;width: 155px;z-index: 214;anchor-id: #block-new1034;left: 402px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size:16px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;">12 НОЯБРЯ</span></strong></span></p>
+
+<p style="text-align: center;"><strong>ЧЕТВЕРГ</strong></p>
+
+<p style="text-align: center;"><span style="font-size:12px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><strong><span style="line-height: 1;">12:00-16:45</span></strong></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new862" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1425px;height: 78px;width: 115px;z-index: 110;anchor-id: #block-new862;raw-css: line-height: 18px;;left: 733px;; line-height: 18px;">
+              <p style="text-align: center;"><span style="color:#ff3300;"><span style="font-size:18px;"><font face="roboto, sans-serif">Пингвины для начинающих</font></span></span></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new877"> #block-new877  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1788px;height: 131px;width: 130px;z-index: 107;anchor-id: #block-new877;left: 726px;}#block-new877 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new877" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/pl_jrdUsZ7.png#size_127x131"
+        alt=""
+        width="130"
+        height="131" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new81" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 6039px;height: 196px;width: 395px;z-index: 307;anchor-id: #block-new81;raw-css: line-height: 16px;;left: 573px;; line-height: 16px;">
+              <p style="line-height: 0.6;"><span style="font-size:16px;"><span style="font-family:verdana,geneva,sans-serif;">Адрес: Санкт-Петербург,</span></span></p>
+
+<p style="line-height: 0.6;"><span style="font-size:16px;"><span style="font-family:verdana,geneva,sans-serif;">пр. Обуховской Обороны,д. 149 Х</span></span></p>
+
+<p style="line-height: 0.6;"><span style="font-size:16px;"><span style="font-family:verdana,geneva,sans-serif;">ст. м. Ломоносовская</span></span></p>
+
+<p><span style="font-size:16px;"><span style="font-family:verdana,geneva,sans-serif;">Контакты:E-mail: park@parkskazok.ru</span></span></p>
+
+<p><span style="font-size:16px;"><span style="font-family:verdana,geneva,sans-serif;">Администрация Ледового катка:</span></span></p>
+
+<p><span style="font-size:16px;"><span style="font-family:verdana,geneva,sans-serif;">(812)565-09-99</span></span></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new959" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 2552px;height: 94px;width: 347px;z-index: 109;anchor-id: #block-new959;raw-css: line-height: 18px;;left: 41px;; line-height: 18px;">
+              <p style="text-align: center;"><font color="#978175" face="roboto, sans-serif"><span style="font-size: 16px;"></span><span style="font-size: 16px;">На указанную в сервисе онлайн-оплаты почту Вы получите чек. Предъявите его в кассе катка на экране телефона или в распечатанном виде.&nbsp;</span><span style="font-size: 16px;"></span></font></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1007" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3953px;height: 210px;width: 711px;z-index: 214;anchor-id: #block-new1007;left: 124px;">
+              <p style="line-height: 1.3; text-align: center;"><span style="font-size:22px;"><span style="font-family:verdana,geneva,sans-serif;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;">ЦЕНА БИЛЕТА ЗА ВСЮ НОЧЬ КАТАНИЙ</span></span></span></span></span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="font-size:18px;"><span style="font-family:verdana,geneva,sans-serif;">800 руб. - со своими коньками</span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="font-size:18px;"><span style="font-family:verdana,geneva,sans-serif;">1150 руб. - с прокатом коньков</span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="font-size:20px;"><em>Билеты на ночные катания продаются только в кассе ледового катка</em></span></p>
+
+<p style="line-height: 1.3;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new706" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 2246px;height: 51px;width: 960px;z-index: 103;anchor-id: #block-new706;left: 0;">
+              <p style="text-align: center;"><strong><span style="font-size:22px;"><font color="#000000" face="roboto, sans-serif"><span style="text-transform: uppercase;">ОНЛАЙН-ОПЛАТА БИЛЕТОВ НА МАССОВЫЕ ДНЕВНЫЕ КАТАНИЯ</span></font></span></strong></p>
+
+<p style="text-align: center;"><span style="font-size:20px;"></span></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-box is-box" id="block-new783" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 4px;border-color: #ff4500;top: 5924px;height: 521px;width: 540px;z-index: 103;anchor-id: #block-new783;border-style: solid;left: 18px;">
+              
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1040" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4940px;height: 264px;width: 150px;z-index: 284;anchor-id: #block-new1040;left: 560px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size: 16px;"></span></p>
+
+<p style="text-align: center;"><b>13 НОЯБРЯ</b></p>
+
+<p style="text-align: center;"><b>ПЯТНИЦА</b></p>
+
+<p style="text-align: center;"><b>09:15-10:15</b></p>
+
+<p style="text-align: center;"><b>10:30-11:30</b></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center; line-height: 1;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1041" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 4939px;height: 162px;width: 150px;z-index: 284;anchor-id: #block-new1041;left: 700px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size: 16px;"></span></p>
+
+<p style="text-align: center;"><b>14 НОЯБРЯ</b></p>
+
+<p style="text-align: center;"><b>СУББОТА</b></p>
+
+<p style="text-align: center;"><b>09:15-10:15</b></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new360"> #block-new360  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 6352px;height: 57px;width: 57px;z-index: 442;anchor-id: #block-new360;left: 607.953125px;}#block-new360 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new360" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/img425228dgx7dm0_h9sZP3F.png#size_57x57"
+        alt=""
+        width="57"
+        height="57" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new529"> #block-new529 { anchor-id: #block-new529; position: absolute; top: 428px;left: 559px;width: 239px; text-align: center; background-color: #fa7b10; z-index: 124; height: 46px; border-radius: 26px;font-family: 'Roboto', sans-serif; font-weight: 300; } #block-new529 > a { display: block; text-decoration: none; cursor: pointer; width: 239px; color: #ffffff; font-size: 15px; box-sizing: border-box; line-height: 46px; height: 46px; padding-right: 12.200000000000001px; padding-left: 12.200000000000001px; font-weight: normal; } #block-new529:hover { background-color: #3eb5f1; } </style>
+        
+        
+        
+          <div class="block block-button is-button" id="block-new529" >
+              <a href="#"
+   target="_self"
+   data-label="УЗНАТЬ РАСПИСАНИЕ"
+        ><span class="button__text">УЗНАТЬ РАСПИСАНИЕ</span></a>
+
+
+
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new785" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 5818px;height: 78px;width: 395px;z-index: 106;anchor-id: #block-new785;left: 282px;">
+              <p style="text-align: center;"><span style="color:#000000;"><span style="font-size:40px; font-weight: 500; text-transform: uppercase;"><span style="font-family:roboto,sans-serif;">Мы на карте</span></span></span></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1028" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1014px;height: 72px;width: 160px;z-index: 109;anchor-id: #block-new1028;raw-css: line-height: 18px;;left: 785px;; line-height: 18px;">
+              <p style="text-align: center; line-height: 1;"><font color="#978175" face="roboto, sans-serif"><span style="font-size: 18px; line-height: 1;">Бесплатная парковка для посетителей</span></font></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new1029" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 720px;height: 130px;width: 960px;z-index: 103;anchor-id: #block-new1029;left: 0;">
+              <p style="text-align: center;"><font color="#000000" face="roboto, sans-serif"><span style="font-size: 34px; text-transform: uppercase;">КРЫТЫЙ ЛЕДОВЫЙ КАТОК В НЕВСКОМ РАЙОНЕ</span></font></p>
+
+<p style="text-align: center;"><span style="font-size:28px;"><font color="#000000" face="roboto, sans-serif">СТ. МЕТРО &quot;ЛОМОНОСОВСКАЯ&quot;</font></span></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new973"> #block-new973 { anchor-id: #block-new973; position: absolute; top: 608px;left: 326px;width: 236px; text-align: center; background-color: #; z-index: 318; height: 26px; border-radius: 7px; } #block-new973 > a { display: block; text-decoration: none; cursor: pointer; width: 236px; color: #000; font-size: 20px; box-sizing: border-box; line-height: 26px; height: 26px; padding-right: 11.8px; padding-left: 11.8px; font-family: Alegreya; font-weight: bold; } #block-new973:hover { background-color: #3eb5f1; } </style>
+        
+        
+        
+          <div class="block block-button is-button" id="block-new973" >
+              <a href="#"
+   target="_self"
+   data-label="БИЛЕТЫ ОНЛАЙН"
+        ><span class="button__text">БИЛЕТЫ ОНЛАЙН</span></a>
+
+
+
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new974" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3337px;height: 237px;width: 155px;z-index: 214;anchor-id: #block-new974;left: 130px;">
+              <p style="text-align: center; line-height: 1;"><span style="font-size:16px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><span style="font-size:14px;"><strong><span style="line-height: 1;">10 НОЯБРЯ</span></strong></span></p>
+
+<p style="text-align: center;"><strong>ВТОРНИК</strong></p>
+
+<p style="text-align: center;"><span style="font-size:12px;"><strong><span style="line-height: 1;"></span><span style="line-height: 1;"></span></strong></span></p>
+
+<p style="text-align: center;"><strong><span style="line-height: 1;">11:45-16:30</span></strong></p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+<p style="text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new1021"> #block-new1021  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 3937px;height: 208px;width: 160px;z-index: 105;anchor-id: #block-new1021;left: 28.5625px;}#block-new1021 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new1021" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/f1_eXCwAiG.png#size_380x492"
+        alt=""
+        width="160"
+        height="208" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new873" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1825px;height: 58px;width: 107px;z-index: 110;anchor-id: #block-new873;raw-css: line-height: 18px;;left: 737px;; line-height: 18px;">
+              <p style="text-align: center;"><span style="color:#ff3300;"><span style="font-size:18px;"><font face="roboto, sans-serif">Бесплатный инструктор</font></span></span></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new1023"> #block-new1023  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 890px;height: 112px;width: 111px;z-index: 461;anchor-id: #block-new1023;left: 43px;}#block-new1023 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new1023" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/5842846d3ce1a046300ba7c2a74b7d68.png#size_635x640"
+        alt=""
+        width="111"
+        height="112" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new1024"> #block-new1024  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 890px;height: 112px;width: 111px;z-index: 461;anchor-id: #block-new1024;left: 226px;}#block-new1024 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new1024" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/5842846d3ce1a046300ba7c2a74b7d68.png#size_635x640"
+        alt=""
+        width="111"
+        height="112" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new1025"> #block-new1025  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 889px;height: 112px;width: 111px;z-index: 461;anchor-id: #block-new1025;left: 424px;}#block-new1025 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new1025" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/5842846d3ce1a046300ba7c2a74b7d68.png#size_635x640"
+        alt=""
+        width="111"
+        height="112" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new1026"> #block-new1026  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 891px;height: 112px;width: 111px;z-index: 461;anchor-id: #block-new1026;left: 620px;}#block-new1026 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new1026" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/5842846d3ce1a046300ba7c2a74b7d68.png#size_635x640"
+        alt=""
+        width="111"
+        height="112" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new1027"> #block-new1027  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 889px;height: 112px;width: 111px;z-index: 461;anchor-id: #block-new1027;left: 800px;}#block-new1027 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new1027" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/5842846d3ce1a046300ba7c2a74b7d68.png#size_635x640"
+        alt=""
+        width="111"
+        height="112" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new876"> #block-new876  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1391px;height: 131px;width: 130px;z-index: 107;anchor-id: #block-new876;left: 330px;}#block-new876 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new876" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/pl_jrdUsZ7.png#size_127x131"
+        alt=""
+        width="130"
+        height="131" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new313"> #block-new313 { anchor-id: #block-new313; position: absolute; top: 6346px;left: 608.96875px;width: 61px; text-align: center; background-color: #; z-index: 452; height: 71px; border-radius: 7px; } #block-new313 > a { display: block; text-decoration: none; cursor: pointer; width: 61px; color: #ffffff; font-size: 22px; box-sizing: border-box; line-height: 71px; height: 71px; padding-right: 11.8px; padding-left: 11.8px; font-weight: bold; } #block-new313 .button__text {  border-bottom-style: solid; border-bottom-color: #ffffff; }#block-new313:hover .button__text {  border-bottom-style: solid; border-bottom-color: #e2820c; } </style>
+        
+        
+        
+          <div class="block block-button is-button" id="block-new313" >
+              <a href="#"
+   target="_self"
+   data-label=""
+        ><span class="button__text"></span></a>
+
+
+
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new592" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1014px;height: 78px;width: 202px;z-index: 109;anchor-id: #block-new592;raw-css: line-height: 18px;;left: 3px;; line-height: 18px;">
+              <p style="text-align: center;"><font color="#978175" face="roboto, sans-serif"><span style="font-size: 18px;">Можно кататься на своих коньках или взять их напрокат</span></font></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new593" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 1014px;height: 78px;width: 171px;z-index: 109;anchor-id: #block-new593;raw-css: line-height: 18px;;left: 205px;; line-height: 18px;">
+              <p style="text-align: center;"><font color="#978175" face="roboto, sans-serif"><span style="font-size: 18px;">Проводятся массовые дневные и ночные катания</span></font></p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new350" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 2396px;height: 45px;width: 300px;z-index: 125;anchor-id: #block-new350;left: 521px;">
+              <p style="text-align: center;"><span style="color:#003366;"><span style="font-size:18px;"><span style="font-family:pt sans caption,sans-serif;">Сумма к оплате: <span class="cost">0</span> руб.</span></span></span></p>
+
+          </div>
+        
+    
+        
+            
+        
+        
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new353" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3076px;height: 184px;width: 424px;z-index: 214;anchor-id: #block-new353;left: 526px;">
+              <p style="line-height: 1.3;"><span style="color:#FFFFFF;"><span style="font-size: 16px; line-height: 1.3;"></span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="font-size:22px;"><span style="font-family:verdana,geneva,sans-serif;"><span style="line-height: 1.3;"><span style="line-height: 1.3;"><span style="line-height: 1.3;">С ПРОКАТОМ КОНЬКОВ</span></span></span></span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="font-size:18px;"><span style="font-family:verdana,geneva,sans-serif;">900 р./час за взрослый билет</span></span></p>
+
+<p style="line-height: 1.3; text-align: center;"><span style="font-size:18px;"><span style="font-family:verdana,geneva,sans-serif;">700 р./час за детский билет*&nbsp;</span></span></p>
+
+<p style="text-align: right; line-height: 1.3;">&nbsp;</p>
+
+<p style="line-height: 1.3;"><span style="color:#FFFFFF;"><span style="font-size: 16px; line-height: 1.3;"></span></span></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new440"> #block-new440  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 204px;height: 88px;width: 259px;z-index: 428;anchor-id: #block-new440;left: 549px;}#block-new440 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new440" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/ajs-gradlogo.png#size_2725x921"
+        alt=""
+        width="259"
+        height="88" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new881" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 5162px;height: 72px;width: 960px;z-index: 103;anchor-id: #block-new881;left: -1px;">
+              <p style="text-align: center;"><span style="color:#000000; font-weight: 500; text-transform: uppercase;"><span style="font-size:36px;"><span style="font-family:roboto,sans-serif;">КРЫТЫЙ ЛЕДОВЫЙ КАТОК В ПАРКЕ ИМ. БАБУШКИНА</span></span></span></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new882"> #block-new882  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 5238px;height: 411px;width: 897px;z-index: 104;anchor-id: #block-new882;left: 31px;}#block-new882 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new882" >
+              
+
+    <img src="//media.lpgenerator.ru/images/57561/pl_JCHZ51U.png#size_897x411"
+        alt=""
+        width="897"
+        height="411" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-youtube is-youtube" id="block-new884" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 5249px;height: 315px;width: 560px;z-index: 438;anchor-id: #block-new884;left: 200px;">
+              
+
+
+
+    <div class="youtube-player" id="youtube-player__block-new884">
+        <img src="https://i.ytimg.com/vi/4ipKRVrhX74/hqdefault.jpg" class="video-youtube" data-video-id="4ipKRVrhX74">
+        <div class="play__block-new884"></div>
+    </div>
+
+    <script>
+        jq_144( function ( $ ) {
+            var player;
+            var playerOptions = {
+                width: '560',
+                height: '315',
+                videoId: '4ipKRVrhX74',
+                playerVars: {
+                    autoplay: 1,
+                    controls: 2,
+                    loop: 1,
+                    playlist: '4ipKRVrhX74',
+                    showinfo: 1,
+                    rel: 0
+                },
+                
+            };
+
+        jq_144('#youtube-player__block-new884, #play__block-new884').click(function() {
+            if ( !document.querySelector( '#yt_iframe_api' ) ) {
+                var tag = document.createElement( 'script' );
+                tag.id = 'yt_iframe_api';
+                tag.src = "//www.youtube.com/iframe_api";
+                var firstScriptTag = document.getElementsByTagName( 'script' )[0];
+                firstScriptTag.parentNode.insertBefore( tag, firstScriptTag );
+            }
+            if (typeof YT !== 'undefined' && typeof YT.Player === 'function') {
+                player = new YT.Player( 'youtube-player__block-new884', playerOptions );
+            } else {
+                if (window.onYouTubeIframeAPIReady) {
+                    var oldOnYouTubeIframeAPIReady = window.onYouTubeIframeAPIReady;
+                }
+                window.onYouTubeIframeAPIReady = function () {
+                    if (oldOnYouTubeIframeAPIReady) {
+                        oldOnYouTubeIframeAPIReady();
+                    }
+                    player = new YT.Player( 'youtube-player__block-new884', playerOptions );
+                };
+            }
+
+        })});
+    </script>
+
+    <style>
+        #youtube-player__block-new884 {
+          position: relative;
+          display: inline-block;
+        }
+
+        #youtube-player__block-new884 img {
+          display: block;
+            width: 560px;
+            height: 315px;
+        }
+
+        .youtube-player .play {
+          height: 48px;
+          width: 68px;
+          left: 50%;
+          top: 50%;
+            transform: translate(-50%, -50%);
+          position: absolute;
+          background: url(/media/css/images/yt.png) no-repeat;
+          cursor: pointer;
+        }
+
+        .youtube-player img:hover {
+          -webkit-filter: brightness(75%);
+          -moz-filter: brightness(75%);
+          filter: brightness(75%);
+        }
+    </style>
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new885" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3272px;height: 69px;width: 960px;z-index: 103;anchor-id: #block-new885;left: 0;">
+              <p style="text-align: center;"><font color="#000000" face="roboto, sans-serif"><span style="font-size: 34px; text-transform: uppercase;">РАСПИСАНИЕ МАССОВЫХ КАТАНИЙ</span></font></p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new803"> #block-new803  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1773px;height: 374px;width: 374px;z-index: 106;anchor-id: #block-new803;left: 97px;}#block-new803 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new803" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/chr63103_sSegZXV.jpg#size_374x374"
+        alt=""
+        width="374"
+        height="374" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new804"> #block-new804  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1381px;height: 374px;width: 374px;z-index: 104;anchor-id: #block-new804;left: 97px;}#block-new804 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new804" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/chr63261.jpg#size_374x374"
+        alt=""
+        width="374"
+        height="374" />
+
+
+          </div>
+        
+    
+        
+            <style id="block-style-new805"> #block-new805  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1381px;height: 374px;width: 374px;z-index: 105;anchor-id: #block-new805;left: 490px;}#block-new805 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new805" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/chr63107.jpg#size_374x374"
+        alt=""
+        width="374"
+        height="374" />
+
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new960" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 3167px;height: 109px;width: 455px;z-index: 214;anchor-id: #block-new960;left: 252px;">
+              <p style="line-height: 1.3; text-align: center;">&nbsp;</p>
+
+<p style="line-height: 1.3; text-align: center;"><font face="verdana, geneva, sans-serif"><span style="font-size: 18px;">*До 12 лет</span></font></p>
+
+<p style="line-height: 1.3;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+        
+        
+          <div class="block block-text is-text" id="block-new339" style="display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;top: 6775px;height: 156px;width: 623px;z-index: 300;anchor-id: #block-new339;raw-css: line-height: 16px;;left: 168px;; line-height: 16px;">
+              <p style="line-height: 1; text-align: center;"><span style="color:#A9A9A9;"><span style="font-family:verdana,geneva,sans-serif;"><span style="font-size: 14px; line-height: 1;"><span style="line-height: 1;"><span style="line-height: 1;"><span style="line-height: 1;"><span style="font-weight: 400; line-height: 1;">ИП Хачатурова Мадлена Грантовна</span></span></span></span></span></span></span></p>
+
+<p style="line-height: 1; text-align: center;"><span style="color:#A9A9A9;"><span style="font-family:verdana,geneva,sans-serif;"><span style="font-size: 14px; line-height: 1;"><span style="line-height: 1;"><span style="line-height: 1;"><span style="line-height: 1;"><span style="font-weight: 400; line-height: 1;">ИНН 780225146584</span></span></span></span></span></span></span></p>
+
+<p style="line-height: 1; text-align: center;"><span style="color:#A9A9A9;">ОГРНИП 324470400133794</span></p>
+
+<p style="line-height: 1; text-align: center;"><span style="color:#A9A9A9;"><span style="font-family:verdana,geneva,sans-serif;"><span style="font-size:14px;"><span style="line-height: 0.6;"><span style="font-weight: 400; line-height: 0.6;">Предоставляемые услуги:&nbsp;</span></span></span></span><span style="font-size: 14px; font-family: verdana, geneva, sans-serif;">спортивно-развлекательная деятельность&nbsp;</span></span></p>
+
+<p style="line-height: 1; text-align: center;"><span style="color:#A9A9A9;"><span style="font-family:verdana,geneva,sans-serif;"><span style="font-size:14px;"></span></span></span></p>
+
+<p style="line-height: 1; text-align: center;">&nbsp;</p>
+
+          </div>
+        
+    
+        
+            <style id="block-style-new799"> #block-new799  {display: block;position: absolute;background-position: 0% 0%;background-repeat: no-repeat;border-width: 1px;fix-aspect: on;top: 1774px;height: 374px;width: 374px;z-index: 107;anchor-id: #block-new799;left: 489px;}#block-new799 > img{vertical-align:top;}</style>
+        
+        
+        
+          <div class="block block-image is-image" id="block-new799" >
+              
+
+    <img src="//media.lpgenerator.ru/images/554465/chr63181_bPmQdGd.jpg#size_374x374"
+        alt=""
+        width="374"
+        height="374" />
+
+
+          </div>
+        
+    
+
+    
+        <style type="text/css">
+            .preview-main-container {
+                overflow: hidden;
+            }
+        </style>
+    
+
+
+<!--style class="page__variant-css">.body-pageVariant,
+.preview-main-container {
+    font-family: Arial, Helvetica, sans-serif;
+}
+.page_container {
+    width: 960px;
+    background: 0% 0% no-repeat #ffffff ;     height: 100%;
+}
+#middle_container { width: 960px; }
+.preview-main-container,
+.main-container {
+    migrated: 1;
+    text-mode-pp: on;
+    background-repeat: no-repeat;
+    background-no-scroll: on;
+    bg-color: ffffff;
+    min-height: 6931px;
+    width: 960;
+    z-index: 101;
+    bg-pos: 0% 0%;
+    anchor-id: #block-page;
+    font-family: Arial, Helvetica, sans-serif;
+    bg-repeat: no-repeat; 
+}
+.preview-main-container {
+    min-width: 960px !important;
+}
+</style-->
+
+<script id="tpl-form_error" type="text/template">
+	<div class="landing__form__error">
+		<div class="landing__form__error__iconWrap"><i class="landing__form__error__icon-error ico-sites__exclamation_point_white"></i></div><div class="landing__form__error__message"><span></span></div>
+	</div>
+</script>
+
+
+<script>
+if (typeof jq_144 == 'undefined') { jq_144 = $ }
+
+jq_144(function ( $ ) {
+
+        
+
+        
+
+        
+
+
+        jq_144('iframe').each(function() {
+            jq_144(this).attr("wmode", "transparent");
+        });
+        jq_144('embed').each(function() {
+            jq_144(this).attr("wmode", "transparent");
+        });
+        jq_144('object').each(function() {
+            jq_144(this).append('<param name="wmode" value="transparent" />')
+        });
+
+        jq_144('a.ajax_out').each(function() {
+            var a = jq_144(this);
+            a.attr('data-href', a.attr('href')).attr('href', '#').mousedown(function(e) {
+                if (e.button != 0) { return; }
+                jq_144.ajax({
+                    url: a.attr('rel'),
+                    type: 'GET',
+                    success: function() {
+                        window.location.href = a.attr('data-href');
+                    },
+                    error: function(data) {
+                        window.location.href = a.attr('data-href');
+                    }
+                });
+                return false;
+            });
+        });
+
+
+        
+
+});
+</script>
+
+    </div>
+    
+    
+
+
+    </div>
+
+    
+
+
+    
+
+
+    
+    <script type="text/javascript" src="//static.lpgenerator.ru/media/dist/landings/landingScriptsAfter.js?v=11124"></script>
+    <script>
+        setTimeout(window.blocksAnimatation.run, 500);
+    </script>
+
+    
+    
+	
+        <div class="lpg__lpFooter-view">
+            <div class="lpg__lpFooter-container">
+                <div class="lpg__lpFooter-text">Этот лендинг создан с помощью маркетинговой платформы
+                    <a href="//lpgenerator.ru?ch=user_lpg&utm_source=user_lpg&utm_medium=trial_blamb&utm_campaign=554465&save_utm=1" target="_blank">Landing Page Generator</a>
+                </div>
+                <div class="lpg_logo"><img src="//static.lpgenerator.ru/media/css/images/2022/lpg_vitamin_yagla_logo_white.svg" alt="landing page генератор"></div>
+            </div>
+        </div>
+    
+
+	
+
+    <script>
+jq_144('#block-new307').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new785').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script>
+ <script>
+	jq_144(function($){
+                $('#block-new75 a').click(function(e){
+			e.preventDefault();
+			$('html, body').animate({ scrollTop: $('#block-new24').offset().top - 220 }, 1000);
+		}); 
+              $('#block-new13 a').click(function(e){
+			e.preventDefault();
+			$('html, body').animate({ scrollTop: $('#block-new24').offset().top - 220 }, 500);
+		}); 
+		               
+	})
+</script> <!--Отслеживание цели Яндекс.Метрики для статичных лид-форм с показом сообщения-->
+<script>
+    jq_144('#block-new24').on('submit', '.our_form', function() {
+        // block-newID - id формы
+        var form = jq_144(this);
+  
+        jq_144('#lp_form_target').on('load', function() {
+  
+                if (!window.frames.lp_form_target.data_json ||
+                    (window.frames.lp_form_target.data_json.length == 0)) {
+                    yaCounter56882098.reachGoal('lead1');
+                    // ЗАМЕНИТЬ COUNTER_ID - номер вашего счетчика
+                    // ЗАМЕНИТЬ ORDER - идентификатор вашей цели
+                }
+  
+                timerName24 = setInterval(function(){
+                    // timerNameID - id формы
+                    if (jq_144('#form_submit_message').css('display') == 'block') {
+                        clearInterval(timerName24); // timerNameID - id формы
+                    }
+                }, 100);
+        });
+    });
+</script> <!--Отслеживание цели Яндекс.Метрики для статичных лид-форм с показом сообщения-->
+<script>
+    jq_144('#block-new113').on('submit', '.our_form', function() {
+        // block-newID - id формы
+        var form = jq_144(this);
+  
+        jq_144('#lp_form_target').on('load', function() {
+  
+                if (!window.frames.lp_form_target.data_json ||
+                    (window.frames.lp_form_target.data_json.length == 0)) {
+                    yaCounter56882098.reachGoal('lead2');
+                    // ЗАМЕНИТЬ COUNTER_ID - номер вашего счетчика
+                    // ЗАМЕНИТЬ ORDER - идентификатор вашей цели
+                }
+  
+                timerName113 = setInterval(function(){
+                    // timerNameID - id формы
+                    if (jq_144('#form_submit_message').css('display') == 'block') {
+                        clearInterval(timerName113); // timerNameID - id формы
+                    }
+                }, 100);
+        });
+    });
+</script> <!--Отслеживание цели Метрики для попап форм с показом сообщения после заполнения-->
+<script>
+ jq_144(function ($) {
+ $(document).ready(function () {
+ $('#overlay-block-new96').on('submit', 'form', function () {
+ // overlay-block-newID - ID заменить на ID формы,
+ // если форма - block-new2, то значение - #overlay-block-new2
+ var $form = $(this);
+ var start = Date.now();
+ timerName96 = setInterval(function () {
+ // в timerName255 замените 255 на ID отслеживаемой формы
+ // если форма block-new2, то переменная будет - timerName2
+ var newTime = Date.now();
+ if ($form.siblings('.confirmation').hasClass('show')) {
+ yaCounter56882098.reachGoal('zvonokverh');
+ // COUNTER_ID - номер счетчика.
+ clearInterval(timerName96);
+ // в timerName255 замените 255 на ID отслеживаемой формы
+ } else if (newTime - start > 2000) {
+ clearInterval(timerName96);
+ // в timerName255 замените 255 на ID отслеживаемой формы
+ }
+ }, 100);
+ });
+ });
+ });
+</script> <!--Отслеживание цели Метрики для попап форм с показом сообщения после заполнения-->
+<script>
+ jq_144(function ($) {
+ $(document).ready(function () {
+ $('#overlay-block-new97').on('submit', 'form', function () {
+ // overlay-block-newID - ID заменить на ID формы,
+ // если форма - block-new2, то значение - #overlay-block-new2
+ var $form = $(this);
+ var start = Date.now();
+ timerName97 = setInterval(function () {
+ // в timerName255 замените 255 на ID отслеживаемой формы
+ // если форма block-new2, то переменная будет - timerName2
+ var newTime = Date.now();
+ if ($form.siblings('.confirmation').hasClass('show')) {
+ yaCounter56882098.reachGoal('zvonokniz');
+ // COUNTER_ID - номер счетчика.
+ clearInterval(timerName97);
+ // в timerName255 замените 255 на ID отслеживаемой формы
+ } else if (newTime - start > 2000) {
+ clearInterval(timerName97);
+ // в timerName255 замените 255 на ID отслеживаемой формы
+ }
+ }, 100);
+ });
+ });
+ });
+</script> <script>
+jq_144('#block-new305').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new919').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script>
+ <script>
+jq_144('#block-new306').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new911').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script>
+ <script>
+jq_144('#block-new347').find('input').keyup(function(){
+    check_sum();
+});
+jq_144('#block-new347').find('input').change(function(){
+    check_sum();
+});
+jq_144('#block-new348').hover(function(){
+    check_sum();
+});
+
+function check_sum() {
+    jq_144('#block-new347').find('input:eq(1)').val(jq_144('#block-new347').find('input:eq(1)').val().replace('.',''));
+    jq_144('#block-new347').find('input:eq(1)').val(jq_144('#block-new347').find('input:eq(1)').val().replace(',',''));
+    jq_144('#block-new347').find('input:eq(1)').val(jq_144('#block-new347').find('input:eq(1)').val().replace('-',''));
+    jq_144('#block-new347').find('input:eq(2)').val(jq_144('#block-new347').find('input:eq(2)').val().replace('-',''));
+    jq_144('#block-new347').find('input:eq(2)').val(jq_144('#block-new347').find('input:eq(2)').val().replace('.',''));
+    jq_144('#block-new347').find('input:eq(2)').val(jq_144('#block-new347').find('input:eq(2)').val().replace(',',''));
+    jq_144('#block-new347').find('input:eq(3)').val(jq_144('#block-new347').find('input:eq(3)').val().replace('.',''));
+    jq_144('#block-new347').find('input:eq(3)').val(jq_144('#block-new347').find('input:eq(3)').val().replace(',',''));
+    jq_144('#block-new347').find('input:eq(3)').val(jq_144('#block-new347').find('input:eq(3)').val().replace('-',''));
+    jq_144('#block-new347').find('input:eq(4)').val(jq_144('#block-new347').find('input:eq(4)').val().replace('-',''));
+    jq_144('#block-new347').find('input:eq(4)').val(jq_144('#block-new347').find('input:eq(4)').val().replace('.',''));
+    jq_144('#block-new347').find('input:eq(4)').val(jq_144('#block-new347').find('input:eq(4)').val().replace(',',''));
+    var adult_count_prokat = jq_144('#block-new347').find('input:eq(1)').val();
+    var child_count_prokat = jq_144('#block-new347').find('input:eq(2)').val();
+    var adult_count = jq_144('#block-new347').find('input:eq(3)').val();
+    var child_count = jq_144('#block-new347').find('input:eq(4)').val();
+
+    var adult_price_prokat = adult_count_prokat * 900;
+    var child_price_prokat = child_count_prokat * 700;
+    var adult_price = adult_count * 600;
+    var child_price = child_count * 500;
+
+    cost = child_price + adult_price + adult_price_prokat + child_price_prokat;    
+    jq_144('#block-new350').find('.cost').text(cost);
+};
+jq_144('#block-new347').find('input:eq(1)').attr('type', 'number');
+jq_144('#block-new347').find('input:eq(2)').attr('type', 'number');
+jq_144('#block-new347').find('input:eq(3)').attr('type', 'number');
+jq_144('#block-new347').find('input:eq(4)').attr('type', 'number');
+jq_144('#block-new347').find('input:eq(1)').attr('min', '0');
+jq_144('#block-new347').find('input:eq(2)').attr('min', '0');
+jq_144('#block-new347').find('input:eq(1)').attr('step', '1');
+jq_144('#block-new347').find('input:eq(2)').attr('step', '1');
+jq_144('#block-new347').find('input:eq(3)').attr('min', '0');
+jq_144('#block-new347').find('input:eq(4)').attr('min', '0');
+jq_144('#block-new347').find('input:eq(3)').attr('step', '1');
+jq_144('#block-new347').find('input:eq(4)').attr('step', '1');
+
+    jq_144('#block-new347').on('submit', '.our_form', function() {
+        var form = jq_144(this);
+
+        for (i = 0; i < jq_144(form).find('.cont input').length; i++) {
+        	var val = jq_144(form).find('.cont input:eq(' + i + ')').val();
+        	if (val == '') {
+        		jq_144(form).find('.cont input:eq(' + i + ')').val('0');
+        	}
+
+        }
+
+        var adult_count_prokat = jq_144('#block-new347').find('input:eq(1)').val();
+        var child_count_prokat = jq_144('#block-new347').find('input:eq(2)').val();
+        var adult_count = jq_144('#block-new347').find('input:eq(3)').val();
+        var child_count = jq_144('#block-new347').find('input:eq(4)').val();
+
+        var adult_price_proktat = adult_count_prokat * 900;
+        var child_price_prokat = child_count_prokat * 700;
+        var adult_price = adult_count * 600;
+        var child_price = child_count * 500;
+
+        if (adult_count_prokat == 0) {
+        	var adult_count_prokat = 1;
+        }
+
+        if (adult_count == 0) {
+        	var adult_count = 1;
+        }
+
+        if (child_count_prokat == 0) {
+        	var child_count_prokat = 1;
+        }
+
+        if (child_count == 0) {
+        	var child_count = 1;
+        }
+ 
+        jq_144('#block-new347').find('div[name="paymentSettings"]').text(jq_144('#block-new347').find('div[name="paymentSettings"]').text().replace('"count":1,"cost":500,"name":"Детский билет"', '"count":' + child_count + ',"cost":' + child_price + ',"name":"Детский билет"'));
+        jq_144('#block-new347').find('div[name="paymentSettings"]').text(jq_144('#block-new347').find('div[name="paymentSettings"]').text().replace('"count":1,"cost":600,"name":"Взрослый билет"', '"count":' + adult_count + ',"cost":' + adult_price + ',"name":"Взрослый билет"'));
+ 
+        jq_144('#block-new347').find('div[name="paymentSettings"]').text(jq_144('#block-new347').find('div[name="paymentSettings"]').text().replace('"count":1,"cost":700,"name":"Детский с прокатом"', '"count":' + child_count_prokat + ',"cost":' + child_price_prokat + ',"name":"Детский с прокатом"'));
+        jq_144('#block-new347').find('div[name="paymentSettings"]').text(jq_144('#block-new347').find('div[name="paymentSettings"]').text().replace('"count":1,"cost":900,"name":"Взрослый с прокатом "', '"count":' + adult_count_prokat + ',"cost":' + adult_price_proktat + ',"name":"Взрослый с прокатом "'));
+        //alert(jq_144('#block-new347').find('div[name="paymentSettings"]').text());
+        jq_144('#lp_form_target').on('load', function() {
+
+                if (!window.frames.lp_form_target.data_json ||
+                    (window.frames.lp_form_target.data_json.length == 0)) {
+                }
+ 
+                timerNameID = setInterval(function(){
+                    // timerNameID - id формы
+                    if (jq_144('#form_submit_message').css('display') == 'block') {
+                        clearInterval(timerNameID); // timerNameID - id формы
+                    }
+                }, 100);
+        });
+    });
+</script> <script>
+    jq_144('#block-new347').on('submit', '.our_form', function() {
+        // block-newID - id формы
+
+        var form = jq_144(this);
+
+        jq_144('#lp_form_target').on('load', function() {
+
+                yaCounter56882098.reachGoal('OPLATA');
+
+         });
+    });
+ </script> <script>
+jq_144('#block-new386').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new232').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script>
+ <script>
+jq_144('#block-new400').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new140').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script> <script>
+jq_144('#block-new1006').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new1003').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script> <script>
+jq_144('#block-new529').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new885').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script>
+ <script> 
+sflakesMax = 75; 
+sflakesMaxActive = 75; 
+svMaxX = 3; 
+svMaxY = 3; 
+ssnowStick = 3; 
+</script> 
+<script src="//media.lpgenerator.ru/uploads/images/2014snowflakes.js">
+</script> <script>
+jq_144('#block-new1002').click(function(e){
+// заменить #block-new1002 на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new1003').offset().top }, 1000);
+// заменить #block-new1003 на ID элемента, к которому идет прокрутка
+});
+</script> <script>
+jq_144('#block-new973').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new706').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script> <script>
+jq_144('#block-new993').click(function(e){
+// заменить #block-newID на ID элемента, по которому кликаем 
+e.preventDefault();
+jq_144('body, html').animate({ scrollTop: jq_144('#block-new885').offset().top }, 1000);
+// заменить #block-newID на ID элемента, к которому идет прокрутка
+});
+</script>
+
+    
+         <script type="text/javascript" src="//static.lpgenerator.ru/media/js/client/widget/gallery.js?v=11124"></script>
+    
+         <script type="text/javascript" src="//static.lpgenerator.ru/media/js/client/widget/popup.js?v=11124"></script>
+    
+
+    
+        <script type="text/javascript">
+        //<![CDATA[
+        function getQueryParams(qs) {
+            qs = qs.split("+").join(" ");
+
+            var params = {}, tokens, re = /[?&]?([^=]+)=([^&]*)/g;
+
+            while (tokens = re.exec(qs)) {
+                params[decodeURIComponent(tokens[1])]
+                    = decodeURIComponent(tokens[2]);
+            }
+
+            return params;
+        }
+        lpg.queryParams = getQueryParams( document.location.search );
+
+        if(redirect===false){
+        (function () {
+        	var query = lpg.queryParams;
+			var params = window.location.search.substring(1);
+        	var vid = "2314114";
+            var pid = "1789499";
+            var pr = "554465";
+            var cv = "1";
+            var ln = 'http://' + location.hostname + location.pathname;
+            var hostname = window.location.hostname;
+
+            if (lpg.queryParams['ch'] || lpg.queryParams['utm_source']) {
+            	var url = "/api/v1/channels/send-to-tracking/" + "?";
+            	url += "vid=" + vid;
+            	url += "&pid=" + pid;
+                url += "&pr=" + pr;
+                url += "&cv=" + cv;
+                url += "&ln=" + ln;
+                url += "&domain=" + hostname;
+
+				if (params)
+					url += "&" + params;
+
+				var s = document.createElement('img');
+				s.id = 'lpg_tr';
+				s.style.display = 'none';
+				s.src = url;
+				var ss = document.body;
+				ss.appendChild(s);
+
+            }
+            else {
+				
+					var remote = "//t.lpgenerator.ru/?type=track";
+				
+
+				var cid = "";
+
+				var path = remote + "&domain=" + hostname;
+
+				path += "&vid=" + vid;
+				path += "&pid=" + pid;
+				if (query.hasOwnProperty('ch'))
+					path += "&cid=" + "";
+				path += "&pr=" + pr;
+				path += "&cv=" + cv;
+				path += "&url=" + ln;
+				if (params)
+					path += "&" + params;
+
+				var s = document.createElement('img');
+				s.id = 'lpg_tr';
+				s.style.display = 'none';
+				s.src = path;
+				var ss = document.body;
+				ss.appendChild(s);
+            }
+        })();
+        }
+        //]]>
+    </script>
+
+        <script type="text/javascript">
+        //<![CDATA[
+        (function () {
+            function setcookie(name, value, expires, path, domain, secure) {
+                expires instanceof Date ? expires = expires.toGMTString() : typeof(expires) == 'number' && (expires = (new Date(+(new Date) + expires * 1e3)).toGMTString());
+                var r = [name + "=" + encodeURIComponent(value)], s, i;
+                for (i in s = {expires: expires, path: path, domain: domain}) {
+                    s[i] && r.push(i + "=" + s[i]);
+                }
+                return secure && r.push("secure"), document.cookie = r.join(";"), true;
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            var v_id = '2314114';
+
+            // Utm params
+            var query = lpg.queryParams;
+            var utm_params = ['utm_medium', 'utm_campaign', 'utm_term', 'utm_source', 'ch'];
+
+            for (var i in utm_params) {
+                if (query.hasOwnProperty(utm_params[i])) {
+                    setcookie(utm_params[i] + "_" + v_id, query[utm_params[i]], 86400, '/');
+                }
+            }
+
+            // Meta info
+            var meta_info = {
+                HTTP_USER_AGENT: navigator.userAgent,
+                HTTP_REFERER: document.referrer,
+                LANGUAGE: window.navigator.userLanguage || window.navigator.language,
+                URL_PATH: document.location.search
+            };
+
+            for (var k in meta_info) {
+                setcookie(k, meta_info[k], 2592000, '/');
+            }
+
+            /* cookie for callbackhunter */
+            var cbhCookieParams = lpg.queryParams;
+            cbhCookieParams.page_id = '1789499';
+            cbhCookieParams.page_variant_id = '2314114';
+            setcookie('CBH', JSON.stringify(cbhCookieParams), 86400, '/');
+            setcookie('cbk_lpgenerator_id', JSON.stringify(cbhCookieParams), 86400, '/');
+
+        })();
+        //]]>
+        </script>
+    
+
+    
+
+    
+    
+    
+    
+
+
+    
+
+    
+
+
+
+    
+
+
+<!-- pushNotification popup -->
+
+
+<!-- end pushNotification popup -->
+
+</body>
+</html>

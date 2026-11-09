@@ -448,7 +448,10 @@ class IceSession(Base):
             name="ck_ice_sessions_price_rental",
         ),
         CheckConstraint(
-            "EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 BETWEEN 30 AND 120",
+            "EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 BETWEEN 30 AND 120 "
+            "OR (kind IN ('public_skate', 'open_ice', 'family_skate') AND btrim(coalesce(price_note, '')) <> '' "
+            "AND EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 > 120 "
+            "AND EXTRACT(EPOCH FROM (ends_at_utc - starts_at_utc)) / 60 <= 480)",
             name="ck_ice_sessions_duration",
         ),
         CheckConstraint(

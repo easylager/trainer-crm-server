@@ -96,6 +96,7 @@ def _drop_database(admin_url: str) -> None:
 # Prod public identity. Literals on purpose: deriving this from ARENAS would not catch a wrong slug.
 # (parser_key, city, slug, arena_id)
 _PROD_BINDINGS: tuple[tuple[str, str, str, int], ...] = (
+    ("aysgrad_html_v1", "Санкт-Петербург/ЛО", "ays-grad", 188),
     ("balticarena_html_v1", "Санкт-Петербург/ЛО", "baltik-arena", 192),
     ("baranovichi_lds_v1", "Барановичи", "baranovichi-lds", 23),
     ("bobruisk_arena_v1", "Бобруйск", "bobruisk-arena", 38),
@@ -189,7 +190,7 @@ async def _bind(async_url: str, expected: dict[str, tuple[str, str, int]]) -> No
     regional = build_regional_job_seeds()
     seeds = [*minsk, *regional]
     assert {seed.parser_key for seed in seeds} == set(expected)
-    assert len(seeds) == 45
+    assert len(seeds) == 46
     for seed in seeds:
         city_name, slug, _arena_id = expected[seed.parser_key]
         assert seed.config["city_name"] == city_name
@@ -229,8 +230,8 @@ async def test_fresh_database_binds_every_parser_job() -> None:
         raise RuntimeError(BIND_DB)
     expected = _expected()
     _assert_seed_lists_match_prod_table(expected)
-    assert len(expected) == 45
-    assert len(arenas_by_parser_key(CAPITAL_ARENAS)) == 25
+    assert len(expected) == 46
+    assert len(arenas_by_parser_key(CAPITAL_ARENAS)) == 26
     assert len(arenas_by_parser_key(REGIONAL_ARENAS)) == 20
 
     base_sync = _sync_url_from_settings()

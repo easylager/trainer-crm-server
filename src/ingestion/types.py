@@ -98,6 +98,8 @@ class ExtractedSlot:
     hall: str | None = None
     # Тарифы вне сетки взрослый/детский/прокат (семейные комбинации): [{"label", "minor"}].
     price_tiers: list[dict] | None = None
+    # На что билет («на 1 час в любое время окна»). Обязательно для окон длиннее 120 мин.
+    price_note: str | None = None
 
 
 @dataclass
@@ -141,6 +143,7 @@ class CanonicalSlotDraft:
     hall: str | None = None
     # Тарифы вне сетки взрослый/детский/прокат (семейные комбинации): [{"label", "minor"}].
     price_tiers: list[dict] | None = None
+    price_note: str | None = None
     source_id: str | None = None
     schedule_basis: str = "live"
     parser_job_id: int | None = None

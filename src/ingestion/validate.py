@@ -17,6 +17,7 @@ from src.application.ice_session_use_cases import (
     IceSessionDurationError,
     IceSessionValidationError,
     duration_minutes,
+    is_open_window,
     validate_duration_minutes,
     validate_prices,
 )
@@ -113,10 +114,12 @@ class IceSessionValidator:
     def _reject_reason(draft: CanonicalSlotDraft, seen_starts: set[tuple[int, object]]) -> str | None:
         if draft.kind not in PARSER_KINDS:
             return DROP_KIND
-        try:
-            validate_duration_minutes(duration_minutes(draft.starts_at_utc, draft.ends_at_utc))
-        except IceSessionDurationError:
-            return DROP_DURATION
+        minutes = duration_minutes(draft.starts_at_utc, draft.ends_at_utc)
+        if not is_open_window(draft.kind, minutes, draft.price_note):
+            try:
+                validate_duration_minutes(minutes)
+            except IceSessionDurationError:
+                return DROP_DURATION
         try:
             validate_prices(
                 price_adult_minor=draft.price_adult_minor,

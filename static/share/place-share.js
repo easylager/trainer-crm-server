@@ -119,6 +119,10 @@
     if (adult != null) parts.push(['Взрослый', PD.formatPriceMinor(adult, cur)]);
     if (session.price_child_minor != null) parts.push(['Детский', PD.formatPriceMinor(session.price_child_minor, cur)]);
     if (session.price_rental_minor != null) parts.push(['Прокат', PD.formatPriceMinor(session.price_rental_minor, cur)]);
+    // Окно свободного катания с почасовым билетом: без «/час» сумма читается как цена всего окна.
+    if (/^\s*билет на 1 час(?=[\s,.]|$)/i.test(String(session.price_note || ''))) {
+      parts = parts.map(function (pair) { return [pair[0], pair[1] + '/час']; });
+    }
     return parts;
   }
 

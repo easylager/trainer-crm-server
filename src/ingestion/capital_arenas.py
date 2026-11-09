@@ -322,6 +322,18 @@ ARENAS: list[SeedArena] = [
         "gololed_html_v1",
         _MOW,
     ),
+    SeedArena(
+        188,
+        "Санкт-Петербург/ЛО",
+        "Айс Град",
+        "проспект Обуховской Обороны, 149Х",
+        59.884099,
+        30.438722,
+        "ays-grad",
+        True,
+        "aysgrad_html_v1",
+        _MOW,
+    ),
 ]
 
 

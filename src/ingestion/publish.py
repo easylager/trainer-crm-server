@@ -226,7 +226,7 @@ class SqlAlchemyIceSessionPublisher:
                 text(
                     """
                     SELECT price_adult_minor, price_child_minor, price_rental_minor,
-                           session_label, age_note, capacity_note, hall, price_tiers, external_url
+                           session_label, age_note, capacity_note, hall, price_tiers, price_note, external_url
                     FROM ice_sessions
                     WHERE id = :id AND arena_id = :arena_id AND source_id = 'admin'
                     """
@@ -257,6 +257,7 @@ class SqlAlchemyIceSessionPublisher:
                     capacity_note = :capacity_note,
                     hall = :hall,
                     price_tiers = CAST(:price_tiers AS jsonb),
+                    price_note = :price_note,
                     external_url = :external_url,
                     status = :status,
                     source_id = 'admin',
@@ -291,6 +292,7 @@ class SqlAlchemyIceSessionPublisher:
                     if current["price_tiers"] is not None
                     else None
                 ),
+                "price_note": draft.price_note if draft.price_note else current["price_note"],
                 "external_url": draft.external_url if draft.external_url else current["external_url"],
                 "status": draft.status,
                 "observed_at": draft.observed_at,
@@ -320,6 +322,7 @@ class SqlAlchemyIceSessionPublisher:
                     capacity_note = :capacity_note,
                     hall = :hall,
                     price_tiers = CAST(:price_tiers AS jsonb),
+                    price_note = :price_note,
                     external_url = :external_url,
                     status = :status,
                     source_id = :source_id,
@@ -341,13 +344,14 @@ class SqlAlchemyIceSessionPublisher:
                     arena_id, kind, starts_at_utc, ends_at_utc, local_date,
                     starts_at_local, ends_at_local,
                     price_adult_minor, price_child_minor, price_rental_minor, price_minor,
-                    currency_code, session_label, age_note, capacity_note, hall, price_tiers, external_url, status,
+                    currency_code, session_label, age_note, capacity_note, hall, price_tiers, price_note, external_url, status,
                     source_id, observed_at, valid_until, schedule_basis
                 ) VALUES (
                     :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date,
                     :starts_at_local, :ends_at_local,
                     :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor,
-                    :currency_code, :session_label, :age_note, :capacity_note, :hall, CAST(:price_tiers AS jsonb), :external_url, :status,
+                    :currency_code, :session_label, :age_note, :capacity_note, :hall, CAST(:price_tiers AS jsonb), :price_note,
+                    :external_url, :status,
                     :source_id, :observed_at, :valid_until, :schedule_basis
                 )
                 ON CONFLICT (arena_id, starts_at_utc, kind)
@@ -381,6 +385,7 @@ class SqlAlchemyIceSessionPublisher:
             "capacity_note": draft.capacity_note,
             "hall": draft.hall,
             "price_tiers": json.dumps(draft.price_tiers, ensure_ascii=False) if draft.price_tiers else None,
+            "price_note": draft.price_note,
             "external_url": draft.external_url,
             "status": draft.status,
             "source_id": source_id,

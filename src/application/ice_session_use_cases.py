@@ -23,6 +23,10 @@ except ImportError:  # pragma: no cover
 DEFAULT_ARENA_TZ = "Europe/Minsk"
 DURATION_MIN_MINUTES = 30
 DURATION_MAX_MINUTES = 120
+#: «Окно» свободного катания: вход в любое время с … до …, билет на час или на всё окно.
+#: Длиннее обычного сеанса допускается только с price_note — пояснением, на сколько билет.
+OPEN_WINDOW_MAX_MINUTES = 480
+OPEN_WINDOW_KINDS = frozenset({"public_skate", "open_ice", "family_skate"})
 RECURRENCE_HORIZON_WEEKS = 4
 
 KIND_PUBLIC_SKATE = "public_skate"
@@ -108,6 +112,15 @@ def compute_session_datetimes(
 
 def duration_minutes(starts_at_utc: datetime, ends_at_utc: datetime) -> int:
     return int((ends_at_utc - starts_at_utc).total_seconds() // 60)
+
+
+def is_open_window(kind: str | None, minutes: int, price_note: str | None) -> bool:
+    """Длинное окно катания, которое объясняет клиенту, что покупает билет (см. price_note)."""
+    return (
+        kind in OPEN_WINDOW_KINDS
+        and DURATION_MAX_MINUTES < int(minutes) <= OPEN_WINDOW_MAX_MINUTES
+        and bool((price_note or "").strip())
+    )
 
 
 def validate_duration_minutes(minutes: int) -> int:
