@@ -3473,6 +3473,12 @@ async def run_hockey_matches_loop() -> None:
                     text = health.failed("календарь матчей", str(counts.get("calendar_error") or ""))
                     if text:
                         await send_review_alert(text)
+                if counts.get("races_failed"):
+                    text = health.failed("гонки и короны месяца", str(counts.get("races_error") or ""))
+                    if text:
+                        await send_review_alert(text)
+                else:
+                    health.ok("гонки и короны месяца")
                 health.ok("цикл матчей")
                 logger.info("[hockey_matches_loop] %s", counts)
             if settings.site_matches_enabled:

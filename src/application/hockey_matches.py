@@ -562,10 +562,21 @@ async def run_tick(
     # прошёл месяц и всё посчитано — короны.
     from src.application.hockey_races import close_due_races, ensure_races, mark_calendar_synced
 
-    await ensure_races(session, now=now)
-    if calendar is not None:
-        await mark_calendar_synced(session, now=now)
-    closed_races = await close_due_races(session, now=now)
+    # Гонки и короны — отдельным savepoint: их сбой не должен откатывать итоги и очки этого тика (а с ними
+    # отметку «алерт отправлен» — иначе админам тот же алерт уходил бы каждый тик). Ошибка — в counts и LoopHealth.
+    closed_races: list = []
+    races_failed = False
+    races_error = ""
+    try:
+        async with session.begin_nested():
+            await ensure_races(session, now=now)
+            if calendar is not None:
+                await mark_calendar_synced(session, now=now)
+            closed_races = await close_due_races(session, now=now)
+    except Exception as exc:
+        logger.warning("hockey races stage failed", exc_info=True)
+        races_failed = True
+        races_error = str(exc) or type(exc).__name__
     return {
         "calendar": calendar,
         "calendar_failed": calendar_failed,
@@ -573,6 +584,8 @@ async def run_tick(
         "dinamo_stats": dinamo_stats,
         "scored_picks": scored,
         "closed_races": closed_races,
+        "races_failed": races_failed,
+        "races_error": races_error,
         "checked": len(results),
         "final": sum(1 for _, kind in results if kind == KIND_FINAL),
         "review": sum(1 for _, kind in results if kind == KIND_REVIEW),
