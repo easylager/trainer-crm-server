@@ -142,6 +142,7 @@
       !list ? h('div', { class: 'kk-skel kk-skel--line' })
         : list.length ? h('div', { class: 'kk-rows' }, list.map(function (l) {
             return h('button', { type: 'button', class: 'kk-lg' + (l.active ? '' : ' is-ended'), onclick: function () { K.go('league', { id: l.id }); } }, [
+              K.leagueThumb ? K.leagueThumb(l) : null,
               h('span', { class: 'kk-col kk-grow' }, [h('b', { text: l.name }), h('span', { class: 'kk-sub', text: S.leagueSub(l) + (l.active ? '' : ' · закончилась') })]),
               h('span', { class: 'kk-lg__r' + (l.my_rank === 1 ? ' is-gold' : '') }, [l.my_rank === 1 ? K.crownIcon(15) : null, l.my_rank ? String(l.my_rank) : '—']),
             ]);

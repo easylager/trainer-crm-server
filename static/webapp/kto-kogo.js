@@ -99,7 +99,10 @@
       return e;
     }
     if (!isPublic) opts.headers['X-Telegram-Init-Data'] = initData;
-    if (body !== undefined) {
+    if (typeof FormData === 'function' && body instanceof FormData) {
+      // Файл: тип с границей выставит браузер, руками его задавать нельзя.
+      opts.body = body;
+    } else if (body !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }

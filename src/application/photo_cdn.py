@@ -1,13 +1,13 @@
 """CDN URL helper for catalog photos (TASK-049).
 
-Trainer keys stay under ``trainers/``. Arena media uses ``arenas/``.
+Trainer keys stay under ``trainers/``. Arena media uses ``arenas/``. Картинки лиг «Кто кого» — ``kk-leagues/``.
 ``legal/`` and other private prefixes stay rejected.
 """
 from __future__ import annotations
 
 from urllib.parse import quote
 
-CDN_KEY_PREFIXES = ("trainers/", "arenas/", "collectives/")
+CDN_KEY_PREFIXES = ("trainers/", "arenas/", "collectives/", "kk-leagues/")
 
 
 def photo_url_from_cdn(file_key: str | None, base: str | None) -> str | None:

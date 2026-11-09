@@ -14,6 +14,77 @@
   var state = K.state;
   var icon = K.icon;
 
+  // Лицо лиги (TASK-361): модель — в kto-kogo-league-identity.js, он грузится после этого файла, поэтому берём её в момент вызова.
+  function Id() {
+    return window.KtoKogoIdentity;
+  }
+  var PHOTO_ICON = ['M4 6.5h16v11H4z', 'M4 15.5l4.5-4.5 4 4 3-3 4.5 4.5', 'M9 10h.01'];
+
+  /** Картинка лиги. Не загрузилась — убираем, под ней остаётся фон, как без картинки. Текст пользователя сюда не попадает. */
+  function photo(src, cls, alt) {
+    return h('img', { class: cls, src: src, alt: alt || '', decoding: 'async', onerror: function (e) { e.target.remove(); } });
+  }
+
+  /** Миниатюра для строки лиги на хабе; нет картинки — ничего (прежний вид). */
+  function leagueThumb(l) {
+    var face = Id().faceOf(l);
+    return face ? h('span', { class: 'kk-lface', 'aria-hidden': 'true' }, [photo(face.thumb, 'kk-lface__img')]) : null;
+  }
+  K.leagueThumb = leagueThumb;
+
+  /** «На что играем: …» — подпись приглушена, текст пользователя только через textContent. */
+  function stakeEl(l, cls) {
+    var parts = Id().stakeParts(l);
+    return parts ? h('p', { class: cls }, [h('span', { class: 'kk-stake__k', text: parts.label + ': ' }), h('span', { class: 'kk-stake__v', text: parts.text })]) : null;
+  }
+
+  /** Загрузка файла в лигу: multipart, ответ — лига с адресами картинки. */
+  function uploadImage(id, file) {
+    var fd = new FormData();
+    fd.append('file', file, file.name || 'photo');
+    return K.api('POST', '/client/hockey/leagues/' + id + '/image', fd);
+  }
+
+  /**
+   * Поле «Картинка»: настоящий label + input[type=file] (камера и галерея), превью и «Убрать».
+   * o: id, src (что показать), alt, error, onFile(file), onRemove (null — убирать нечего).
+   */
+  function photoField(o) {
+    var has = !!o.src;
+    return h('div', { class: 'kk-fld' }, [
+      h('span', { class: 'kk-lbl' }, ['КАРТИНКА ', h('span', { class: 'kk-mute', text: '· необязательно' })]),
+      h('div', { class: 'kk-pick' }, [
+        has ? photo(o.src, 'kk-pick__img', o.alt) : h('span', { class: 'kk-pick__ph', 'aria-hidden': 'true' }, [icon(PHOTO_ICON, 26)]),
+        h('div', { class: 'kk-pick__a' }, [
+          h('label', { class: 'kk-filebtn', for: o.id }, [
+            h('input', {
+              id: o.id,
+              class: 'kk-vh',
+              type: 'file',
+              accept: 'image/jpeg,image/png,image/webp',
+              onchange: function (e) {
+                var file = e.target.files && e.target.files[0];
+                e.target.value = '';
+                if (file) o.onFile(file);
+              },
+            }),
+            has ? 'Заменить фото' : 'Выбрать фото',
+          ]),
+          has && o.onRemove ? h('button', { type: 'button', class: 'kk-linkbtn kk-pick__rm', onclick: o.onRemove, 'aria-label': 'Убрать картинку лиги', text: 'Убрать' }) : null,
+        ]),
+      ]),
+      o.error ? h('span', { class: 'kk-tx kk-tx--err', role: 'alert', text: o.error }) : h('span', { class: 'kk-sub', text: 'JPEG, PNG или WEBP до 5\u00a0МБ' }),
+    ]);
+  }
+
+  /** Поле «На что играем»: обычный input без примера внутри. */
+  function stakeField(id, value, oninput) {
+    return h('div', { class: 'kk-fld' }, [
+      h('label', { for: id, class: 'kk-lbl' }, ['НА ЧТО ИГРАЕМ ', h('span', { class: 'kk-mute', text: '· необязательно' })]),
+      h('input', { id: id, class: 'kk-input', maxlength: String(Id().STAKE_MAX), autocomplete: 'off', value: value, placeholder: 'Свободный текст', oninput: function (e) { oninput(e.target.value); } }),
+    ]);
+  }
+
   var IDEAS = ['Раздевалка', 'Офис', 'Двор', 'Семья'];
   var SCOPES = [
     ['dinamo', 'Динамо-Минск', 'КХЛ, дома и на выезде'],
@@ -37,7 +108,7 @@
 
   function newForm(a) {
     if (!a.form) {
-      a.form = { name: '', scope: a.club ? 'pick' : 'dinamo', clubs: a.club ? [a.club] : [], term: 'season', startsOn: '', endsOn: '' };
+      a.form = { name: '', scope: a.club ? 'pick' : 'dinamo', clubs: a.club ? [a.club] : [], term: 'season', startsOn: '', endsOn: '', stake: '', image: null, imageUrl: null, imageError: '' };
     }
     return a.form;
   }
@@ -78,18 +149,54 @@
     refreshPreview(a);
   }
 
+  /** Выбранный файл: тип и вес проверяем сразу, превью — из памяти телефона. */
+  function pickFile(holder, file, fileKey, urlKey, errKey) {
+    if (holder[urlKey]) URL.revokeObjectURL(holder[urlKey]);
+    var err = Id().imageError(file);
+    holder[errKey] = err;
+    holder[fileKey] = err ? null : file;
+    holder[urlKey] = err ? null : URL.createObjectURL(file);
+  }
+
+  function dropFile(holder, fileKey, urlKey, errKey) {
+    if (holder[urlKey]) URL.revokeObjectURL(holder[urlKey]);
+    holder[fileKey] = null;
+    holder[urlKey] = null;
+    holder[errKey] = '';
+  }
+
   function createLeague(a) {
     var f = newForm(a);
-    var err = S.formError(f);
+    var err = S.formError(f) || Id().stakeError(f.stake);
     if (err) return K.toast(err);
     state.busy = true;
     K.render();
     var owner = K.current();
-    K.api('POST', '/client/hockey/leagues', { name: f.name.trim(), terms: S.termsBody(f, nowIso()) })
+    var body = { name: f.name.trim(), terms: S.termsBody(f, nowIso()) };
+    var stake = Id().cleanStake(f.stake);
+    if (stake) body.stake_text = stake;
+    var file = f.image;
+    K.api('POST', '/client/hockey/leagues', body)
+      .then(function (l) {
+        state.created = l;
+        state.createdNote = '';
+        state.leagues = null;
+        if (!file) return l;
+        // Лига уже есть: не вышло с фото — это не повод терять лигу, картинку можно добавить в меню лиги.
+        return uploadImage(l.id, file).then(
+          function (withImage) {
+            state.created = Object.assign({}, l, withImage);
+            return state.created;
+          },
+          function (e) {
+            state.createdNote = 'Лигу собрали, а фото не загрузилось: ' + e.message + '. Добавить его можно в меню лиги.';
+            return l;
+          }
+        );
+      })
       .then(function (l) {
         state.busy = false;
-        state.created = l;
-        state.leagues = null;
+        dropFile(f, 'image', 'imageUrl', 'imageError');
         K.haptic('success');
         // Лига создана, но игрок успел уйти с формы: чужой экран не подменяем.
         if (K.current() === owner) K.replace('created', {});
@@ -135,7 +242,7 @@
       var f = newForm(a);
       var clubs = state.clubs || [];
       var maxClubs = (state.termOptions && state.termOptions.max_clubs) || state.maxClubs || null;
-      var err = S.formError(f);
+      var err = S.formError(f) || Id().stakeError(f.stake);
       var sum = S.termsSummary(f, a.preview);
       var choices = S.termChoices(state.termOptions);
       // Выбранное окно ушло из списка (плей-офф прошёл): откатываемся на первый открытый.
@@ -157,6 +264,15 @@
           h('input', { id: 'kk-lname', class: 'kk-input', maxlength: '28', autocomplete: 'off', value: f.name, placeholder: 'Например, Офис', oninput: function (e) { f.name = e.target.value; } }),
           h('div', { class: 'kk-chips' }, IDEAS.map(function (n) { return h('button', { type: 'button', class: 'kk-ch kk-ch--sm', onclick: function () { f.name = n; K.render(); refreshPreview(a); }, text: n }); })),
         ]),
+        photoField({
+          id: 'kk-limg',
+          src: f.imageUrl,
+          alt: 'Выбранная картинка лиги',
+          error: f.imageError,
+          onFile: function (file) { pickFile(f, file, 'image', 'imageUrl', 'imageError'); K.render(); },
+          onRemove: f.image ? function () { dropFile(f, 'image', 'imageUrl', 'imageError'); K.render(); } : null,
+        }),
+        stakeField('kk-lstake', f.stake, function (v) { f.stake = v; }),
         h('div', { class: 'kk-sec' }, [
           h('span', { class: 'kk-lbl', text: 'КАКИЕ МАТЧИ' }),
           h('div', { class: 'kk-opts', role: 'group', 'aria-label': 'Матчи' }, SCOPES.map(function (it) {
@@ -198,7 +314,7 @@
         ]),
       ]);
       return [main, h('div', { class: 'kk-cta' }, [
-        h('button', { type: 'button', class: 'kk-btn kk-btn--gold kk-btn--lg', disabled: err || state.busy ? 'true' : null, 'aria-disabled': err ? 'true' : 'false', onclick: function () { createLeague(a); }, text: err || 'Создать и позвать своих' }),
+        h('button', { type: 'button', class: 'kk-btn kk-btn--gold kk-btn--lg', disabled: err || state.busy ? 'true' : null, 'aria-disabled': err ? 'true' : 'false', onclick: function () { createLeague(a); }, text: err || (state.busy ? 'Создаём…' : 'Создать и позвать своих') }),
       ])];
     },
   });
@@ -207,11 +323,16 @@
     render: function () {
       var l = state.created;
       if (!l) return [h('main', { class: 'kk-main' }, [K.loading()])];
+      var face = Id().faceOf(l);
       return [
         h('main', { class: 'kk-main kk-center' }, [
-          h('span', { class: 'kk-badge-big', 'aria-hidden': 'true', text: M.firstChars(l.name, 2).toUpperCase() }),
+          face
+            ? h('span', { class: 'kk-badge-big kk-badge-big--img', 'aria-hidden': 'true' }, [photo(face.src, 'kk-badge-big__img')])
+            : h('span', { class: 'kk-badge-big', 'aria-hidden': 'true', text: M.firstChars(l.name, 2).toUpperCase() }),
           h('h2', { class: 'kk-h2 kk-h2--xl', text: 'Лига «' + l.name + '» готова' }),
+          stakeEl(l, 'kk-stake kk-stake--c'),
           h('span', { class: 'kk-sub', text: S.leagueSub(l) + '. Пока в лиге только ты — позови своих, очки за матчи пойдут и сюда, и в общую таблицу.' }),
+          state.createdNote ? h('span', { class: 'kk-tx kk-tx--warn', role: 'status', text: state.createdNote }) : null,
           l.few_matches ? h('span', { class: 'kk-tx kk-tx--warn', text: 'Матчей до конца лиги мало — таблица будет почти пустой.' }) : null,
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l)); }, text: 'Позвать в Telegram' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.copy(l.invite_url); }, text: 'Скопировать ссылку' }),
@@ -266,6 +387,90 @@
     ]);
   }
 
+  /** Черновик «Изменить лигу»: название, строка, выбранный файл и «убрать картинку». */
+  function editDraft(l) {
+    return { kind: 'edit', name: l.name || '', stake: l.stake_text || '', file: null, previewUrl: null, imageError: '', removeImage: false, error: '', busy: false };
+  }
+
+  function closeDraft(s) {
+    if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
+    s.previewUrl = null;
+  }
+
+  function editSheet(s, a, l) {
+    var face = Id().faceOf(l);
+    var shown = s.previewUrl || (!s.removeImage && face ? face.thumb : null);
+    return K.sheet('Изменить лигу', 'Друзья увидят всё сразу', [
+      h('label', { for: 'kk-ename', class: 'kk-lbl', text: 'НАЗВАНИЕ' }),
+      h('input', { id: 'kk-ename', class: 'kk-input', maxlength: String(Id().NAME_MAX), autocomplete: 'off', value: s.name, oninput: function (e) { s.name = e.target.value; } }),
+      photoField({
+        id: 'kk-eimg',
+        src: shown,
+        alt: s.previewUrl ? 'Выбранная картинка лиги' : 'Картинка лиги',
+        error: s.imageError,
+        onFile: function (file) { pickFile(s, file, 'file', 'previewUrl', 'imageError'); s.removeImage = false; K.render(); },
+        onRemove: shown
+          ? function () {
+              // Выбранный, но ещё не отправленный файл просто отменяем (возвращается прежняя картинка); прежнюю — убираем.
+              if (s.file) dropFile(s, 'file', 'previewUrl', 'imageError');
+              else s.removeImage = true;
+              K.render();
+            }
+          : null,
+      }),
+      stakeField('kk-estake', s.stake, function (v) { s.stake = v; }),
+      s.error ? h('span', { class: 'kk-tx kk-tx--err', role: 'alert', text: s.error }) : null,
+      h('button', { type: 'button', class: 'kk-btn kk-btn--gold', disabled: s.busy ? 'true' : null, text: s.busy ? 'Сохраняем…' : 'Сохранить', onclick: function () { saveEdit(s, a, l); } }),
+    ]);
+  }
+
+  /** Сохранить по шагам: тексты, потом картинка. Сбой на втором шаге не откатывает первый — лига перечитывается как есть. */
+  function saveEdit(s, a, l) {
+    var err = Id().editError(s);
+    if (err) {
+      s.error = err;
+      return K.render();
+    }
+    var plan = Id().editPlan(l, s);
+    if (!plan.changed) return K.closeSheet();
+    s.busy = true;
+    s.error = '';
+    K.render();
+    var base = '/client/hockey/leagues/' + a.id;
+    var touched = false;
+    var chain = Promise.resolve();
+    if (plan.patch) chain = chain.then(function () { return K.api('PATCH', base, plan.patch); }).then(function () { touched = true; });
+    if (plan.image === 'upload') chain = chain.then(function () { return uploadImage(a.id, s.file); }).then(function () { touched = true; });
+    if (plan.image === 'remove') chain = chain.then(function () { return K.api('DELETE', base + '/image'); }).then(function () { touched = true; });
+    chain.then(function () {
+      closeDraft(s);
+      state.sheet = null;
+      state.leagues = null;
+      state.leagueTables = {};
+      a.failed = false;
+      // Всё сохранено: сбой перезагрузки таблицы показываем на экране с «Повторить», а не в закрытой шторке.
+      loadLeague(a, true).then(K.render, function (e) {
+        a.failed = true;
+        K.render();
+        K.fail(e);
+      });
+      K.render();
+    }, function (e) {
+      s.busy = false;
+      s.error = e.message;
+      K.render();
+      if (!touched) return;
+      // Часть уже сохранена: перечитываем лигу, чтобы повторное «Сохранить» отправило только оставшееся.
+      var key = lkey(a);
+      K.api('GET', base + (a.tab === 'month' ? '?period=month' : '')).then(function (d) {
+        state.leagues = null;
+        state.leagueTables = {};
+        state.leagueTables[key] = d;
+        K.render();
+      }, function () {});
+    });
+  }
+
   K.register('league', {
     enter: function (a) {
       a.tab = a.tab || 'all';
@@ -283,13 +488,16 @@
       if (!l) return [h('main', { class: 'kk-main' }, [K.topbar('Лига', null), a.failed ? K.retryCard('Лига не загрузилась.', function () { a.failed = false; K.render(); K.replace('league', a); }) : K.loading()])];
       var items = l.items || [];
       var me = items.filter(function (r) { return r.is_me; })[0];
+      var face = Id().faceOf(l);
       var main = h('main', { class: 'kk-main' }, [
-        h('header', { class: 'kk-lhead' }, [
+        h('header', { class: 'kk-lhead' + (face ? ' kk-lhead--img' : '') }, [
+          face ? photo(face.src, 'kk-lhead__bg') : null,
           h('div', { class: 'kk-hero__bar' }, [
             h('button', { type: 'button', class: 'kk-round kk-round--glass', 'aria-label': 'Назад', onclick: K.back }, [icon(I.back)]),
             h('button', { type: 'button', class: 'kk-round kk-round--glass', 'aria-label': 'Настройки лиги', onclick: function () { state.sheet = { kind: 'menu' }; K.render(); } }, [icon(I.more)]),
           ]),
           h('h1', { class: 'kk-h1 kk-h1--xl', text: l.name }),
+          stakeEl(l, 'kk-lstake'),
           h('div', { class: 'kk-lmeta' }, [h('span', { class: 'kk-logos' }, clubLogos(l)), h('span', { text: S.leagueMeta(l, items.length) + (l.active ? '' : ' · закончилась') })]),
         ]),
         seg([['month', monthName], ['all', 'Вся лига']], a.tab, function (id) {
@@ -312,31 +520,32 @@
       var l = state.leagueTables[lkey(a)] || {};
       if (s.kind === 'menu') {
         return K.sheet('Лига', null, [
-          l.is_owner ? h('button', { type: 'button', class: 'kk-pr', onclick: function () { state.sheet = { kind: 'rename', draft: l.name || '' }; K.render(); } }, [h('span', { text: 'Переименовать' })]) : null,
+          l.is_owner ? h('button', { type: 'button', class: 'kk-pr', onclick: function () { state.sheet = editDraft(l); K.render(); } }, [h('span', { text: 'Изменить лигу' })]) : null,
           h('button', { type: 'button', class: 'kk-pr', onclick: function () { state.sheet = null; K.render(); K.copy(l.invite_url); } }, [h('span', { text: 'Скопировать ссылку' })]),
+          !l.is_owner ? h('button', { type: 'button', class: 'kk-pr', onclick: function () { state.sheet = { kind: 'report', error: '', busy: false }; K.render(); } }, [h('span', { text: 'Пожаловаться на лигу' })]) : null,
           h('button', { type: 'button', class: 'kk-pr kk-pr--danger', onclick: function () { state.sheet = { kind: 'leave' }; K.render(); } }, [h('span', { text: 'Выйти из лиги' })]),
         ]);
       }
-      if (s.kind === 'rename') {
-        return K.sheet('Новое название', 'Друзья увидят его сразу', [
-          h('label', { for: 'kk-rename', class: 'kk-lbl', text: 'НАЗВАНИЕ' }),
-          h('input', { id: 'kk-rename', class: 'kk-input', maxlength: '28', value: s.draft, oninput: function (e) { s.draft = e.target.value; } }),
-          s.error ? h('span', { class: 'kk-tx kk-tx--err', text: s.error }) : null,
-          h('button', { type: 'button', class: 'kk-btn kk-btn--gold', text: 'Сохранить', onclick: function () {
-            K.api('PATCH', '/client/hockey/leagues/' + a.id, { name: s.draft })
+      if (s.kind === 'edit') return editSheet(s, a, l);
+      if (s.kind === 'report') {
+        return K.sheet('Пожаловаться на лигу?', null, [
+          h('span', { class: 'kk-tx', text: 'Мы посмотрим картинку и текст этой лиги и уберём то, что не подходит. Владелец не узнает, что жалоба от тебя.' }),
+          s.error ? h('span', { class: 'kk-tx kk-tx--err', role: 'alert', text: s.error }) : null,
+          h('button', { type: 'button', class: 'kk-btn kk-btn--alt', text: 'Не надо', onclick: K.closeSheet }),
+          h('button', { type: 'button', class: 'kk-btn kk-btn--danger', disabled: s.busy ? 'true' : null, text: s.busy ? 'Отправляем…' : 'Пожаловаться', onclick: function () {
+            s.busy = true;
+            s.error = '';
+            K.render();
+            K.api('POST', '/client/hockey/leagues/' + a.id + '/report')
               .then(function () {
-                state.sheet = null;
-                state.leagues = null;
-                state.leagueTables = {};
-                a.failed = false;
-                // Название уже сохранено: сбой перезагрузки таблицы показываем на экране с «Повторить», а не в закрытой шторке.
-                loadLeague(a, true).then(K.render, function (e) {
-                  a.failed = true;
-                  K.render();
-                  K.fail(e);
-                });
+                K.haptic('success');
+                K.closeSheet();
+                K.toast('Спасибо, мы посмотрим');
+              }, function (e) {
+                s.busy = false;
+                s.error = e.message;
                 K.render();
-              }, function (e) { s.error = e.message; K.render(); });
+              });
           } }),
         ]);
       }
@@ -406,12 +615,15 @@
       }
       var p = state.joinPreview;
       var next = S.nextMatch(state.matches, { id: 0, home_team: '', away_team: '' });
+      var face = p ? Id().faceOf(p) : null;
       return [h('main', { class: 'kk-main' }, [
         h('span', { class: 'kk-lbl', text: 'КТО КОГО?' }),
         p ? h('div', { class: 'kk-sec' }, [
+          face ? h('div', { class: 'kk-joinimg', 'aria-hidden': 'true' }, [photo(face.src, 'kk-joinimg__img')]) : null,
           h('div', { class: 'kk-faces', 'aria-hidden': 'true' }, (p.names || []).slice(0, 5).map(function (n) { return K.ava(n, 48); })),
           h('span', { class: 'kk-tx', text: p.names && p.names[0] ? p.names[0] + ' зовёт тебя в лигу' : 'Тебя зовут в лигу' }),
           h('h2', { class: 'kk-h2 kk-h2--xl', text: p.name }),
+          stakeEl(p, 'kk-stake'),
           h('span', { class: 'kk-tx', text: p.members + ' ' + M.plural(p.members, 'человек', 'человека', 'человек') + ' уже ' + M.plural(p.members, 'угадывает', 'угадывают', 'угадывают') }),
           next ? h('div', { class: 'kk-card kk-note' }, [h('span', { class: 'kk-lbl', text: 'БЛИЖАЙШИЙ МАТЧ' }), h('b', { class: 'kk-hd', text: S.clubName(next.home.name) + ' — ' + S.clubName(next.away.name) }), h('span', { class: 'kk-sub', text: M.whenLabel(next.starts_at, new Date()) })]) : null,
           h('span', { class: 'kk-sub', text: 'Тапаешь за команду или угадываешь счёт. После матча очки приходят сами. ' + M.RULES }),
@@ -446,9 +658,12 @@
       var l = state.created;
       var next = S.nextMatch(state.matches, { id: 0, home_team: '', away_team: '' });
       if (!l) return [h('main', { class: 'kk-main' }, [K.loading()])];
+      var face = Id().faceOf(l);
       return [h('main', { class: 'kk-main kk-center' }, [
         K.sticker('ТЫ В ЛИГЕ'),
+        face ? h('span', { class: 'kk-badge-big kk-badge-big--img', 'aria-hidden': 'true' }, [photo(face.src, 'kk-badge-big__img')]) : null,
         h('h2', { class: 'kk-h2 kk-h2--xl', text: l.name }),
+        stakeEl(l, 'kk-stake kk-stake--c'),
         h('span', { class: 'kk-sub', text: S.leagueSub(l) + '. Очки в лиге — за матчи после вступления.' }),
         next ? h('span', { class: 'kk-tx', text: 'Первый ход — ' + M.whenLabel(next.starts_at, new Date()).split(',')[0] + ': ' + S.clubName(next.home.name) + ' или ' + S.clubName(next.away.name) + '?' }) : h('span', { class: 'kk-tx', text: 'Как только матчи появятся в календаре, тапни за команду.' }),
         h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.reset('hub', {}); }, text: 'Тапнуть за команду' }),

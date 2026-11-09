@@ -128,6 +128,8 @@ def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, 
 SUGGESTIONS_PREFIX = "suggestions/"
 #: TASK-343: фото зимних точек до модерации. Публично не отдаётся (см. ``get_photo``).
 WINTER_PREFIX = "winter-photos/"
+#: TASK-361: картинки лиг «Кто кого». Отдаются публично (``get_photo``): их видит всякий, у кого есть приглашение.
+LEAGUE_PREFIX = "kk-leagues/"
 
 
 def upload_arena_photo(arena_id: int, body: bytes, content_type: str) -> dict:
@@ -387,6 +389,42 @@ def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) 
         return None
 
 
+def put_bytes(file_key: str, body: bytes, content_type: str, *, allowed_prefixes: tuple[str, ...]) -> None:
+    """Write ready bytes under ``file_key`` (S3 or local). The key must stay under ``allowed_prefixes``; failure raises."""
+    norm_key = resolve_object_key_under_prefixes(file_key, allowed_prefixes)
+    if not norm_key or not body:
+        raise ValueError("bad storage key or empty body")
+    settings = Settings()
+    if _use_local():
+        path = Path(settings.local_storage_path).resolve() / norm_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        return
+    _get_client().put_object(
+        Bucket=settings.s3_bucket,
+        Key=norm_key,
+        Body=body,
+        ContentType=content_type,
+        CacheControl=PHOTO_CACHE_CONTROL,
+    )
+
+
+def delete_file(file_key: str, *, allowed_prefixes: tuple[str, ...]) -> bool:
+    """Remove one object (S3 or local). False — the key is not allowed or removal failed; never raises."""
+    norm_key = resolve_object_key_under_prefixes(file_key, allowed_prefixes)
+    if not norm_key:
+        return False
+    settings = Settings()
+    try:
+        if _use_local():
+            (Path(settings.local_storage_path).resolve() / norm_key).unlink(missing_ok=True)
+            return True
+        _get_client().delete_object(Bucket=settings.s3_bucket, Key=norm_key)
+    except Exception:
+        return False
+    return True
+
+
 def upload_ice_company_avatar(file_key: str, body: bytes, content_type: str = "image/jpeg") -> bool:
     norm_key = resolve_object_key_under_prefixes(file_key, ("ice-company/",))
     if not norm_key or not body:
@@ -410,9 +448,9 @@ def upload_ice_company_avatar(file_key: str, body: bytes, content_type: str = "i
 def get_photo(file_key: str) -> tuple[bytes, str] | None:
     """
     Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.
-    Allowed prefixes: trainers/, collectives/, arenas/, ice-company/.
+    Allowed prefixes: trainers/, collectives/, arenas/, ice-company/, kk-leagues/.
     """
-    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/", "arenas/", "ice-company/"))
+    return get_file(file_key, allowed_prefixes=("trainers/", "collectives/", "arenas/", "ice-company/", LEAGUE_PREFIX))
 
 
 def presign_get_url(file_key: str, expires_in: int | None = None) -> str | None:
