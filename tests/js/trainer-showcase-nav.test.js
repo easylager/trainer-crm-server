@@ -138,11 +138,12 @@ describe('нативная «назад» Telegram (MiniAppBack)', () => {
     assert.equal(h.S.view, 'list');
   });
 
-  it('если пришли с другого экрана, стрелка есть и на списке', async () => {
+  it('на списке стрелки нет, даже если история длинная: это корень раздела, а не глубина', async () => {
     const back = stub();
     boot({ historyLength: 3, showcase: { items: [trainer(1), trainer(2)] }, session: PHONE, miniAppBack: back });
     await tick();
-    assert.ok(back.log.set.length > 0);
+    assert.equal(back.log.set.length, 0);
+    assert.ok(back.log.clear > 0);
   });
 });
 

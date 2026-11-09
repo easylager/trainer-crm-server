@@ -1607,7 +1607,9 @@
   function syncBack() {
     var Back = window.MiniAppBack;
     if (!Back) return;
-    if (S.view !== 'list' || S.stack.length || CAME_FROM) Back.set(back);
+    // Список — корень раздела «Поиск» (панель вкладок под рукой): стрелки нет. Она появляется,
+    // только когда идём вглубь (карточка тренера, неделя, запись) и ведёт на шаг назад.
+    if (S.view !== 'list' || S.stack.length) Back.set(back);
     else Back.clear();
   }
 
