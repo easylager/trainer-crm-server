@@ -1695,10 +1695,14 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     from src.application.booking_source import get_booking_source_breakdown
 
     booking_sources = await get_booking_source_breakdown(session)
+    from src.application.hockey_promo import promo_report
+
+    kk_promo = await promo_report(session)
 
     return {
         "catalog_demand_pulse": catalog_demand_pulse,
         "booking_sources": booking_sources,
+        "kk_promo": kk_promo,
         "trainers_by_status": trainers_by_status,
         "trainers_total": trainers_total,
         "trainers_pending_moderation": trainers_pending_moderation,

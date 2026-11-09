@@ -127,3 +127,13 @@ async def test_admin_promo_report_per_label(app_use_test_db, db_session) -> None
     items = {row["src"]: row for row in resp.json()["items"]}
     assert items["push1"] == {"src": "push1", "entries": 5, "new_players": 3, "picked": 2, "returned": 1}
     assert items["insta"] == {"src": "insta", "entries": 1, "new_players": 0, "picked": 0, "returned": 0}
+
+
+@pytest.mark.asyncio
+async def test_platform_stats_carry_promo_rows_for_the_stats_page(app_use_test_db, db_session) -> None:
+    from src.application.stats_use_cases import get_platform_stats
+
+    await db_session.execute(text("INSERT INTO hockey_entry_events (src) VALUES ('statsx')"))
+    data = await get_platform_stats(db_session)
+    row = next(r for r in data["kk_promo"] if r["src"] == "statsx")
+    assert row == {"src": "statsx", "entries": 1, "new_players": 0, "picked": 0, "returned": 0}
