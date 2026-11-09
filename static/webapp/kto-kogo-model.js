@@ -420,7 +420,51 @@
     }
   }
 
+  /**
+   * Первые n символов строки по кодовым точкам: slice/charAt режут суррогатную пару эмодзи пополам,
+   * и в DOM попадал битый символ-половинка.
+   */
+  function firstChars(str, n) {
+    return Array.from(String(str || '')).slice(0, n).join('');
+  }
+
+  /** Инициалы для аватарки: по букве от первых двух слов, эмодзи в начале имени остаются целыми. */
+  function initials(name) {
+    var parts = String(name || '').trim().split(/\s+/);
+    return (firstChars(parts[0] || '?', 1) + (parts[1] ? firstChars(parts[1], 1) : '')).toUpperCase();
+  }
+
+  /**
+   * Подмешать свежий объект fresh в живой own, не меняя его идентичность: ссылки на матч держат отправленные
+   * ходы и таймеры счёта, и ответ, записанный в «осиротевший» объект, пропадал с экрана.
+   * local — клиентские поля (в ответе их нет), их не стираем; frozen — поля, которые не перезаписываем
+   * (у хода в пути свежий ответ сервера старше того, что игрок уже нажал).
+   */
+  function mergeInPlace(own, fresh, local, frozen) {
+    local = local || [];
+    frozen = frozen || [];
+    Object.keys(own).forEach(function (k) {
+      if (local.indexOf(k) < 0 && !(k in fresh) && frozen.indexOf(k) < 0) delete own[k];
+    });
+    Object.keys(fresh).forEach(function (k) {
+      if (frozen.indexOf(k) < 0) own[k] = fresh[k];
+    });
+    return own;
+  }
+
+  /**
+   * Пауза до следующего опроса: после каждой неудачи (ошибка или «ещё не готово») вдвое дольше, не больше чем в 8 раз.
+   * Успех обнуляет счётчик — вызывающий передаёт misses = 0.
+   */
+  function pollDelay(base, misses) {
+    return base * Math.pow(2, Math.min(Math.max(misses | 0, 0), 3));
+  }
+
   var api = {
+    firstChars: firstChars,
+    initials: initials,
+    mergeInPlace: mergeInPlace,
+    pollDelay: pollDelay,
     NEUTRAL: NEUTRAL,
     clubName: clubName,
     clubGen: clubGen,

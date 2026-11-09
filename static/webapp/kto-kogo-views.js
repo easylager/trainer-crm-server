@@ -312,11 +312,20 @@
 
   function loadMovement(m) {
     var cur = state.movement[m.id];
-    if (cur) return Promise.resolve();
+    // Упавший запрос не кэшируется: «Повторить» (и следующий вход на экран) спрашивает заново.
+    if (cur && !cur.failed) return Promise.resolve();
     state.movement[m.id] = { loading: true, data: null };
     return K.api('GET', '/client/hockey/matches/' + m.id + '/movement')
       .then(function (d) { state.movement[m.id] = { loading: false, data: d }; })
-      .catch(function () { state.movement[m.id] = { loading: false, data: null }; });
+      .catch(function () { state.movement[m.id] = { loading: false, data: null, failed: true }; });
+  }
+
+  /** Места не загрузились — это не «меньше трёх игроков»: говорим как есть и даём повторить. */
+  function movementRetry(m) {
+    return h('div', { class: 'kk-col' }, [
+      h('span', { class: 'kk-sub', text: 'Не получилось узнать, куда сдвинулось место.' }),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--alt kk-btn--sm', onclick: function () { loadMovement(m).then(K.render); K.render(); }, text: 'Повторить' }),
+    ]);
   }
 
   function duelCard(m) {
@@ -429,7 +438,7 @@
         var rows = S.movementRows(items);
         main.appendChild(h('div', { class: 'kk-sec' }, [
           h('span', { class: 'kk-lbl', text: 'КУДА СДВИНУЛОСЬ ТВОЁ МЕСТО' }),
-          mv && mv.loading ? h('span', { class: 'kk-skel kk-skel--line' }) : rows.length ? h('div', { class: 'kk-rows' }, rows.map(moveRow)) : h('span', { class: 'kk-sub', text: 'Пока в таблицах меньше трёх игроков с очками — места появятся, когда людей станет больше.' }),
+          mv && mv.loading ? h('span', { class: 'kk-skel kk-skel--line' }) : mv && mv.failed ? movementRetry(m) : rows.length ? h('div', { class: 'kk-rows' }, rows.map(moveRow)) : h('span', { class: 'kk-sub', text: 'Пока в таблицах меньше трёх игроков с очками — места появятся, когда людей станет больше.' }),
           S.crownLineAfter(items) ? h('span', { class: 'kk-crownline', text: S.crownLineAfter(items) }) : null,
         ]));
         var duel = duelCard(m);
@@ -481,6 +490,27 @@
     return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.emptyCard('МАТЧ НЕ НАЙДЕН', 'Такого матча нет или ссылка устарела. Ближайшие матчи — на главной игры.')])];
   }
 
+  /**
+   * Матч сыгран, а очки хода ещё считаются («Считаем очки»): экран сам спрашивает сервер, пока они не появятся.
+   * Пауза растёт (опрос тянет за собой backoff в K.poll), через 12 попыток опрос сдаётся — дальше обновит повторный вход.
+   */
+  function pollPoints() {
+    var tries = 0;
+    K.poll('match', 6000, function (args) {
+      return K.fetchMatch(args.id).then(function (fresh) {
+        var pts = fresh && fresh.my_pick && fresh.my_pick.points;
+        if (pts == null) {
+          if (++tries >= 12) K.stopPoll();
+          return false;
+        }
+        K.stopPoll();
+        delete state.movement[fresh.id];
+        loadMovement(fresh).then(K.render);
+        K.render();
+      });
+    });
+  }
+
   // ---------- регистрация ----------
 
   K.register('match', {
@@ -490,19 +520,23 @@
       K.fetchMatch(id).then(function (m) {
         K.render();
         if (!m) return;
+        // Пока матч грузился, игрок мог уйти: опрос и догрузки привязаны к экрану, который их запросил.
+        var cur = K.current();
+        if (!cur || cur.name !== 'match' || cur.args !== a) return;
         var ph = phase(m);
         if (m.my_pick && (ph === 'open' || ph === 'live')) K.loadStakes(m.id).then(K.render);
         if (ph === 'final' && m.my_pick) {
-          loadMovement(m).then(K.render);
+          if (m.my_pick.points != null) loadMovement(m).then(K.render);
+          else pollPoints();
           K.api('POST', '/client/hockey/matches/' + m.id + '/seen').catch(function () {});
           if (!state.leagues) K.loadLeagues().catch(function () {});
         }
         if (ph === 'live') {
           K.poll('match', 45000, function (args) {
-            K.fetchMatch(args.id).then(function (fresh) {
+            return K.fetchMatch(args.id).then(function (fresh) {
               if (fresh && phase(fresh) === 'final') K.replace('match', args);
               else K.render();
-            }, function () {});
+            });
           });
         }
         if (ph === 'open' && !state.matches.length) K.loadMatches().then(K.render, function () {});
@@ -511,9 +545,9 @@
           K.poll('match', 15000, function (args) {
             var cur = K.findMatch(args.id);
             if (!cur || new Date(cur.starts_at).getTime() - Date.now() > 70000) return;
-            K.fetchMatch(args.id).then(function (fresh) {
+            return K.fetchMatch(args.id).then(function (fresh) {
               if (fresh && phase(fresh) !== 'open') K.replace('match', args);
-            }, function () {});
+            });
           });
         }
       }, function (e) {

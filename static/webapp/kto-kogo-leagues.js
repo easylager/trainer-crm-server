@@ -84,13 +84,16 @@
     if (err) return K.toast(err);
     state.busy = true;
     K.render();
+    var owner = K.current();
     K.api('POST', '/client/hockey/leagues', { name: f.name.trim(), terms: S.termsBody(f, nowIso()) })
       .then(function (l) {
         state.busy = false;
         state.created = l;
         state.leagues = null;
         K.haptic('success');
-        K.replace('created', {});
+        // Лига создана, но игрок успел уйти с формы: чужой экран не подменяем.
+        if (K.current() === owner) K.replace('created', {});
+        else K.toast('Лига «' + l.name + '» создана');
       })
       .catch(function (e) {
         state.busy = false;
@@ -206,7 +209,7 @@
       if (!l) return [h('main', { class: 'kk-main' }, [K.loading()])];
       return [
         h('main', { class: 'kk-main kk-center' }, [
-          h('span', { class: 'kk-badge-big', 'aria-hidden': 'true', text: l.name.slice(0, 2).toUpperCase() }),
+          h('span', { class: 'kk-badge-big', 'aria-hidden': 'true', text: M.firstChars(l.name, 2).toUpperCase() }),
           h('h2', { class: 'kk-h2 kk-h2--xl', text: 'Лига «' + l.name + '» готова' }),
           h('span', { class: 'kk-sub', text: S.leagueSub(l) + '. Пока в лиге только ты — позови своих, очки за матчи пойдут и сюда, и в общую таблицу.' }),
           l.few_matches ? h('span', { class: 'kk-tx kk-tx--warn', text: 'Матчей до конца лиги мало — таблица будет почти пустой.' }) : null,
@@ -325,10 +328,15 @@
                 state.sheet = null;
                 state.leagues = null;
                 state.leagueTables = {};
-                return loadLeague(a, true);
-              })
-              .then(K.render)
-              .catch(function (e) { s.error = e.message; K.render(); });
+                a.failed = false;
+                // Название уже сохранено: сбой перезагрузки таблицы показываем на экране с «Повторить», а не в закрытой шторке.
+                loadLeague(a, true).then(K.render, function (e) {
+                  a.failed = true;
+                  K.render();
+                  K.fail(e);
+                });
+                K.render();
+              }, function (e) { s.error = e.message; K.render(); });
           } }),
         ]);
       }
@@ -341,10 +349,12 @@
           h('span', { class: 'kk-tx', text: text }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--alt', text: 'Остаться', onclick: K.closeSheet }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--danger', text: 'Выйти', onclick: function () {
+            var owner = K.current();
             K.api('DELETE', '/client/hockey/leagues/' + a.id + '/membership')
               .then(function () {
                 state.leagueTables = {};
                 state.leagues = null;
+                if (K.current() !== owner) return;
                 state.sheet = null;
                 K.reset('hub', {});
               })
@@ -356,15 +366,17 @@
         return K.sheet('Продлить «' + (l.name || '') + '»', null, [
           h('span', { class: 'kk-tx', text: 'Появится новая лига с теми же людьми и теми же командами — на следующий круг. Участникам придёт сообщение, выйти можно в один тап. Старая лига и её короны остаются.' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', text: 'Продлить', onclick: function () {
+            var owner = K.current();
             K.api('POST', '/client/hockey/leagues/' + a.id + '/extend', {})
               .then(function (next) {
                 state.leagues = null;
-                state.sheet = null;
                 K.haptic('success');
-                K.toast(next.created ? 'Лига продлена: все уже внутри' : 'У лиги уже есть продолжение');
+                if (K.current() !== owner) return K.toast(next.created ? 'Лига продлена: все уже внутри' : 'У лиги уже есть продолжение');
+                state.sheet = null;
                 K.replace('league', { id: next.id });
+                K.toast(next.created ? 'Лига продлена: все уже внутри' : 'У лиги уже есть продолжение');
               })
-              .catch(function (e) { K.closeSheet(); K.toast(e.message); });
+              .catch(function (e) { if (K.current() === owner) K.closeSheet(); K.toast(e.message); });
           } }),
         ]);
       }
@@ -413,13 +425,15 @@
   function joinLeague() {
     state.busy = true;
     K.render();
+    var owner = K.current();
     K.api('POST', '/client/hockey/leagues/join', { code: state.joinCode, from_card: state.fromCard || null })
       .then(function (l) {
         state.busy = false;
         state.created = l;
         state.leagues = null;
         K.haptic('success');
-        K.replace('joined', {});
+        if (K.current() === owner) K.replace('joined', {});
+        else K.toast('Ты в лиге «' + l.name + '»');
       })
       .catch(function (e) {
         state.busy = false;

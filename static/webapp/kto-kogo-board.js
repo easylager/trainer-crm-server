@@ -152,9 +152,17 @@
 
   K.register('hub', {
     enter: function () {
-      Promise.all([K.loadProfile(), K.loadPeaks(), K.loadLeagues(true).catch(function () {}), K.loadMatches().then(function () { state.matchesFailed = false; }, function () { state.matchesFailed = true; })])
+      // Главная карточка ждёт только матчи и профиль (клуб игрока нужен для его матчей); вершины и лиги дорисовываются сами,
+      // и медленный второстепенный запрос её не задерживает.
+      var matches = state.matchesFresh
+        ? Promise.resolve()
+        : K.loadMatches().then(function () { state.matchesFailed = false; }, function () { state.matchesFailed = true; });
+      state.matchesFresh = false;
+      Promise.all([K.loadProfile(), matches])
         .then(K.loadClubMatches)
         .then(function () { state.hubReady = true; K.render(); }, function (e) { state.hubReady = true; K.fail(e); });
+      K.loadPeaks().then(K.render, function () {});
+      K.loadLeagues(true).then(K.render, function () {});
     },
     render: function () {
       return [

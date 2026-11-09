@@ -227,7 +227,7 @@
   }
 
   function initialOf(name) {
-    return firstWord(name).charAt(0).toUpperCase() || '?';
+    return Base.firstChars(firstWord(name), 1).toUpperCase() || '?';
   }
 
   /**
