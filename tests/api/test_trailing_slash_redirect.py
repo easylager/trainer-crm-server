@@ -30,6 +30,14 @@ async def test_trailing_slash_keeps_query(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_cyrillic_city_path_trailing_slash_301(monkeypatch) -> None:
+    monkeypatch.setenv("WEBAPP_BASE_URL", "https://glideclub.by")
+    r = await _get("/c/%D0%BC%D0%B8%D0%BD%D1%81%D0%BA/", {"x-forwarded-proto": "https", "host": "glideclub.by"})
+    assert r.status_code == 301
+    assert r.headers["location"] == "https://glideclub.by/c/%D0%BC%D0%B8%D0%BD%D1%81%D0%BA"
+
+
+@pytest.mark.asyncio
 async def test_root_and_api_are_not_stripped() -> None:
     root = await _get("/")
     api = await _get("/health/live/")

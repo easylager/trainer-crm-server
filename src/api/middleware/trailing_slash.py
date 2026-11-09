@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from src.shared.config import Settings
@@ -31,17 +33,9 @@ def _request_proto(scope: Scope) -> str:
     return str(scope.get("scheme") or "http").lower()
 
 
-def _redirect_location(scope: Scope, path: str) -> str:
-    query = scope.get("query_string") or b""
-    suffix = ("?" + query.decode("latin-1")) if query else ""
-    base = (Settings().webapp_base_url or "").strip().rstrip("/")
-    if base.startswith("http"):
-        return f"{base}{path}{suffix}"
-    host = _request_host(scope) or "localhost"
-    proto = _request_proto(scope)
-    if proto != "https" and host.endswith("glideclub.by"):
-        proto = "https"
-    return f"{proto}://{host}{path}{suffix}"
+def _location_path(path: str) -> str:
+    """Путь в Location: кириллица и прочее — percent-encoding, слэши целые."""
+    return quote(path, safe="/:@")
 
 
 class TrailingSlashMiddleware:
@@ -59,12 +53,24 @@ class TrailingSlashMiddleware:
         if any(path.startswith(p) for p in _SKIP_PREFIXES):
             await self.app(scope, receive, send)
             return
-        location = _redirect_location(scope, path.rstrip("/") or "/")
+        query = scope.get("query_string") or b""
+        suffix = ("?" + query.decode("latin-1")) if query else ""
+        bare = path.rstrip("/") or "/"
+        location_path = _location_path(bare)
+        base = (Settings().webapp_base_url or "").strip().rstrip("/")
+        if base.startswith("http"):
+            location = f"{base}{location_path}{suffix}"
+        else:
+            host = _request_host(scope) or "localhost"
+            proto = _request_proto(scope)
+            if proto != "https" and host.endswith("glideclub.by"):
+                proto = "https"
+            location = f"{proto}://{host}{location_path}{suffix}"
         await send(
             {
                 "type": "http.response.start",
                 "status": 301,
-                "headers": [(b"location", location.encode("latin-1")), (b"content-length", b"0")],
+                "headers": [(b"location", location.encode("ascii")), (b"content-length", b"0")],
             }
         )
         await send({"type": "http.response.body", "body": b""})

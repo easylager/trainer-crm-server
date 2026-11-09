@@ -6,6 +6,7 @@ from src.application.catalog_directions import ALL, direction_by_slug
 from src.application.site_trainer_catalog import (
     DESCRIPTION_LIMIT,
     TITLE_LIMIT,
+    _catalog_all_lead,
     catalog_description,
     catalog_title,
     fit_meta,
@@ -37,6 +38,17 @@ def _data(city: str, trainers: list[dict]) -> dict:
 def test_one_trainer_teaches_in_the_singular() -> None:
     data = _data("Минск", [_trainer(1, ["zero"])])
     assert catalog_description(data, ALL) == ("В Минске 1 тренер по катанию на коньках: с нуля. Запись в Telegram.")
+
+
+def test_catalog_all_lead_without_trainers_is_honest() -> None:
+    assert _catalog_all_lead(_data("Минск", [])) == "Запись к тренеру — в Telegram, оплата на месте."
+    assert "хоккей" not in _catalog_all_lead(_data("Минск", []))
+
+
+def test_catalog_all_lead_mentions_only_present_directions() -> None:
+    spb = _data("Санкт-Петербург/ЛО", [_trainer(1, ["fig"]), _trainer(2, ["fig"])])
+    assert _catalog_all_lead(spb) == "Есть фигурное катание."
+    assert "хоккей" not in _catalog_all_lead(spb)
 
 
 def test_catalog_names_only_directions_that_exist() -> None:
@@ -109,7 +121,7 @@ def test_direction_description_for_two_trainers_keeps_the_snippet_wording() -> N
     data = _data("Минск", [_trainer(1, ["zero"]), _trainer(2, ["zero"])])
     zero = direction_by_slug("s-nulya")
     assert catalog_description(data, zero) == (
-        "Научиться кататься на коньках с нуля в Минске. 2 тренера учат, от 10 BYN за занятие. Запись в Telegram."
+        "Научиться кататься на коньках с нуля в Минске: 2 тренера, от 10 BYN за занятие. Запись в Telegram."
     )
 
 
@@ -117,20 +129,20 @@ def test_direction_description_counts_and_skips_a_missing_price() -> None:
     zero = direction_by_slug("s-nulya")
     priced = _data("Минск", [_trainer(i, ["zero"]) for i in range(1, 6)])
     assert catalog_description(priced, zero) == (
-        "Научиться кататься на коньках с нуля в Минске. 5 тренеров учат, от 10 BYN за занятие. Запись в Telegram."
+        "Научиться кататься на коньках с нуля в Минске: 5 тренеров, от 10 BYN за занятие. Запись в Telegram."
     )
     one = _data("Санкт-Петербург/ЛО", [_trainer(1, ["zero"])])
     assert catalog_description(one, zero) == (
-        "Научиться кататься на коньках с нуля в Санкт-Петербурге. 1 тренер учит, от 10 BYN за занятие. Запись в Telegram."
+        "Научиться кататься на коньках с нуля в Санкт-Петербурге: 1 тренер, от 10 BYN за занятие. Запись в Telegram."
     )
     free = _trainer(1, ["fig"])
     free["services_by_dir"] = {"fig": [{}]}
     bare = _data("Минск", [free])
     fig = direction_by_slug("figurnoe")
     assert catalog_description(bare, fig) == (
-        "Фигурное катание с тренером в Минске. 1 тренер учит. Запись в Telegram."
+        "Фигурное катание с тренером в Минске: 1 тренер. Запись в Telegram."
     )
-    assert "учат" in catalog_description(priced, zero)
+    assert "учат" not in catalog_description(priced, zero)
 
 
 def test_catalog_title_adds_brand_only_when_it_fits() -> None:

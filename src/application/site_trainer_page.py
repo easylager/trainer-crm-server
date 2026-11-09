@@ -312,7 +312,7 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
     return [
         {
             "id": int(r["id"]),
-            "name": str(r["name"] or "").strip(),
+            "name": format_public_name(str(r["name"] or "").strip()),
             "city_id": int(r["city_id"]) if r["city_id"] is not None else None,
             "city_name": str(r["city_name"] or "").strip(),
             "is_ice": str(r["venue_type"]) == "ice",
@@ -847,7 +847,7 @@ def _ice_arena_names(page: Mapping[str, Any]) -> list[str]:
     for arena in page.get("arenas") or []:
         if arena.get("is_ice") is False:
             continue
-        name = str(arena.get("name") or "").strip()
+        name = format_public_name(str(arena.get("name") or "").strip())
         if name and name not in names:
             names.append(name)
     return names
@@ -954,7 +954,7 @@ def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:
     places = [
         {
             "@type": "SportsActivityLocation",
-            "name": a["name"],
+            "name": format_public_name(str(a["name"])),
             "url": place_page_url(base_url=base_url, city_name=a["city_name"], slug=a["slug"]),
         }
         for a in page.get("arenas") or []
@@ -1011,7 +1011,7 @@ def _since_text(page: Mapping[str, Any]) -> str:
 
 def _arenas_check(page: Mapping[str, Any]) -> str:
     """Галочка «Каток: …» — ледовые катки из анкеты (лыжероллерная трасса — не каток)."""
-    names = [str(a["name"]) for a in page.get("arenas") or [] if a.get("is_ice")]
+    names = [format_public_name(str(a["name"])) for a in page.get("arenas") or [] if a.get("is_ice")]
     if not names:
         return ""
     if len(names) > 2:
@@ -1488,8 +1488,9 @@ def _faq_html(page: Mapping[str, Any]) -> str:
     if not dirs:
         return ""
     d = direction_by_key(dirs[0]["key"])
+    cur = str(page.get("min_price")[1] if page.get("min_price") else "BYN")
     rents = [
-        (str(a["name"]), _money(int(a["rental_minor"]), "BYN"))
+        (format_public_name(str(a["name"])), _money(int(a["rental_minor"]), cur))
         for a in page.get("arenas") or []
         if a.get("rental_minor")
     ]
@@ -1532,7 +1533,7 @@ def _arenas_html(page: Mapping[str, Any], base_url: str) -> str:
             f'<img src="{esc(a["photo_url"])}" alt="" loading="lazy" decoding="async" />' if a.get("photo_url") else ""
         )
         peers = int(a.get("peers") or 0)
-        lines = f"<b>{esc(a['name'])}</b>"
+        lines = f"<b>{esc(format_public_name(str(a['name'])))}</b>"
         if peers:
             lines += f"<span>Здесь же ещё {peers} {plural_ru(peers, 'тренер', 'тренера', 'тренеров')}</span>"
         cur = str(page.get("min_price")[1] if page.get("min_price") else "BYN")

@@ -2060,7 +2060,7 @@ def _b_arrive(
     return section(title or t("hub.directions"), body, klass="b-sec--place", sec_id=sec_id)
 
 
-def _b_trainers(view: Mapping[str, Any], *, school_html: str = "") -> str:
+def _b_trainers(view: Mapping[str, Any], *, school_html: str = "", learn_line: str = "") -> str:
     """Тренеры катка: прямые ссылки на ``/t/…`` и каталог тренеров города."""
     from src.application.site_trainer_catalog import catalog_path
     from src.application.site_trainer_page import trainer_path
@@ -2073,19 +2073,22 @@ def _b_trainers(view: Mapping[str, Any], *, school_html: str = "") -> str:
     arena_id = int(card["id"])
     city_name = _city(card)
     coach = _b_coach_entry(card, first=False) if _ice(card) else ""
-    catalog_href = (
-        f"{catalog_path(city_name)}?arena={arena_id}" if city_name else f"/trenery?arena={arena_id}"
-    )
+    catalog_href = catalog_path(city_name) if city_name else "/trenery"
+    if city_name:
+        from src.shared.city_locative import city_locative
+
+        public_city = format_public_name(city_name)
+        loc = city_locative(public_city) or city_locative(city_name)
+        link_text = f"Все тренеры в {loc}" if loc else "Все тренеры города"
+    else:
+        link_text = "Все тренеры города"
 
     def href_for(trainer: Mapping[str, Any]) -> str:
         return f"{trainer_path(int(trainer['id']), str(trainer['name']))}?via=p{arena_id}"
 
-    body = school_html + trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go"))
-    body += (
-        f'<p class="b-trainer-catalog">'
-        f'<a href="{_esc(catalog_href)}">Все тренеры'
-        f"{_esc(' ' + city_name if city_name else '')}</a></p>"
-    )
+    soon = f'<p class="b-learn__line">{_esc(learn_line)}</p>' if learn_line else ""
+    body = soon + school_html + trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go"))
+    body += f'<p class="b-trainer-catalog"><a href="{_esc(catalog_href)}">{_esc(link_text)}</a></p>'
     return section(t("place.trainers"), body + coach, klass="b-sec--place", sec_id="trainers")
 
 
@@ -2421,16 +2424,22 @@ def render_place_body_b(
     trainers_listed = bool(view.get("trainers"))
     coach_in_more = _b_coach_entry(card, first=True) if _ice(card) and not trainers_listed else ""
     hours = card.get("opening_hours") if isinstance(card.get("opening_hours"), Mapping) else {}
+    learn_block = view.get("learn")
+    learn_line = str(learn_block.line or "").strip() if trainers_listed and learn_block else ""
+    ice_html = _b_ice(view, base_path=base_path, invite=invite, links=links, vv=vv)
+    trainers_html = _b_trainers(
+        view, school_html=school_in_trainers_html(vv.get("school")), learn_line=learn_line
+    )
+    ice_and_trainers = ice_html + trainers_html
     # Порядок блоков — arena_visit_info.PLACE_BLOCKS: cover, ice, facts, services, trainers, partners, more.
     parts = [
         _b_hero(card, status_html=_b_status(view), chips_html=_b_hero_chips(card, links)),
         _b_plan(view, invite=invite),
-        _b_ice(view, base_path=base_path, invite=invite, links=links, vv=vv),
-        "" if trainers_listed else render_learn_block(view.get("learn")),
+        ice_and_trainers,
+        "" if trainers_listed else render_learn_block(learn_block),
         _b_matches_here(view),
         facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
         services_html(vv, title=_rental_section_title(card, hours) if hours.get("rental_title") else "Прокат и услуги"),
-        _b_trainers(view, school_html=school_in_trainers_html(vv.get("school"))),
         _b_partners(card),
         more_html(vv, coach_html=coach_in_more, tel_href=str(links.get("tel") or "")),
         _b_about(card),

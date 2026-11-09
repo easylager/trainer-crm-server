@@ -271,6 +271,38 @@ async def test_spb_catalog_breadcrumb_uses_public_city_name(app_use_test_db, db_
     assert "Санкт-Петербург" in html and "/ЛО" not in html.split("<title>", 1)[1].split("</title>", 1)[0]
 
 
+def test_catalog_arena_rental_uses_city_currency() -> None:
+    from src.application.site_trainer_catalog import render_catalog_page
+
+    trainer = {
+        "id": 1,
+        "order": 0,
+        "name": "Игорь",
+        "initial": "И",
+        "photo_url": None,
+        "path": "/t/1-igor",
+        "experience_years": None,
+        "rating_avg": None,
+        "rating_count": 0,
+        "education": "",
+        "about": "",
+        "arenas": [{"id": 7, "name": "Ледовый"}],
+        "services_by_dir": {"zero": [{"service_id": 1, "price_cents": 4500, "currency_code": "RUB"}]},
+        "passes": [],
+        "can_book": False,
+        "windows": [],
+        "contact_url": None,
+    }
+    data = {
+        "city": {"id": 31, "name": "Санкт-Петербург/ЛО", "country": "RU", "currency_code": "RUB"},
+        "trainers": [trainer],
+        "arenas": {7: {"id": 7, "name": "Ледовый", "rental_minor": 60000, "slug": "ledovyy", "city_name": "Санкт-Петербург/ЛО"}},
+    }
+    html = render_catalog_page(data, ALL, base_url="https://glide.example")
+    assert "600" in html and "руб." in html
+    assert "600 BYN" not in html
+
+
 @pytest.mark.asyncio
 async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     async with _client() as client:
@@ -293,7 +325,8 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert f'href="{base}/s-klyushkoy"' in html
     assert "Научиться кататься на коньках с нуля" in html and "Мне 35 — не поздно начинать?" in html
     # Лид на странице остаётся общим. В сниппете — только направления, которые реально есть.
-    assert "Учат кататься с нуля и ставят технику. Есть фигурное катание и хоккей." in all_r.text
+    assert "Учат кататься с нуля и ставят технику. Есть хоккей." in all_r.text
+    assert "фигурное катание" not in re.search(r'<p class="tcat-lead">(.*?)</p>', all_r.text).group(1)
     meta = re.search(r'name="description" content="([^"]*)"', all_r.text).group(1)
     assert "по катанию на коньках" in meta and "с нуля" in meta and "хоккейное катание" in meta
     assert "учат" not in meta

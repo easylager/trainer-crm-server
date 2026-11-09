@@ -244,11 +244,16 @@ async def test_rink_page_block_with_and_without_trainers(app_use_test_db, db_ses
         one_trainer = (await client.get(other_path)).text
         no_trainers = (await client.get(empty["path"])).text
     base = f"/c/{c['slug']}/trenery"
-    assert 'id="learn"' not in with_trainers and 'id="trainers"' in with_trainers
+    trainers = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', with_trainers, re.S)
+    assert trainers
+    assert re.search(r"Ближайшее свободное время — [^.]+, \d\d:\d\d\.", trainers.group(1))
     assert c["names"]["A"] in with_trainers
-    assert f"{base}?arena={c['arena_id']}" in with_trainers
-    assert "Здесь работают" not in with_trainers
-    assert 'id="learn"' not in one_trainer and c["names"]["B"] in one_trainer
+    assert f'href="{base}"' in with_trainers and f"{base}?arena=" not in with_trainers
+    assert with_trainers.index('id="schedule"') < with_trainers.index('id="trainers"')
+    assert "Здесь работают" not in with_trainers and 'id="learn"' not in with_trainers
+    one_block = re.search(r'id="trainers">(.*?)</section>', one_trainer, re.S)
+    assert one_block and c["names"]["B"] in one_trainer and 'id="learn"' not in one_trainer
+    assert "Ближайшее" not in (one_block.group(1) if one_block else "")
     # Каток без тренеров — строка про город, цель — весь город.
     n = _block(no_trainers)
     assert re.fullmatch(r"На этом катке тренеров пока нет\. В [^—]+ — 2, от 41,87 BYN по абонементу\.", _line(n))

@@ -213,7 +213,8 @@ async def test_place_page_shows_learn_block_for_arena_trainers(
     block = trainers.group(1)
     assert "Александр Гаевский" in block
     assert f'href="/t/{tid}-' in block and f"?via=p{place['arena_id']}" in block
-    assert f'href="/c/{city_slug(place["city_name"])}/trenery?arena={place["arena_id"]}"' in block
+    assert f'href="/c/{city_slug(place["city_name"])}/trenery"' in block
+    assert "Санкт-Петербург/ЛО" not in block
     assert "startapp=" not in block and "t.me" not in block
     assert 'id="learn"' not in html
 

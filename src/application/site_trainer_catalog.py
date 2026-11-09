@@ -143,7 +143,7 @@ async def _ice_arenas(
     )
     out: dict[int, list[dict[str, Any]]] = {}
     for r in rows:
-        name = str(r["name"] or "").strip()
+        name = _public_arena_name(str(r["name"] or ""))
         if name:
             out.setdefault(int(r["trainer_id"]), []).append(
                 {"id": int(r["id"]), "name": name, "city_name": str(r["city_name"] or ""), "slug": r["slug"]}
@@ -241,7 +241,9 @@ async def _primary_public_arenas(
         .mappings()
         .all()
     )
-    return {int(r["trainer_id"]): [{"id": int(r["id"]), "name": str(r["name"] or "").strip()}] for r in rows}
+    return {
+        int(r["trainer_id"]): [{"id": int(r["id"]), "name": _public_arena_name(str(r["name"] or ""))}] for r in rows
+    }
 
 
 def city_windows(
@@ -363,7 +365,13 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     await attach_arena_media_payloads(session, media_items)
     for a in media_items:
         a["rental_minor"] = rentals.get(a["id"])
-    return {"city": dict(city), "trainers": trainers, "arenas": arena_rows}
+    from src.shared.currency import currency_for_country
+
+    city_out = dict(city)
+    city_out["currency_code"] = currency_for_country(city.get("country"))
+    for a in media_items:
+        a["name"] = _public_arena_name(str(a.get("name") or ""))
+    return {"city": city_out, "trainers": trainers, "arenas": arena_rows}
 
 
 # ── Что показать во вкладке ──────────────────────────────────────────
@@ -556,13 +564,6 @@ async def sitemap_rows(session: AsyncSession) -> list[tuple[str, datetime | None
     return out
 
 
-def _teaches(n: int) -> str:
-    """«1 тренер учит», «2 тренера учат», «5 тренеров учат»."""
-    noun = plural_ru(n, "тренер", "тренера", "тренеров")
-    verb = "учит" if noun == "тренер" else "учат"
-    return f"{n} {noun} {verb}"
-
-
 def _city_public_locative(city_name: str) -> tuple[str, str | None]:
     raw = str(city_name or "").strip()
     public = format_public_name(raw)
@@ -586,6 +587,38 @@ def _present_direction_phrases(data: Mapping[str, Any]) -> list[str]:
     elif skating:
         bits.append(f"{skating[0]} катание")
     return bits
+
+
+def _catalog_all_lead(data: Mapping[str, Any]) -> str:
+    """Подзаголовок «Все»: только направления, у которых в городе есть тренеры."""
+    present = {d.key for d in DIRECTIONS if listed_trainers(data, d)}
+    teaching: list[str] = []
+    if "zero" in present:
+        teaching.append("учат кататься с нуля")
+    if "better" in present:
+        teaching.append("ставят технику")
+    sentences: list[str] = []
+    if teaching:
+        teach = " и ".join(teaching)
+        sentences.append(teach[0].upper() + teach[1:] + ".")
+    skating: list[str] = []
+    if "fig" in present:
+        skating.append("фигурное катание")
+    if "hock" in present:
+        skating.append("хоккей")
+    if skating:
+        sentences.append(
+            f"Есть {skating[0]} и {skating[1]}." if len(skating) == 2 else f"Есть {skating[0]}."
+        )
+    if sentences:
+        return " ".join(sentences)
+    if not listed_trainers(data, ALL):
+        return "Запись к тренеру — в Telegram, оплата на месте."
+    return ALL.lead
+
+
+def _public_arena_name(name: str) -> str:
+    return format_public_name(str(name or "").strip())
 
 
 def fit_meta(text_: str, limit: int) -> str:
@@ -629,7 +662,8 @@ def catalog_description(data: Mapping[str, Any], direction: Direction) -> str:
     else:
         head = direction.h1
     if n:
-        text_ = f"{head}. {_teaches(n)}{_direction_price_clause(data, direction)}. Запись в Telegram."
+        noun = plural_ru(n, "тренер", "тренера", "тренеров")
+        text_ = f"{head}: {n} {noun}{_direction_price_clause(data, direction)}. Запись в Telegram."
     else:
         text_ = f"{head}. Тренеров пока нет."
     return fit_meta(text_, DESCRIPTION_LIMIT)
@@ -936,6 +970,7 @@ def render_catalog_page(
     city = data["city"]
     city_name = str(city["name"])
     city_id = int(city["id"])
+    city_currency = str(city.get("currency_code") or "BYN")
     public_city, loc = _city_public_locative(city_name)
     in_city = f"в {loc}" if loc else public_city
     arenas = data["arenas"]
@@ -953,6 +988,7 @@ def render_catalog_page(
 
     public_city = format_public_name(city_name)
     h1 = "Тренер по катанию на коньках" if one and direction is ALL else direction.h1
+    page_lead = _catalog_all_lead(data) if direction is ALL else direction.lead
     low = best_offer(shown, direction)
     facts: list[str] = []
     if shown:
@@ -976,7 +1012,7 @@ def render_catalog_page(
         '<section class="tcat-hero">'
         f'<span class="tcat-eyebrow">Учиться с тренером · {esc(public_city)}</span>'
         f'<h1 class="tcat-h1">{esc(h1)} <em>{esc(in_city)}</em></h1>'
-        f'<p class="tcat-lead">{esc(direction.lead)}</p>'
+        f'<p class="tcat-lead">{esc(page_lead)}</p>'
         f'<div class="tcat-facts">{"".join(facts)}</div></section>'
     )
 
@@ -1056,7 +1092,7 @@ def render_catalog_page(
             counts[a["id"]] = counts.get(a["id"], 0) + 1
     arena_order = sorted(counts, key=lambda aid: (-counts[aid], str(arenas[aid]["name"])))
     rentals = [
-        (str(arenas[aid]["name"]), _money(arenas[aid]["rental_minor"]))
+        (str(arenas[aid]["name"]), _money(arenas[aid]["rental_minor"], city_currency))
         for aid in arena_order
         if arenas[aid].get("rental_minor")
     ]
@@ -1089,7 +1125,7 @@ def render_catalog_page(
         a = arenas[aid]
         img = media_url(a.get("hero"), size="card")
         img_html = f'<img src="{esc(img)}" alt="" loading="lazy" decoding="async" />' if img else ""
-        rent = f"Прокат — {_money(a['rental_minor'])} · " if a.get("rental_minor") else ""
+        rent = f"Прокат — {_money(a['rental_minor'], city_currency)} · " if a.get("rental_minor") else ""
         inner = (
             f"{img_html}<div><b>{esc(a['name'])}</b><span>{esc(_n_trainers(counts[aid]))}</span>"
             + (f"<em>{esc(rent)}расписание ›</em>" if a.get("slug") else (f"<em>{esc(rent[:-3])}</em>" if rent else ""))
