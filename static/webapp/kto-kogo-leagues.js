@@ -139,7 +139,7 @@
       var sum = S.termsSummary(f, a.preview);
       var choices = S.termChoices(state.termOptions);
       // Выбранное окно ушло из списка (плей-офф прошёл): откатываемся на первый открытый.
-      if (choices.length && choices.every(function (c) { return c.term !== f.term; })) f.term = choices[0].term;
+      f.term = S.settleTerm(f.term, state.termOptions);
       var today = S.dayKey(nowIso());
       var lastDay = state.termOptions && state.termOptions.season_ends_at ? S.dayKey(new Date(new Date(state.termOptions.season_ends_at).getTime() - 1).toISOString()) : null;
 

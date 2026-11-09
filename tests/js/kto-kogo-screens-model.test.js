@@ -472,3 +472,30 @@ describe('таблица без периода в аргументах (повт
     assert.deepEqual(S.fewPlayers(view, null, undefined), S.fewPlayers(view, null, 'season'));
   });
 });
+
+describe('срок формы «Новая лига» (TASK-362)', () => {
+  const items = [
+    { term: 'season', starts_at: '2026-11-09T21:00:00Z', ends_at: '2027-04-30T21:00:00Z', monthly_crowns: true },
+    { term: 'weeks4', starts_at: '2026-11-09T21:00:00Z', ends_at: '2026-12-07T21:00:00Z', monthly_crowns: false },
+  ];
+  const opts = { items, season_ends_at: '2027-04-30T21:00:00Z' };
+
+  it('пока сроки не загружены, выбор не трогаем (раньше форма уходила на «Свои даты»)', () => {
+    assert.equal(S.settleTerm('season', null), 'season');
+    assert.equal(S.settleTerm('season', undefined), 'season');
+  });
+
+  it('выбор из списка сохраняется', () => {
+    assert.equal(S.settleTerm('season', opts), 'season');
+    assert.equal(S.settleTerm('weeks4', opts), 'weeks4');
+    assert.equal(S.settleTerm('dates', opts), 'dates');
+  });
+
+  it('выбранного окна уже нет — первый открытый срок', () => {
+    assert.equal(S.settleTerm('playoff', opts), 'season');
+  });
+
+  it('открытых сроков нет совсем — остаются «Свои даты»', () => {
+    assert.equal(S.settleTerm('season', { items: [], season_ends_at: '2027-04-30T21:00:00Z' }), 'dates');
+  });
+});
