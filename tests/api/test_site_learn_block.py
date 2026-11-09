@@ -153,7 +153,7 @@ async def test_city_page_block_numbers_match_catalog_and_old_list_is_gone(app_us
     assert "Учиться с тренером" in block and "Выбрать тренера" in block and _go(block) == base
     # Цифры — те же, что в каталоге: «2 тренера», «от 41,87 BYN» (абонемент A на хоккей), вкладки с числами.
     assert "2 тренера" in _plain(block) and _tab(catalog, "Все") == "2"
-    assert "от <b>41,87 BYN</b> за занятие" in _plain(catalog) and _line(block).startswith("От 41,87 BYN за занятие.")
+    assert "от <b>41,87 BYN</b> по абонементу" in _plain(catalog) and _line(block).startswith("От 41,87 BYN по абонементу.")
     assert re.search(r"Ближайшее свободное время — [^.]+, \d\d:\d\d\.$", _line(block))
     assert "окно" not in block.lower()
     # Чипы — только вкладки с ненулевыми числами; ведут на направление.
@@ -251,7 +251,7 @@ async def test_rink_page_block_with_and_without_trainers(app_use_test_db, db_ses
     assert 'id="learn"' not in one_trainer and c["names"]["B"] in one_trainer
     # Каток без тренеров — строка про город, цель — весь город.
     n = _block(no_trainers)
-    assert re.fullmatch(r"На этом катке тренеров пока нет\. В [^—]+ — 2, от 41,87 BYN за занятие\.", _line(n))
+    assert re.fullmatch(r"На этом катке тренеров пока нет\. В [^—]+ — 2, от 41,87 BYN по абонементу\.", _line(n))
     assert _go(n) == base and "t.me" not in n and "startapp" not in n
 
 

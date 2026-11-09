@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <script>
-    /* SDK только внутри Telegram: иначе редирект по startapp уходит раньше WebApp.ready() и заставка не гаснет. */
+    /* SDK только внутри Telegram: иначе редирект по startapp уходит раньше WebApp.ready() и экран загрузки не гаснет. */
     (function () {
       var h = location.hash || '';
       if (h.indexOf('tgWebAppData') < 0 && h.indexOf('tgWebAppStartParam') < 0) return;

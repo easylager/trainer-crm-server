@@ -23,11 +23,13 @@ from src.application.site_trainer_catalog import (
     _card_windows,
     _money,
     _n_trainers,
+    best_offer,
     catalog_path,
     direction_by_slug,
     direction_min_price,
     listed_trainers,
     load_city_catalog,
+    offer_phrase,
 )
 from src.application.style_b import esc
 from src.shared.city_locative import city_locative
@@ -61,6 +63,12 @@ def _min_price(rows: list[dict[str, Any]], direction: Direction) -> tuple[int, s
     return min(prices) if prices else None
 
 
+def _min_phrase(rows: list[dict[str, Any]], direction: Direction, *, capital: bool = False) -> str:
+    """«от 25 BYN в группе» / «от 41,87 BYN по абонементу» / «от 45 BYN за занятие» — как на карточке."""
+    offer = best_offer(rows, direction)
+    return offer_phrase(offer, capital=capital) if offer else ""
+
+
 def _nearest(rows: list[dict[str, Any]], arena_id: int | None) -> str:
     """«сегодня, 17:15» — самое раннее окно среди показанных тренеров; нет окон — пусто."""
     wins = [w for t in rows for w in _card_windows(t, arena_id)[:1]]
@@ -89,7 +97,7 @@ def learn_block(data: Mapping[str, Any], place: Place, *, arena_id: int | None =
         price = _min_price(everyone, ALL)
         bits = []
         if price:
-            bits.append(f"От {_money(*price)} за занятие.")
+            bits.append(f"{_min_phrase(everyone, ALL, capital=True)}.")
         soon = _nearest(everyone, None)
         if soon:
             bits.append(f"Ближайшее свободное время — {soon}.")
@@ -146,7 +154,7 @@ def learn_block(data: Mapping[str, Any], place: Place, *, arena_id: int | None =
     price = _min_price(everyone, ALL)
     where = f"В {loc}" if loc else "В городе"
     line = f"На этом катке тренеров пока нет. {where} — {len(everyone)}"
-    line += f", от {_money(*price)} за занятие." if price else "."
+    line += f", {_min_phrase(everyone, ALL)}." if price else "."
     return LearnBlock(
         faces=_faces(everyone), count=len(everyone), line=line, href=catalog_path(city_name), price=price
     )
