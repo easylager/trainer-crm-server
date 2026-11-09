@@ -42,6 +42,7 @@
     tables: {}, // 'клуб|период'
     created: null,
     joinCode: '',
+    src: '',
     joinPreview: null,
     joinError: '',
     month: null,
@@ -529,6 +530,9 @@
 
   function sendPick(match, body, optimistic) {
     match = findMatch(match.id) || match;
+    // Рекламная метка: только с первым ходом человека; сервер всё равно пишет её лишь новому игроку.
+    var src = M.firstPickSrc(state.src, state.matches);
+    if (src) body = Object.assign({ src: src }, body);
     var before = match.my_pick;
     // Ответы могут прийти не по порядку: учитываем только последний отправленный ход.
     var seq = (match.pickSeq = (match.pickSeq || 0) + 1);
@@ -775,6 +779,21 @@
     if (!initData) return outsideTelegram();
     render();
     state.fromCard = M.cardFrom(startParam(), params.get('from'));
+    // Рекламный вход (kks_<метка> или ?src=): запоминаем метку на сессию и считаем заход один раз, без ключа игрока.
+    state.src = M.promoSrc(startParam(), params.get('src'));
+    try {
+      if (state.src) sessionStorage.setItem('kk_src', state.src);
+      else state.src = M.promoSrc('', sessionStorage.getItem('kk_src'));
+    } catch (e) { /* */ }
+    if (state.src && (params.get('src') || /^kks_/.test(startParam()))) {
+      var entryKey = 'kk_entry_' + state.src;
+      var counted = false;
+      try { counted = sessionStorage.getItem(entryKey) === '1'; } catch (e) { /* */ }
+      if (!counted) {
+        try { sessionStorage.setItem(entryKey, '1'); } catch (e) { /* */ }
+        api('POST', '/client/hockey/entry', { src: state.src }).catch(function () {});
+      }
+    }
     if (state.fromCard) api('POST', '/client/hockey/card-opened', { card: state.fromCard }).catch(function () {});
     var code = (params.get('join') || M.inviteCode(startParam()) || '').toUpperCase();
     var matchId = Number(params.get('reveal') || params.get('match')) || null;

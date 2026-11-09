@@ -285,6 +285,24 @@
     return m ? m[1].toUpperCase() : '';
   }
 
+  /**
+   * Рекламная метка источника: start_param kks_<метка> главнее, иначе ?src=<метка>.
+   * Метка — 2–16 латиница/цифры, приводится к нижнему регистру; остальное игнорируется.
+   */
+  function promoSrc(startParam, srcParam) {
+    var re = /^[A-Za-z0-9]{2,16}$/;
+    var m = /^kks_(.*)$/.exec(String(startParam || '').trim());
+    if (m) return re.test(m[1]) ? m[1].toLowerCase() : '';
+    var s = String(srcParam || '').trim();
+    return re.test(s) ? s.toLowerCase() : '';
+  }
+
+  /** Метка уходит на сервер только с первым ходом человека: есть любой его ход — не шлём. */
+  function firstPickSrc(src, matches) {
+    if (!src) return '';
+    return (matches || []).some(function (m) { return m && m.my_pick; }) ? '' : src;
+  }
+
   /** С какой карточки в чате пришли: 'league' | 'result' | ''. */
   function cardFrom(startParam, fromParam) {
     if (fromParam === 'league' || fromParam === 'result') return fromParam;
@@ -496,6 +514,8 @@
     nudgeLine: nudgeLine,
     inviteCode: inviteCode,
     cardFrom: cardFrom,
+    promoSrc: promoSrc,
+    firstPickSrc: firstPickSrc,
     pickSide: pickSide,
     raceHead: raceHead,
     raceSegments: raceSegments,

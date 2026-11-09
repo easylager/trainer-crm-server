@@ -259,6 +259,12 @@ describe('«Кто кого» из сообщений бота (TASK-335)', () =
     assert.deepEqual(G.deepLinkTarget('kkn_42'), { key: 'kto-kogo', path: 'kto-kogo' });
     assert.deepEqual(G.deepLinkTarget('kkmo_7'), { key: 'kto-kogo', path: 'kto-kogo?month=7' });
     assert.deepEqual(G.deepLinkTarget('kkoff'), { key: 'kto-kogo', path: 'kto-kogo?remind=off' });
+    // Рекламный вход: kks_<метка> ведёт в игру с ?src=, метка 2–16 латиница/цифры.
+    assert.deepEqual(G.deepLinkTarget('kks_push1'), { key: 'kto-kogo', path: 'kto-kogo?src=push1' });
+    assert.deepEqual(G.deepLinkTarget('kks_Site'), { key: 'kto-kogo', path: 'kto-kogo?src=site' });
+    assert.equal(G.deepLinkTarget('kks_a'), null);
+    assert.equal(G.deepLinkTarget('kks_a-b'), null);
+    assert.equal(G.deepLinkTarget('kks_' + 'a'.repeat(17)), null);
     assert.deepEqual(G.deepLinkTarget('kkm_5'), { key: 'client-match', path: 'client-match?id=5' });
   });
 });

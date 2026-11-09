@@ -273,3 +273,30 @@ describe('pollDelay', () => {
     assert.equal(M.pollDelay(1000, -1), 1000);
   });
 });
+
+describe('рекламная метка источника (kks_<метка>, ?src=)', () => {
+  it('метка из start_param kks_… или из ?src=, start_param главнее', () => {
+    assert.equal(M.promoSrc('kks_push1', ''), 'push1');
+    assert.equal(M.promoSrc('', 'insta'), 'insta');
+    assert.equal(M.promoSrc('kks_site', 'insta'), 'site');
+    assert.equal(M.promoSrc('kks_Push1', null), 'push1');
+  });
+  it('невалидная метка игнорируется', () => {
+    assert.equal(M.promoSrc('kks_a', ''), '');
+    assert.equal(M.promoSrc('kks_' + 'a'.repeat(17), ''), '');
+    assert.equal(M.promoSrc('kks_a-b', ''), '');
+    assert.equal(M.promoSrc('', 'a b'), '');
+    assert.equal(M.promoSrc('kk_abcd2345', ''), '');
+    assert.equal(M.promoSrc('kks_', null), '');
+    assert.equal(M.promoSrc(undefined, undefined), '');
+  });
+  it('kks_ не принимают за приглашение в лигу', () => {
+    assert.equal(M.inviteCode('kks_push1'), '');
+    assert.equal(M.cardFrom('kks_push1', null), '');
+  });
+  it('метку шлём только с первым ходом: есть чей-то ход — не шлём', () => {
+    assert.equal(M.firstPickSrc('push1', [{ my_pick: null }, {}]), 'push1');
+    assert.equal(M.firstPickSrc('push1', [{ my_pick: { side: 'home' } }]), '');
+    assert.equal(M.firstPickSrc('', []), '');
+  });
+});
