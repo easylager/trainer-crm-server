@@ -234,6 +234,37 @@ describe('GlideDeepLink.maybeEarlyRedirect', () => {
     assert.equal(replaced, '/webapp/ice?city_id=7#tgWebAppStartParam=catalog_7');
     assert.equal(storage.getItem(G.DEEP_LINK_FLAG), 'catalog_7');
   });
+
+  it('слот с сайта: WebApp.ready() раньше редиректа, иначе заставка Telegram не гаснет', () => {
+    const storage = memStorage();
+    const order = [];
+    const loc = {
+      href: 'https://app.test/webapp/client-home#tgWebAppStartParam=trainer_11_s_453',
+      pathname: '/webapp/client-home',
+      search: '',
+      hash: '#tgWebAppStartParam=trainer_11_s_453',
+      replace(u) {
+        order.push('replace:' + u);
+      },
+    };
+    const ok = G.maybeEarlyRedirect({
+      location: loc,
+      sessionStorage: storage,
+      Telegram: {
+        WebApp: {
+          ready() {
+            order.push('ready');
+          },
+          initDataUnsafe: { start_param: 'trainer_11_s_453' },
+        },
+      },
+    });
+    assert.equal(ok, true);
+    assert.deepEqual(order, [
+      'ready',
+      'replace:/webapp/trainers?trainer_id=11&slot_id=453#tgWebAppStartParam=trainer_11_s_453',
+    ]);
+  });
 });
 
 describe('client-home подключает early redirect до body', () => {

@@ -215,6 +215,17 @@
     return u.pathname + u.search;
   }
 
+  /**
+   * Заставка Telegram висит, пока документ не вызовет ``ready()``.
+   * Редирект по startapp (слот с сайта → витрина) уходит из ``<head>`` раньше theme.js,
+   * и без этого вызова клиент остаётся на белом экране.
+   */
+  function notifyTelegramReady(ctx) {
+    var tg = ctx && ctx.Telegram && ctx.Telegram.WebApp;
+    if (!tg || typeof tg.ready !== 'function') return;
+    try { tg.ready(); } catch (e) { /* старый клиент */ }
+  }
+
   function maybePublicRedirect(ctx) {
     ctx = ctx || (typeof window !== 'undefined' ? window : {});
     var loc = ctx.location;
@@ -268,6 +279,7 @@
     try {
       if (target && storage) storage.setItem(DEEP_LINK_FLAG, sp);
     } catch (e3) { /* */ }
+    notifyTelegramReady(ctx);
     loc.replace(url.pathname + url.search + (loc.hash || ''));
     return true;
   }
@@ -293,6 +305,7 @@
     if (isAlreadyOnTarget(loc, target)) return false;
     var pathAndQuery = resolveWebappPath(target.path, loc);
     var hash = loc.hash || '';
+    notifyTelegramReady(ctx);
     loc.replace(pathAndQuery + hash);
     return true;
   }

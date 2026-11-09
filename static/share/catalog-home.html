@@ -3,7 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <script src="/static/webapp/glide-deeplink.js?v=2026110701"></script>
+  <script>
+    /* SDK только внутри Telegram: иначе редирект по startapp уходит раньше WebApp.ready() и заставка не гаснет. */
+    (function () {
+      var h = location.hash || '';
+      if (h.indexOf('tgWebAppData') < 0 && h.indexOf('tgWebAppStartParam') < 0) return;
+      document.write('<script src="https://telegram.org/js/telegram-web-app.js"><\/script>');
+    })();
+  </script>
+  <script src="/static/webapp/glide-deeplink.js?v=2026111001"></script>
   <title>__OG_TITLE__</title>
   <meta name="description" content="__OG_DESCRIPTION__" />
   <link rel="canonical" href="__CANONICAL__" />

@@ -93,6 +93,21 @@ async def test_showcase_has_from_price_glide_since_windows_and_ice_arenas(app_us
 
 
 @pytest.mark.asyncio
+async def test_showcase_keeps_a_slot_the_trainer_page_shows_past_seven_days(app_use_test_db, db_session) -> None:
+    """Страница /t смотрит на 14 дней. Витрина с запасом в 7 дней этот слот теряла."""
+    async with _client() as client:
+        place = await _place(db_session)
+        tid = await _trainer_on(db_session, client, place, first_name=f"Влад{uuid.uuid4().hex[:4]}")
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        far = await _slot(db_session, tid, days=9, hour=11, arena_id=place["arena_id"])
+        await db_session.commit()
+        body = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+
+    item = next(t for t in body["items"] if t["id"] == tid)
+    assert [w["slot_id"] for w in item["windows"]] == [far]
+
+
+@pytest.mark.asyncio
 async def test_showcase_service_presentation_public_vs_own(app_use_test_db, db_session) -> None:
     """Публичная услуга отдаёт наш крючок/подробности и название; своя — только слова тренера и заметку."""
     async with _client() as client:
