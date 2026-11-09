@@ -19,6 +19,12 @@ Usage:
   python -m scripts.broadcast_release_comms \\
     --message docs/release-comms/2026-08-26-glide-rebrand.trainers.md
 
+  # Игра «Кто кого»: segment: by_clients в файле. Журнал — в БД (client_broadcast_log, campaign_key = release_id),
+  # повторный запуск не дублирует. Волны: сначала 10% аудитории, потом больше.
+  python -m scripts.broadcast_release_comms --message docs/release-comms/<файл>.clients.md --dry-run
+  python -m scripts.broadcast_release_comms --message docs/release-comms/<файл>.clients.md --percent 10
+  python -m scripts.broadcast_release_comms --message docs/release-comms/<файл>.clients.md --percent 50 --limit 500
+
 Env: .env with database_url, TELEGRAM_BOT_TOKEN_CLIENT, TELEGRAM_BOT_TOKEN_TRAINER,
      WEBAPP_BASE_URL (https — for WebApp button on message).
 """
@@ -35,8 +41,10 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.application.ice_forecast import describe_markup
 from src.application.release_comms_use_cases import (
     broadcast_release_comms,
+    build_webapp_markup,
     parse_release_comms_file,
 )
 from src.infrastructure.db import async_session_factory
@@ -66,7 +74,19 @@ async def main() -> int:
         action="store_true",
         help="Ignore delivery log and resend to everyone in audience",
     )
-    parser.add_argument("--limit", type=int, default=None, help="Send to at most N recipients")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Send to at most N recipients (by_clients: N new sends per run, journal already skipped)",
+    )
+    parser.add_argument(
+        "--percent",
+        type=float,
+        default=None,
+        help="Only for segment by_clients: wave = first P%% of the audience in a stable order; "
+        "run again with a larger P to send the rest of that wave",
+    )
     parser.add_argument(
         "--delay-ms",
         type=int,
@@ -101,6 +121,7 @@ async def main() -> int:
             chat_id=args.chat_id,
             force=args.force,
             limit=args.limit,
+            percent=args.percent,
             send_delay_sec=max(0, args.delay_ms) / 1000.0,
         )
 
@@ -114,7 +135,18 @@ async def main() -> int:
         "failed": result.failed,
         "errors_sample": result.errors[:5],
     }
+    if result.sample_ids is not None:
+        summary["would_send"] = result.would_send
+        summary["sample_telegram_ids"] = result.sample_ids
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if args.dry_run and result.sample_ids is not None:
+        # Что именно уйдёт: текст и кнопки так, как их увидит человек.
+        markup = build_webapp_markup(settings, spec)
+        print("--- text ---")
+        print(spec.html_body)
+        print("--- buttons ---")
+        for line in describe_markup(markup):
+            print(line)
 
     if result.failed and not args.dry_run:
         return 2

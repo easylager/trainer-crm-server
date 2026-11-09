@@ -773,13 +773,14 @@ class ClientBroadcastOptout(Base):
     __tablename__ = "client_broadcast_optouts"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('ice_forecast')",
+            "kind IN ('ice_forecast', 'kk_promo')",
             name="ck_client_broadcast_optouts_kind",
         ),
     )
 
+    # Ключ (telegram_id, kind): отписка от одного вида рассылки не трогает другой (миграция 0312).
     telegram_id: Mapped[int] = mapped_column(BigInteger(), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
