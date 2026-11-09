@@ -41,3 +41,6 @@
 - Prices are PDF-only and the PDF link 404s intermittently with a filename that changes per update — not scraped; `price_*` fields always null until a future pass adds PDF parsing (see e.g. `baranovichi-lds` / `kobrin-lds` for existing PDF-price precedent in the BY lane).
 - Two comma-separated times on the same weekday ("Воскресенье 13.00, 14:15") are read as two separate session starts, not a start/end range — flagged, not asserted as fact; the source never spells out which reading is intended.
 - Arena has a second physical location under the same operator, СПОРТИВНЫЙ КОМПЛЕКС «ИЖОРЕЦ» (г. Колпино, ул. Тверская, д. 25) — distinct from this ФОК «Ижорец» (пос. Металлострой) venue and its schedule page; not covered here.
+
+## Status 2026-11-09: source gone
+- Сайт переехал на `https://izhorets.ru/`; `/massovoe-katanie-fok-izhorets` отдаёт 404 (и на старом, и на новом домене). На странице ФОК (`/objects/fok-izhorets/`) сетки сеансов нет: «Расписание сеансов уточняйте перед визитом». Живой прогон падает с ошибкой 404 — фейковых слотов нет. Подключать заново, только когда появится опубликованное расписание.

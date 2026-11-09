@@ -5,7 +5,11 @@ from src.application.arena_profile import VENUE_AMENITY_KEYS
 from src.application.arena_visit_info import normalize_visit_info, visit_view
 
 _VERSIONS = Path(__file__).resolve().parents[2] / "migrations/versions"
-_BATCHES = ("0311_spb_rink_cards_batch1.py", "0313_spb_rink_cards_batch2.py")
+_BATCHES = (
+    "0311_spb_rink_cards_batch1.py",
+    "0313_spb_rink_cards_batch2.py",
+    "0314_spb_rink_cards_batch3.py",
+)
 
 
 def _cards() -> dict:
