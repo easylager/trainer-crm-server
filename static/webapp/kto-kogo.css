@@ -413,3 +413,87 @@ body.kk-dark .kk-lhead { background: var(--kk-chip); }
 .kk-club.is-on { background: var(--kk-line); box-shadow: inset 0 0 0 2px var(--kk-gold); }
 .kk-sum--future { border: 1.5px solid var(--kk-gold); background: var(--kk-crownbg); }
 .kk-cta { position: sticky; bottom: 0; max-width: 480px; margin: 0 auto; padding: 10px 20px 14px; background: var(--kk-bg); }
+
+/* ===== coin (TASK-360) ===== */
+/* Золотая монета рядом с матчем: тап — бросок, рулетка выбора команды, барабаны счёта, «ВЫПАЛО». Холст WjisnSqHGkH81nW3VLyZR3.
+   Кнопка 44 px, золото 32 px, без текста. Размеры монеты — в em от 32 px, поэтому рисунок масштабируется целиком. */
+.kk-coin { position: relative; z-index: 3; flex: none; width: 44px; height: 44px; padding: 0; border: 0; background: none; display: flex; align-items: center; justify-content: center; perspective: 400px; overflow: visible; }
+.kk-coin-none { display: none; }
+.kk-cn {
+  --kk-coin-hi: #fff3b8; --kk-coin-1: #f5c518; --kk-coin-2: #b88a00; --kk-coin-3: #ffe98a; --kk-coin-4: #f2bf14; --kk-coin-5: #a67700; --kk-coin-6: #fff0a8;
+  --kk-coin-rim: #7a5600; --kk-coin-groove: rgba(90, 60, 0, 0.35); --kk-coin-shadow: rgba(13, 20, 36, 0.38);
+  --kk-coin-f1: #ffe88f; --kk-coin-f2: #f1b90a; --kk-coin-f3: #ffdf70; --kk-coin-f4: #d6a000; --kk-coin-hl: rgba(255, 255, 255, 0.75); --kk-coin-lo: rgba(110, 70, 0, 0.6);
+  --kk-coin-puck: #0d0c0b; --kk-coin-puck-top: #3b3732;
+  position: relative; display: block; width: 32px; height: 32px; font-size: 32px; transform-style: preserve-3d;
+}
+body.kk-dark .kk-cn { --kk-coin-shadow: rgba(0, 0, 0, 0.55); }
+.kk-cn__f {
+  position: absolute; inset: 0; border-radius: 50%; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  background: conic-gradient(from 200deg, var(--kk-coin-hi), var(--kk-coin-1) 14%, var(--kk-coin-2) 30%, var(--kk-coin-3) 48%, var(--kk-coin-4) 62%, var(--kk-coin-5) 80%, var(--kk-coin-6));
+  box-shadow: 0 0.035em 0.08em var(--kk-coin-shadow), inset 0 0 0 0.02em var(--kk-coin-rim);
+}
+.kk-cn__b { transform: rotateX(180deg); }
+/* Рифлёный кант: частые насечки по кругу, видны только в кольце у края. */
+.kk-cn__f::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(var(--kk-coin-groove) 0 1.6deg, transparent 1.6deg 6deg); -webkit-mask: radial-gradient(circle, transparent 0 82%, #000 83%); mask: radial-gradient(circle, transparent 0 82%, #000 83%); }
+/* Шайба-диск внутри канта. */
+.kk-cn__f::after { content: ''; position: absolute; inset: 0.13em; border-radius: 50%; background: conic-gradient(from 30deg, var(--kk-coin-f1), var(--kk-coin-f2), var(--kk-coin-f3), var(--kk-coin-f4), var(--kk-coin-f1)); box-shadow: inset 0.02em 0.025em 0.03em var(--kk-coin-hl), inset -0.02em -0.025em 0.03em var(--kk-coin-lo); }
+.kk-cn__pk { position: absolute; left: 50%; top: 50%; width: 0.4em; height: 0.27em; transform: translate(-50%, -52%); z-index: 1; }
+.kk-cn__pk b, .kk-cn__pk i { position: absolute; left: 0; right: 0; display: block; }
+.kk-cn__pk b { top: 0.1em; height: 0.16em; border-radius: 0.03em 0.03em 0.2em 0.2em / 0.03em 0.03em 0.08em 0.08em; background: var(--kk-coin-puck); }
+.kk-cn__pk i { top: 0; height: 0.17em; border-radius: 50%; background: var(--kk-coin-puck-top); box-shadow: inset 0 0.012em 0 rgba(255, 255, 255, 0.35); }
+.kk-cn__shw { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 2; }
+.kk-cn__shine { position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent); animation: kk-coin-shine 5s ease-in-out 1.5s infinite; }
+@keyframes kk-coin-shine { 0%, 70% { transform: translateX(-120%) skewX(-20deg); } 100% { transform: translateX(260%) skewX(-20deg); } }
+/* Бросок: монета взлетает и крутится; задержка отрицательная — после пересборки экрана анимация идёт с того же места. */
+.kk-cn.is-flip { animation: kk-coin-flip var(--kk-cn-dur, 1100ms) cubic-bezier(0.3, 0.1, 0.3, 1) var(--kk-cn-delay, 0ms) forwards; }
+@keyframes kk-coin-flip {
+  0% { transform: translate(0, 0) scale(1) rotateX(0deg); }
+  40% { transform: translate(-84px, 22px) scale(1.7) rotateX(900deg); }
+  100% { transform: translate(0, 0) scale(1) rotateX(1800deg); }
+}
+
+/* Команды во время броска: притихли, подсветка бежит, остаётся одна. Тапы по ним в это время не принимаются. */
+.kk-dt.is-coin-soft, .kk-ht.is-coin-soft, .kk-side.is-coin-soft { opacity: 0.7; }
+.kk-dt.is-coin-dim, .kk-ht.is-coin-dim, .kk-side.is-coin-dim { opacity: 0.55; }
+.kk-dt.is-coin-hl, .kk-ht.is-coin-hl, .kk-side.is-coin-hl { transform: scale(1.04); box-shadow: 0 6px 16px rgba(13, 20, 36, 0.25); }
+.kk-dt[class*='is-coin-'], .kk-ht[class*='is-coin-'], .kk-side[class*='is-coin-'] { pointer-events: none; }
+
+/* Места монеты в шапках: матч дня, «Твоя команда», экран матча. */
+.kk-dhr { display: flex; align-items: center; gap: 4px; }
+.kk-dhr .kk-dh { flex: 1; min-width: 0; }
+.kk-hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -10px 0; }
+.kk-hrow .kk-hm { flex: 1; min-width: 0; margin: 0; align-self: center; }
+.kk-qr { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kk-qr .kk-q { min-width: 0; }
+
+/* Барабаны счёта и строка итога. Ячейка барабана 72 px, ленту двигает --kk-n (номер клетки) в кадре анимации. */
+.kk-cp { --kk-reel-h: 72px; display: flex; flex-direction: column; gap: 8px; }
+.kk-cp--hold { min-height: 105px; }
+.kk-cp__reels { position: relative; display: flex; align-items: flex-start; justify-content: center; gap: 10px; padding: 10px 0 2px; }
+.kk-cp__col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.kk-cp__win { width: 68px; height: var(--kk-reel-h); overflow: hidden; border-radius: 14px; background: var(--kk-chip); }
+.kk-cp__mask { height: var(--kk-reel-h); -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24%, #000 76%, transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 24%, #000 76%, transparent 100%); }
+.kk-cp__strip { will-change: transform; }
+.kk-cp__strip.is-set { transform: translateY(calc(var(--kk-n) * var(--kk-reel-h) * -1)); }
+.kk-cp__strip.is-run { animation: kk-reel var(--kk-dur, 1300ms) cubic-bezier(0.12, 0.8, 0.2, 1) var(--kk-delay, 0ms) both; }
+@keyframes kk-reel { from { transform: translateY(0); } to { transform: translateY(calc(var(--kk-n) * var(--kk-reel-h) * -1)); } }
+.kk-cp__c { height: var(--kk-reel-h); display: flex; align-items: center; justify-content: center; font: 400 44px/1 var(--kk-display); font-variant-numeric: normal; color: var(--kk-ink); }
+.kk-cp__nm { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px/1.2 var(--kk-text); color: var(--kk-muted); }
+.kk-cp__sep { font: 400 30px/72px var(--kk-display); color: var(--kk-ink); }
+.kk-cp__stamp { position: absolute; right: 6px; top: 2px; padding: 7px 9px; border-radius: 9px; background: var(--kk-gold); color: var(--kk-on-gold); font: 400 12px/1 var(--kk-display); transform: rotate(-6deg); pointer-events: none; }
+.kk-cp__stamp.is-pop { animation: kk-stamp 0.28s cubic-bezier(0.3, 1.7, 0.5, 1) var(--kk-delay, 0ms) both; }
+@keyframes kk-stamp { from { transform: rotate(-6deg) scale(0); } to { transform: rotate(-6deg) scale(1); } }
+.kk-cp__sum { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.kk-cp__t { min-width: 0; font: 600 14px/1.3 var(--kk-text); color: var(--kk-ink); }
+.kk-cp__again { flex: none; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--kk-chip); color: var(--kk-ink); font: 600 14px/1 var(--kk-text); }
+/* На цветной карточке «Твоя команда» текст белый, как у соседних кнопок. */
+.kk-yc .kk-cp__nm, .kk-yc .kk-cp__sep, .kk-yc .kk-cp__t { color: #fff; }
+.kk-yc .kk-cp__again { background: rgba(0, 0, 0, 0.18); color: #fff; }
+.kk-coin-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kk-cn__shine { animation: none; }
+  .kk-cn.is-flip { animation: none; }
+  .kk-cp__strip.is-run { animation: none; transform: translateY(calc(var(--kk-n) * var(--kk-reel-h) * -1)); }
+  .kk-cp__stamp.is-pop { animation: none; }
+}
