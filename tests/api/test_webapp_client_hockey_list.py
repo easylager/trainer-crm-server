@@ -78,7 +78,9 @@ async def _pick(db, match_id: int, who: int = ME, *, points: int | None = None, 
         text("INSERT INTO hockey_players (player_key, display_name) VALUES (:k, 'Игрок') ON CONFLICT DO NOTHING"),
         {"k": who},
     )
-    starts_at = (await db.execute(text("SELECT starts_at FROM hockey_matches WHERE id = :m"), {"m": match_id})).scalar_one()
+    starts_at = (
+        await db.execute(text("SELECT starts_at FROM hockey_matches WHERE id = :m"), {"m": match_id})
+    ).scalar_one()
     await db.execute(
         text("""
             INSERT INTO hockey_picks (match_id, player_key, side, points, doubled, trump_week)
@@ -131,7 +133,9 @@ async def test_each_match_carries_phase_and_my_points_and_old_fields_stay(app_us
     assert items[played]["my_pick"]["points"] == 50 and items[played]["my_pick"]["doubled"] is True
     assert items[live]["my_points"] is None and items[ahead]["my_points"] is None
     # Прежние поля ответа не тронуты.
-    assert {"home", "away", "open", "result", "sides", "friends", "live", "friend_moves", "race_final"} <= set(items[ahead])
+    assert {"home", "away", "open", "result", "sides", "friends", "live", "friend_moves", "race_final"} <= set(
+        items[ahead]
+    )
     assert items[played]["result"] == {"home_score": 3, "away_score": 2, "decided_in": "regulation"}
     assert {"me", "race", "double", "doubles", "leader"} <= set(body)
     assert body["awaiting"] == 1  # идущий матч с моим ходом; «зависший» на четвёртые сутки не считается

@@ -20,7 +20,9 @@ PROBE = '{"home": 3, "away": 2, "decided_in": "regulation", "first_seen_at": "20
 SASHA, KATYA = 9359501, 9359502
 
 
-async def _match(db, *, league: str = "extraliga", status: str = "scheduled", starts_at: datetime = START, probe=None) -> int:
+async def _match(
+    db, *, league: str = "extraliga", status: str = "scheduled", starts_at: datetime = START, probe=None
+) -> int:
     return int(
         (
             await db.execute(
