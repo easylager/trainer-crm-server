@@ -529,8 +529,9 @@ async def fan_club(session: AsyncSession, player_key: int, *, now: datetime) -> 
 # ---------- «тебя обошли в лиге» ----------
 
 _ACTIVE_LEAGUES = text("""
-    SELECT id, name, invite_code, owner_key, scope, clubs, term_kind, starts_at, ends_at FROM hockey_leagues
+    SELECT id, name, invite_code, owner_key, scope, clubs, term_kind, starts_at, ends_at FROM hockey_leagues AS l
     WHERE starts_at <= :now AND ends_at > :now
+      AND EXISTS (SELECT 1 FROM hockey_league_members AS m WHERE m.league_id = l.id)  -- архивные пропускаем
     ORDER BY id
     """)
 

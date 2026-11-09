@@ -303,8 +303,9 @@ async def _close_months(session: AsyncSession, *, now: datetime, closed: list[in
 
 
 _ACTIVE_LEAGUES = text("""
-    SELECT id, scope, clubs, term_kind, starts_at, ends_at FROM hockey_leagues
+    SELECT id, scope, clubs, term_kind, starts_at, ends_at FROM hockey_leagues AS l
     WHERE starts_at < :now
+      AND EXISTS (SELECT 1 FROM hockey_league_members AS m WHERE m.league_id = l.id)  -- архивные не закрываем
     ORDER BY id
     """)
 

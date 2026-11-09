@@ -173,8 +173,10 @@ _ADD_MEMBER = text("""
     ON CONFLICT DO NOTHING
     """)
 
+# Архивная лига (вышел последний участник, короны остались) по коду не находится: ни превью, ни вступления.
 _LEAGUE_BY_CODE = text(f"""
-    SELECT {_LEAGUE_COLUMNS} FROM hockey_leagues WHERE invite_code = :code
+    SELECT {_LEAGUE_COLUMNS} FROM hockey_leagues AS l WHERE l.invite_code = :code
+      AND EXISTS (SELECT 1 FROM hockey_league_members AS m WHERE m.league_id = l.id)
     """)
 
 _LEAGUE_BY_ID = text(f"""
@@ -203,6 +205,9 @@ _NEXT_OWNER = text("""
 _SET_OWNER = text("UPDATE hockey_leagues SET owner_key = :owner_key, updated_at = now() WHERE id = :league_id")
 
 _DELETE_LEAGUE = text("DELETE FROM hockey_leagues WHERE id = :league_id")
+
+# Короны ссылаются на лигу с ON DELETE CASCADE: лигу с коронами удалять нельзя, она уходит в архив.
+_HAS_CROWNS = text("SELECT EXISTS (SELECT 1 FROM hockey_crowns WHERE league_id = :league_id)")
 
 _RENAME = text("UPDATE hockey_leagues SET name = :name, updated_at = now() WHERE id = :league_id")
 
@@ -579,6 +584,8 @@ async def join_league(session: AsyncSession, *, player_key: int, display_name: s
     if record is None:  # лигу удалили между поиском по коду и блокировкой
         raise LookupError(code)
     league = _league(record)
+    if not (await session.execute(_MEMBER_COUNT, {"league_id": league.id})).scalar_one():
+        raise LookupError(code)  # лига ушла в архив между поиском и блокировкой: не воскрешаем
     await _ensure_player(session, player_key, display_name)
     if (await session.execute(_IS_MEMBER, {"league_id": league.id, "player_key": player_key})).first():
         return league, False
@@ -605,11 +612,15 @@ async def _member_league(session: AsyncSession, league_id: int, player_key: int,
 
 
 async def leave_league(session: AsyncSession, *, league_id: int, player_key: int) -> str:
-    """Выйти. Ушёл владелец — лига переходит к самому раннему участнику; ушёл последний — лиги нет."""
+    """Выйти. Ушёл владелец — лига переходит к самому раннему участнику; ушёл последний — лиги нет
+    (``deleted``), а если у неё есть короны — она уходит в архив без участников (``archived``)."""
     league = await _member_league(session, league_id, player_key)
     await session.execute(_REMOVE_MEMBER, {"league_id": league_id, "player_key": player_key})
     next_owner = (await session.execute(_NEXT_OWNER, {"league_id": league_id})).scalar_one_or_none()
     if next_owner is None:
+        if (await session.execute(_HAS_CROWNS, {"league_id": league_id})).scalar_one():
+            # Архив: строка лиги остаётся без участников (владелец прежний), короны и их названия живы.
+            return "archived"
         await session.execute(_DELETE_LEAGUE, {"league_id": league_id})
         return "deleted"
     if league.owner_key == player_key:

@@ -213,3 +213,47 @@ def test_term_options_drops_playoff_after_its_end() -> None:
     assert "playoff" in [i["term"] for i in term_options(now=alive_edge)["items"]]
     gone_edge = datetime(2027, 6, 1, 0, 1, tzinfo=MINSK_TZ)
     assert [i["term"] for i in term_options(now=gone_edge)["items"]] == ["season", "month", "weeks4"]
+
+
+async def _crown(db_session, league_id: int, player: int) -> None:
+    await db_session.execute(
+        text("""
+            INSERT INTO hockey_crowns (league_id, player_key, points, exact, kind, period_start, period_end)
+            VALUES (:l, :p, 10, 1, 'league_month', :s, :e)
+            """),
+        {"l": league_id, "p": player, "s": NOW - timedelta(days=40), "e": NOW - timedelta(days=10)},
+    )
+
+
+@pytest.mark.asyncio
+async def test_last_member_leaves_league_with_crowns_archives_it(db_session) -> None:
+    league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
+    await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
+    await _crown(db_session, league.id, KATYA)
+    assert await leave_league(db_session, league_id=league.id, player_key=SASHA) == "owner_moved"
+    assert await leave_league(db_session, league_id=league.id, player_key=KATYA) == "archived"
+    # Лига и корона живы, но лигу не видно ни в списках, ни по коду, ни в квоте.
+    assert (await db_session.execute(text("SELECT COUNT(*) FROM hockey_leagues WHERE id = :l"), {"l": league.id})).scalar_one() == 1
+    assert (await db_session.execute(text("SELECT COUNT(*) FROM hockey_crowns WHERE league_id = :l"), {"l": league.id})).scalar_one() == 1
+    assert await player_leagues(db_session, player_key=KATYA, now=NOW) == []
+    assert await league_preview(db_session, league.invite_code) is None
+    with pytest.raises(LookupError):
+        await join_by_code(db_session, player_key=DIMA, display_name="Дима", code=league.invite_code)
+    assert (await db_session.execute(text("SELECT COUNT(*) FROM hockey_league_members WHERE league_id = :l"), {"l": league.id})).scalar_one() == 0
+    # Повторный выход не падает: участника уже нет.
+    with pytest.raises(PermissionError):
+        await leave_league(db_session, league_id=league.id, player_key=KATYA)
+
+
+@pytest.mark.asyncio
+async def test_archived_league_is_skipped_by_closing_and_notices(db_session) -> None:
+    from src.application.hockey_notices import scan_league_ranks
+    from src.application.hockey_races import close_due_races
+
+    league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
+    await _crown(db_session, league.id, SASHA)
+    assert await leave_league(db_session, league_id=league.id, player_key=SASHA) == "archived"
+    later = NOW + timedelta(days=400)  # срок давно вышел: закрытие обходит пустую лигу, не падая
+    await close_due_races(db_session, now=later)
+    assert await scan_league_ranks(db_session, now=league.starts_at + timedelta(hours=1)) == []
+    assert (await db_session.execute(text("SELECT COUNT(*) FROM hockey_crowns WHERE league_id = :l"), {"l": league.id})).scalar_one() == 1
