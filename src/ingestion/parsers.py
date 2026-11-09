@@ -84,6 +84,7 @@ def default_registry() -> ParserRegistry:
     from src.ingestion.adapters_spb_batch_j import IzhoretsHtmlParser
     from src.ingestion.adapters_spb_batch_m import DinamoYuniorHtmlParser
     from src.ingestion.adapters_spb_batch_o import ShuvalovskyLedHtmlParser
+    from src.ingestion.adapters_ledokat import RaketaLedokatParser
     from src.ingestion.adapters_spb_batch_p import AysGradHtmlParser, GololedHtmlParser
     from src.ingestion.manual_schedule_v1 import ManualScheduleParser
     from src.ingestion.weekly_grid_v1 import WeeklyGridV1Parser
@@ -139,6 +140,7 @@ def default_registry() -> ParserRegistry:
         ShuvalovskyLedHtmlParser(),
         GololedHtmlParser(),
         AysGradHtmlParser(),
+        RaketaLedokatParser(),
         WeeklyGridV1Parser(),
     ):
         registry.register(parser)
