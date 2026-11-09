@@ -4,14 +4,19 @@ from pathlib import Path
 from src.application.arena_profile import VENUE_AMENITY_KEYS
 from src.application.arena_visit_info import normalize_visit_info, visit_view
 
-_PATH = Path(__file__).resolve().parents[2] / "migrations/versions/0311_spb_rink_cards_batch1.py"
+_VERSIONS = Path(__file__).resolve().parents[2] / "migrations/versions"
+_BATCHES = ("0311_spb_rink_cards_batch1.py", "0313_spb_rink_cards_batch2.py")
 
 
 def _cards() -> dict:
-    spec = importlib.util.spec_from_file_location("m0311", _PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.CARDS
+    cards: dict = {}
+    for name in _BATCHES:
+        spec = importlib.util.spec_from_file_location(name[:-3], _VERSIONS / name)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert not set(cards) & set(module.CARDS), name
+        cards.update(module.CARDS)
+    return cards
 
 
 def test_spb_cards_survive_the_visit_info_validator_and_render() -> None:
