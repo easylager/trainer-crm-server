@@ -7,7 +7,7 @@ vertical ice): таблица направлений и их тексты — ``
 * Тренер во вкладке: есть услуга направления **и** (есть цена **или** ледовый каток в этом городе).
 * Цена в карточке — тарифы услуги; «от» — ``trainer_min_price`` (тарифы, групповая, абонементы).
 * Окна — те же, что на ``/t/`` (``_trainer_windows_on_arena``), запись — ``booking_url``.
-* Число занятий тренера не показываем (решение владельца 2026-11-07); оценку — от 3 оценок.
+* Число занятий тренера не показываем (решение владельца 2026-11-07); оценку — с первой, «★ 5,0 · 2 оценки».
 
 Загрузка (``load_city_catalog``) — один раз на город; что показать во вкладке и с фильтром катка
 (``catalog_view``) — чистая функция, её же берёт sitemap.
@@ -44,6 +44,7 @@ from src.application.catalog_directions import (  # noqa: F401 — реэксп�
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.style_b import esc
 from src.shared.city_locative import city_locative
+from src.shared.ru_text import trainer_rating_parts
 from src.shared.html_template import fill_placeholders, json_for_script
 from src.shared.public_display import format_public_name
 
@@ -55,8 +56,6 @@ TRAINER_CATALOG_STYLE_VERSION = _file_version("static/share/trainer-catalog.css"
 CARD_WINDOWS = 3
 #: Сколько катков в «Где проходят занятия».
 ARENAS_SHOWN = 6
-#: Оценку показываем, когда оценок хотя бы столько (решение владельца).
-RATING_MIN_COUNT = 3
 #: Сниппет каталога — тот же потолок, что у страницы тренера.
 DESCRIPTION_LIMIT = 165
 
@@ -609,14 +608,11 @@ def price_tiers(services: Sequence[Mapping[str, Any]]) -> list[tuple[str, str]] 
 
 
 def _rating_html(t: Mapping[str, Any]) -> str:
-    avg, n = t.get("rating_avg"), int(t.get("rating_count") or 0)
-    if not avg or n < RATING_MIN_COUNT:
+    parts = trainer_rating_parts(t.get("rating_avg"), t.get("rating_count"))
+    if not parts:
         return ""
-    who = plural_ru(n, "ученик оценил", "ученика оценили", "учеников оценили")
-    return (
-        f'<div class="tc-rate"><i aria-hidden="true">★</i>{float(avg):.1f}'.replace(".", ",")
-        + f" <span>· {n} {who} занятия</span></div>"
-    )
+    score, label = parts
+    return f'<div class="tc-rate"><i aria-hidden="true">★</i>{esc(score)} <span>· {esc(label)}</span></div>'
 
 
 def _arenas_check(arenas: Sequence[Mapping[str, Any]]) -> str:

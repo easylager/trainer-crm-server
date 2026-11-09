@@ -105,9 +105,11 @@
   function renderCard(node, person) {
     if (!node) return;
     var metaTop = [];
-    if (person.rating_count > 0 && person.rating_avg != null) {
-      metaTop.push(Number(person.rating_avg).toFixed(1) + ' ★ (' + person.rating_count + ')');
-    }
+    var ratingApi = window.RuText;
+    var ratingCaption = ratingApi && ratingApi.trainerRatingCaption
+      ? ratingApi.trainerRatingCaption(person.rating_avg, person.rating_count)
+      : '';
+    if (ratingCaption) metaTop.push(ratingCaption);
     if (person.experience_years != null) {
       metaTop.push(experienceWord(person.experience_years));
     }

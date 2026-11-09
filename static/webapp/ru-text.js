@@ -46,11 +46,20 @@
       return String(amount) + (suffix ? " " + suffix : "");
     }
 
+    /** «★ 5,0 · 2 оценки» с первой оценки. Нет оценок — пустая строка. */
+    function trainerRatingCaption(avg, count) {
+      var n = Math.floor(Number(count) || 0);
+      var a = Number(avg);
+      if (n < 1 || !isFinite(a) || a <= 0) return "";
+      return "★ " + a.toFixed(1).replace(".", ",") + " · " + countRu(n, "оценка", "оценки", "оценок");
+    }
+
     return {
       pluralRu: pluralRu,
       countRu: countRu,
       genitiveCountRu: genitiveCountRu,
       formatPrice: formatPrice,
+      trainerRatingCaption: trainerRatingCaption,
     };
   },
 );

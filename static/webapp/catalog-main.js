@@ -27,6 +27,9 @@
       }
 
       var RuText = window.RuText;
+      function trainerRatingCaption(avg, count) {
+        return RuText && RuText.trainerRatingCaption ? RuText.trainerRatingCaption(avg, count) : '';
+      }
       var state = {
         cityId: null,
         cityName: '',
@@ -6191,9 +6194,8 @@
             var p = t.profile || {};
 
             var metaTop = [];
-            if (p && (p.rating_avg != null) && (p.rating_count || 0) > 0) {
-              metaTop.push(p.rating_avg.toFixed(1) + ' ★ (' + p.rating_count + ')');
-            }
+            var listRating = trainerRatingCaption(p && p.rating_avg, p && p.rating_count);
+            if (listRating) metaTop.push(listRating);
             if (p && p.experience_years != null) {
               var expLine = formatExperienceCatalogLine(p.experience_years);
               if (expLine) metaTop.push(expLine);
@@ -6788,7 +6790,7 @@
         if (!t) return;
         var p = t.profile || {};
         var name = trainerName(t);
-        var ratingStr = (p.rating_avg != null && (p.rating_count || 0) > 0) ? (p.rating_avg.toFixed(1) + ' ★ (' + p.rating_count + ')') : '—';
+        var ratingStr = trainerRatingCaption(p.rating_avg, p.rating_count);
         var arenaIds = t.arena_ids || [];
         var arenaStatClass = 'trainer-detail-stat';
         var arenaInnerHtml;
@@ -6840,8 +6842,8 @@
         }
         html += '<div class="trainer-detail-header">';
         html += '<div class="trainer-detail-name">' + escapeHtml(name) + '</div>';
-        if (ratingStr !== '—') {
-          html += '<div class="trainer-detail-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + t.id + ')">⭐ ' + ratingStr + '</div>';
+        if (ratingStr) {
+          html += '<div class="trainer-detail-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + t.id + ')">' + escapeHtml(ratingStr) + '</div>';
         }
         html += '</div>';
         

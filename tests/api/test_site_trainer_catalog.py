@@ -290,8 +290,10 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert "Цену уточните у тренера" in cards[1]
     # Абонемент A только на «Хоккейное» не трогает «от» вкладки «С нуля».
     assert "от <b>45 BYN</b> за занятие" in html
-    # Оценка — только от 3 оценок; стаж и образование — из полей; числа занятий нет.
-    assert "оценили" not in cards[0] and "3 ученика оценили занятия" in cards[1]
+    # Оценка — с первой, одна подпись; стаж и образование — из полей; числа занятий нет.
+    assert "★" in cards[0] and "2 оценки" in cards[0]
+    assert "★" in cards[1] and "3 оценки" in cards[1]
+    assert "оценили" not in cards[0] and "оценили" not in cards[1]
     assert "Тренирует 6 лет" in cards[0] and "Высшее профильное образование" in cards[1]
     assert not re.search(r"\d+\s*занят(ие|ия|ий)\b", html.replace("за занятие", ""))
     # «вместе с ребёнком» — из тарифов: 1 тренер с ценой «взрослый + ребёнок».

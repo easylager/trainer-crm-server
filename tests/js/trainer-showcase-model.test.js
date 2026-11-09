@@ -61,8 +61,11 @@ describe('карточка', () => {
     assert.equal(M.cardPriceHtml(svc(1, [])), 'Цену уточните у тренера');
   });
 
-  it('оценка — только при 3+; «В Glide с …» без числа занятий; стаж', () => {
-    assert.equal(M.ratingLine(5, 2), '');
+  it('оценка — с первой и с числом; «В Glide с …» без числа занятий; стаж', () => {
+    assert.equal(M.ratingLine(5, 0), '');
+    assert.equal(M.ratingLine(null, 2), '');
+    assert.equal(M.ratingLine(5, 1), '★ 5,0 · 1 оценка');
+    assert.equal(M.ratingLine(5, 2), '★ 5,0 · 2 оценки');
     assert.equal(M.ratingLine(5, 7), '★ 5,0 · 7 оценок');
     assert.equal(M.glideSince('2026-04'), 'В Glide с апреля 2026');
     assert.equal(M.glideSince(null), '');

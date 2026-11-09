@@ -12,6 +12,7 @@ from typing import Any, Mapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_city_day import format_price_minor
+from src.shared.ru_text import trainer_rating_caption
 
 #: Сколько лиц показываем на странице города; остальные — ссылкой «Все тренеры».
 CITY_TRAINERS_SHOWN = 6
@@ -54,6 +55,10 @@ def trainer_line(trainer: Mapping[str, Any]) -> str:
     if cents:
         price = format_price_minor(int(cents), str(trainer.get("min_session_price_currency") or "BYN"))
         bits.append("от\u00a0" + price.replace(" ", "\u00a0") + " за\u00a0занятие")
+    profile = trainer.get("profile") or {}
+    caption = trainer_rating_caption(profile.get("rating_avg"), profile.get("rating_count"))
+    if caption:
+        bits.append(caption)
     return " · ".join(bits)
 
 

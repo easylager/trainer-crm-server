@@ -265,12 +265,15 @@
     return 'Тренирует ' + word(n, 'год', 'года', 'лет');
   }
 
-  /** Оценка — только при 3+ оценках (дизайн). */
+  /** «★ 5,0 · 2 оценки» с первой оценки. Нет оценок — пусто. То же правило, что RuText. */
   function ratingLine(avg, count) {
-    var c = Number(count) || 0;
-    var a = Number(avg);
-    if (c < 3 || !isFinite(a) || a <= 0) return '';
-    return '★ ' + a.toFixed(1).replace('.', ',') + ' · ' + word(c, 'оценка', 'оценки', 'оценок');
+    var api =
+      typeof module === 'object' && module.exports && typeof require === 'function'
+        ? require('./ru-text.js')
+        : typeof globalThis !== 'undefined'
+          ? globalThis.RuText
+          : null;
+    return api && api.trainerRatingCaption ? api.trainerRatingCaption(avg, count) : '';
   }
 
   /** «В Glide с апреля 2026» из «2026-04». Число занятий не показываем никогда (решение владельца). */

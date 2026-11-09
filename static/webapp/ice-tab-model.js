@@ -1613,6 +1613,16 @@
     return 'от ' + num + ' ' + priceCurrencyLabel(minCur);
   }
 
+  function trainerRatingCaption(avg, count) {
+    var api =
+      typeof module === 'object' && module.exports && typeof require === 'function'
+        ? require('./ru-text.js')
+        : typeof globalThis !== 'undefined'
+          ? globalThis.RuText
+          : null;
+    return api && api.trainerRatingCaption ? api.trainerRatingCaption(avg, count) : '';
+  }
+
   function formatTrainerExperience(profile) {
     var years = Number(profile && profile.experience_years);
     if (!years || years < 1) return '';
@@ -1643,14 +1653,9 @@
     }
 
     /*
-     * Факты для выбора, по убыванию силы: цена → стаж → рейтинг.
-     *
-     * Каждый добавляется, только если он ЕСТЬ. Ни «цена по запросу», ни «стаж не
-     * указан», ни нулевых звёзд: пустой факт не сообщает ничего, но выглядит как
-     * недостаток тренера, а не как недостаток данных.
-     *
-     * Больше одного факта в строку не ставим — рядом с длинным названием арены
-     * («Ледовый дворец спорта Минской области») строка и так уходит в две.
+     * Цена или стаж — один факт: рядом с длинным названием арены строка и так
+     * уходит в две. Звёзды — отдельно и всегда, когда оценка есть: «★ 5,0 · 2 оценки».
+     * Нет оценок — ни «0», ни пустых звёзд.
      */
     var facts = [];
     var price = formatTrainerPriceFrom(item);
@@ -1659,11 +1664,8 @@
       var exp = formatTrainerExperience(p);
       if (exp) facts.push(exp);
     }
-    if (!facts.length) {
-      var rating = p.rating_avg;
-      var count = Number(p.rating_count) || 0;
-      if (rating != null && count > 0) facts.push('★ ' + Number(rating).toFixed(1));
-    }
+    var ratingCaption = trainerRatingCaption(p.rating_avg, p.rating_count);
+    if (ratingCaption) facts.push(ratingCaption);
     parts = parts.concat(facts);
 
     var live = item.can_book ? 'Записаться' : 'Открыть профиль';

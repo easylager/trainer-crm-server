@@ -546,7 +546,10 @@
         if (!r || !req) return;
         var name = (r.name || 'Тренер').trim() || 'Тренер';
         var tc = (r.trainer_comment || '').trim();
-        var ratingStr = (r.rating_avg != null && (r.rating_count || 0) > 0) ? (r.rating_avg.toFixed(1) + ' ★ (' + r.rating_count + ')') : null;
+        var ratingApi = window.RuText;
+        var ratingStr = ratingApi && ratingApi.trainerRatingCaption
+          ? ratingApi.trainerRatingCaption(r.rating_avg, r.rating_count)
+          : '';
         var arenaIdsForLayout = Array.isArray(r.arena_ids) ? r.arena_ids : [];
         var arenaNamesForLayout = Array.isArray(r.arena_names) ? r.arena_names : [];
         var arenaStatClass = 'trainer-detail-stat';
@@ -567,7 +570,7 @@
         html += '<div class="tcf-header">';
         html += '<h1 class="tcf-name">' + escapeHtml(name) + '</h1>';
         if (ratingStr) {
-          html += '<div class="tcf-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + r.trainer_id + ')">⭐ ' + escapeHtml(ratingStr) + '</div>';
+          html += '<div class="tcf-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + r.trainer_id + ')">' + escapeHtml(ratingStr) + '</div>';
         }
         html += '</div>';
         

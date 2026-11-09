@@ -11,7 +11,7 @@
 
 Дизайн — PDEC-033, ``.ai/epics/trainer-catalog/design/trainer.html`` (TASK-356): первый экран —
 фото, имя, галочки из анкеты и тёмная карточка цены с ближайшим временем. Число занятий не
-показываем никогда, оценку — от 3 оценок, слова тренера — дословно, нет данных — нет блока.
+показываем никогда, оценку — с первой («★ 5,0 · 2 оценки»), слова тренера — дословно, нет данных — нет блока.
 
 Тренер не в каталоге (черновик, снят, пауза) — страница по его прямой ссылке открывается, но
 ``noindex``, её нет в sitemap и на страницах катков: «запись по вашей ссылке работает как обычно».
@@ -48,6 +48,7 @@ from src.application.place_links import place_page_url, public_telegram_cta_url,
 from src.application.site_trainers import trainer_initial, trainer_line, trainer_name, trainer_photo_url
 from src.application.style_b import esc
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL, trainer_is_listed
+from src.shared.ru_text import trainer_rating_caption
 from src.shared.city_locative import city_locative
 from src.shared.html_template import fill_placeholders
 from src.shared.public_display import format_public_name
@@ -68,8 +69,6 @@ WEEK_WINDOWS_LIMIT = 200
 #: Как далеко вперёд ищем окна: неделя сетки стартует с первого дня с окнами, он может быть не сегодня.
 WEEK_LOOKAHEAD_DAYS = 14
 WEEK_DAYS = 7
-#: Оценку показываем, когда оценок хотя бы столько (решение владельца).
-RATING_MIN_COUNT = 3
 #: Сколько других тренеров направления показываем внизу.
 PEERS_SHOWN = 6
 _WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
@@ -963,7 +962,7 @@ def write_beacon_url(page: Mapping[str, Any], *, via: str | None = None) -> str:
 
 
 def _rating_ok(page: Mapping[str, Any]) -> bool:
-    return bool(page.get("rating_avg")) and int(page.get("rating_count") or 0) >= RATING_MIN_COUNT
+    return bool(trainer_rating_caption(page.get("rating_avg"), page.get("rating_count")))
 
 
 def _n_ratings(n: int) -> str:

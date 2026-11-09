@@ -73,6 +73,9 @@ def test_trainer_line_shows_cheapest_session() -> None:
     assert trainer_line(trainer) == "Обучение катанию «с нуля» · от\u00a041,87\u00a0BYN за\u00a0занятие"
     assert trainer_line({"services": [{"service_name": "Фигурное катание"}], "min_session_price_cents": None}) == "Фигурное катание"
     assert trainer_line({}) == ""
+    rated = {**trainer, "profile": {"rating_avg": 5, "rating_count": 2}}
+    assert trainer_line(rated).endswith("★ 5,0 · 2 оценки")
+    assert "★" not in trainer_line({**trainer, "profile": {"rating_avg": 5, "rating_count": 0}})
 
 
 def test_trainer_initial_skips_emoji() -> None:

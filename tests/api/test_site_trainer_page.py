@@ -1,7 +1,7 @@
 """TASK-350/356: страница тренера ``/t/{id}-{slug}`` — та же логика, что у карточки тренера в Mini App.
 
 TASK-356 (PDEC-033, ``design/trainer.html``): карточка цены с вкладками направлений и ближайшим
-временем, неделя, цены по тарифам, «Ещё ведёт», оценка от 3 оценок, «В Glide с …», без числа занятий.
+временем, неделя, цены по тарифам, «Ещё ведёт», оценка с первой, «В Glide с …», без числа занятий.
 """
 
 from __future__ import annotations
@@ -300,10 +300,11 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
     assert "Постановка прыжков" in html
     # Ролики (не вкладка) и неразобранная своя услуга — «Ещё ведёт» словами тренера.
     assert "Ещё ведёт: Катание на роликах, Растяжка для фигуристов." in html
-    # Первый экран: стаж, строка направлений и аудитории, оценка от 3, галочки из анкеты.
+    # Первый экран: стаж, строка направлений и аудитории, оценка с первой, галочки из анкеты.
     assert "Тренирует 6 лет" in html
     assert "Занятия с нуля, для уже катающихся и по фигурному катанию. Дети и взрослые." in html
     assert "<span>· 7 оценок</span>" in html and "7 оценок — все на 5 из 5" in html
+    assert "AggregateRating" not in html
     assert "<li>Высшее профильное образование</li>" in html and f"<li>Каток: {place['name']}</li>" in html
     # «В Glide с» — месяц первой состоявшейся записи; запись тренера к себе (40 дней назад) не в счёт.
     from datetime import date, timedelta
@@ -338,7 +339,7 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
 
 
 @pytest.mark.asyncio
-async def test_few_ratings_hidden_and_no_photo_shows_letter(app_use_test_db, db_session) -> None:
+async def test_two_ratings_shown_and_no_photo_shows_letter(app_use_test_db, db_session) -> None:
     async with _client() as client:
         _place_row, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_CRM)
         await db_session.execute(text("DELETE FROM trainer_photos WHERE trainer_id = :t"), {"t": tid})
@@ -348,7 +349,8 @@ async def test_few_ratings_hidden_and_no_photo_shows_letter(app_use_test_db, db_
         await db_session.commit()
         html = (await client.get(trainer_path(tid, name))).text
     assert "tp-photo" not in html and 'class="tp-ava tp-ava--mono"' in html
-    assert "★" not in html and "Оценки учеников" not in html and "оценк" not in html.lower().replace("оценить", "")
+    assert "★" in html and "<span>· 2 оценки</span>" in html
+    assert "AggregateRating" not in html and "0 оценок" not in html
     assert "В Glide с" not in html
     assert "Онлайн-записи нет — напишите и договоритесь о времени." in html
     assert "Нужен Telegram — переписка идёт там." in html
