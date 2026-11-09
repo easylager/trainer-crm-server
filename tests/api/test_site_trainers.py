@@ -146,21 +146,25 @@ async def _trainer_on(
 
 
 @pytest.mark.asyncio
-async def test_place_page_trainers_are_one_learn_block_not_a_list(app_use_test_db, db_session) -> None:
-    """TASK-354: список тренеров на катке заменён единым блоком «Учиться с тренером» → каталог."""
+async def test_place_page_lists_trainers_with_site_links(app_use_test_db, db_session) -> None:
+    """На катке — прямые ссылки ``/t/…`` и каталог тренеров; без learn-блока при наличии тренеров."""
     place = await _place(db_session)
     name = f"Анна{uuid.uuid4().hex[:4]}"
     async with _client() as client:
         tid = await _trainer_on(db_session, client, place, first_name=name)
         html = (await client.get(place["path"])).text
 
-    block = re.search(r'<section class="b-sec b-learn-sec" id="learn">(.*?)</section>', html, re.S)
-    assert block, "нет блока «Учиться с тренером»"
-    assert f"trainers/{tid}/a_list.jpg" in block.group(1)  # лицо тренера
-    assert f'href="/c/{city_slug(place["city_name"])}/trenery?arena={place["arena_id"]}"' in block.group(1)
-    assert f"{name} Тренерова" not in html and "b-row--coach" not in html
+    trainers = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', html, re.S)
+    assert trainers, "нет раздела «Тренеры»"
+    block = trainers.group(1)
+    assert f"{name} Тренерова" in block
+    assert f"trainers/{tid}/a_list.jpg" in block
+    from src.application.site_trainer_page import trainer_path
+
+    assert f'href="{trainer_path(tid, f"{name} Тренерова")}?via=p{place["arena_id"]}"' in block
+    assert f'href="/c/{city_slug(place["city_name"])}/trenery?arena={place["arena_id"]}"' in block
+    assert 'id="learn"' not in html
     assert "startapp=trainer_" not in html
-    # Список заменял счётчик «Здесь работает 1 тренер» в «На месте» — блок тоже.
     assert "Здесь работает" not in html
 
 

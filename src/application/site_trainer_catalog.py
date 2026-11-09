@@ -495,6 +495,13 @@ async def sitemap_rows(session: AsyncSession) -> list[tuple[str, datetime | None
     return out
 
 
+def _teaches(n: int) -> str:
+    """«1 тренер учит», «2 тренера учат», «5 тренеров учат»."""
+    noun = plural_ru(n, "тренер", "тренера", "тренеров")
+    verb = "учит" if noun == "тренер" else "учат"
+    return f"{n} {noun} {verb}"
+
+
 def _city_public_locative(city_name: str) -> tuple[str, str | None]:
     raw = str(city_name or "").strip()
     public = format_public_name(raw)
@@ -561,8 +568,7 @@ def catalog_description(data: Mapping[str, Any], direction: Direction) -> str:
     else:
         head = direction.h1
     if n:
-        noun = plural_ru(n, "тренер", "тренера", "тренеров")
-        text_ = f"{head}: {n} {noun}{_direction_price_clause(data, direction)}. Запись в Telegram."
+        text_ = f"{head}. {_teaches(n)}{_direction_price_clause(data, direction)}. Запись в Telegram."
     else:
         text_ = f"{head}. Тренеров пока нет."
     return fit_meta(text_, DESCRIPTION_LIMIT)

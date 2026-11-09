@@ -71,7 +71,7 @@ def test_direction_page_with_the_same_trainers_stays_in_the_index() -> None:
     assert indexable(data, zero)
     assert not indexable(data, direction_by_slug("figurnoe"))
     assert catalog_description(data, zero) == (
-        "Научиться кататься на коньках с нуля в Минске: 2 тренера, от 10 BYN за занятие. Запись в Telegram."
+        "Научиться кататься на коньках с нуля в Минске. 2 тренера учат, от 10 BYN за занятие. Запись в Telegram."
     )
 
 
@@ -79,20 +79,20 @@ def test_direction_description_counts_and_skips_a_missing_price() -> None:
     zero = direction_by_slug("s-nulya")
     priced = _data("Минск", [_trainer(i, ["zero"]) for i in range(1, 6)])
     assert catalog_description(priced, zero) == (
-        "Научиться кататься на коньках с нуля в Минске: 5 тренеров, от 10 BYN за занятие. Запись в Telegram."
+        "Научиться кататься на коньках с нуля в Минске. 5 тренеров учат, от 10 BYN за занятие. Запись в Telegram."
     )
     one = _data("Санкт-Петербург/ЛО", [_trainer(1, ["zero"])])
     assert catalog_description(one, zero) == (
-        "Научиться кататься на коньках с нуля в Санкт-Петербурге: 1 тренер, от 10 BYN за занятие. Запись в Telegram."
+        "Научиться кататься на коньках с нуля в Санкт-Петербурге. 1 тренер учит, от 10 BYN за занятие. Запись в Telegram."
     )
     free = _trainer(1, ["fig"])
     free["services_by_dir"] = {"fig": [{}]}
     bare = _data("Минск", [free])
     fig = direction_by_slug("figurnoe")
     assert catalog_description(bare, fig) == (
-        "Фигурное катание с тренером в Минске: 1 тренер. Запись в Telegram."
+        "Фигурное катание с тренером в Минске. 1 тренер учит. Запись в Telegram."
     )
-    assert "учат" not in catalog_description(priced, zero)
+    assert "учат" in catalog_description(priced, zero)
 
 
 def test_catalog_title_adds_brand_only_when_it_fits() -> None:

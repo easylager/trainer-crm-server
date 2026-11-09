@@ -248,6 +248,30 @@ def _tab(html: str, label: str) -> str | None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_catalog_page_og_type_is_website(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        c = await _city(db_session, client)
+        html = (await client.get(f"/c/{city_slug(c['city_name'])}/trenery")).text
+    assert 'property="og:type" content="website"' in html
+
+
+@pytest.mark.asyncio
+async def test_spb_catalog_breadcrumb_uses_public_city_name(app_use_test_db, db_session) -> None:
+    from tests.api.test_public_arenas import _insert_city
+
+    city_id = await _insert_city(db_session, name="Санкт-Петербург/ЛО")
+    place = await _place(db_session)
+    await db_session.execute(text("UPDATE arenas SET city_id = :c WHERE id = :a"), {"c": city_id, "a": place["arena_id"]})
+    async with _client() as client:
+        tid = await _trainer_on(db_session, client, {**place, "city_id": city_id}, first_name="Пётр")
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        await db_session.commit()
+        html = (await client.get("/c/sankt-peterburg-lo/trenery")).text
+    assert "Санкт-Петербург" in html and "/ЛО" not in html.split("<title>", 1)[1].split("</title>", 1)[0]
+
+
+@pytest.mark.asyncio
 async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     async with _client() as client:
         c = await _city(db_session, client)

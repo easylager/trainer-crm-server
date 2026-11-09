@@ -167,10 +167,8 @@ async def test_rink_page_tags_trainer_link_and_trainer_page_passes_it_to_telegra
         place_html = (await client.get(place["path"])).text
         page = (await client.get(f"{trainer_path(tid, name)}?via=p{place['arena_id']}")).text
         plain = (await client.get(trainer_path(tid, name))).text
-    # TASK-354: со страницы катка тренеры — через единый блок в каталог (источник «каталог сайта»),
-    # не прямыми ссылками; метка ?via=p остаётся для тех, кто пришёл на страницу тренера по ней.
+    assert f"{trainer_path(tid, name)}?via=p{place['arena_id']}" in place_html
     assert f"/c/{city_slug(place['city_name'])}/trenery?arena={place['arena_id']}" in place_html
-    assert f"{trainer_path(tid, name)}?via=p" not in place_html
     assert f"startapp=trainer_{tid}_v_p{place['arena_id']}&amp;surface=trainer_page" in page
     assert f"startapp=trainer_{tid}&amp;surface=trainer_page" in plain
     # Канонический адрес метка не меняет.

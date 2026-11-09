@@ -1547,7 +1547,8 @@ def _peers_html(page: Mapping[str, Any]) -> str:
     minis = []
     for p in peers:
         img = (
-            f'<img src="{esc(p["photo_url"])}" alt="" loading="lazy" decoding="async" />'
+            f'<img src="{esc(p["photo_url"])}" alt="{esc(p.get("name") or "")}" width="56" height="56" '
+            f'loading="lazy" decoding="async" />'
             if p.get("photo_url")
             else f'<span class="tp-mini__mono" aria-hidden="true">{esc(p["initial"])}</span>'
         )

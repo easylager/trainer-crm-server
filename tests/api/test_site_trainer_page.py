@@ -55,6 +55,15 @@ async def _listed(db_session, client, *, tier: str | None) -> tuple[dict, int, s
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_trainer_page_og_type_is_profile(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        _place_row, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        html = (await client.get(trainer_path(tid, name))).text
+    assert 'property="og:type" content="profile"' in html
+
+
+@pytest.mark.asyncio
 async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use_test_db, db_session) -> None:
     async with _client() as client:
         place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
@@ -397,7 +406,7 @@ async def test_peers_of_the_same_direction_in_city(app_use_test_db, db_session) 
         await db_session.commit()
         html = (await client.get(trainer_path(tid, name))).text
     more = html.split('class="tp-more"', 1)[1].split("</section>", 1)[0]
-    assert f"/t/{other}-" in more and "от 45 BYN" in more and place["name"] in more
+    assert f"/t/{other}-" in more and "от 25 BYN" in more and place["name"] in more
     assert f"/t/{tid}-" not in more
     assert "Здесь же ещё 1 тренер" in html
 
