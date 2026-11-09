@@ -343,19 +343,78 @@
 })(window);
 
 /**
- * Telegram Mini App: keep native header as close (X), not BackButton.
- * Calling WebApp.BackButton.show() replaces the X with a system back arrow — avoid that globally.
+ * Кнопка «назад» — одна на всё приложение: нативная стрелка в шапке Telegram.
+ * Экран говорит MiniAppBack.set(handler) («тут есть назад, и он делает вот это») или
+ * MiniAppBack.clear() (корневой экран). Собственных кнопок «назад» внутри страницы нет;
+ * isNative() — для запасного пути вне Telegram (браузер: там есть своя «назад»).
  */
+window.MiniAppBack = (function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var current = null;
+  var wired = false;
+
+  function isNative() {
+    if (!tg || !tg.initData || !tg.BackButton) return false;
+    return typeof tg.isVersionAtLeast === 'function' ? tg.isVersionAtLeast('6.1') : true;
+  }
+
+  function onClick() {
+    if (current) current();
+  }
+
+  function set(handler) {
+    if (!isNative() || typeof handler !== 'function') return false;
+    current = handler;
+    try {
+      if (!wired) {
+        tg.BackButton.onClick(onClick);
+        wired = true;
+      }
+      tg.BackButton.show();
+    } catch (e) { return false; }
+    return true;
+  }
+
+  function clear() {
+    current = null;
+    if (!isNative()) return;
+    try { tg.BackButton.hide(); } catch (e) { /* старый клиент */ }
+  }
+
+  return { set: set, clear: clear, isNative: isNative };
+})();
+
+/**
+ * Клиентские экраны с шапкой ``.client-mini-nav`` (и «Записи» с ``.cb-detail-back``) уже умеют сами
+ * решать, нужна ли «назад»: показывают ``#btnBack`` или прячут его (атрибут hidden) и вешают свой
+ * обработчик. Мост отражает это в нативную стрелку: кнопка видна — стрелка включена и нажимает
+ * ``#btnBack``; кнопка спрятана — стрелки нет. Саму кнопку в Telegram скрываем стилем.
+ */
+function bridgeLegacyBackButton() {
+  var Back = window.MiniAppBack;
+  var btn = document.getElementById('btnBack');
+  if (!Back || !btn || !Back.isNative()) return;
+  if (!btn.closest('.client-mini-nav') && !btn.classList.contains('cb-detail-back')) return;
+  var style = document.createElement('style');
+  // #backFromEdit — второй «назад» внутри «Заявок»: тот же переход делает #btnBack.
+  style.textContent = '#btnBack, #backFromEdit { display: none !important; }';
+  document.head.appendChild(style);
+  function sync() {
+    if (btn.hidden) Back.clear();
+    else Back.set(function () { btn.click(); });
+  }
+  sync();
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(sync).observe(btn, { attributes: true, attributeFilter: ['hidden'] });
+  }
+}
+
 (function () {
   if (window.MiniAppRuntime) window.MiniAppRuntime.ready();
-  var tg = window.Telegram && window.Telegram.WebApp;
-  if (!tg) return;
-  if (tg.BackButton) {
-    tg.BackButton.hide();
-    try {
-      tg.BackButton.onClick(function () {});
-    } catch (e) { /* noop */ }
-  }
+  // Экран, который не просил «назад», стартует без стрелки.
+  if (window.MiniAppBack) window.MiniAppBack.clear();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bridgeLegacyBackButton);
+  else bridgeLegacyBackButton();
 })();
 
 /**

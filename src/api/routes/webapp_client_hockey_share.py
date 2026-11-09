@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
@@ -21,6 +21,7 @@ from src.api.miniapp_auth import (
     client_catalog_telegram_key,
     get_client_miniapp_principal,
 )
+from src.application.hockey_promo import record_entry
 from src.application.hockey_cards import (
     CARD_SIZE,
     crown_caption,
@@ -142,14 +143,22 @@ async def post_client_hockey_share(
         res = await race_result(session, player_key=player_key, race=race)
         crown_league = res["league"]["id"] if res["league"] else None
         data = await crown_card_data(session, race_id=race.id, league_id=crown_league)
-        assert data is not None
+        if data is None:
+            # В лиге за этот месяц никого не короновали (никто не играл): хвастаться нечем.
+            raise HTTPException(status_code=404, detail="Корон за этот месяц нет")
         caption = crown_caption(
             title=data["title"],
             where="в " + data["where"] if crown_league else "в общей таблице",
             winners=data["winners"],
             won=res["won"],
         )
-        leagues = await player_leagues(session, player_key=player_key, now=now)
+        leagues = (
+            await player_leagues(
+                session, player_key=player_key, now=now, league_ids=[crown_league], ends_after=None, with_rank=False
+            )
+            if crown_league
+            else []
+        )
         code = next((x.invite_code for x in leagues if x.id == crown_league), None)
         url = card_link(START_LEAGUE_CARD, code) if code else card_link(START_RESULT_CARD)
         button = {"text": "Новый месяц — играть", "url": url}
@@ -169,7 +178,7 @@ async def post_client_hockey_share(
             home=m.home_team, away=m.away_team, home_score=m.home_score, away_score=m.away_score, points=card.points
         )
         # Позвать в свою лигу, если она есть: хвастаются обычно там, где играют вместе.
-        leagues = await player_leagues(session, player_key=player_key, now=now)
+        leagues = await player_leagues(session, player_key=player_key, now=now, with_rank=False)  # нужен код, не место
         url = card_link(START_RESULT_CARD, leagues[0].invite_code if leagues else None)
         button = {"text": "А ты угадаешь?", "url": url}
         sig = result_card_sig(settings.telegram_bot_token_client, m.id, card.points)
@@ -187,7 +196,16 @@ async def post_client_hockey_share(
         except PermissionError:
             raise HTTPException(status_code=403, detail="Нет доступа к этой лиге") from None
         mine = next(
-            row for row in await player_leagues(session, player_key=player_key, now=now) if row.id == body.league_id
+            iter(
+                await player_leagues(
+                    session,
+                    player_key=player_key,
+                    now=now,
+                    league_ids=[body.league_id],
+                    ends_after=None,
+                    with_rank=False,
+                )
+            )
         )
         lc = await league_card(session, mine.invite_code, now=now)
         assert lc is not None
@@ -218,4 +236,20 @@ async def post_client_hockey_card_opened(
 ) -> None:
     """Игру открыли с карточки в чате. Кто — не храним, только сколько."""
     await record_card_event(session, kind="opened", card=body.card)
+    await session.commit()
+
+
+class EntryBody(BaseModel):
+    src: str = Field("", max_length=64)
+
+
+@router.post("/client/hockey/entry", status_code=204)
+async def post_client_hockey_entry(
+    body: EntryBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Заход по рекламной метке (kks_<метка>). Фронт зовёт раз за сессию; кто — не храним, только метку."""
+    del principal
+    await record_entry(session, body.src)
     await session.commit()

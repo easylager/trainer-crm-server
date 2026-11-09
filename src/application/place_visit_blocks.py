@@ -197,6 +197,17 @@ def _passes_table_html(passes: Mapping[str, Any]) -> str:
     return f'<table class="b-ptable"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
 
 
+def _promos_html(promos: Mapping[str, Any]) -> str:
+    rows = "".join(
+        f'<div class="b-promo"><b>{_esc(r.get("title"))}</b>'
+        + (f'<span class="b-promo__w">{_esc(r.get("when"))}</span>' if r.get("when") else "")
+        + (f'<p class="b-more-lead">{_esc(r.get("text"))}</p>' if r.get("text") else "")
+        + "</div>"
+        for r in promos.get("rows") or []
+    )
+    return f'<div class="b-promos">{rows}</div>'
+
+
 def _rink_html(rink: Mapping[str, Any], *, tel_href: str) -> str:
     rows = "".join(
         f'<div class="b-rinkrow"><span>{_esc(r.get("label"))}'
@@ -224,6 +235,8 @@ def more_html(vv: Mapping[str, Any], *, coach_html: str = "", tel_href: str = ""
             inner = school_table_html(detail)
         elif m.get("key") == "passes":
             inner = _passes_table_html(detail)
+        elif m.get("key") == "promos":
+            inner = _promos_html(detail)
         else:
             inner = _rink_html(detail, tel_href=tel_href)
         note = f'<span class="b-more-row__n">{_esc(m.get("note"))}</span>' if m.get("note") else ""

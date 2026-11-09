@@ -30,6 +30,7 @@
     drafts: {}, // id матча → черновик счёта [дома, в гостях], пока он не ушёл на сервер или это ничья
     scoreOpen: {}, // id матча → раскрыты степперы в строке дня
     matchesFailed: false, // список матчей не загрузился (нет сети) — хаб показывает «Повторить»
+    matchesFresh: false, // матчи только что загрузил boot: хабу при первом входе перезапрашивать их незачем
     hubReady: false, // хаб прошёл первую загрузку (профиль, матчи, матчи клуба)
     stakes: {}, // id матча → {loading, data}
     movement: {}, // id матча → {loading, data}
@@ -41,6 +42,7 @@
     tables: {}, // 'клуб|период'
     created: null,
     joinCode: '',
+    src: '',
     joinPreview: null,
     joinError: '',
     month: null,
@@ -55,6 +57,7 @@
 
   var screens = {};
   var pollTimer = null;
+  var pollGen = 0; // поколение опроса: запоздавший ответ старого опроса не заводит таймер заново
 
   // ---------- среда ----------
 
@@ -78,21 +81,45 @@
     } catch (e) { /* */ }
   }
 
+  /** Запрос, который завис, не держит экран вечно: через это время игрок видит ошибку и «Повторить». */
+  var API_TIMEOUT_MS = 20000;
+
   function api(method, path, body, isPublic) {
     var opts = { method: method, headers: {} };
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timedOut = false;
+    var timer = null;
+    if (ctl) {
+      opts.signal = ctl.signal;
+      timer = setTimeout(function () { timedOut = true; ctl.abort(); }, API_TIMEOUT_MS);
+    }
+    function slow() {
+      var e = new Error('Сервер долго не отвечает. Попробуй ещё раз');
+      e.status = 0;
+      return e;
+    }
     if (!isPublic) opts.headers['X-Telegram-Init-Data'] = initData;
     if (body !== undefined) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
     return fetch((isPublic ? '/api/public' : '/api/webapp') + path, opts).catch(function () {
+      clearTimeout(timer);
+      if (timedOut) throw slow();
       // Нет сети: браузер отдаёт «Failed to fetch» по-английски, игроку это показывать нельзя.
       var offline = new Error('Нет связи. Проверь интернет и попробуй ещё раз');
       offline.status = 0;
       throw offline;
     }).then(function (r) {
-      if (r.status === 204) return null;
-      return r.json().catch(function () { return {}; }).then(function (data) {
+      if (r.status === 204) {
+        clearTimeout(timer);
+        return null;
+      }
+      return r.json().catch(function () {
+        if (timedOut) throw slow();
+        return {};
+      }).then(function (data) {
+        clearTimeout(timer);
         if (!r.ok) {
           var e = new Error((data && typeof data.detail === 'string' && data.detail) || 'Не получилось. Попробуй ещё раз');
           e.status = r.status;
@@ -195,8 +222,7 @@
   }
 
   function initials(name) {
-    var parts = String(name || '').trim().split(/\s+/);
-    return ((parts[0] || '?').charAt(0) + (parts[1] ? parts[1].charAt(0) : '')).toUpperCase();
+    return M.initials(name);
   }
 
   /** Белый круг с логотипом клуба; без логотипа — две буквы. */
@@ -297,18 +323,37 @@
   }
 
   function stopPoll() {
-    if (pollTimer) clearInterval(pollTimer);
+    pollGen++;
+    if (pollTimer) clearTimeout(pollTimer);
     pollTimer = null;
   }
 
-  /** Периодический опрос, пока открыт экран: сам останавливается, когда экран ушёл. */
+  /**
+   * Периодический опрос, пока открыт экран-владелец: сам останавливается, когда экран ушёл.
+   * Владелец — экран, который открыт в момент вызова: запускать нужно из его колбэка, проверив, что он ещё текущий.
+   * В фоне (document.hidden) запросов нет. fn может вернуть промис: отказ или false («ещё не готово») растягивают паузу
+   * вдвое (до 8 раз), успех возвращает обычную.
+   */
   function poll(name, ms, fn) {
     stopPoll();
-    pollTimer = setInterval(function () {
+    var gen = pollGen;
+    var owner = current();
+    var misses = 0;
+    function schedule() {
+      pollTimer = setTimeout(tick, M.pollDelay(ms, misses));
+    }
+    function tick() {
+      if (gen !== pollGen) return;
       var c = current();
-      if (!c || c.name !== name) return stopPoll();
-      fn(c.args);
-    }, ms);
+      if (!c || c !== owner || c.name !== name) return stopPoll();
+      if (document.hidden) return schedule();
+      var r;
+      try { r = fn(c.args); } catch (e) { r = Promise.reject(e); }
+      Promise.resolve(r).then(function (v) { misses = v === false ? misses + 1 : 0; }, function () { misses++; }).then(function () {
+        if (gen === pollGen) schedule();
+      });
+    }
+    schedule();
   }
 
   function showStack(stack) {
@@ -368,8 +413,20 @@
 
   // ---------- данные ----------
 
+  /** Клиентские поля матча: в ответе сервера их нет, и подмешивание их не стирает. */
+  var MATCH_LOCAL = ['pickSeq', 'pickPending'];
+
+  /**
+   * Новый список подмешивается в те же объекты матчей: ход, козырь и таймер счёта держат ссылку на матч,
+   * а ответ, записанный в заменённый объект, пропадал с хаба. Пока ход матча в пути, его my_pick не трогаем.
+   */
   function mergeMatches(items) {
-    state.matches = items;
+    var own = {};
+    state.matches.forEach(function (m) { own[m.id] = m; });
+    state.matches = items.map(function (m) {
+      var cur = own[m.id];
+      return cur ? M.mergeInPlace(cur, m, MATCH_LOCAL, cur.pickPending ? ['my_pick'] : []) : m;
+    });
     items.forEach(function (m) { delete state.matchCache[m.id]; });
   }
 
@@ -414,8 +471,7 @@
         // Итог мог поправить админ: сменился счёт — накопленное «куда сдвинулось» переспрашиваем.
         var r0 = own.result, r1 = m.result;
         if (JSON.stringify(r0 || null) !== JSON.stringify(r1 || null)) delete state.movement[id];
-        Object.keys(own).forEach(function (k) { if (k !== 'pickSeq' && !(k in m)) delete own[k]; });
-        Object.keys(m).forEach(function (k) { own[k] = m[k]; });
+        M.mergeInPlace(own, m, MATCH_LOCAL, own.pickPending ? ['my_pick'] : []);
       } else state.matchCache[id] = m;
       return findMatch(id);
     });
@@ -468,10 +524,25 @@
 
   // ---------- ход ----------
 
+  // Козырь: порядковый номер последнего запроса и число запросов в пути (см. toggleTrump).
+  var trumpSeq = 0;
+  var trumpPending = 0;
+
   function sendPick(match, body, optimistic) {
+    match = findMatch(match.id) || match;
+    // Рекламная метка: только с первым ходом человека; сервер всё равно пишет её лишь новому игроку.
+    var src = M.firstPickSrc(state.src, state.matches);
+    if (src) body = Object.assign({ src: src }, body);
     var before = match.my_pick;
     // Ответы могут прийти не по порядку: учитываем только последний отправленный ход.
     var seq = (match.pickSeq = (match.pickSeq || 0) + 1);
+    match.pickPending = (match.pickPending || 0) + 1;
+    var settled = false;
+    function settle() {
+      if (!settled) match.pickPending--;
+      settled = true;
+    }
+    var trumpAtSend = trumpSeq;
     // Козырь живёт на ходе: смена стороны или счёта его не снимает.
     if (before && before.doubled) optimistic.doubled = true;
     match.my_pick = optimistic;
@@ -479,14 +550,19 @@
     render();
     return api('PUT', '/client/hockey/matches/' + match.id + '/pick', body)
       .then(function (data) {
+        settle();
         if (match.pickSeq !== seq) return;
+        var doubled = match.my_pick && match.my_pick.doubled;
         match.my_pick = data && data.my_pick;
+        // Козырь переключали, пока ход был в пути: ответ хода его не знает и не должен затирать выбор игрока.
+        if (match.my_pick && (trumpPending > 0 || trumpSeq !== trumpAtSend)) match.my_pick.doubled = !!doubled;
         delete state.stakes[match.id];
         haptic('success');
         render();
         if (current() && current().name === 'match') loadStakes(match.id, true).then(render);
       })
       .catch(function (e) {
+        settle();
         if (match.pickSeq === seq) match.my_pick = before;
         if (e.status === 409) match.open = false;
         toast(e.message);
@@ -521,12 +597,22 @@
       else if (on && x.my_pick.doubled && S.weekKey(x.starts_at) === wk && x.open) touched.push([x, x.my_pick.doubled]);
     });
     var prevDoubles = state.doubles;
+    // Ответы приходят не по порядку: применяем и откатываем только по последнему нажатию.
+    var seq = ++trumpSeq;
+    trumpPending++;
     touched.forEach(function (t) { t[0].my_pick.doubled = t[0].id === match.id ? on : false; });
     state.doubles = state.doubles.map(function (d) { return d.week_start === wk ? { week_start: d.week_start, match_id: on ? match.id : null, locked: false } : d; });
     haptic();
     render();
+    var settled = false;
+    function settle() {
+      if (!settled) trumpPending--;
+      settled = true;
+    }
     return api('PUT', '/client/hockey/matches/' + match.id + '/double', { on: on })
       .then(function (r) {
+        settle();
+        if (seq !== trumpSeq) return;
         state.double = (r && r.double) || state.double;
         state.doubles = (r && r.doubles) || state.doubles;
         delete state.stakes[match.id];
@@ -534,7 +620,10 @@
         loadStakes(match.id, true).then(render);
       })
       .catch(function (e) {
-        touched.forEach(function (t) { t[0].my_pick.doubled = t[1]; });
+        settle();
+        // Откат устаревшим снимком затёр бы более новое нажатие: его ответ уже решает, как будет на самом деле.
+        if (seq !== trumpSeq) return toast(e.message);
+        touched.forEach(function (t) { if (t[0].my_pick) t[0].my_pick.doubled = t[1]; });
         state.doubles = prevDoubles;
         toast(e.message);
         render();
@@ -638,7 +727,7 @@
         }
       }
     }
-    if (tg && tg.BackButton) tg.BackButton.show();
+    if (window.MiniAppBack) window.MiniAppBack.set(back);
   }
 
   function startParam() {
@@ -660,11 +749,8 @@
         tg.expand();
       } catch (e) { /* */ }
       if (tg.onEvent) tg.onEvent('themeChanged', function () { applyTheme(); render(); });
-      if (tg.BackButton && tg.BackButton.onClick) {
-        // Один обработчик на страницу, даже если boot позовут ещё раз.
-        if (tg.BackButton.offClick) tg.BackButton.offClick(back);
-        tg.BackButton.onClick(back);
-      }
+      // Одна нативная «назад» на страницу: помощник сам не вешает обработчик дважды.
+      if (window.MiniAppBack) window.MiniAppBack.set(back);
     }
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && state.sheet) return closeSheet();
@@ -693,6 +779,21 @@
     if (!initData) return outsideTelegram();
     render();
     state.fromCard = M.cardFrom(startParam(), params.get('from'));
+    // Рекламный вход (kks_<метка> или ?src=): запоминаем метку на сессию и считаем заход один раз, без ключа игрока.
+    state.src = M.promoSrc(startParam(), params.get('src'));
+    try {
+      if (state.src) sessionStorage.setItem('kk_src', state.src);
+      else state.src = M.promoSrc('', sessionStorage.getItem('kk_src'));
+    } catch (e) { /* */ }
+    if (state.src && (params.get('src') || /^kks_/.test(startParam()))) {
+      var entryKey = 'kk_entry_' + state.src;
+      var counted = false;
+      try { counted = sessionStorage.getItem(entryKey) === '1'; } catch (e) { /* */ }
+      if (!counted) {
+        try { sessionStorage.setItem(entryKey, '1'); } catch (e) { /* */ }
+        api('POST', '/client/hockey/entry', { src: state.src }).catch(function () {});
+      }
+    }
     if (state.fromCard) api('POST', '/client/hockey/card-opened', { card: state.fromCard }).catch(function () {});
     var code = (params.get('join') || M.inviteCode(startParam()) || '').toUpperCase();
     var matchId = Number(params.get('reveal') || params.get('match')) || null;
@@ -721,13 +822,18 @@
             pickSide(target, pickSideParam);
             toast('Ход принят: за ' + S.clubName(target[pickSideParam].name));
           }
+          // Хаб сам грузит матчи при входе; свежий список с загрузки страницы второй раз не запрашиваем.
+          state.matchesFresh = !loadError;
           enter();
           if (code) go('join', { code: code });
           else if (openId) go('match', { id: openId });
           else if (params.get('tab') === 'table') go('table', {});
           if (month) {
+            var owner = current();
             api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {
               state.month = data;
+              // Игрок успел уйти с экрана, куда его вела ссылка, — итоги месяца поверх нового экрана не выскакивают.
+              if (current() !== owner) return;
               go('month', {});
               api('POST', '/client/hockey/races/' + month + '/seen').catch(function () {});
             }, function () {});

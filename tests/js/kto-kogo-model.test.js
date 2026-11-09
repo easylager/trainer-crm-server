@@ -232,3 +232,71 @@ describe('commitNav', () => {
     assert.deepEqual(h.shown, ['hub', 'hub']);
   });
 });
+
+describe('firstChars / initials', () => {
+  it('эмодзи (суррогатная пара) не режется пополам', () => {
+    assert.equal(M.firstChars('🏒 Хоккей', 1), '🏒');
+    assert.equal(M.firstChars('🏒🥅x', 2), '🏒🥅');
+    assert.equal(M.firstChars(null, 2), '');
+  });
+
+  it('инициалы: по букве от двух слов, эмодзи в начале целый', () => {
+    assert.equal(M.initials('иван петров'), 'ИП');
+    assert.equal(M.initials('🏒 Вася'), '🏒В');
+    assert.equal(M.initials(''), '?');
+  });
+});
+
+describe('mergeInPlace', () => {
+  it('сохраняет идентичность объекта, стирает пропавшие поля, но не клиентские', () => {
+    const own = { id: 1, open: true, my_pick: { side: 'home' }, pickSeq: 3, gone: 1 };
+    const res = M.mergeInPlace(own, { id: 1, open: false, my_pick: { side: 'away' } }, ['pickSeq']);
+    assert.equal(res, own);
+    assert.deepEqual(own, { id: 1, open: false, my_pick: { side: 'away' }, pickSeq: 3 });
+  });
+
+  it('замороженное поле (ход в пути) ответом не перезаписывается и не стирается', () => {
+    const mine = { side: 'home' };
+    const own = { id: 1, my_pick: mine };
+    M.mergeInPlace(own, { id: 1, my_pick: null, open: true }, [], ['my_pick']);
+    assert.equal(own.my_pick, mine);
+    assert.equal(own.open, true);
+    const bare = { id: 2, my_pick: mine };
+    M.mergeInPlace(bare, { id: 2 }, [], ['my_pick']);
+    assert.equal(bare.my_pick, mine);
+  });
+});
+
+describe('pollDelay', () => {
+  it('растёт вдвое с каждой неудачей и упирается в 8 раз', () => {
+    assert.deepEqual([0, 1, 2, 3, 4, 9].map((n) => M.pollDelay(1000, n)), [1000, 2000, 4000, 8000, 8000, 8000]);
+    assert.equal(M.pollDelay(1000, -1), 1000);
+  });
+});
+
+describe('рекламная метка источника (kks_<метка>, ?src=)', () => {
+  it('метка из start_param kks_… или из ?src=, start_param главнее', () => {
+    assert.equal(M.promoSrc('kks_push1', ''), 'push1');
+    assert.equal(M.promoSrc('', 'insta'), 'insta');
+    assert.equal(M.promoSrc('kks_site', 'insta'), 'site');
+    assert.equal(M.promoSrc('kks_Push1', null), 'push1');
+  });
+  it('невалидная метка игнорируется', () => {
+    assert.equal(M.promoSrc('kks_a', ''), '');
+    assert.equal(M.promoSrc('kks_' + 'a'.repeat(17), ''), '');
+    assert.equal(M.promoSrc('kks_a-b', ''), '');
+    assert.equal(M.promoSrc('', 'a b'), '');
+    assert.equal(M.promoSrc('kk_abcd2345', ''), '');
+    assert.equal(M.promoSrc('kks_', null), '');
+    assert.equal(M.promoSrc(undefined, undefined), '');
+  });
+  it('kks_ не принимают за приглашение в лигу', () => {
+    assert.equal(M.inviteCode('kks_push1'), '');
+    assert.equal(M.cardFrom('kks_push1', null), '');
+  });
+  it('метку шлём только с первым ходом: есть чей-то ход — не шлём', () => {
+    assert.equal(M.firstPickSrc('push1', [{ my_pick: null }, {}]), 'push1');
+    assert.equal(M.firstPickSrc('push1', [{ my_pick: { side: 'home' } }]), '');
+    assert.equal(M.firstPickSrc('', []), '');
+  });
+});

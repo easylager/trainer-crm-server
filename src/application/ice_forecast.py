@@ -748,7 +748,7 @@ async def record_ice_forecast_optout(session: AsyncSession, telegram_id: int) ->
             """
             INSERT INTO client_broadcast_optouts (telegram_id, kind)
             VALUES (:tid, :kind)
-            ON CONFLICT (telegram_id) DO NOTHING
+            ON CONFLICT (telegram_id, kind) DO NOTHING
             """
         ),
         {"tid": telegram_id, "kind": OPT_OUT_KIND},

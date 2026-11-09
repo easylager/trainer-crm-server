@@ -154,7 +154,8 @@ async def _best_place(session: AsyncSession, player_key: int, *, at: datetime) -
     """Место в лучшей лиге игрока — то же, что в таблице лиги (весь её срок, матчи после вступления)."""
     from src.application.hockey_leagues import player_leagues
 
-    leagues = [x for x in await player_leagues(session, player_key=player_key, now=at) if _utc(x.starts_at) <= _utc(at) < _utc(x.ends_at)]  # type: ignore[arg-type]
+    # Только идущие на момент ``at``: таблицы закончившихся лиг здесь не нужны, считать их незачем.
+    leagues = await player_leagues(session, player_key=player_key, now=at, ends_after=_utc(at), starts_by=_utc(at))
     if not leagues:
         return None
     best = min(leagues, key=lambda x: (x.my_rank, x.name))

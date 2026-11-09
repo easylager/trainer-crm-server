@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 import html as html_lib
 from typing import Any, Mapping
 from urllib.parse import quote
@@ -41,6 +42,8 @@ PRESS_SCRIPT_VERSION = _file_version("static/share/b-press.js")
 WHEN_SWAP_SCRIPT_VERSION = _file_version("static/share/b-when-swap.js")
 MOTION_SCRIPT_VERSION = _file_version("static/share/glide-motion.js")
 FONT_V_PLACEHOLDER = "__FONT_V__"
+
+_BADGE_DAY_TIME = re.compile(r"^(.*?)\s*(\d{1,2}:\d{2})$")
 
 
 def _fonts_dir_version() -> str:
@@ -266,7 +269,13 @@ def tile_html(
         kind = f" b-badge--{badge_kind}" if badge_kind else ""
         if not photo_url and badge_kind != "time":
             kind += " b-badge--light"
-        media += f'<span class="b-badge{kind}">{esc(badge)}</span>'
+        # «сб, 14 ноября 7:45» в один ряд крупным шрифтом не помещается в плитку: день — строкой выше, время — крупно.
+        split = _BADGE_DAY_TIME.match(badge) if badge_kind == "time" else None
+        if split and split.group(1):
+            inner = f'<span class="b-badge__day">{esc(split.group(1))}</span>{esc(split.group(2))}'
+        else:
+            inner = esc(badge)
+        media += f'<span class="b-badge{kind}">{inner}</span>'
     media += "</span>"
     vt = f' data-place-vt="{esc(vt_name)}"' if vt_name else ""
     return (

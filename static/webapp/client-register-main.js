@@ -521,12 +521,8 @@
     btnOpenHome.addEventListener('click', goToClientHome, false);
   }
 
-  if (tg && tg.BackButton) {
-    tg.BackButton.show();
-    tg.BackButton.onClick(function () {
-      tg.close();
-    });
-  }
+  // Первый экран: «назад» закрывает мини-приложение.
+  if (window.MiniAppBack) window.MiniAppBack.set(function () { tg.close(); });
 
   if (window.CrmPhoneField) {
     sendRegisterEvent('form_opened');

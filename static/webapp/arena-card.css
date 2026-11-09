@@ -1270,16 +1270,7 @@ button.arena-info__tel--copy {
   background: var(--g-surface, var(--app-card-bg));
 }
 .arena-wait__head { display: flex; flex-direction: column; gap: 6px; }
-.arena-wait__kicker {
-  margin: 0;
-  font-size: var(--app-text-kicker);
-  font-weight: var(--app-weight-semibold);
-  line-height: 1;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--g-muted, var(--glide-hint));
-}
-.arena-wait__title { margin: 4px 0 0; font-size: var(--app-text-headline); font-weight: var(--app-weight-bold); line-height: 1.15; text-wrap: balance; }
+.arena-wait__title { margin: 0; font-size: var(--app-text-body); font-weight: var(--app-weight-semibold); line-height: 1.35; text-wrap: balance; }
 .arena-wait__sub { margin: 0; font-size: var(--app-text-body); line-height: 1.4; color: var(--g-muted, var(--glide-hint)); }
 .arena-wait__cta { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; }
 .arena-wait__ico {

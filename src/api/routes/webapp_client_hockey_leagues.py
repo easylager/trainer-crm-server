@@ -15,6 +15,7 @@ from src.api.routes.webapp_client_hockey import _player_name
 from src.application.hockey_leagues import (
     FEW_MATCHES,
     MONTHLY_CROWN_TERMS,
+    AlreadyExtended,
     InvalidTerms,
     League,
     LeagueFull,
@@ -24,7 +25,7 @@ from src.application.hockey_leagues import (
     build_terms,
     create_league,
     extend_league,
-    join_by_code,
+    join_league,
     league_table,
     league_titles,
     leave_league,
@@ -45,6 +46,7 @@ _TOO_MANY = "Можно состоять максимум в 20 лигах"
 _LEAGUE_FULL = "В лиге уже 100 человек"
 _NOT_FOUND = "Лига не найдена"
 _FORBIDDEN = "Нет доступа к этой лиге"
+_ALREADY_EXTENDED = "Лига уже продлена — вы из продолжения вышли"
 
 
 class TermsBody(BaseModel):
@@ -99,6 +101,8 @@ def _raise_league(exc: Exception) -> NoReturn:
         raise HTTPException(status_code=409, detail=_LEAGUE_FULL) from exc
     if isinstance(exc, TooManyLeagues):
         raise HTTPException(status_code=409, detail=_TOO_MANY) from exc
+    if isinstance(exc, AlreadyExtended):
+        raise HTTPException(status_code=409, detail=_ALREADY_EXTENDED) from exc
     if isinstance(exc, PermissionError):
         raise HTTPException(status_code=403, detail=_FORBIDDEN) from exc
     raise exc
@@ -269,9 +273,8 @@ async def post_client_hockey_league_join(
 ) -> dict:
     now = datetime.now(timezone.utc)
     player_key = client_catalog_telegram_key(principal)
-    already = {row.id for row in await player_leagues(session, player_key=player_key, now=now)}
     try:
-        league = await join_by_code(
+        league, added = await join_league(
             session,
             player_key=player_key,
             display_name=_player_name(body.display_name, _init_raw(init_data, x_telegram_init_data)),
@@ -280,7 +283,7 @@ async def post_client_hockey_league_join(
         payload = await _created_out(session, league, player_key, now)
     except (LookupError, LeagueFull, TooManyLeagues) as exc:
         _raise_league(exc)
-    if body.from_card and league.id not in already:
+    if body.from_card and added:  # двойной тап «Вступить» событие не дублирует
         await record_card_event(session, kind="joined", card=body.from_card, league_id=league.id)
     await session.commit()
     return payload
@@ -305,11 +308,16 @@ async def get_client_hockey_league(
         rows = await league_table(session, league_id=league_id, player_key=player_key, now=now, period=chosen)
     except (LookupError, PermissionError) as exc:
         _raise_league(exc)
+    # Нужна только эта лига и без места: таблицу мы уже посчитали выше, остальные лиги игрока не считаем.
     summary = next(
-        item for item in await player_leagues(session, player_key=player_key, now=now) if item.id == league_id
+        iter(
+            await player_leagues(
+                session, player_key=player_key, now=now, league_ids=[league_id], ends_after=None, with_rank=False
+            )
+        )
     )
     titles = await league_titles(session, league_id=league_id, now=now)
-    crowns = await crown_counts(session, league_id=league_id)
+    crowns = await crown_counts(session, league_id=league_id, player_keys=[row.player_key for row in rows])
     return {
         "id": summary.id,
         "name": summary.name,
@@ -372,7 +380,7 @@ async def post_client_hockey_league_extend(
         league, created = await extend_league(session, league_id=league_id, player_key=player_key, now=now, terms=terms)
         payload = await _created_out(session, league, player_key, now)
         payload.update(await _terms_hint(session, league, now))
-    except (ValueError, LookupError, PermissionError, TooManyLeagues) as exc:
+    except (ValueError, LookupError, PermissionError, TooManyLeagues, AlreadyExtended) as exc:
         _raise_league(exc)
     await session.commit()
     return {**payload, "created": created}

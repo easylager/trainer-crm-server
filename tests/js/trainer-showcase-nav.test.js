@@ -89,10 +89,10 @@ describe('панель вкладок на витрине', () => {
 });
 
 describe('«‹ Назад» на корне витрины', () => {
-  it('пришли с другого экрана — «Назад» уводит туда (history.back)', async () => {
+  it('пришли с другого экрана — на списке своей кнопки нет, «Назад» (панель Telegram) уводит туда (history.back)', async () => {
     const h = boot({ historyLength: 3, showcase: { items: [trainer(1), trainer(2)] }, session: PHONE });
     await tick();
-    assert.equal(backHtml(h), 'Назад');
+    assert.equal(backHtml(h), null);
     h.click({ 'data-act': 'back' });
     assert.equal(h.ctx.history.left, 1);
     assert.deepEqual([...h.ctx.navigated], []);
@@ -115,6 +115,35 @@ describe('«‹ Назад» на корне витрины', () => {
     assert.equal(h.ctx.history.left, 0, 'со своей записи истории со страницы не уходим');
     h.click({ 'data-act': 'back' });
     assert.equal(h.ctx.history.left, 1);
+  });
+});
+
+describe('нативная «назад» Telegram (MiniAppBack)', () => {
+  const stub = () => {
+    const log = { set: [], clear: 0 };
+    return { log, isNative: () => true, set: (fn) => { log.set.push(fn); return true; }, clear: () => { log.clear += 1; } };
+  };
+
+  it('на карточке тренера своей кнопки нет, «назад» — нативная и ведёт в список', async () => {
+    const back = stub();
+    const h = boot({ historyLength: 1, showcase: { items: [trainer(1), trainer(2)] }, session: PHONE, routes: [slotsRoute], miniAppBack: back });
+    await tick();
+    assert.equal(back.log.set.length, 0, 'корень без истории — стрелки нет');
+    assert.ok(back.log.clear > 0);
+    h.click({ 'data-act': 'trainer', 'data-tid': 1 });
+    await tick();
+    assert.equal(backHtml(h), null);
+    assert.ok(back.log.set.length > 0, 'внутри витрины стрелка включена');
+    back.log.set[back.log.set.length - 1]();
+    assert.equal(h.S.view, 'list');
+  });
+
+  it('на списке стрелки нет, даже если история длинная: это корень раздела, а не глубина', async () => {
+    const back = stub();
+    boot({ historyLength: 3, showcase: { items: [trainer(1), trainer(2)] }, session: PHONE, miniAppBack: back });
+    await tick();
+    assert.equal(back.log.set.length, 0);
+    assert.ok(back.log.clear > 0);
   });
 });
 

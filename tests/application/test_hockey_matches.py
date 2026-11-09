@@ -328,6 +328,31 @@ async def test_run_tick_publishes_played_match(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_tick_races_failure_keeps_result_and_surfaces_error(db_session, monkeypatch) -> None:
+    pages = {match_url("1218869"): _page("hcdinamo-match-final.html"), HOCKEY_BY_URL: _page("hockey-by-ticker.html")}
+    await upsert_calendar_match(db_session, _match("final", "1218869"), now=_minsk(2026, 10, 18, 12, 0))
+
+    async def broken(session, *, now):
+        await session.execute(text("SELECT * FROM table_that_does_not_exist"))
+
+    monkeypatch.setattr("src.application.hockey_races.close_due_races", broken)
+    counts = await run_tick(
+        db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=False
+    )
+    assert counts["races_failed"] is True and counts["races_error"]
+    assert counts["closed_races"] == []
+    # Сбой гонок откатывает только гонки: итог остался в той же транзакции.
+    row = (await db_session.execute(text("SELECT status, home_score, away_score FROM hockey_matches"))).one()
+    assert tuple(row) == ("final", 1, 4)
+
+
+@pytest.mark.asyncio
+async def test_run_tick_ok_reports_no_races_failure(db_session) -> None:
+    counts = await run_tick(db_session, _fake_fetch({}), now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=False)
+    assert counts["races_failed"] is False and counts["races_error"] == ""
+
+
+@pytest.mark.asyncio
 async def test_manual_result_rejects_tie_and_unknown_match(db_session) -> None:
     with pytest.raises(LookupError):
         await set_manual_result(

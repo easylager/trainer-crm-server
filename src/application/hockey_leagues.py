@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.hockey_game import DEFAULT_PLAYER_NAME, POINTS_EXACT, POINTS_WINNER
 from src.application.hockey_slices import (
     DINAMO,
+    MAX_YEAR,
+    MIN_YEAR,
     Period,
     Scope,
     crown_eligible,
@@ -34,6 +36,9 @@ from src.ingestion.hockey_sources import MINSK_TZ
 NAME_MAX = 28
 MAX_MEMBERS = 100
 MAX_LEAGUES_PER_PLAYER = 20
+# Список «мои лиги»: закончившиеся показываем ещё столько дней и не больше стольких лиг (таблица считается на каждую).
+RECENTLY_ENDED_DAYS = 60
+MY_LEAGUES_LIMIT = 40
 MAX_CLUBS = 20
 SCOPES = ("all", "extraliga", "dinamo", "clubs")
 TERM_KINDS = ("season", "month", "weeks4", "playoff", "dates")
@@ -53,6 +58,10 @@ class LeagueFull(Exception):
 
 class TooManyLeagues(Exception):
     """Игрок уже в максимуме лиг."""
+
+
+class AlreadyExtended(Exception):
+    """Лига уже продлена, а продлевающий из продолжения вышел: показать ему чужую лигу нельзя."""
 
 
 class InvalidTerms(ValueError):
@@ -92,8 +101,8 @@ class LeagueSummary:
     invite_code: str
     is_owner: bool
     members: int
-    my_rank: int
-    my_points: int
+    my_rank: int | None  # None, если место не считали (with_rank=False)
+    my_points: int | None
     scope: str = "dinamo"
     clubs: tuple[str, ...] = ()
     term_kind: str = "season"
@@ -164,8 +173,10 @@ _ADD_MEMBER = text("""
     ON CONFLICT DO NOTHING
     """)
 
+# Архивная лига (вышел последний участник, короны остались) по коду не находится: ни превью, ни вступления.
 _LEAGUE_BY_CODE = text(f"""
-    SELECT {_LEAGUE_COLUMNS} FROM hockey_leagues WHERE invite_code = :code
+    SELECT {_LEAGUE_COLUMNS} FROM hockey_leagues AS l WHERE l.invite_code = :code
+      AND EXISTS (SELECT 1 FROM hockey_league_members AS m WHERE m.league_id = l.id)
     """)
 
 _LEAGUE_BY_ID = text(f"""
@@ -195,6 +206,9 @@ _SET_OWNER = text("UPDATE hockey_leagues SET owner_key = :owner_key, updated_at 
 
 _DELETE_LEAGUE = text("DELETE FROM hockey_leagues WHERE id = :league_id")
 
+# Короны ссылаются на лигу с ON DELETE CASCADE: лигу с коронами удалять нельзя, она уходит в архив.
+_HAS_CROWNS = text("SELECT EXISTS (SELECT 1 FROM hockey_crowns WHERE league_id = :league_id)")
+
 _RENAME = text("UPDATE hockey_leagues SET name = :name, updated_at = now() WHERE id = :league_id")
 
 # Очки каждого участника за матчи гонки, начавшиеся после его вступления; у кого их нет — ноль.
@@ -221,13 +235,24 @@ _LEAGUE_TABLE = text("""
     ORDER BY rank, pl.display_name, mb.player_key
     """)
 
+# Лиги игрока. Закончившиеся без границы копились бы вечно, а на каждую считается таблица, поэтому по
+# умолчанию — только идущие и недавно закончившиеся (ends_at > :ends_after), не больше :limit: сперва идущие,
+# среди равных — позже кончающиеся. Выдаём по-прежнему в порядке вступления.
 _MY_LEAGUES = text("""
-    SELECT l.id, l.name, l.invite_code, (l.owner_key = :player_key) AS is_owner,
-           l.scope, l.clubs, l.term_kind, l.starts_at, l.ends_at,
-           (SELECT COUNT(*) FROM hockey_league_members x WHERE x.league_id = l.id)::int AS members
-    FROM hockey_leagues AS l
-    JOIN hockey_league_members AS me ON me.league_id = l.id AND me.player_key = :player_key
-    ORDER BY me.joined_at, l.id
+    SELECT t.id, t.name, t.invite_code, t.is_owner, t.scope, t.clubs, t.term_kind, t.starts_at, t.ends_at,
+           (SELECT COUNT(*) FROM hockey_league_members x WHERE x.league_id = t.id)::int AS members
+    FROM (
+        SELECT l.id, l.name, l.invite_code, (l.owner_key = :player_key) AS is_owner,
+               l.scope, l.clubs, l.term_kind, l.starts_at, l.ends_at, me.joined_at
+        FROM hockey_leagues AS l
+        JOIN hockey_league_members AS me ON me.league_id = l.id AND me.player_key = :player_key
+        WHERE (CAST(:ids AS bigint[]) IS NULL OR l.id = ANY(CAST(:ids AS bigint[])))
+          AND (CAST(:ends_after AS timestamptz) IS NULL OR l.ends_at > CAST(:ends_after AS timestamptz))
+          AND (CAST(:starts_by AS timestamptz) IS NULL OR l.starts_at <= CAST(:starts_by AS timestamptz))
+        ORDER BY (l.ends_at > :now) DESC, l.ends_at DESC, l.id DESC
+        LIMIT :limit
+    ) AS t
+    ORDER BY t.joined_at, t.id
     """)
 
 _PREVIEW_NAMES = text("""
@@ -323,6 +348,10 @@ def build_terms(
         start, end = period.since, period.until
     elif term == "weeks4":
         start, end = today, today + timedelta(days=28)
+    elif term in ("playoff", "dates") and any(
+        v is not None and not MIN_YEAR <= v.year <= MAX_YEAR for v in (starts_at, ends_at)
+    ):
+        raise InvalidTerms("Такие даты не подходят")
     elif term == "playoff":
         year = season.until.astimezone(MINSK_TZ).year
         start = _as_instant(starts_at) if starts_at else datetime(year, *PLAYOFF_FROM, tzinfo=MINSK_TZ)
@@ -376,6 +405,8 @@ def term_options(*, now: datetime) -> dict:
 def _parse_month(raw: str) -> Period:
     try:
         year, mon = (int(x) for x in raw.split("-"))
+        if not MIN_YEAR <= year <= MAX_YEAR:
+            raise ValueError(raw)
         return month_period(date(year, mon, 1))
     except (ValueError, TypeError):
         raise InvalidTerms("Месяц в формате 2026-12") from None
@@ -518,7 +549,11 @@ async def extend_league(
         raise PermissionError(league_id)
     existing = (await session.execute(_EXTENSION_OF, {"league_id": league_id})).one_or_none()
     if existing is not None:
+        if not (await session.execute(_IS_MEMBER, {"league_id": existing.id, "player_key": player_key})).first():
+            raise AlreadyExtended(league_id)
         return _league(existing), False
+    # Сам владелец обязан попасть в продолжение: без места в квоте лигу не создаём (иначе она осиротеет).
+    await _check_league_quota(session, player_key, now=now)
     terms = terms or _next_terms(league, now=now)
     fresh = await _insert_league(session, owner_key=player_key, name=league.name, terms=terms, extended_from=league.id)
     joined = max(_utc(now), terms.starts_at) if terms.starts_at > _utc(now) else _utc(now)
@@ -539,20 +574,30 @@ async def league_by_code(session: AsyncSession, code: str) -> League | None:
     return None if record is None else _league(record)
 
 
-async def join_by_code(session: AsyncSession, *, player_key: int, display_name: str, code: str) -> League:
-    """Вступить по коду. Повторный переход по той же ссылке ничего не меняет."""
+async def join_league(session: AsyncSession, *, player_key: int, display_name: str, code: str) -> tuple[League, bool]:
+    """Вступить по коду. Возвращает (лига, добавлен_ли_сейчас): повторный переход по ссылке ничего не меняет."""
     found = await league_by_code(session, code)
     if found is None:
         raise LookupError(code)
     # Лочим строку лиги: двое одновременно не превысят лимит участников.
-    league = _league((await session.execute(_LEAGUE_BY_ID_LOCK, {"league_id": found.id})).one())
+    record = (await session.execute(_LEAGUE_BY_ID_LOCK, {"league_id": found.id})).one_or_none()
+    if record is None:  # лигу удалили между поиском по коду и блокировкой
+        raise LookupError(code)
+    league = _league(record)
+    if not (await session.execute(_MEMBER_COUNT, {"league_id": league.id})).scalar_one():
+        raise LookupError(code)  # лига ушла в архив между поиском и блокировкой: не воскрешаем
     await _ensure_player(session, player_key, display_name)
     if (await session.execute(_IS_MEMBER, {"league_id": league.id, "player_key": player_key})).first():
-        return league
+        return league, False
     if (await session.execute(_MEMBER_COUNT, {"league_id": league.id})).scalar_one() >= MAX_MEMBERS:
         raise LeagueFull(league.id)
     await _check_league_quota(session, player_key)
     await session.execute(_ADD_MEMBER, {"league_id": league.id, "player_key": player_key})
+    return league, True
+
+
+async def join_by_code(session: AsyncSession, *, player_key: int, display_name: str, code: str) -> League:
+    league, _ = await join_league(session, player_key=player_key, display_name=display_name, code=code)
     return league
 
 
@@ -567,11 +612,15 @@ async def _member_league(session: AsyncSession, league_id: int, player_key: int,
 
 
 async def leave_league(session: AsyncSession, *, league_id: int, player_key: int) -> str:
-    """Выйти. Ушёл владелец — лига переходит к самому раннему участнику; ушёл последний — лиги нет."""
+    """Выйти. Ушёл владелец — лига переходит к самому раннему участнику; ушёл последний — лиги нет
+    (``deleted``), а если у неё есть короны — она уходит в архив без участников (``archived``)."""
     league = await _member_league(session, league_id, player_key)
     await session.execute(_REMOVE_MEMBER, {"league_id": league_id, "player_key": player_key})
     next_owner = (await session.execute(_NEXT_OWNER, {"league_id": league_id})).scalar_one_or_none()
     if next_owner is None:
+        if (await session.execute(_HAS_CROWNS, {"league_id": league_id})).scalar_one():
+            # Архив: строка лиги остаётся без участников (владелец прежний), короны и их названия живы.
+            return "archived"
         await session.execute(_DELETE_LEAGUE, {"league_id": league_id})
         return "deleted"
     if league.owner_key == player_key:
@@ -727,9 +776,40 @@ async def league_titles(session: AsyncSession, *, league_id: int, now: datetime)
     return pick_titles(picks, next_match_id=next_id)
 
 
-async def player_leagues(session: AsyncSession, *, player_key: int, now: datetime) -> list[LeagueSummary]:
+_RECENT = object()
+
+
+async def player_leagues(
+    session: AsyncSession,
+    *,
+    player_key: int,
+    now: datetime,
+    league_ids: list[int] | None = None,
+    ends_after: datetime | None | object = _RECENT,
+    starts_by: datetime | None = None,
+    limit: int = MY_LEAGUES_LIMIT,
+    with_rank: bool = True,
+) -> list[LeagueSummary]:
+    """Лиги игрока в порядке вступления; место и очки — по таблице лиги.
+
+    По умолчанию — идущие и закончившиеся не раньше ``RECENTLY_ENDED_DAYS`` назад, не больше ``limit``.
+    ``league_ids`` — только эти лиги (границы срока тогда не нужны: ``ends_after=None``); ``ends_after`` — лиги,
+    кончающиеся позже этого момента; ``starts_by`` — начавшиеся не позже. Таблица считается на каждую вернувшуюся
+    лигу, поэтому берите узкий срез; ``with_rank=False`` таблиц не считает (``my_rank``/``my_points`` — ``None``).
+    """
+    now_utc = _utc(now)
+    if ends_after is _RECENT:
+        ends_after = now_utc - timedelta(days=RECENTLY_ENDED_DAYS)
+    params = {
+        "player_key": player_key,
+        "now": now_utc,
+        "ids": None if league_ids is None else list(league_ids),
+        "ends_after": None if ends_after is None else _utc(ends_after),  # type: ignore[arg-type]
+        "starts_by": None if starts_by is None else _utc(starts_by),
+        "limit": limit,
+    }
     out: list[LeagueSummary] = []
-    for record in (await session.execute(_MY_LEAGUES, {"player_key": player_key})).all():
+    for record in (await session.execute(_MY_LEAGUES, params)).all():
         league = League(
             id=record.id,
             name=record.name,
@@ -741,8 +821,11 @@ async def player_leagues(session: AsyncSession, *, player_key: int, now: datetim
             starts_at=record.starts_at,
             ends_at=record.ends_at,
         )
-        rows = await league_table_rows(session, league)
-        mine = next(r for r in rows if r.player_key == player_key)
+        rank = points = None
+        if with_rank:
+            rows = await league_table_rows(session, league)
+            mine = next(r for r in rows if r.player_key == player_key)
+            rank, points = mine.rank, mine.points
         out.append(
             LeagueSummary(
                 id=record.id,
@@ -750,14 +833,14 @@ async def player_leagues(session: AsyncSession, *, player_key: int, now: datetim
                 invite_code=record.invite_code,
                 is_owner=bool(record.is_owner),
                 members=record.members,
-                my_rank=mine.rank,
-                my_points=mine.points,
+                my_rank=rank,  # type: ignore[arg-type]
+                my_points=points,  # type: ignore[arg-type]
                 scope=record.scope,
                 clubs=league.clubs,
                 term_kind=record.term_kind,
                 starts_at=record.starts_at,
                 ends_at=record.ends_at,
-                active=_utc(record.ends_at) > _utc(now),
+                active=_utc(record.ends_at) > now_utc,
             )
         )
     return out
@@ -847,7 +930,9 @@ __all__ = [
     "create_league",
     "friends_moves",
     "friends_picks",
+    "AlreadyExtended",
     "join_by_code",
+    "join_league",
     "league_by_code",
     "league_preview",
     "league_table",

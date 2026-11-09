@@ -329,6 +329,8 @@
   /* ── Общие куски ─────────────────────────────────────────────────── */
 
   function backBtn(label) {
+    // В Telegram «назад» — нативная стрелка в шапке (MiniAppBack); своя кнопка только в браузере.
+    if (window.MiniAppBack && window.MiniAppBack.isNative()) return '';
     return '<button type="button" class="back" data-act="back">‹ ' + esc(label) + '</button>';
   }
 
@@ -408,7 +410,7 @@
 
   function renderList() {
     if (S.loadError) {
-      return '<div class="bd">' + (CAME_FROM ? backBtn('Назад') : '') + '<h1 class="h1a">Учиться с тренером</h1><div class="card"><p>Не удалось загрузить тренеров.</p>' +
+      return '<div class="bd bd--list"><h1 class="h1a">Учиться с тренером</h1><div class="card"><p>Не удалось загрузить тренеров.</p>' +
         '<button type="button" class="sec2" data-act="retry">Повторить</button></div></div>';
     }
     if (!S.items) return '<div class="bd"><div class="skel"></div><div class="skel"></div></div>';
@@ -419,7 +421,7 @@
     var counts = M.tabCounts(S.items, arenaId);
     var list = M.visibleTrainers(S.items, key, arenaId);
     var dir = M.direction(key);
-    var h = '<div class="bd">' + (CAME_FROM ? backBtn('Назад') : '') + '<h1 class="h1a">Учиться с тренером</h1>';
+    var h = '<div class="bd bd--list"><h1 class="h1a">Учиться с тренером</h1>';
     if (!solo) {
       h += '<div class="tabsA" role="tablist">' + M.DIRECTIONS.filter(function (d) {
         return d.key === 'all' || d.key === key || counts[d.key] > 0;
@@ -448,7 +450,6 @@
         (arenaId ? '<button type="button" class="sec2" data-act="arena-clear">' + esc(dir.key === 'all' ? 'Все катки' : dir.title + ' на всех катках') + '</button>' : '') +
         '</div>';
     } else {
-      h += '<span class="mut" style="font-size:12px">Сверху — тренеры с онлайн-записью, по ближайшему свободному времени.</span>';
       h += list.map(function (t) { return cardHtml(t, key, arenaId); }).join('');
     }
     return h + '</div>';
@@ -1603,6 +1604,15 @@
     }
   }
 
+  function syncBack() {
+    var Back = window.MiniAppBack;
+    if (!Back) return;
+    // Список — корень раздела «Поиск» (панель вкладок под рукой): стрелки нет. Она появляется,
+    // только когда идём вглубь (карточка тренера, неделя, запись) и ведёт на шаг назад.
+    if (S.view !== 'list' || S.stack.length) Back.set(back);
+    else Back.clear();
+  }
+
   function render() {
     if (S.view === 'book') capturePhone(S.book, appEl);
     var html;
@@ -1613,6 +1623,7 @@
     else if (S.view === 'reqsent') html = renderReqSent();
     else html = renderList();
     appEl.innerHTML = '<div class="tsw-view">' + html + '</div>';
+    syncBack();
     syncTabBar();
     if (S.view === 'book' && S.book) wirePhone(S.book);
     if (S.view === 'sent' || (S.view === 'trainer' && S.waBlock)) BC.bindWriteAccessBlock(appEl);

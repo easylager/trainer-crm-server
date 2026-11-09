@@ -17,15 +17,18 @@
 отдельно; заблокировавшему бота больше не пишем, пока он снова не зайдёт.
 
 Сообщение сначала «занимается» строкой в ``hockey_notices`` и только потом уходит: второй цикл
-или повтор тика не пришлёт его дважды. Сбой отправки не повторяем.
+или повтор тика не пришлёт его дважды. Постоянный сбой (BadRequest) не повторяем; временный (429, сеть, 5xx) освобождает
+строку, и сообщение уходит на следующем проходе — не более ``MAX_ATTEMPTS`` раз.
 
 Ход из чата — тот же ``hockey_game.make_pick``, что у Mini App: срок закрытия и запись одни и те же.
 """
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
+import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -108,6 +111,9 @@ CB_LEAVE = "kk:lv"  # kk:lv:<лига>
 SENT = "ok"
 BLOCKED = "blocked"
 FAILED = "failed"
+RETRY = "retry"  # временный сбой (429, сеть, 5xx): сообщение не потеряно, повторим на следующем проходе
+# Попыток на одно сообщение; счётчик в памяти процесса — дальше страхуют окна свежести и тишина.
+MAX_ATTEMPTS = 5
 
 MONTHS_GEN = (
     "января",
@@ -523,8 +529,9 @@ async def fan_club(session: AsyncSession, player_key: int, *, now: datetime) -> 
 # ---------- «тебя обошли в лиге» ----------
 
 _ACTIVE_LEAGUES = text("""
-    SELECT id, name, invite_code, owner_key, scope, clubs, term_kind, starts_at, ends_at FROM hockey_leagues
+    SELECT id, name, invite_code, owner_key, scope, clubs, term_kind, starts_at, ends_at FROM hockey_leagues AS l
     WHERE starts_at <= :now AND ends_at > :now
+      AND EXISTS (SELECT 1 FROM hockey_league_members AS m WHERE m.league_id = l.id)  -- архивные пропускаем
     ORDER BY id
     """)
 
@@ -835,7 +842,7 @@ _QUEUE_MOVED = text("""
     ON CONFLICT (player_key, match_id, kind) DO UPDATE SET sent_at = NULL, failed = false
     """)
 
-# Строки уже «заняты» при вставке — достаются один раз; сбой отправки не повторяем (sent_at IS NULL + failed).
+# Строки уже «заняты» при вставке; постоянный сбой отправки — failed, временный оставляет строку в очереди.
 _DUE_MOVED = text("""
     SELECT n.player_key, n.match_id, n.kind, m.home_team, m.away_team, m.starts_at
     FROM hockey_notices AS n
@@ -911,6 +918,78 @@ async def mark_done(session: AsyncSession, notice: Notice, *, ok: bool, now: dat
         await session.execute(_DONE, {**params, "ok": ok, "now": _utc(now)})
 
 
+_RELEASE = text("""
+    DELETE FROM hockey_notices
+    WHERE player_key = :player_key AND match_id = :match_id AND kind = :kind AND sent_at IS NULL AND NOT failed
+    """)
+
+_RETRIES: dict[tuple, int] = {}
+
+
+def _attempt(key: tuple) -> bool:
+    """Учесть попытку после временного сбоя. True — попытки ещё есть, False — лимит исчерпан."""
+    _RETRIES[key] = _RETRIES.get(key, 0) + 1
+    if _RETRIES[key] >= MAX_ATTEMPTS:
+        _RETRIES.pop(key, None)
+        return False
+    return True
+
+
+async def release(session: AsyncSession, notice: Notice) -> None:
+    """Вернуть сообщение в очередь после временного сбоя: строку-«занятие» убираем, и скан найдёт повод снова."""
+    if notice.preclaimed:
+        return  # строка поставлена событием: sent_at IS NULL и не failed — и так в очереди
+    for match_id in notice.match_ids:
+        await session.execute(_RELEASE, {"player_key": notice.player_key, "match_id": match_id, "kind": notice.kind})
+
+
+# ---------- чистка старых строк ----------
+
+# Строки hockey_notices нужны, пока матч «живой» для сообщений (защита от повтора). Старше этого срока
+# отправленные и окончательно упавшие строки только раздувают таблицу и индексы.
+NOTICES_KEEP = timedelta(days=60)
+NOTICES_CLEANUP_EVERY = timedelta(hours=6)
+NOTICES_CLEANUP_BATCH = 2000
+NOTICES_CLEANUP_MAX_BATCHES = 10
+
+# Неотправленные строки очереди (sent_at IS NULL и не failed) не трогаем; повторно поставленная строка
+# («moved» снова в очереди) имеет свежий sent_at/NULL, поэтому под условие не попадает.
+_DELETE_OLD_NOTICES = text("""
+    DELETE FROM hockey_notices
+    WHERE (player_key, match_id, kind) IN (
+        SELECT player_key, match_id, kind FROM hockey_notices
+        WHERE COALESCE(sent_at, created_at) < :cutoff AND (sent_at IS NOT NULL OR failed)
+        LIMIT :batch
+    )
+    """)
+
+_last_cleanup: datetime | None = None
+
+
+async def cleanup_old_notices(session_factory, *, now: datetime, force: bool = False) -> int:
+    """Удалить старые строки порциями, не чаще раза в ``NOTICES_CLEANUP_EVERY``. Возвращает число удалённых.
+
+    Каждая порция — своя короткая транзакция; за проход не больше ``NOTICES_CLEANUP_MAX_BATCHES`` порций,
+    остаток уйдёт в следующий раз."""
+    global _last_cleanup
+    now = _utc(now)
+    if not force and _last_cleanup is not None and now - _last_cleanup < NOTICES_CLEANUP_EVERY:
+        return 0
+    _last_cleanup = now
+    total = 0
+    for _ in range(NOTICES_CLEANUP_MAX_BATCHES):
+        async with session_factory() as session:
+            result = await session.execute(
+                _DELETE_OLD_NOTICES, {"cutoff": now - NOTICES_KEEP, "batch": NOTICES_CLEANUP_BATCH}
+            )
+            await session.commit()
+        deleted = getattr(result, "rowcount", 0) or 0
+        total += deleted
+        if deleted < NOTICES_CLEANUP_BATCH:
+            break
+    return total
+
+
 def _outcome(value: "bool | str") -> str:
     if value is True:
         return SENT
@@ -937,12 +1016,20 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
             logger.warning("kto-kogo notice %s/%s failed", notice.kind, notice.match_id, exc_info=True)
             outcome = FAILED
+        key = (notice.kind, notice.player_key, notice.match_ids)
+        if outcome == RETRY and not _attempt(key):
+            outcome = FAILED
         async with session_factory() as session:
-            await mark_done(session, notice, ok=outcome == SENT, now=now)
-            if outcome == BLOCKED:
-                await mark_blocked(session, notice.player_key, now=now)
+            if outcome == RETRY:
+                await release(session, notice)
+            else:
+                _RETRIES.pop(key, None)
+                await mark_done(session, notice, ok=outcome == SENT, now=now)
+                if outcome == BLOCKED:
+                    await mark_blocked(session, notice.player_key, now=now)
             await session.commit()
-        counts[{SENT: "sent", BLOCKED: "blocked"}.get(outcome, "failed")] += 1
+        name = {SENT: "sent", BLOCKED: "blocked", RETRY: "retry"}.get(outcome, "failed")
+        counts[name] = counts.get(name, 0) + 1  # ``retry`` появляется в ответе только когда был
     return counts
 
 
@@ -1031,6 +1118,11 @@ _CLAIM_LEAGUE_NOTICE = text("""
     RETURNING player_key
     """)
 
+_RELEASE_LEAGUE_NOTICE = text("""
+    UPDATE hockey_league_notices SET claimed_at = NULL
+    WHERE league_id = :league_id AND player_key = :player_key AND kind = 'extended' AND sent_at IS NULL
+    """)
+
 _DONE_LEAGUE_NOTICE = text("""
     UPDATE hockey_league_notices
     SET sent_at = CASE WHEN CAST(:ok AS BOOLEAN) THEN CAST(:now AS TIMESTAMPTZ) END, failed = :failed
@@ -1084,48 +1176,108 @@ async def deliver_league_notices(session_factory, *, now: datetime, send: Sender
         except Exception:  # noqa: BLE001
             logger.warning("kto-kogo league notice %s failed", r.league_id, exc_info=True)
             outcome = FAILED
+        key = ("league", r.league_id, r.player_key)
+        if outcome == RETRY and not _attempt(key):
+            outcome = FAILED
         async with session_factory() as session:
-            await session.execute(
-                _DONE_LEAGUE_NOTICE,
-                {**params, "ok": outcome == SENT, "failed": outcome != SENT, "now": _utc(now)},
-            )
-            if outcome == BLOCKED:
-                await mark_blocked(session, r.player_key, now=now)
+            if outcome == RETRY:
+                await session.execute(_RELEASE_LEAGUE_NOTICE, params)  # claimed_at снова NULL — уйдёт в следующий проход
+            else:
+                _RETRIES.pop(key, None)
+                await session.execute(
+                    _DONE_LEAGUE_NOTICE,
+                    {**params, "ok": outcome == SENT, "failed": outcome != SENT, "now": _utc(now)},
+                )
+                if outcome == BLOCKED:
+                    await mark_blocked(session, r.player_key, now=now)
             await session.commit()
-        counts[{SENT: "sent", BLOCKED: "blocked"}.get(outcome, "failed")] += 1
+        name = {SENT: "sent", BLOCKED: "blocked", RETRY: "retry"}.get(outcome, "failed")
+        counts[name] = counts.get(name, 0) + 1
     return counts
 
 
-async def send_via_client_bot(chat_id: int, text_body: str, buttons: list[list[dict]]) -> str:
-    """Личное сообщение клиентским ботом: ``ok``, ``blocked`` (запретил писать) или ``failed``."""
+# Telegram режет рассылку ботом на ~30 сообщений/с; держимся с запасом.
+_THROTTLE_SEC = 1 / 25
+# Дольше этого просьбу подождать (RetryAfter) не ждём: сообщение вернётся в очередь на следующий проход.
+_RETRY_AFTER_CAP_SEC = 30
+_last_send = 0.0
+_bot = None
+_bot_token = ""
+
+
+async def _client_bot():
+    """Один ``Bot`` (и его HTTP-сессия) на процесс, а не на каждое сообщение; закрывается ``close_client_bot``."""
+    global _bot, _bot_token
     from aiogram import Bot
     from aiogram.client.default import DefaultBotProperties
     from aiogram.enums import ParseMode
-    from aiogram.exceptions import TelegramForbiddenError
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
     from src.shared.config import Settings
 
     token = (Settings().telegram_bot_token_client or "").strip()  # type: ignore[call-arg]
     if not token:
+        return None
+    if _bot is None or _bot_token != token:
+        await close_client_bot()
+        _bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        _bot_token = token
+    return _bot
+
+
+async def close_client_bot() -> None:
+    global _bot, _bot_token
+    bot, _bot, _bot_token = _bot, None, ""
+    if bot is not None:
+        await bot.session.close()
+
+
+async def _throttle() -> None:
+    global _last_send
+    wait = _last_send + _THROTTLE_SEC - time.monotonic()
+    if wait > 0:
+        await asyncio.sleep(wait)
+    _last_send = time.monotonic()
+
+
+async def send_via_client_bot(chat_id: int, text_body: str, buttons: list[list[dict]]) -> str:
+    """Личное сообщение клиентским ботом: ``ok``, ``blocked`` (запретил писать), ``retry`` (429, сеть, 5xx —
+    повторим позже) или ``failed`` (BadRequest и прочее постоянное)."""
+    from aiogram.exceptions import (
+        TelegramForbiddenError,
+        TelegramNetworkError,
+        TelegramRetryAfter,
+        TelegramServerError,
+    )
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    bot = await _client_bot()
+    if bot is None:
         return FAILED
     markup = (
         InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(**b) for b in row] for row in buttons])
         if buttons
         else None
     )
-    bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    try:
-        await bot.send_message(chat_id=int(chat_id), text=text_body, reply_markup=markup)
-        return SENT
-    except TelegramForbiddenError:
-        logger.info("kto-kogo notice to %s: bot blocked", chat_id)
-        return BLOCKED
-    except Exception:  # noqa: BLE001 — BadRequest/сеть: не повторяем
-        logger.info("kto-kogo notice to %s not delivered", chat_id, exc_info=True)
-        return FAILED
-    finally:
-        await bot.session.close()
+    for attempt in (1, 2):
+        await _throttle()
+        try:
+            await bot.send_message(chat_id=int(chat_id), text=text_body, reply_markup=markup)
+            return SENT
+        except TelegramForbiddenError:
+            logger.info("kto-kogo notice to %s: bot blocked", chat_id)
+            return BLOCKED
+        except TelegramRetryAfter as exc:
+            if attempt == 2 or exc.retry_after > _RETRY_AFTER_CAP_SEC:
+                logger.info("kto-kogo notice to %s: 429, retry later (%ss)", chat_id, exc.retry_after)
+                return RETRY
+            await asyncio.sleep(exc.retry_after)
+        except (TimeoutError, TelegramNetworkError, TelegramServerError):
+            logger.info("kto-kogo notice to %s: temporary error, retry later", chat_id, exc_info=True)
+            return RETRY
+        except Exception:  # noqa: BLE001 — BadRequest и прочее постоянное: не повторяем
+            logger.info("kto-kogo notice to %s not delivered", chat_id, exc_info=True)
+            return FAILED
+    return RETRY
 
 
 __all__ = [
@@ -1150,7 +1302,9 @@ __all__ = [
     "TYPE_CODES",
     "chat_pick",
     "claim",
+    "close_client_bot",
     "clear_blocked",
+    "cleanup_old_notices",
     "deliver",
     "deliver_league_notices",
     "due_notices",
@@ -1162,6 +1316,7 @@ __all__ = [
     "next_move",
     "picked_buttons",
     "queue_moved",
+    "release",
     "remind_on",
     "result_text",
     "scan_league_ranks",

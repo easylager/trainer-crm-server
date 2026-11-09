@@ -11,13 +11,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.hockey_cache import aggregates, personal_aggregates
 from src.application.hockey_game import (
     FIRST_RACE_MONTH,
     MONTHS,
@@ -38,6 +41,8 @@ PEAK_MIN_MOVES = 3
 PEAKS_LIMIT = 3
 NEIGHBORS = 2
 _PERIOD_RE = re.compile(r"^(\d{4})-(\d{2})$")
+# Годы вне этого окна — мусор из запроса: date/astimezone на краях календаря падают OverflowError (500).
+MIN_YEAR, MAX_YEAR = 2020, 2100
 
 
 def _utc(value: datetime) -> datetime:
@@ -83,7 +88,7 @@ def parse_period(raw: str | None, now: datetime) -> Period:
     if value == KIND_MONTH:
         return current_month_period(now)
     found = _PERIOD_RE.match(value)
-    if found and 1 <= int(found.group(2)) <= 12:
+    if found and 1 <= int(found.group(2)) <= 12 and MIN_YEAR <= int(found.group(1)) <= MAX_YEAR:
         return month_period(date(int(found.group(1)), int(found.group(2)), 1))
     raise ValueError(f"unknown period: {raw!r}")
 
@@ -191,6 +196,49 @@ async def slice_rows(session: AsyncSession, *, scope: Scope, period: Period) -> 
     return [Row(**r._mapping) for r in rows]
 
 
+@dataclass(frozen=True)
+class SliceTable:
+    """Кэшируемая таблица среза: строки по местам и поиск строки игрока без прохода по всем."""
+
+    rows: list[Row]
+    by_key: dict[int, Row]
+
+
+def _cacheable_scope(scope: Scope) -> bool:
+    """Кэшируем только срезы известных клубов: произвольная строка ``club`` из запроса не должна плодить ключи."""
+    if not scope.clubs:
+        return True
+    from src.application.extraliga import CLUBS
+    from src.application.hockey_teams import TEAMS
+
+    known = set(TEAMS) | {club.name for club in CLUBS.values()}
+    return all(c in known for c in scope.clubs)
+
+
+async def slice_table_cached(session: AsyncSession, *, scope: Scope, period: Period) -> SliceTable:
+    """``slice_rows`` с коротким кэшем и single-flight: для запросов API, где допустима задержка ≤ TTL.
+
+    Списки и словарь общие — только читать. Фоновые пересчёты (короны, уведомления) берут ``slice_rows``."""
+
+    async def compute() -> SliceTable:
+        rows = await slice_rows(session, scope=scope, period=period)
+        return SliceTable(rows=rows, by_key={r.player_key: r for r in rows})
+
+    key = ("slice", scope.clubs, scope.league, period.since, period.until)
+    return await aggregates.get_or_compute(
+        key, compute, weight=lambda t: len(t.rows), cacheable=_cacheable_scope(scope)
+    )
+
+
+async def slice_rows_cached(session: AsyncSession, *, scope: Scope, period: Period) -> list[Row]:
+    return (await slice_table_cached(session, scope=scope, period=period)).rows
+
+
+async def slice_row_of(session: AsyncSession, *, scope: Scope, period: Period, player_key: int) -> Row | None:
+    """Строка одного игрока в срезе (место считается по всему срезу, но он берётся из кэша)."""
+    return (await slice_table_cached(session, scope=scope, period=period)).by_key.get(player_key)
+
+
 async def league_rows(
     session: AsyncSession, *, league_id: int, scope: Scope, since: datetime, until: datetime
 ) -> list[Row]:
@@ -236,14 +284,38 @@ def correct_percent(row: Row | None) -> int | None:
     return round(100 * row.correct / row.played)
 
 
-async def crown_totals(session: AsyncSession, *, league_id: int | None = None) -> dict[int, int]:
-    """Число корон у каждого игрока одним запросом — ВСЕ его короны (месяцы, клубы, лиги).
+async def crown_totals(
+    session: AsyncSession, *, league_id: int | None = None, player_keys: Iterable[int] | None = None
+) -> dict[int, int]:
+    """Число корон у игроков одним запросом — ВСЕ их короны (месяцы, клубы, лиги).
 
     Значок у имени один на всё приложение: в хабе, таблице, лиге и профиле он считает одно и то же.
-    ``league_id`` оставлен для совместимости вызовов и на счёт не влияет.
+    ``league_id`` оставлен для совместимости вызовов и на счёт не влияет. ``player_keys`` — только эти
+    игроки (те, кого экран реально показывает): без него читается вся таблица корон.
     """
-    stmt = text("SELECT player_key, COUNT(*)::int AS crowns FROM hockey_crowns GROUP BY player_key")
-    return {r.player_key: r.crowns for r in (await session.execute(stmt)).all()}
+    if player_keys is None:
+        stmt = text("SELECT player_key, COUNT(*)::int AS crowns FROM hockey_crowns GROUP BY player_key")
+        params: dict = {}
+    else:
+        keys = sorted(set(player_keys))
+        if not keys:
+            return {}
+        stmt = text(
+            "SELECT player_key, COUNT(*)::int AS crowns FROM hockey_crowns"
+            " WHERE player_key = ANY(:keys) GROUP BY player_key"
+        )
+        params = {"keys": keys}
+    return {r.player_key: r.crowns for r in (await session.execute(stmt, params)).all()}
+
+
+def shown_keys(rows: list[Row], player_key: int | None, *, limit: int) -> set[int]:
+    """Чьи строки таблицы увидит игрок: верх, он сам и соседи — для ``crown_totals(player_keys=...)``."""
+    keys = {r.player_key for r in rows[:limit]}
+    if player_key is not None:
+        mine = next((i for i, r in enumerate(rows) if r.player_key == player_key), None)
+        if mine is not None:
+            keys |= {r.player_key for r in rows[max(0, mine - NEIGHBORS) : mine + NEIGHBORS + 1]}
+    return keys
 
 
 def _row_out(row: Row, *, me: int | None, crowns: dict[int, int]) -> dict:
@@ -321,7 +393,36 @@ _PEAKS = text("""
     """)
 
 
+# Запрос вершин ранжирует весь сезон (все клубы × месяцы) и тяжелее любой таблицы среза: пик не должен
+# превращаться в десятки одновременных таких запросов и занимать весь пул соединений. Лишние ждут здесь,
+# ещё не взяв соединение.
+_PEAKS_PARALLEL = 2
+_peaks_gate: asyncio.Semaphore | None = None
+_peaks_gate_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _gate() -> asyncio.Semaphore:
+    global _peaks_gate, _peaks_gate_loop
+    loop = asyncio.get_running_loop()
+    if _peaks_gate is None or _peaks_gate_loop is not loop:
+        _peaks_gate, _peaks_gate_loop = asyncio.Semaphore(_PEAKS_PARALLEL), loop
+    return _peaks_gate
+
+
 async def peaks(session: AsyncSession, *, player_key: int, now: datetime) -> list[dict]:
+    """Вершины игрока с коротким кэшем по игроку (результат не зависит от ``now`` внутри сезона)."""
+    season = season_period(now)
+
+    async def compute() -> list[dict]:
+        async with _gate():
+            return await _peaks_uncached(session, player_key=player_key, now=now)
+
+    return await personal_aggregates.get_or_compute(
+        ("peaks", player_key, season.since, season.until), compute, weight=lambda items: 1 + len(items)
+    )
+
+
+async def _peaks_uncached(session: AsyncSession, *, player_key: int, now: datetime) -> list[dict]:
     """Три среза, где у игрока лучшее место среди срезов, где он играл и где есть кого обгонять.
 
     Срез годится, если в нём хотя бы трое с очками и у игрока не меньше трёх ходов. Сравнение —
@@ -405,12 +506,15 @@ async def stakes(session: AsyncSession, *, player_key: int, match_id: int, now: 
         return None
     mult = 2 if match.doubled else 1
     add = POINTS_WINNER * mult
+    if match.status != "scheduled":
+        # Сыгранный (или отменённый) матч уже в таблицах: очки победителя второй раз не добавляем.
+        return {"match_id": match_id, "points_if_winner": add, "doubled": bool(match.doubled), "items": []}
     month = month_period(_utc(match.starts_at).astimezone(MINSK_TZ).date())
     season = season_period(match.starts_at)
     out: list[dict] = []
     for club in (match.home_team, match.away_team, None):
         for period in (month, season):
-            rows = await slice_rows(session, scope=club_scope(club), period=period)
+            rows = await slice_rows_cached(session, scope=club_scope(club), period=period)
             if not crown_eligible(rows):
                 continue
             now_rank = next((r.rank for r in rows if r.player_key == player_key), None)
@@ -468,10 +572,13 @@ __all__ = [
     "DINAMO",
     "FIRST_RACE_MONTH",
     "KIND_MONTH",
+    "MAX_YEAR",
+    "MIN_YEAR",
     "KIND_SEASON",
     "Period",
     "Row",
     "Scope",
+    "SliceTable",
     "club_scope",
     "correct_percent",
     "crown_eligible",
@@ -486,7 +593,11 @@ __all__ = [
     "peaks",
     "season_label",
     "season_period",
+    "shown_keys",
+    "slice_row_of",
     "slice_rows",
+    "slice_rows_cached",
+    "slice_table_cached",
     "stakes",
     "table_view",
     "week_start",

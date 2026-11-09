@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_public_use_cases import STATUS_ACTIVE
 from src.application.catalog_home_page import _session_card
+from src.application.hockey_game import pick_open
 from src.application.hockey_matches import DINAMO
 from src.application.hockey_teams import team_card
 from src.application.hub_home import _upcoming
@@ -311,7 +312,7 @@ def _pick_out(row: Any) -> dict[str, Any]:
 def _phase(status: str, starts_at: datetime, *, now: datetime, picked: bool) -> str:
     if status in ("final", "cancelled"):
         return "final"
-    if status == "scheduled" and now < starts_at:
+    if pick_open(status, starts_at, now):  # последние 60 секунд ход уже не принимается
         return "picked" if picked else "open"
     return "live"
 

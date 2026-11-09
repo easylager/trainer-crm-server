@@ -631,11 +631,9 @@
   function start() {
     if (tg) {
       try { tg.ready(); } catch (e) { /* */ }
-      try {
-        tg.BackButton.show();
-        tg.BackButton.onClick(back);
-      } catch (e) { /* старый клиент — кнопка в шапке */ }
     }
+    // Нативная стрелка в шапке Telegram — единственная «назад»; кружок в шапке матча нужен только вне Telegram.
+    if (global.MiniAppBack && global.MiniAppBack.set(back)) $('cmBack').hidden = true;
     // Токены сайта темнеют по body.tg-dark, а тема Mini App ставит hub-is-dark на <html> — как на главной.
     var syncDark = function () {
       doc.body.classList.toggle('tg-dark', doc.documentElement.classList.contains('hub-is-dark'));

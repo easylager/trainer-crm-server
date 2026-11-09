@@ -1500,9 +1500,10 @@ def _b_buy(links: Mapping[str, Any]) -> str:
     )
 
 
-def schedule_wait_lines(card: Mapping[str, Any]) -> tuple[str, str]:
-    """TASK-330: (надзаголовок, заголовок) пустой карточки — привычка катка, без дат.
+def schedule_wait_habit(card: Mapping[str, Any]) -> str:
+    """Когда каток обычно выкладывает расписание — по нашим журналам волн (``schedule_habit``).
 
+    Говорим про публикацию, не про сеансы: «Каток обычно выкладывает расписание по пятницам».
     Та же логика, что ``scheduleWaitView`` в Mini App (arena-card-model.js), один словарь.
     """
     raw = card.get("schedule_habit")
@@ -1510,10 +1511,10 @@ def schedule_wait_lines(card: Mapping[str, Any]) -> tuple[str, str]:
     level = habit.get("level")
     weekday = habit.get("weekday")
     if level == "day" and isinstance(weekday, int) and not isinstance(weekday, bool) and 0 <= weekday <= 6:
-        return t("schedule.wait_kicker"), t("schedule.habit_day", day=t(f"schedule.dow_{weekday}"))
+        return t("schedule.habit_day", day=t(f"schedule.dow_{weekday}"))
     if level == "week":
-        return t("schedule.wait_kicker"), t("schedule.habit_week")
-    return "", t("schedule.wait_none")
+        return t("schedule.habit_week")
+    return ""
 
 
 def _schedule_waits(card: Mapping[str, Any]) -> bool:
@@ -1523,12 +1524,13 @@ def _schedule_waits(card: Mapping[str, Any]) -> bool:
 
 
 def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
-    """TASK-330: привычка катка и колокольчик в Telegram (бот ставит его по /start watch_<id>)."""
+    """TASK-330: «расписания пока нет» и колокольчик в Telegram (бот ставит его по /start watch_<id>)."""
     from src.application.catalog_icons import icon_svg
 
-    kicker, headline = schedule_wait_lines(card)
+    headline = t("schedule.wait_none")
+    habit = schedule_wait_habit(card)
+    habit_html = f'<p class="b-wait__sub">{_esc(habit)}</p>' if habit else ""
     watch = links.get("watch")
-    kicker_html = f'<p class="b-wait__kicker">{_esc(kicker)}</p>' if kicker else ""
     bell = ""
     if watch:
         bell = (
@@ -1537,7 +1539,7 @@ def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
             f'{icon_svg("bell")}{_esc(t("schedule.bell_site_cta"))}</a>'
             f'<p class="b-wait__note">{_esc(t("schedule.bell_note"))}</p>'
         )
-    return f'<div class="b-wait">{kicker_html}<p class="b-wait__title">{_esc(headline)}</p>{bell}</div>'
+    return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{habit_html}{bell}</div>'
 
 
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
@@ -1545,7 +1547,7 @@ def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *,
     del title
     if _schedule_waits(card):
         # Касса и телефон остаются под колокольчиком: они полезны и без расписания.
-        return f"{_b_schedule_wait(card, links)}{_b_buy(links)}{_b_call(card, links)}"
+        return f"{_b_schedule_wait(card, links)}{_b_buy(links)}{_b_call(card, links, dark=False)}"
     buy = _b_buy(links)
     call = _b_call(card, links)
     if call:
@@ -1898,13 +1900,16 @@ def _b_ice(
         _title, skate_body, buy = skate
         tabs.append(("skate", t("kind.public_skate"), skate_body, ""))
     tabs.extend(extras)
+    visit = view["card"].get("visit_info")
+    renamed = (visit.get("ice_tab_labels") if isinstance(visit, Mapping) else None) or {}
+    tabs = [(key, renamed.get(key) or label, body_, aside_) for key, label, body_, aside_ in tabs]
     radios = "".join(
         f'<input type="radio" name="icetab" id="icetab-{key}" class="b-icetabs__r"{" checked" if i == 0 else ""}>'
         for i, (key, _l, _b, _a) in enumerate(tabs)
     )
     labels = "".join(
         f'<label for="icetab-{key}" class="b-seg__i b-seg__i--{key}" title="{_esc(label)}">'
-        f"{_esc(_ICE_TAB_SHORT.get(key, label) if len(tabs) > 2 else label)}</label>"
+        f"{_esc(renamed.get(key) or (_ICE_TAB_SHORT.get(key, label) if len(tabs) > 2 else label))}</label>"
         for key, label, _b, _a in tabs
     )
     panes = "".join(

@@ -28,7 +28,7 @@ from src.application.hockey_slices import (
     scope_has_match,
     season_label,
     season_period,
-    slice_rows,
+    slice_rows_cached,
 )
 from src.application.hockey_teams import team_card
 from src.ingestion.hockey_sources import MINSK_TZ
@@ -117,7 +117,7 @@ async def match_movement(session: AsyncSession, *, player_key: int, match_id: in
     found: list[dict] = []
     for club in (match.home_team, match.away_team, None):
         for period in (month, season):
-            rows = await slice_rows(session, scope=club_scope(club), period=period)
+            rows = await slice_rows_cached(session, scope=club_scope(club), period=period)
             if not crown_eligible(rows):
                 continue
             after = next((r for r in rows if r.player_key == player_key), None)
@@ -264,7 +264,7 @@ async def fan_profile(session: AsyncSession, *, player_key: int, now: datetime) 
     club = favorite_club(in_season)
 
     async def place(for_club: str | None) -> dict | None:
-        rows = await slice_rows(session, scope=club_scope(for_club), period=season)
+        rows = await slice_rows_cached(session, scope=club_scope(for_club), period=season)
         mine = next((r for r in rows if r.player_key == player_key), None)
         if mine is None:
             return None

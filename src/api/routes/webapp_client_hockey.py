@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
@@ -36,7 +36,9 @@ from src.application.hockey_slices import (
     crown_totals,
     parse_period,
     peaks,
-    slice_rows,
+    shown_keys,
+    slice_row_of,
+    slice_rows_cached,
     stakes,
     table_view,
 )
@@ -56,6 +58,8 @@ class PickBody(BaseModel):
     home_score: int | None = None
     away_score: int | None = None
     display_name: str | None = None
+    # Рекламная метка (kks_<метка>): учитывается только первому ходу нового игрока, мусор игнорируется.
+    src: str | None = Field(None, max_length=64)
 
 
 def _aware(value: datetime) -> datetime:
@@ -265,6 +269,7 @@ async def put_client_hockey_pick(
             side=body.side,
             home_score=body.home_score,
             away_score=body.away_score,
+            src=body.src,
             now=now,
         )
     except ValueError as exc:
@@ -278,8 +283,8 @@ async def put_client_hockey_pick(
 
 
 async def _my_season_row(session: AsyncSession, player_key: int, now: datetime):
-    rows = await slice_rows(session, scope=club_scope(None), period=parse_period(None, now))
-    return next((r for r in rows if r.player_key == player_key), None)
+    # Строка берётся из короткого кэша среза: таблицу всего сезона не считаем на каждое открытие экрана.
+    return await slice_row_of(session, scope=club_scope(None), period=parse_period(None, now), player_key=player_key)
 
 
 @router.get("/client/hockey/standings")
@@ -299,8 +304,9 @@ async def get_client_hockey_standings(
         chosen = parse_period(period, now)
     except ValueError:
         raise HTTPException(status_code=400, detail="Неизвестный период") from None
-    rows = await slice_rows(session, scope=club_scope(club), period=chosen)
-    crowns = await crown_totals(session, league_id=None)
+    rows = await slice_rows_cached(session, scope=club_scope(club), period=chosen)
+    # Короны нужны только тем, кого таблица показывает: верх, сам игрок и соседи.
+    crowns = await crown_totals(session, player_keys=shown_keys(rows, player_key, limit=_TABLE_LIMIT))
     view = table_view(
         rows, player_key=player_key, crowns=crowns, limit=_TABLE_LIMIT, crown_possible=chosen.kind == "month"
     )

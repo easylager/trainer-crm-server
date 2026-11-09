@@ -631,7 +631,10 @@
       imgHtml +
       (hero.mode === 'photo' ? '<span class="arena-hero__shade"></span>' : '<span class="arena-hero__glare"></span>') +
       '<span class="arena-hero__top">' +
-      '<button type="button" class="ga-round ga-press" data-action="back" aria-label="Назад">' + icon('back') + '</button>' +
+      // В Telegram «назад» — нативная стрелка в шапке (MiniAppBack, мост от #btnBack); кружок только в браузере.
+      (global.MiniAppBack && global.MiniAppBack.isNative()
+        ? ''
+        : '<button type="button" class="ga-round ga-press" data-action="back" aria-label="Назад">' + icon('back') + '</button>') +
       shareRound +
       '</span>' +
       '<span class="arena-hero__txt">' +
@@ -1668,8 +1671,8 @@
       '<p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
       '<div class="arena-wait">' +
       '<div class="arena-wait__head">' +
-      (w.kicker ? '<p class="arena-wait__kicker">' + esc(w.kicker) + '</p>' : '') +
       '<p class="arena-wait__title">' + esc(w.title) + '</p>' +
+      (w.habit ? '<p class="arena-wait__sub">' + esc(w.habit) + '</p>' : '') +
       (canWatch ? '<p class="arena-wait__sub">' + esc(w.sub) + '</p>' : '') +
       '</div>' +
       bell +

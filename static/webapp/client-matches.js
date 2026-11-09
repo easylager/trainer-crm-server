@@ -316,8 +316,9 @@
 
   function start() {
     if (tg) {
-      try { tg.ready(); tg.BackButton.show(); tg.BackButton.onClick(back); } catch (e) { /* старый клиент */ }
+      try { tg.ready(); } catch (e) { /* старый клиент */ }
     }
+    if (global.MiniAppBack && global.MiniAppBack.set(back)) $('cmBack').hidden = true;
     var syncDark = function () { doc.body.classList.toggle('tg-dark', doc.documentElement.classList.contains('hub-is-dark')); };
     syncDark();
     if (global.MutationObserver) new global.MutationObserver(syncDark).observe(doc.documentElement, { attributes: true, attributeFilter: ['class'] });

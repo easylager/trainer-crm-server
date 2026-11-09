@@ -11,9 +11,11 @@ from sqlalchemy import text
 from src.application.hockey_game import make_pick, score_finished_matches
 from src.application.hockey_leagues import build_terms, create_league, extend_league, join_by_code
 from src.application.hockey_matches import set_manual_result
+from src.application import hockey_notices
 from src.application.hockey_notices import (
     BLOCKED,
     FAILED,
+    RETRY,
     SENT,
     chat_pick,
     deliver,
@@ -43,6 +45,11 @@ def bot_env(monkeypatch) -> None:
     monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_test_bot")
     monkeypatch.setenv("CLIENT_BOT_MAIN_MINI_APP", "1")
     monkeypatch.delenv("CLIENT_MINI_APP_SHORT_NAME", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def fresh_retry_counter() -> None:
+    hockey_notices._RETRIES.clear()
 
 
 @pytest.fixture
@@ -403,6 +410,145 @@ async def test_failed_send_is_not_retried(db_session, factory) -> None:
     out = Outbox()
     assert (await deliver(factory, now=at(16, 20), send=out))["sent"] == 0 and out.sent == []
     assert (await get_prefs(db_session, SASHA))["blocked"] is False
+
+
+class Script:
+    """Отправка по сценарию: каждому вызову — следующий ответ, последний повторяется."""
+
+    def __init__(self, *answers) -> None:
+        self.answers = list(answers)
+        self.calls = 0
+
+    async def __call__(self, chat_id: int, body: str, buttons) -> str:
+        answer = self.answers[min(self.calls, len(self.answers) - 1)]
+        self.calls += 1
+        return answer
+
+
+@pytest.mark.asyncio
+async def test_temporary_error_releases_notice_and_next_pass_resends(db_session, factory) -> None:
+    await _fan(db_session, SASHA)
+    await _match(db_session, "r1", at(19))
+    out = Script(RETRY, SENT)
+    first = await deliver(factory, now=at(16, 5), send=out)
+    assert first["sent"] == 0 and first["failed"] == 0 and first["retry"] == 1
+    assert (await db_session.execute(text("SELECT COUNT(*) FROM hockey_notices"))).scalar_one() == 0
+    assert (await deliver(factory, now=at(16, 15), send=out))["sent"] == 1
+    assert (await deliver(factory, now=at(16, 25), send=out))["sent"] == 0 and out.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_retries_are_capped_then_notice_is_failed_for_good(db_session, factory) -> None:
+    await _fan(db_session, SASHA)
+    await _match(db_session, "r2", at(19))
+    out = Script(RETRY)
+    for minute in range(hockey_notices.MAX_ATTEMPTS - 1):
+        assert (await deliver(factory, now=at(16, 5 + minute), send=out))["retry"] == 1
+    last = await deliver(factory, now=at(16, 20), send=out)
+    assert last["failed"] == 1 and "retry" not in last
+    assert (await deliver(factory, now=at(16, 30), send=out))["failed"] == 0 and out.calls == hockey_notices.MAX_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_temporary_error_on_preclaimed_moved_notice_keeps_it_due(db_session, factory) -> None:
+    await _fan(db_session, SASHA)
+    m = await _match(db_session, "r3", at(19))
+    await db_session.execute(
+        text("INSERT INTO hockey_notices (player_key, match_id, kind) VALUES (:p, :m, 'moved')"), {"p": SASHA, "m": m}
+    )
+    out = Script(RETRY, SENT)
+    assert (await deliver(factory, now=at(12, 5), send=out))["retry"] == 1
+    assert (await deliver(factory, now=at(12, 15), send=out))["sent"] == 1
+
+
+@pytest.mark.asyncio
+async def test_temporary_error_returns_league_notice_to_queue(db_session, factory) -> None:
+    league = await create_league(
+        db_session,
+        owner_key=SASHA,
+        owner_name="Саша",
+        name="Офис",
+        terms=build_terms(scope="all", term="season", now=at(0, day=1)),
+        now=at(0, day=1),
+    )
+    await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
+    await extend_league(db_session, league_id=league.id, player_key=SASHA, now=at(12))
+    out = Script(RETRY, SENT)
+    assert (await deliver_league_notices(factory, now=at(12, 5), send=out))["retry"] == 1
+    assert (await deliver_league_notices(factory, now=at(12, 15), send=out))["sent"] == 1
+
+
+class _FakeBot:
+    def __init__(self, *errors) -> None:
+        self.errors = list(errors)
+        self.sent = 0
+
+    async def send_message(self, **kwargs) -> None:
+        if self.errors:
+            raise self.errors.pop(0)
+        self.sent += 1
+
+
+@pytest.fixture
+def sender(monkeypatch):
+    sleeps: list[float] = []
+
+    async def fake_sleep(sec: float) -> None:
+        sleeps.append(sec)
+
+    monkeypatch.setattr(hockey_notices.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(hockey_notices, "_THROTTLE_SEC", 0)
+
+    def use(bot):
+        async def get():
+            return bot
+
+        monkeypatch.setattr(hockey_notices, "_client_bot", get)
+        return sleeps
+
+    return use
+
+
+@pytest.mark.asyncio
+async def test_sender_waits_retry_after_and_resends(sender) -> None:
+    from aiogram.exceptions import TelegramRetryAfter
+
+    bot = _FakeBot(TelegramRetryAfter(method=None, message="flood", retry_after=3))
+    sleeps = sender(bot)
+    assert await hockey_notices.send_via_client_bot(1, "t", []) == SENT
+    assert sleeps == [3] and bot.sent == 1
+
+
+@pytest.mark.asyncio
+async def test_sender_long_retry_after_is_not_waited_but_retried_later(sender) -> None:
+    from aiogram.exceptions import TelegramRetryAfter
+
+    bot = _FakeBot(TelegramRetryAfter(method=None, message="flood", retry_after=600))
+    sleeps = sender(bot)
+    assert await hockey_notices.send_via_client_bot(1, "t", []) == RETRY
+    assert sleeps == [] and bot.sent == 0
+
+
+@pytest.mark.asyncio
+async def test_sender_network_and_server_errors_are_retry_bad_request_is_failed(sender) -> None:
+    from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramServerError
+
+    for error, expected in (
+        (TelegramNetworkError(method=None, message="timeout"), RETRY),
+        (TelegramServerError(method=None, message="502"), RETRY),
+        (TelegramBadRequest(method=None, message="chat not found"), FAILED),
+    ):
+        sender(_FakeBot(error))
+        assert await hockey_notices.send_via_client_bot(1, "t", []) == expected
+
+
+@pytest.mark.asyncio
+async def test_sender_throttles_between_messages(sender, monkeypatch) -> None:
+    sleeps = sender(_FakeBot())
+    monkeypatch.setattr(hockey_notices, "_THROTTLE_SEC", 0.04)
+    monkeypatch.setattr(hockey_notices, "_last_send", hockey_notices.time.monotonic())
+    await hockey_notices.send_via_client_bot(1, "t", [])
+    assert len(sleeps) == 1 and 0 < sleeps[0] <= 0.04
 
 
 # ---------- ход из чата ----------

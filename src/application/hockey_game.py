@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.hockey_promo import clean_src
 from src.application.hockey_slices_sql import SCOPE_SQL
 from src.ingestion.hockey_sources import MINSK_TZ
 
@@ -149,8 +150,8 @@ def normalize_pick(
 
 
 _PLAYER_UPSERT = text("""
-    INSERT INTO hockey_players (player_key, display_name)
-    VALUES (:player_key, :display_name)
+    INSERT INTO hockey_players (player_key, display_name, first_src)
+    VALUES (:player_key, :display_name, :first_src)
     ON CONFLICT (player_key) DO UPDATE
     SET display_name = EXCLUDED.display_name, updated_at = now()
     WHERE hockey_players.display_name IS DISTINCT FROM EXCLUDED.display_name
@@ -207,15 +208,24 @@ _PLAYER_MATCHES = text(f"""
            m.live_home_score, m.live_away_score, m.live_at,
            m.previous_starts_at, m.arena, m.city,
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
-           p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled,
-           (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
-           (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'away')::int AS away_picks
+           p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
     FROM game_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.status <> 'cancelled' AND m.starts_at >= :since
       {SCOPE_SQL}
     ORDER BY m.starts_at
     LIMIT :limit
+    """)
+
+# Сколько людей за каждую сторону — одним проходом по списку матчей (индекс ix_hockey_picks_match_side),
+# а не двумя коррелированными COUNT(*) на каждый матч.
+_SIDE_COUNTS = text("""
+    SELECT match_id,
+           COUNT(*) FILTER (WHERE side = 'home')::int AS home_picks,
+           COUNT(*) FILTER (WHERE side = 'away')::int AS away_picks
+    FROM hockey_picks
+    WHERE match_id = ANY(:match_ids)
+    GROUP BY match_id
     """)
 
 
@@ -228,6 +238,7 @@ async def make_pick(
     side: str | None = None,
     home_score: int | None = None,
     away_score: int | None = None,
+    src: str | None = None,
     now: datetime,
 ) -> Pick:
     """Записать или заменить ход игрока. Срок проверяется здесь, на сервере, а не в интерфейсе."""
@@ -238,7 +249,10 @@ async def make_pick(
     if not pick_open(match.status, match.starts_at, now):
         raise PicksClosed(match_id)
     name = (display_name or "").strip()[:40] or DEFAULT_PLAYER_NAME
-    await session.execute(_PLAYER_UPSERT, {"player_key": player_key, "display_name": name})
+    # Рекламная метка пишется только при создании игрока: ON CONFLICT first_src не трогает.
+    await session.execute(
+        _PLAYER_UPSERT, {"player_key": player_key, "display_name": name, "first_src": clean_src(src)}
+    )
     row = (
         await session.execute(
             _PICK_UPSERT,
@@ -285,8 +299,13 @@ async def score_finished_matches(session: AsyncSession, *, now: datetime) -> int
     params = {"winner": POINTS_WINNER, "diff": POINTS_DIFF, "goals": POINTS_GOALS, "now": _utc(now)}
     result = await session.execute(_SCORE_FINALS, params)
     scored = getattr(result, "rowcount", 0) or 0
-    await session.execute(_UNSCORE_CANCELLED, {"now": _utc(now)})
+    unscored = await session.execute(_UNSCORE_CANCELLED, {"now": _utc(now)})
     await session.execute(_RELEASE_CANCELLED_TRUMPS, {"now": _utc(now)})
+    if scored or (getattr(unscored, "rowcount", 0) or 0) > 0:
+        # Очки изменились — короткий кэш таблиц (hockey_cache) этого процесса больше не верен.
+        from src.application.hockey_cache import invalidate_after_commit
+
+        invalidate_after_commit(session)
     return int(scored)
 
 
@@ -512,7 +531,16 @@ async def player_matches(
     ``club`` — только матчи клуба (дома и в гостях), ``league`` — ``khl`` (Динамо) или ``extraliga``.
     """
     params = {"player_key": player_key, "since": _utc(since), "limit": limit, **_scope(club, league).params}
-    return [dict(r._mapping) for r in (await session.execute(_PLAYER_MATCHES, params)).all()]
+    rows = [dict(r._mapping) for r in (await session.execute(_PLAYER_MATCHES, params)).all()]
+    counts = {}
+    if rows:
+        found = await session.execute(_SIDE_COUNTS, {"match_ids": [int(r["id"]) for r in rows]})
+        counts = {r.match_id: r for r in found.all()}
+    for row in rows:
+        c = counts.get(row["id"])
+        row["home_picks"] = c.home_picks if c else 0
+        row["away_picks"] = c.away_picks if c else 0
+    return rows
 
 
 __all__ = [

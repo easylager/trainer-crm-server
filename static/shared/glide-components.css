@@ -26,6 +26,7 @@
   font-family: var(--g-font-display); font-weight: 400; font-size: 26px; line-height: 1.1;
   border-radius: 10px; padding: 4px 10px;
 }
+.b-badge__day { display: block; font: 600 13px/1.2 var(--g-font); letter-spacing: 0; color: inherit; opacity: .85; }
 .b-badge--light { background: var(--g-surface); color: var(--g-ink); }
 
 /* ── Билет сеанса ─────────────────────────────────────────────────────── */

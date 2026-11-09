@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from datetime import date, timedelta
 from typing import Any
 
 # Порядок блоков страницы катка. Один на сайт и Mini App; тест сверяет оба.
@@ -22,6 +23,10 @@ PLACE_BLOCKS: tuple[str, ...] = ("cover", "ice", "facts", "services", "trainers"
 TICKET_MODES: tuple[str, ...] = ("online", "same_day", "box_office", "phone")
 FACT_STATES: tuple[str, ...] = ("yes", "no")
 WARMTH_STATES: tuple[str, ...] = ("warm", "cool", "cold")
+# Вкладки блока «На льду»: арена может переименовать их (place_page._b_ice).
+ICE_TAB_KEYS: tuple[str, ...] = ("skate", "family", "figure", "ohm")
+# Анонс акции появляется за столько дней до начала; после valid_until акция исчезает сама.
+PROMO_ANNOUNCE_DAYS = 7
 SERVICE_KINDS: tuple[str, ...] = ("aid", "rental", "sharpening", "protection", "helmet", "other")
 FACT_ICONS: tuple[str, ...] = (
     "hanger", "lock", "cup", "thermo", "card", "child", "eye", "ruler", "clock", "info", "parking", "person",
@@ -245,6 +250,28 @@ def normalize_visit_info(raw: Any) -> dict[str, Any]:
             rink["phone"] = phone
         out["rink_rental"] = rink
 
+    promos = []
+    for row in _rows(raw.get("promos"), field="promos"):
+        title = _text(row.get("title"), limit=80)
+        if not title:
+            continue
+        promo = {"title": title, "text": _text(row.get("text"))}
+        for key in ("valid_from", "valid_until"):
+            raw_day = _text(row.get(key), limit=10)
+            if raw_day:
+                try:
+                    promo[key] = date.fromisoformat(raw_day).isoformat()
+                except ValueError as exc:
+                    raise VisitInfoError(f"promos.{key}: нужна дата ГГГГ-ММ-ДД") from exc
+        promos.append(promo)
+    if promos:
+        out["promos"] = promos
+
+    tabs = raw.get("ice_tab_labels") if isinstance(raw.get("ice_tab_labels"), Mapping) else {}
+    tab_labels = {k: _text(tabs.get(k), limit=30) for k in ICE_TAB_KEYS if _text(tabs.get(k), limit=30)}
+    if tab_labels:
+        out["ice_tab_labels"] = tab_labels
+
     return out
 
 
@@ -461,8 +488,41 @@ def _guess_icon(label: str) -> str:
     return "info"
 
 
-def _more_view(visit: Mapping[str, Any], *, has_trainers: bool) -> list[dict[str, Any]]:
+def _promo_when(start: date | None, end: date | None, today: date) -> str:
+    from src.shared.arena_schedule_mode import _MONTHS_GEN
+
+    def fmt(d: date) -> str:
+        return f"{d.day} {_MONTHS_GEN[d.month - 1]}"
+
+    if start and start > today:
+        return f"{fmt(start)}" if end in (None, start) else f"{fmt(start)} — {fmt(end)}"
+    if end is None:
+        return ""
+    return "сегодня" if end == today else f"до {fmt(end)}"
+
+
+def _promos_view(visit: Mapping[str, Any], today: date) -> list[dict[str, Any]]:
+    """Акции со сроком жизни: идущие сейчас и анонсы на ближайшую неделю. Прошедшие не показываем."""
+    rows: list[tuple[date, dict[str, Any]]] = []
+    for p in visit.get("promos") or []:
+        start = date.fromisoformat(p["valid_from"]) if p.get("valid_from") else None
+        end = date.fromisoformat(p["valid_until"]) if p.get("valid_until") else None
+        if end and end < today:
+            continue
+        if start and start > today + timedelta(days=PROMO_ANNOUNCE_DAYS):
+            continue
+        rows.append((start or today, {"title": p["title"], "text": p.get("text") or "",
+                                      "when": _promo_when(start, end, today)}))
+    return [r for _, r in sorted(rows, key=lambda x: x[0])]
+
+
+def _more_view(visit: Mapping[str, Any], *, has_trainers: bool, today: date) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
+    promos = _promos_view(visit, today)
+    if promos:
+        out.append({"key": "promos", "icon": "ticket", "title": "Акции",
+                    "note": f"{promos[0]['title']}" + (f" · {promos[0]['when']}" if promos[0]["when"] else ""),
+                    "detail": {"rows": promos}})
     school = _mapping(visit.get("school"))
     if school.get("rows") and not has_trainers:
         out.append({"key": "school", "icon": "child", "title": "Научиться кататься",
@@ -519,12 +579,17 @@ def visit_view(
     has_trainers: bool = False,
     rental_price: str = "",
     has_slots: bool | None = None,
+    today: date | None = None,
 ) -> dict[str, Any]:
     """Всё, что блоки 2–7 показывают сверх расписания. Пустые части — пустые списки.
 
     ``rental_price`` — цена проката из сеансов недели: если она известна, строка проката
     не должна говорить «цена в кассе».
     """
+    if today is None:
+        from src.ingestion.dates import minsk_today
+
+        today = minsk_today()
     visit = _mapping(card.get("visit_info"))
     hours = _mapping(card.get("opening_hours"))
     school = _mapping(visit.get("school"))
@@ -540,5 +605,5 @@ def visit_view(
         "facts_visible": FACTS_VISIBLE,
         "services": _services_view(card, visit, hours, rental_price),
         "school": dict(school) if school.get("rows") and has_trainers else None,
-        "more": _more_view(visit, has_trainers=has_trainers),
+        "more": _more_view(visit, has_trainers=has_trainers, today=today),
     }

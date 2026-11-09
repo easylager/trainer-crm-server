@@ -50,6 +50,7 @@ body.arena-hub .arena-hero--photo .arena-hero__shade {
   background: linear-gradient(180deg, rgba(13, 27, 38, .3) 0%, rgba(13, 27, 38, 0) 30%, rgba(13, 27, 38, .82) 100%);
 }
 body.arena-hub .arena-hero__glare { display: none; }
+body.arena-hub .arena-hero__top > :only-child { margin-left: auto; }
 body.arena-hub .arena-hero__top {
   position: absolute; z-index: 2; left: 16px; right: 16px; top: calc(12px + env(safe-area-inset-top, 0px));
   display: flex; justify-content: space-between;

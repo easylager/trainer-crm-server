@@ -1262,30 +1262,20 @@ describe('TASK-290: живой остаток вместо полоски', () =
 });
 
 describe('scheduleWaitView (TASK-330)', () => {
-  const NB = ' ';
+  const NB = '\u00a0';
 
-  it('names the rink habit day without promising a date', () => {
+  it('says when the rink usually publishes, not when sessions are', () => {
     const { scheduleWaitView } = loadModel();
-    const v = scheduleWaitView({ schedule_habit: { level: 'day', weekday: 4 } });
-    assert.equal(v.kicker, 'Новое расписание');
-    assert.equal(v.title, 'Обычно по' + NB + 'пятницам');
-    assert.equal(v.sub, 'Сообщим в' + NB + 'Telegram, как только появится.');
-    assert.equal(v.cta, 'Сообщить, когда появится');
-    assert.doesNotMatch(v.title + v.sub, /\d/);
-  });
-
-  it('covers every weekday and the weekly rhythm', () => {
-    const { scheduleWaitView } = loadModel();
-    const days = ['понедельникам', 'вторникам', 'средам', 'четвергам', 'пятницам', 'субботам', 'воскресеньям'];
-    days.forEach((day, wd) => {
-      assert.equal(scheduleWaitView({ schedule_habit: { level: 'day', weekday: wd } }).title, 'Обычно по' + NB + day);
-    });
+    const day = scheduleWaitView({ schedule_habit: { level: 'day', weekday: 4 } });
+    assert.equal(day.title, 'Ждём новое расписание');
+    assert.equal(day.habit, 'Каток обычно выкладывает расписание по' + NB + 'пятницам');
     const week = scheduleWaitView({ schedule_habit: { level: 'week', weekday: null } });
-    assert.equal(week.title, 'Обычно раз в' + NB + 'неделю');
-    assert.equal(week.kicker, 'Новое расписание');
+    assert.equal(week.habit, 'Каток обычно выкладывает расписание раз в' + NB + 'неделю');
+    assert.equal(day.kicker, undefined);
+    assert.equal(day.cta, 'Сообщить, когда появится');
   });
 
-  it('falls back to waiting without a habit or with a broken weekday', () => {
+  it('keeps quiet without a habit or with a broken weekday', () => {
     const { scheduleWaitView } = loadModel();
     [
       {},
@@ -1297,7 +1287,7 @@ describe('scheduleWaitView (TASK-330)', () => {
     ].forEach((card) => {
       const v = scheduleWaitView(card);
       assert.equal(v.title, 'Ждём новое расписание');
-      assert.equal(v.kicker, '');
+      assert.equal(v.habit, '');
     });
   });
 });
@@ -1308,7 +1298,7 @@ describe('iceFeedView wait block (TASK-330)', () => {
     const habit = { level: 'day', weekday: 4 };
     const tracked = iceFeedView({ card: { schedule_tracked: true, schedule_habit: habit }, hasSessions: false });
     assert.ok(tracked.wait);
-    assert.equal(tracked.wait.title, 'Обычно по пятницам');
+    assert.equal(tracked.wait.title, 'Ждём новое расписание');
     assert.equal(iceFeedView({ card: { schedule_tracked: false }, hasSessions: false }).wait, undefined);
     assert.equal(iceFeedView({ card: { schedule_tracked: true }, hasSessions: true }).wait, undefined);
   });

@@ -751,7 +751,7 @@
   }
 
   /* TASK-330: пустая карточка катка, который ведёт расписание. Даты не обещаем —
-     только наблюдение о привычке катка («Обычно по пятницам») и колокольчик. */
+     только «расписания пока нет» и колокольчик. */
   function copyWith(key, fallback, kw) {
     var GC = glideCopy();
     if (GC && typeof GC.t === 'function') {
@@ -765,26 +765,22 @@
 
   var DOW_DAT_PL = ['понедельникам', 'вторникам', 'средам', 'четвергам', 'пятницам', 'субботам', 'воскресеньям'];
 
+  /* «Расписания пока нет» + когда каток обычно его выкладывает (по журналу волн). Говорим про
+     публикацию, не про сеансы: «Каток обычно выкладывает расписание по пятницам». */
   function scheduleWaitView(card) {
     card = card || {};
     var habit = card.schedule_habit && typeof card.schedule_habit === 'object' ? card.schedule_habit : {};
-    var kicker = '';
-    var title = '';
     var wd = habit.weekday;
+    var habitLine = '';
     if (habit.level === 'day' && typeof wd === 'number' && wd >= 0 && wd <= 6 && Math.floor(wd) === wd) {
-      var day = copyLine('schedule.dow_' + wd, DOW_DAT_PL[wd]);
-      title = copyWith('schedule.habit_day', 'Обычно по\u00a0{day}', { day: day });
+      habitLine = copyWith('schedule.habit_day', 'Каток обычно выкладывает расписание по\u00a0{day}',
+        { day: copyLine('schedule.dow_' + wd, DOW_DAT_PL[wd]) });
     } else if (habit.level === 'week') {
-      title = copyLine('schedule.habit_week', 'Обычно раз в\u00a0неделю');
-    }
-    if (title) {
-      kicker = copyLine('schedule.wait_kicker', 'Новое расписание');
-    } else {
-      title = copyLine('schedule.wait_none', 'Ждём новое расписание');
+      habitLine = copyLine('schedule.habit_week', 'Каток обычно выкладывает расписание раз в\u00a0неделю');
     }
     return {
-      kicker: kicker,
-      title: title,
+      habit: habitLine,
+      title: copyLine('schedule.wait_none', 'Ждём новое расписание'),
       sub: copyLine('schedule.wait_sub', 'Сообщим в\u00a0Telegram, как только появится.'),
       cta: copyLine('schedule.bell_cta', 'Сообщить, когда появится'),
       note: copyLine('schedule.bell_note', 'Одно сообщение, потом колокольчик сам выключится.'),

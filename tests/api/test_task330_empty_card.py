@@ -51,7 +51,8 @@ async def test_empty_tracked_rink_shows_habit_and_bell(app_use_test_db, db_sessi
     async with _client() as client:
         html = (await client.get(place["path"])).text
     assert 'class="b-wait"' in html
-    assert f"Обычно по{NB}пятницам" in html
+    assert "Ждём новое расписание" in html
+    assert f"Каток обычно выкладывает расписание по{NB}пятницам" in html  # про публикацию, не про сеансы
     # Кнопка в блоке и колокольчик на обложке — одна и та же подписка.
     assert html.count(f"startapp={watch_start_param(place['arena_id'])}") == 2
     assert f"Сообщить в{NB}Telegram" in html
@@ -69,8 +70,7 @@ async def test_empty_tracked_rink_without_habit_waits_without_a_day(app_use_test
     async with _client() as client:
         html = (await client.get(place["path"])).text
     assert "Ждём новое расписание" in html
-    assert "Обычно" not in html
-    assert "b-wait__kicker" not in html
+    assert "бычно" not in html
 
 
 @pytest.mark.asyncio

@@ -145,6 +145,9 @@
     // «Кто кого»: приглашение в лигу друзей (TASK-298/299).
     var league = /^kk_([A-Za-z0-9]{4,16})$/.exec(sp);
     if (league) return { key: 'kto-kogo', path: 'kto-kogo?join=' + league[1].toUpperCase() };
+    // Рекламный вход: kks_<метка> — откуда пришёл человек (соцсети, рассылка); метка 2–16 латиница/цифры.
+    var promo = /^kks_([A-Za-z0-9]{2,16})$/.exec(sp);
+    if (promo) return { key: 'kto-kogo', path: 'kto-kogo?src=' + promo[1].toLowerCase() };
     // Кнопки карточек в чате (TASK-300): kkl_КОД — приглашение, kkr[_КОД] — итог «в точку!».
     var fromCard = /^kk([lr])(?:_([A-Za-z0-9]{4,16}))?$/.exec(sp);
     if (fromCard) {

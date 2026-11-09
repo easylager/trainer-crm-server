@@ -3702,6 +3702,32 @@ async def ice_forecast_optout_callback(callback: CallbackQuery) -> None:
     await callback.answer(OPT_OUT_TOAST)
 
 
+@router.callback_query(lambda c: c.data == "kk_promo:optout")
+async def kk_promo_optout_callback(callback: CallbackQuery) -> None:
+    """Отписка от рассылки про «Кто кого»: тост, кнопка «Не присылать такое» уходит из сообщения."""
+    from src.application.release_comms_use_cases import (
+        KK_PROMO_OPTOUT_TOAST,
+        markup_without_kk_optout,
+        record_kk_promo_optout,
+    )
+    from src.infrastructure.db import async_session_factory
+
+    if callback.from_user is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        await record_kk_promo_optout(session, int(callback.from_user.id))
+        await session.commit()
+    if callback.message is not None:
+        try:
+            await callback.message.edit_reply_markup(
+                reply_markup=markup_without_kk_optout(callback.message.reply_markup)
+            )
+        except Exception:  # noqa: BLE001 — сообщение могло устареть; тост уже показан
+            logger.warning("kk_promo opt-out: failed to edit markup", exc_info=True)
+    await callback.answer(KK_PROMO_OPTOUT_TOAST)
+
+
 @router.message()
 async def fallback(message: Message) -> None:
     """Any other message: handle support state or direct to main menu."""

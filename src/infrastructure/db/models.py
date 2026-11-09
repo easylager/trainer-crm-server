@@ -615,8 +615,21 @@ class HockeyPlayer(Base):
 
     player_key: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=False)
     display_name: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Рекламная метка первого хода (миграция 0312): пишется при создании игрока, потом не меняется.
+    first_src: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyEntryEvent(Base):
+    """Заход в «Кто кого» по рекламной метке: только метка и время, без ключа игрока (миграция 0312)."""
+
+    __tablename__ = "hockey_entry_events"
+    __table_args__ = (Index("ix_hockey_entry_events_src", "src", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    src: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class HockeyPlayerPrefs(Base):
@@ -638,6 +651,8 @@ class HockeyPick(Base):
     __table_args__ = (
         UniqueConstraint("match_id", "player_key", name="uq_hockey_picks_match_player"),
         Index("ix_hockey_picks_player", "player_key"),
+        # Счётчики сторон по списку матчей (миграция 0311).
+        Index("ix_hockey_picks_match_side", "match_id", "side"),
         CheckConstraint("side IN ('home', 'away')", name="ck_hockey_picks_side"),
         CheckConstraint("(home_score IS NULL) = (away_score IS NULL)", name="ck_hockey_picks_score_pair"),
         CheckConstraint(
@@ -758,13 +773,14 @@ class ClientBroadcastOptout(Base):
     __tablename__ = "client_broadcast_optouts"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('ice_forecast')",
+            "kind IN ('ice_forecast', 'kk_promo')",
             name="ck_client_broadcast_optouts_kind",
         ),
     )
 
+    # Ключ (telegram_id, kind): отписка от одного вида рассылки не трогает другой (миграция 0312).
     telegram_id: Mapped[int] = mapped_column(BigInteger(), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
