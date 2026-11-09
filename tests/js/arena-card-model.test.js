@@ -1262,20 +1262,32 @@ describe('TASK-290: живой остаток вместо полоски', () =
 });
 
 describe('scheduleWaitView (TASK-330)', () => {
-  it('only says the schedule is not there yet, whatever habit the card carries', () => {
+  const NB = '\u00a0';
+
+  it('says when the rink usually publishes, not when sessions are', () => {
+    const { scheduleWaitView } = loadModel();
+    const day = scheduleWaitView({ schedule_habit: { level: 'day', weekday: 4 } });
+    assert.equal(day.title, 'Ждём новое расписание');
+    assert.equal(day.habit, 'Каток обычно выкладывает расписание по' + NB + 'пятницам');
+    const week = scheduleWaitView({ schedule_habit: { level: 'week', weekday: null } });
+    assert.equal(week.habit, 'Каток обычно выкладывает расписание раз в' + NB + 'неделю');
+    assert.equal(day.kicker, undefined);
+    assert.equal(day.cta, 'Сообщить, когда появится');
+  });
+
+  it('keeps quiet without a habit or with a broken weekday', () => {
     const { scheduleWaitView } = loadModel();
     [
       {},
       { schedule_habit: null },
-      { schedule_habit: { level: 'day', weekday: 4 } },
-      { schedule_habit: { level: 'week', weekday: null } },
+      { schedule_habit: { level: 'none', weekday: null } },
+      { schedule_habit: { level: 'day', weekday: 7 } },
+      { schedule_habit: { level: 'day', weekday: '4' } },
+      { schedule_habit: { level: 'day', weekday: 2.5 } },
     ].forEach((card) => {
       const v = scheduleWaitView(card);
       assert.equal(v.title, 'Ждём новое расписание');
-      assert.equal(v.kicker, undefined);
-      assert.equal(v.sub, 'Сообщим в\u00a0Telegram, как только появится.');
-      assert.equal(v.cta, 'Сообщить, когда появится');
-      assert.doesNotMatch(v.title + v.sub, /Обычно|\d/);
+      assert.equal(v.habit, '');
     });
   });
 });

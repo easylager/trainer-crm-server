@@ -1669,6 +1669,7 @@
       '<div class="arena-wait">' +
       '<div class="arena-wait__head">' +
       '<p class="arena-wait__title">' + esc(w.title) + '</p>' +
+      (w.habit ? '<p class="arena-wait__sub">' + esc(w.habit) + '</p>' : '') +
       (canWatch ? '<p class="arena-wait__sub">' + esc(w.sub) + '</p>' : '') +
       '</div>' +
       bell +

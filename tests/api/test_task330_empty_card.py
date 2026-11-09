@@ -52,7 +52,7 @@ async def test_empty_tracked_rink_shows_habit_and_bell(app_use_test_db, db_sessi
         html = (await client.get(place["path"])).text
     assert 'class="b-wait"' in html
     assert "Ждём новое расписание" in html
-    assert "бычно по" not in html  # день выкладывания расписания не обещаем
+    assert f"Каток обычно выкладывает расписание по{NB}пятницам" in html  # про публикацию, не про сеансы
     # Кнопка в блоке и колокольчик на обложке — одна и та же подписка.
     assert html.count(f"startapp={watch_start_param(place['arena_id'])}") == 2
     assert f"Сообщить в{NB}Telegram" in html

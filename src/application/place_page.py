@@ -1500,13 +1500,21 @@ def _b_buy(links: Mapping[str, Any]) -> str:
     )
 
 
-def schedule_wait_line() -> str:
-    """Заголовок пустой карточки: только факт «расписания нет». Дня и ритма не обещаем.
+def schedule_wait_habit(card: Mapping[str, Any]) -> str:
+    """Когда каток обычно выкладывает расписание — по нашим журналам волн (``schedule_habit``).
 
-    «Привычка» катка (``schedule_habit``) — день, когда каток выкладывает расписание, а читатель
-    слышал в этом «сеансы по пятницам». Слоты идут не только в этот день, так что не показываем.
+    Говорим про публикацию, не про сеансы: «Каток обычно выкладывает расписание по пятницам».
+    Та же логика, что ``scheduleWaitView`` в Mini App (arena-card-model.js), один словарь.
     """
-    return t("schedule.wait_none")
+    raw = card.get("schedule_habit")
+    habit: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
+    level = habit.get("level")
+    weekday = habit.get("weekday")
+    if level == "day" and isinstance(weekday, int) and not isinstance(weekday, bool) and 0 <= weekday <= 6:
+        return t("schedule.habit_day", day=t(f"schedule.dow_{weekday}"))
+    if level == "week":
+        return t("schedule.habit_week")
+    return ""
 
 
 def _schedule_waits(card: Mapping[str, Any]) -> bool:
@@ -1519,7 +1527,9 @@ def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
     """TASK-330: «расписания пока нет» и колокольчик в Telegram (бот ставит его по /start watch_<id>)."""
     from src.application.catalog_icons import icon_svg
 
-    headline = schedule_wait_line()
+    headline = t("schedule.wait_none")
+    habit = schedule_wait_habit(card)
+    habit_html = f'<p class="b-wait__sub">{_esc(habit)}</p>' if habit else ""
     watch = links.get("watch")
     bell = ""
     if watch:
@@ -1529,7 +1539,7 @@ def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
             f'{icon_svg("bell")}{_esc(t("schedule.bell_site_cta"))}</a>'
             f'<p class="b-wait__note">{_esc(t("schedule.bell_note"))}</p>'
         )
-    return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{bell}</div>'
+    return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{habit_html}{bell}</div>'
 
 
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:

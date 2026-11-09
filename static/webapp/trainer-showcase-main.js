@@ -408,7 +408,7 @@
 
   function renderList() {
     if (S.loadError) {
-      return '<div class="bd">' + (CAME_FROM ? backBtn('Назад') : '') + '<h1 class="h1a">Учиться с тренером</h1><div class="card"><p>Не удалось загрузить тренеров.</p>' +
+      return '<div class="bd bd--list"><h1 class="h1a">Учиться с тренером</h1><div class="card"><p>Не удалось загрузить тренеров.</p>' +
         '<button type="button" class="sec2" data-act="retry">Повторить</button></div></div>';
     }
     if (!S.items) return '<div class="bd"><div class="skel"></div><div class="skel"></div></div>';
@@ -419,7 +419,7 @@
     var counts = M.tabCounts(S.items, arenaId);
     var list = M.visibleTrainers(S.items, key, arenaId);
     var dir = M.direction(key);
-    var h = '<div class="bd">' + (CAME_FROM ? backBtn('Назад') : '') + '<h1 class="h1a">Учиться с тренером</h1>';
+    var h = '<div class="bd bd--list"><h1 class="h1a">Учиться с тренером</h1>';
     if (!solo) {
       h += '<div class="tabsA" role="tablist">' + M.DIRECTIONS.filter(function (d) {
         return d.key === 'all' || d.key === key || counts[d.key] > 0;
@@ -448,7 +448,6 @@
         (arenaId ? '<button type="button" class="sec2" data-act="arena-clear">' + esc(dir.key === 'all' ? 'Все катки' : dir.title + ' на всех катках') + '</button>' : '') +
         '</div>';
     } else {
-      h += '<span class="mut" style="font-size:12px">Сверху — тренеры с онлайн-записью, по ближайшему свободному времени.</span>';
       h += list.map(function (t) { return cardHtml(t, key, arenaId); }).join('');
     }
     return h + '</div>';

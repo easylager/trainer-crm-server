@@ -89,10 +89,10 @@ describe('панель вкладок на витрине', () => {
 });
 
 describe('«‹ Назад» на корне витрины', () => {
-  it('пришли с другого экрана — «Назад» уводит туда (history.back)', async () => {
+  it('пришли с другого экрана — на списке своей кнопки нет, «Назад» (панель Telegram) уводит туда (history.back)', async () => {
     const h = boot({ historyLength: 3, showcase: { items: [trainer(1), trainer(2)] }, session: PHONE });
     await tick();
-    assert.equal(backHtml(h), 'Назад');
+    assert.equal(backHtml(h), null);
     h.click({ 'data-act': 'back' });
     assert.equal(h.ctx.history.left, 1);
     assert.deepEqual([...h.ctx.navigated], []);
