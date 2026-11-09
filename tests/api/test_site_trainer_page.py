@@ -339,6 +339,19 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
 
 
 @pytest.mark.asyncio
+async def test_one_five_star_rating_says_one_not_all_fives(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        _, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_CRM)
+        await db_session.execute(
+            text("UPDATE trainer_profiles SET rating_avg = 5, rating_count = 1 WHERE trainer_id = :t"), {"t": tid}
+        )
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+    assert "1 оценка — 5 из 5" in html
+    assert "все на 5 из 5" not in html
+
+
+@pytest.mark.asyncio
 async def test_two_ratings_shown_and_no_photo_shows_letter(app_use_test_db, db_session) -> None:
     async with _client() as client:
         _place_row, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_CRM)

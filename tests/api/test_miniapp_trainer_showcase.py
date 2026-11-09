@@ -552,3 +552,32 @@ async def test_showcase_keeps_window_on_primary_arena_without_trainer_arenas_row
         body = (await client.get(f"/api/public/trainer-showcase?city_id={a['city_id']}")).json()
     item = next(t for t in body["items"] if t["id"] == tid)
     assert [w["slot_id"] for w in item["windows"]] == [mine]
+
+
+@pytest.mark.asyncio
+async def test_showcase_first_window_matches_trainer_page_with_dense_schedule(
+    app_use_test_db, db_session
+) -> None:
+    """Плотное расписание: первое окно витрины = первое в «Ближайшее время» на /t/."""
+    import re
+
+    from src.application.site_trainer_page import trainer_path
+
+    async with _client() as client:
+        place = await _place(db_session)
+        first = f"Плот{uuid.uuid4().hex[:4]}"
+        tid = await _trainer_on(db_session, client, place, first_name=first)
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        for day in range(3):
+            for hour in range(8, 20):
+                await _slot(db_session, tid, days=day, hour=hour, arena_id=place["arena_id"])
+        await db_session.commit()
+        name = f"{first} Тренерова"
+        showcase = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+        page_html = (await client.get(trainer_path(tid, name))).text
+
+    item = next(t for t in showcase["items"] if t["id"] == tid)
+    near = page_html.split('class="tp-near"', 1)[1].split("</div>", 1)[0]
+    first_page = re.search(rf"_s_(\d+)", near)
+    assert first_page is not None
+    assert item["windows"] and item["windows"][0]["slot_id"] == int(first_page.group(1))

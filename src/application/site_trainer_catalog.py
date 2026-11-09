@@ -297,9 +297,24 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     can_book: dict[int, bool] = {}
     for tid in ids:
         can_book[tid] = bool((await get_trainer_booking_availability(session, tid)).get("can_book"))
+    from src.application.site_trainer_page import WEEK_DAYS, WEEK_LOOKAHEAD_DAYS, WEEK_WINDOWS_LIMIT
+
     windows = await _trainer_windows_on_arena(
-        session, None, [t for t in ids if can_book[t]], timezone_name=NOTIFICATION_TZ
+        session,
+        None,
+        [t for t in ids if can_book[t]],
+        timezone_name=NOTIFICATION_TZ,
+        limit=WEEK_WINDOWS_LIMIT,
+        days=WEEK_LOOKAHEAD_DAYS,
     )
+
+    def _align_windows(wins: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not wins:
+            return []
+        first = min(datetime.fromisoformat(w["starts_at"]).date() for w in wins)
+        return [w for w in wins if (datetime.fromisoformat(w["starts_at"]).date() - first).days < WEEK_DAYS]
+
+    windows = {tid: _align_windows(ws) for tid, ws in windows.items()}
     win_cities = await window_arena_cities(session, [w for ws in windows.values() for w in ws])
     trainers: list[dict[str, Any]] = []
     for order, body in enumerate(bodies):
@@ -658,14 +673,19 @@ def _price_html(t: Mapping[str, Any], direction: Direction) -> str:
         val = f'<div class="tc-val">от {esc(_money(*found))}{note}</div>' if found else ""
     else:
         label = "Занятие · " + direction.short
+        found = direction_min_price(t, direction)
+        basis = _min_price_basis(t, found[0]) if found else ""
+        note = f" <small>{esc(basis)}</small>" if basis else ""
+        head_val = f'<div class="tc-val">от {esc(_money(*found))}{note}</div>' if found else ""
         tiers = price_tiers(t["services_by_dir"].get(direction.key, []))
-        val = (
+        tier_html = (
             '<div class="tc-tiers">'
             + "".join(f'<div class="tc-val">{esc(v)} <small>{esc(sub)}</small></div>' for v, sub in tiers)
             + "</div>"
             if tiers
             else ""
         )
+        val = head_val + tier_html
     if not val:
         val = '<div class="tc-no">Цену уточните у тренера</div>'
     return f'<div class="tc-price"><div><div class="tc-lbl">{esc(label)}</div>{val}</div></div>'
@@ -682,7 +702,7 @@ _ICON_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true
 def _card_html(t: Mapping[str, Any], direction: Direction, *, base_url: str, city_id: int, arena_id: int | None) -> str:
     photo = t.get("photo_url")
     ph = (
-        f'<img class="tc-ph" src="{esc(photo)}" alt="" width="128" height="148" loading="lazy" decoding="async" />'
+        f'<img class="tc-ph" src="{esc(photo)}" alt="{esc(t["name"])}" width="128" height="148" loading="lazy" decoding="async" />'
         if photo
         else f'<span class="tc-ph tc-ph--mono" aria-hidden="true">{esc(t["initial"])}</span>'
     )
@@ -869,13 +889,16 @@ def render_catalog_page(
     canonical = own_url
     city_href = f"/c/{city_slug(city_name)}"
 
+    public_city = format_public_name(city_name)
     h1 = "Тренер по катанию на коньках" if one and direction is ALL else direction.h1
     prices = [p for p in (direction_min_price(t, direction) for t in shown) if p]
-    facts = [f"<span><b>{esc(_n_trainers(len(shown)))}</b></span>"]
-    if prices:
-        low = min(prices)
-        facts.append(f"<span>от <b>{esc(_money(*low))}</b> за занятие</span>")
-    facts.append("<span>оплата на месте</span>")
+    facts: list[str] = []
+    if shown:
+        facts = [f"<span><b>{esc(_n_trainers(len(shown)))}</b></span>"]
+        if prices:
+            low = min(prices)
+            facts.append(f"<span>от <b>{esc(_money(*low))}</b> за занятие</span>")
+        facts.append("<span>оплата на месте</span>")
     crumbs_html = (
         '<nav class="tcat-crumbs" aria-label="Навигация">'
         f'<a href="{esc(city_href)}">{esc(public_city)}</a> › '
@@ -1076,6 +1099,7 @@ def render_catalog_page(
             "__OG_IMAGE__": esc(catalog_home_og_image_url(base)),
             "__LANG__": "ru",
             "__OG_LOCALE__": "ru_RU",
+            "__OG_TYPE__": "website",
             "__ROBOTS__": "index, follow" if indexable(data, direction) else "noindex, follow",
             "__HEAD_EXTRA__": f'<link rel="stylesheet" href="/static/share/trainer-catalog.css?v={TRAINER_CATALOG_STYLE_VERSION}" />',
             "__JSONLD__": json_for_script(ld) if pool else "{}",

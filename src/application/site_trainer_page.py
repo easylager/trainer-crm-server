@@ -48,7 +48,7 @@ from src.application.place_links import place_page_url, public_telegram_cta_url,
 from src.application.site_trainers import trainer_initial, trainer_line, trainer_name, trainer_photo_url
 from src.application.style_b import esc
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL, trainer_is_listed
-from src.shared.ru_text import trainer_rating_caption
+from src.shared.ru_text import trainer_rating_caption, trainer_rating_parts, trainer_rating_score, trainer_rating_summary
 from src.shared.city_locative import city_locative
 from src.shared.html_template import fill_placeholders
 from src.shared.public_display import format_public_name
@@ -404,6 +404,8 @@ async def _arena_peer_counts(session: AsyncSession, trainer_id: int, arena_ids: 
 
 async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction: Direction) -> list[dict[str, Any]]:
     """Другие тренеры направления в городе — по правилу каталога: услуга направления и (цена или каток)."""
+    from src.application.site_trainer_catalog import direction_min_price, services_by_direction
+    from src.application.trainer_min_price import load_pass_offers
     from src.application.trainer_use_cases import list_active_trainers_for_client
     from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
@@ -413,6 +415,7 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
     if not bodies:
         return []
     await load_service_directions(session, [s for b in bodies for s in b.get("services") or []])
+    passes = await load_pass_offers(session, [int(b["id"]) for b in bodies])
     ids = [int(b["id"]) for b in bodies]
     rows = await session.execute(
         text(f"""
@@ -432,14 +435,14 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
             arenas.setdefault(int(tid), []).append(str(name).strip())
     out: list[dict[str, Any]] = []
     for body in bodies:
-        svcs = [s for s in body.get("services") or [] if service_direction(s) == direction.key]
+        by_dir = services_by_direction(body.get("services") or [])
+        svcs = by_dir.get(direction.key) or []
         if not svcs:
             continue
         tid = int(body["id"])
-        cents = sorted({c for s in svcs for c in ([*_tier_cents(s).values()] or [_min_cents(s) or 0]) if c > 0})
-        cur = str(svcs[0].get("currency_code") or "BYN")
+        found = direction_min_price({"services_by_dir": by_dir, "passes": passes.get(tid, [])}, direction)
         where = arenas.get(tid, [])
-        if not cents and not where:
+        if not found and not where:
             continue
         name = trainer_name(body)
         out.append(
@@ -448,9 +451,7 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
                 "initial": trainer_initial(name),
                 "photo_url": trainer_photo_url(body),
                 "path": trainer_path(tid, name),
-                "price": (
-                    (("" if len(cents) == 1 else "от\u00a0") + _money(cents[0], cur)) if cents else "цену уточните"
-                ),
+                "price": (f"от\u00a0{_money(*found)}" if found else "цену уточните"),
                 "where": (
                     (
                         where[0]
@@ -902,6 +903,18 @@ def page_description(page: Mapping[str, Any]) -> str:
     return shortened + ending
 
 
+def _jsonld_description(text: str) -> str:
+    """Краткое bio для JSON-LD: без @-ников, обрезка по слову."""
+    import re
+
+    cleaned = re.sub(r"@[\w\d_]+", "", text)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    if len(cleaned) <= 300:
+        return cleaned
+    cut = cleaned[:300].rsplit(" ", 1)[0].rstrip(" ,;:—-.")
+    return cut or cleaned[:300]
+
+
 def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:
     person: dict[str, Any] = {
         "@context": "https://schema.org",
@@ -913,7 +926,7 @@ def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:
     if page.get("photo_url"):
         person["image"] = _absolute(base_url, str(page["photo_url"]))
     if page.get("description"):
-        person["description"] = str(page["description"])[:300]
+        person["description"] = _jsonld_description(str(page["description"]))
     locality = format_public_name(str(page.get("city_name") or ""))
     if locality:
         person["address"] = {"@type": "PostalAddress", "addressLocality": locality}
@@ -961,14 +974,6 @@ def write_beacon_url(page: Mapping[str, Any], *, via: str | None = None) -> str:
 
 def _rating_ok(page: Mapping[str, Any]) -> bool:
     return bool(trainer_rating_caption(page.get("rating_avg"), page.get("rating_count")))
-
-
-def _n_ratings(n: int) -> str:
-    return f"{n} {plural_ru(n, 'оценка', 'оценки', 'оценок')}"
-
-
-def _avg(page: Mapping[str, Any]) -> str:
-    return f"{float(page['rating_avg']):.1f}".replace(".", ",")
 
 
 def _years(page: Mapping[str, Any]) -> int:
@@ -1175,7 +1180,9 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
     if photo and not compact:
         media = f'<div class="tp-photo"><img src="{esc(photo)}" alt="{esc(page["name"])}" decoding="async" fetchpriority="high" /></div>'
     elif photo:
-        media = f'<img class="tp-ava" src="{esc(photo)}" alt="" width="72" height="72" decoding="async" />'
+        media = (
+            f'<img class="tp-ava" src="{esc(photo)}" alt="{esc(page["name"])}" width="72" height="72" decoding="async" />'
+        )
     else:
         media = f'<span class="tp-ava tp-ava--mono" aria-hidden="true">{esc(page["initial"])}</span>'
     years = _years(page)
@@ -1192,10 +1199,13 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
             head += f'<p class="tp-bio">{esc(bio)}</p>'
         if _rating_ok(page):
             tag, href = ("a", ' href="#reviews"') if _reviews_ready(page) else ("p", "")
-            head += (
-                f'<{tag} class="tp-rate"{href}><i aria-hidden="true">★</i>{esc(_avg(page))} '
-                f"<span>· {esc(_n_ratings(int(page['rating_count'])))}</span></{tag}>"
-            )
+            parts = trainer_rating_parts(page.get("rating_avg"), page.get("rating_count"))
+            if parts:
+                score, label = parts
+                head += (
+                    f'<{tag} class="tp-rate"{href}><i aria-hidden="true">★</i>{esc(score)} '
+                    f"<span>· {esc(label)}</span></{tag}>"
+                )
         since = _since_text(page)
         if since:
             head += f'<p class="tp-since">{esc(since)}</p>'
@@ -1379,11 +1389,14 @@ def _reviews_html(page: Mapping[str, Any]) -> str:
         return ""
     head = ""
     if _rating_ok(page):
-        avg = float(page["rating_avg"])
+        avg = trainer_rating_score(page.get("rating_avg")) or 0
+        parts = trainer_rating_parts(page.get("rating_avg"), page.get("rating_count"))
+        summary = trainer_rating_summary(page.get("rating_avg"), page.get("rating_count"))
         stars = "★" * max(1, min(5, round(avg)))
+        score = parts[0] if parts else ""
         head = (
-            f'<div class="tp-score"><b>{esc(_avg(page))}</b><div><i aria-hidden="true">{stars}</i>'
-            f"<span>{esc(_n_ratings(int(page['rating_count'])))}</span></div></div>"
+            f'<div class="tp-score"><b>{esc(score)}</b><div><i aria-hidden="true">{stars}</i>'
+            f"<span>{esc(summary)}</span></div></div>"
         )
     cards = []
     for r in page["reviews"]:
@@ -1417,13 +1430,14 @@ def _about_html(page: Mapping[str, Any], *, ratings: bool) -> str:
     if desc:
         cards.append(f'<div class="tp-card"><h3>О тренере</h3><p class="tp-words">{esc(desc)}</p></div>')
     if ratings and _rating_ok(page) and not _reviews_ready(page):
-        n = int(page["rating_count"])
-        avg = float(page["rating_avg"])
+        avg = trainer_rating_score(page.get("rating_avg")) or 0
+        parts = trainer_rating_parts(page.get("rating_avg"), page.get("rating_count"))
+        summary = trainer_rating_summary(page.get("rating_avg"), page.get("rating_count"))
         stars = "★" * max(1, min(5, round(avg)))
-        what = f"{_n_ratings(n)} — все на 5 из 5" if avg >= 5 else f"{_n_ratings(n)}, в среднем {_avg(page)} из 5"
+        score = parts[0] if parts else ""
         cards.append(
             '<div class="tp-card"><h3>Оценки учеников</h3>'
-            f'<div class="tp-score"><b>{esc(_avg(page))}</b><div><i aria-hidden="true">{stars}</i><span>{esc(what)}</span></div></div>'
+            f'<div class="tp-score"><b>{esc(score)}</b><div><i aria-hidden="true">{stars}</i><span>{esc(summary)}</span></div></div>'
             '<p class="tp-muted">Оценить занятие можно только после того, как оно состоялось.</p></div>'
         )
     return f'<section class="tp-sec"><div class="tp-two">{"".join(cards)}</div></section>' if cards else ""
@@ -1500,7 +1514,8 @@ def _arenas_html(page: Mapping[str, Any], base_url: str) -> str:
         lines = f"<b>{esc(a['name'])}</b>"
         if peers:
             lines += f"<span>Здесь же ещё {peers} {plural_ru(peers, 'тренер', 'тренера', 'тренеров')}</span>"
-        rent = f"Прокат — {_money(int(a['rental_minor']), 'BYN')}" if a.get("rental_minor") else ""
+        cur = str(page.get("min_price")[1] if page.get("min_price") else "BYN")
+        rent = f"Прокат — {_money(int(a['rental_minor']), cur)}" if a.get("rental_minor") else ""
         href = (
             place_page_url(base_url=base_url, city_name=a["city_name"], slug=a["slug"])
             if a.get("slug") and a.get("city_name")
@@ -1696,6 +1711,7 @@ def render_trainer_page(
             "__OG_IMAGE__": esc(og_image),
             "__LANG__": "ru",
             "__OG_LOCALE__": "ru_RU",
+            "__OG_TYPE__": "profile",
             "__ROBOTS__": "index, follow" if page["listed"] else "noindex, follow",
             "__HEAD_EXTRA__": f'<link rel="stylesheet" href="/static/share/trainer-page.css?v={TRAINER_PAGE_STYLE_VERSION}" />',
             "__JSONLD__": jsonld(page, canonical=canonical, base_url=base_url) if page["listed"] else "{}",

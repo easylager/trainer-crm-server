@@ -1,8 +1,14 @@
 """Одна подпись рейтинга тренера: «★ 5,0 · 2 оценки» с первой оценки."""
 
+import pytest
+
 from src.application.site_trainer_catalog import _rating_html
 from src.application.site_trainer_page import _rating_ok, jsonld
-from src.shared.ru_text import trainer_rating_caption
+from src.shared.ru_text import (
+    trainer_rating_caption,
+    trainer_rating_score,
+    trainer_rating_summary,
+)
 
 
 def test_caption_for_zero_one_two_and_seven() -> None:
@@ -12,6 +18,31 @@ def test_caption_for_zero_one_two_and_seven() -> None:
     assert trainer_rating_caption(5, 1) == "★ 5,0 · 1 оценка"
     assert trainer_rating_caption(5, 2) == "★ 5,0 · 2 оценки"
     assert trainer_rating_caption(5, 7) == "★ 5,0 · 7 оценок"
+
+
+@pytest.mark.parametrize(
+    "count,label",
+    [
+        (1, "1 оценка"),
+        (11, "11 оценок"),
+        (21, "21 оценка"),
+        (22, "22 оценки"),
+        (111, "111 оценок"),
+    ],
+)
+def test_rating_count_plural(count: int, label: str) -> None:
+    assert trainer_rating_caption(5, count) == f"★ 5,0 · {label}"
+
+
+def test_rating_score_rounds_like_mini_app() -> None:
+    assert trainer_rating_score(4.25) == 4.3
+    assert trainer_rating_caption(4.25, 2) == "★ 4,3 · 2 оценки"
+
+
+def test_summary_one_five_star_is_not_all_fives() -> None:
+    assert trainer_rating_summary(5, 1) == "1 оценка — 5 из 5"
+    assert trainer_rating_summary(5, 7) == "7 оценок — все на 5 из 5"
+    assert trainer_rating_summary(4.25, 3) == "3 оценки, в среднем 4,3 из 5"
 
 
 def test_site_uses_the_same_caption() -> None:

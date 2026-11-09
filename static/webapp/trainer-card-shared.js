@@ -18,12 +18,6 @@
     return escapeHtml(num) + ' ' + escapeHtml(cur === 'RUB' ? 'руб.' : cur);
   }
 
-  function buildRatingText(profile) {
-    if (!profile) return '—';
-    if (profile.rating_avg == null || (profile.rating_count || 0) <= 0) return '—';
-    return Number(profile.rating_avg).toFixed(1) + ' ★ (' + (profile.rating_count || 0) + ')';
-  }
-
   function buildServicesListHtml(services, selectedServiceId, opts) {
     var options = opts || {};
     var listClass = options.listClass || 'trainer-services-list';
@@ -93,7 +87,6 @@
   window.TrainerCardShared = {
     escapeHtml: escapeHtml,
     formatPriceByn: formatPriceBynHtml,
-    buildRatingText: buildRatingText,
     buildServicesListHtml: buildServicesListHtml,
     buildArenasListHtml: buildArenasListHtml,
     buildEducationListHtml: buildEducationListHtml
