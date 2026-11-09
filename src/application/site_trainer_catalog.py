@@ -416,15 +416,20 @@ def _id_set(data: Mapping[str, Any], direction: Direction) -> frozenset[int]:
     return frozenset(t["id"] for t in data["trainers"] if is_listed(t, direction))
 
 
-def indexable(data: Mapping[str, Any], direction: Direction) -> bool:
-    """В индексе — направление с тренерами (порог ≥1, PDEC-033 открытый вопрос). «Все» — если не
-    повторяет одно из направлений тем же составом (в Минске сейчас все пятеро — «С нуля»)."""
-    ids = _id_set(data, direction)
-    if not ids:
-        return False
+def duplicates_all(data: Mapping[str, Any], direction: Direction) -> bool:
+    """Направление с тем же составом, что и «Все» (в Минске все пятеро — «С нуля»): дубль главной страницы."""
     if direction is ALL:
-        return all(_id_set(data, d) != ids for d in DIRECTIONS)
-    return True
+        return False
+    ids = _id_set(data, direction)
+    return bool(ids) and ids == _id_set(data, ALL)
+
+
+def indexable(data: Mapping[str, Any], direction: Direction) -> bool:
+    """«Все» — главная страница под «тренер по катанию на коньках {город}», в индексе всегда, пока есть
+    тренеры. Направление — если есть тренеры и состав не совпадает со «Всеми» (иначе noindex, canonical на «Все»)."""
+    if not _id_set(data, direction):
+        return False
+    return not duplicates_all(data, direction)
 
 
 def sitemap_paths(data: Mapping[str, Any]) -> list[str]:
@@ -739,7 +744,8 @@ def render_catalog_page(
     one = len(everyone) == 1
     pool = listed_trainers(data, direction)
     shown = listed_trainers(data, direction, arena_id)
-    canonical = f"{base}{catalog_path(city_name, direction)}"
+    own_url = f"{base}{catalog_path(city_name, direction)}"
+    canonical = f"{base}{catalog_path(city_name, ALL)}" if duplicates_all(data, direction) else own_url
     city_href = f"/c/{city_slug(city_name)}"
 
     h1 = "Тренер по катанию на коньках" if one and direction is ALL else direction.h1
@@ -912,8 +918,8 @@ def render_catalog_page(
 
     crumbs = [("Glideclub", f"{base}/"), (city_name, f"{base}{city_href}"), ("Тренеры", f"{base}{catalog_path(city_name)}")]
     if direction is not ALL:
-        crumbs.append((direction.crumb, canonical))
-    body += breadcrumb_script(canonical, crumbs)
+        crumbs.append((direction.crumb, own_url))
+    body += breadcrumb_script(own_url, crumbs)
 
     title = f"{h1} {in_city} · Glideclub".replace(" ", " ")
     desc_bits = [direction.lead]
@@ -932,7 +938,7 @@ def render_catalog_page(
         "@type": "ItemList",
         "name": f"{h1} {in_city}".replace(" ", " "),
         "itemListElement": [
-            {"@type": "ListItem", "position": i + 1, "name": t["name"], "url": f"{base}{t['path']}"}
+            {"@type": "ListItem", "position": i + 1, "name": t["name"], "url": f"{base}{t['path'].split('?', 1)[0]}"}
             for i, t in enumerate(pool)
         ],
     }

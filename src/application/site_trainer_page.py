@@ -55,8 +55,7 @@ TRAINER_PREFIX = "/t"
 TRAINER_SURFACE = "trainer_page"
 _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
 _TELEGRAM_USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
-TITLE_LIMIT = 60
-DESCRIPTION_LIMIT = 155
+DESCRIPTION_LIMIT = 160
 #: Ближайшее время в карточке цены — дальше «Всё время на неделю».
 NEAR_SHOWN = 3
 #: Слотов на неделю с запасом: у тренера с плотным расписанием их бывает десятки.
@@ -576,6 +575,11 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         "initial": trainer_initial(name),
         "photo_url": big_photo or trainer_photo_url(body),
         "line": trainer_line(body),
+        "min_price": (
+            (int(body["min_session_price_cents"]), str(body.get("min_session_price_currency") or "BYN"))
+            if body.get("min_session_price_cents")
+            else None
+        ),
         "listed": listed,
         "can_book": can_book,
         "contact_url": contact_url(int(trainer_id), username, listed=listed),
@@ -794,33 +798,60 @@ def primary_cta(
 
 
 def page_title(page: Mapping[str, Any]) -> str:
-    name = str(page["name"])
-    city = str(page.get("city_name") or "")
-    first_service = (page.get("services") or [{}])[0].get("name") if page.get("services") else ""
-    candidates = [
-        f"{name} — тренер{', ' + city if city else ''} · Glideclub",
-        f"{name} — тренер · Glideclub",
-        name,
-    ]
-    if first_service:
-        candidates.insert(0, f"{name} — {first_service}{', ' + city if city else ''} · Glideclub")
-    for c in candidates:
-        if len(c) <= TITLE_LIMIT:
-            return c
-    return candidates[-1][:TITLE_LIMIT]
+    """«Имя — тренер по катанию на коньках, Город · Glideclub»: формат один у всех, город — из профиля."""
+    city = str(page.get("city_name") or "").strip()
+    return f"{page['name']} — тренер по катанию на коньках{', ' + city if city else ''} · Glideclub"
+
+
+#: Что человек ведёт — по-русски, в винительном падеже («ведёт катание с нуля»).
+_DIRECTION_PHRASE = {
+    "zero": "катание с нуля",
+    "better": "занятия для тех, кто уже катается",
+    "fig": "фигурное катание",
+    "hock": "хоккейное катание",
+}
+
+
+def _arena_phrase(names: Sequence[str]) -> str:
+    quoted = [n if "«" in n else f"«{n}»" for n in names]
+    return ("на катке " if len(quoted) == 1 else "на катках ") + " и ".join(quoted)
+
+
+def _cut_at_phrase(text_: str, limit: int) -> str:
+    """Обрезка по границе фразы: точка, потом запятая; без многоточия и без разрыва слова."""
+    if len(text_) <= limit:
+        return text_
+    head = text_[:limit]
+    for sep in (". ", ", ", " "):
+        i = head.rfind(sep)
+        if i > 40:
+            return head[:i].rstrip(" ,;—-") + "."
+    return head.rstrip(" ,;—-") + "."
 
 
 def page_description(page: Mapping[str, Any]) -> str:
-    bits = [str(page["name"]), "тренер"]
-    arenas = [a["name"] for a in page.get("arenas") or []]
-    if arenas:
-        bits.append("занимается: " + ", ".join(arenas[:3]))
-    line = str(page.get("line") or "")
-    if line:
-        bits.append(line.replace(" ", " "))
-    tail = "Запись в Telegram, ничего не устанавливая." if page.get("can_book") else "Написать тренеру в Telegram."
-    text_ = ". ".join([" — ".join(bits[:2])] + bits[2:]) + ". " + tail
-    return text_ if len(text_) <= DESCRIPTION_LIMIT else text_[: DESCRIPTION_LIMIT - 1].rstrip() + "…"
+    """Живая фраза из реальных данных: что ведёт, где (1–2 катка), цена «от», как записаться."""
+    name = str(page["name"])
+    dirs = [_DIRECTION_PHRASE[d["key"]] for d in page.get("directions") or [] if d["key"] in _DIRECTION_PHRASE]
+    arenas = [str(a["name"]).strip() for a in page.get("arenas") or [] if str(a.get("name") or "").strip()]
+    price = page.get("min_price")
+    amount = format_price_minor(int(price[0]), str(price[1])) if price and price[0] else ""
+    price_txt = f"Занятие от {amount}{'' if amount.endswith('.') else '.'} " if amount else ""
+    tail = "Записаться можно в Telegram." if page.get("can_book") else "Написать тренеру можно в Telegram."
+
+    def build(n_dirs: int, n_arenas: int, with_price: bool) -> str:
+        what = " и ".join([", ".join(dirs[: n_dirs - 1]), dirs[n_dirs - 1]] if n_dirs > 1 else dirs[:1])
+        first = f"{name} ведёт {what}" if n_dirs else f"{name} проводит занятия"
+        if n_arenas:
+            first += " " + _arena_phrase(arenas[:n_arenas])
+        return f"{first}. " + (price_txt if with_price else "") + tail
+
+    for n_dirs in sorted({min(len(dirs), 3), min(len(dirs), 2), min(len(dirs), 1)}, reverse=True):
+        for n_arenas in sorted({min(len(arenas), 2), min(len(arenas), 1)}, reverse=True):
+            cand = build(n_dirs, n_arenas, True)
+            if len(cand) <= DESCRIPTION_LIMIT:
+                return cand
+    return _cut_at_phrase(build(min(len(dirs), 1), min(len(arenas), 1), True), DESCRIPTION_LIMIT)
 
 
 def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:

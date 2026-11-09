@@ -284,8 +284,14 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert "от <b>41,87 BYN</b> за занятие" in hock.text and "от <b>41,87 BYN</b> за занятие" in all_r.text
     # Пустое направление — страница есть, но не в индексе.
     assert 'content="noindex, follow"' in fig.text and not _cards(fig.text)
-    assert 'content="index, follow"' in zero.text
-    assert f'rel="canonical" href="https://glide.example{base}/s-nulya"' in zero.text
+    # «С нуля» повторяет «Все» тем же составом: закрыто, canonical ведёт на «Все».
+    assert 'content="noindex, follow"' in zero.text
+    assert f'rel="canonical" href="https://glide.example{base}"' in zero.text
+    assert 'content="index, follow"' in all_r.text
+    assert f'rel="canonical" href="https://glide.example{base}"' in all_r.text
+    # В JSON-LD — канонические адреса тренеров, без ?via=.
+    ld_urls = re.findall(r'"url":\s*"([^"]+)"', all_r.text)
+    assert any("/t/" in u for u in ld_urls) and not any("via=" in u for u in ld_urls if "/t/" in u)
 
 
 @pytest.mark.asyncio
@@ -300,7 +306,7 @@ async def test_arena_filter_canonical_and_empty_state(app_use_test_db, db_sessio
     # Второй каток — только B; canonical без фильтра; вкладки несут фильтр.
     cards = _cards(other.text)
     assert len(cards) == 1 and names["B"] in cards[0]
-    assert f'rel="canonical" href="https://glide.example{base}/s-nulya"' in other.text
+    assert f'rel="canonical" href="https://glide.example{base}"' in other.text
     assert f'href="{base}/uzhe-katayus?arena={c["other_arena"]}"' in other.text
     assert "Где удобно заниматься?" in other.text and 'aria-label="Сбросить каток"' in other.text
     # Пустое состояние фильтра: вкладку сам не переключает, предлагает два выхода.
@@ -331,13 +337,13 @@ async def test_sitemap_lists_only_directions_with_trainers(app_use_test_db, db_s
         xml = (await client.get("/sitemap.xml")).text
         all_html = (await client.get(f"/c/{c['slug']}/trenery")).text
     base = f"https://glide.example/c/{c['slug']}/trenery"
-    assert f"<loc>{base}/s-nulya</loc>" in xml
+    assert f"<loc>{base}</loc>" in xml
+    assert f"<loc>{base}/s-nulya</loc>" not in xml
     assert f"<loc>{base}/uzhe-katayus</loc>" in xml
     assert f"<loc>{base}/s-klyushkoy</loc>" in xml
     assert f"<loc>{base}/figurnoe</loc>" not in xml
-    # «Все» повторяет «С нуля» тем же составом — не индексируем.
-    assert f"<loc>{base}</loc>" not in xml
-    assert 'content="noindex, follow"' in all_html
+    # «Все» — главная страница каталога: в индексе всегда; «С нуля» её дубль — только noindex.
+    assert 'content="index, follow"' in all_html
 
 
 @pytest.mark.asyncio
