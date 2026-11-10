@@ -18,8 +18,8 @@ from src.shared.config import Settings
 router = APIRouter(tags=["public-kk-promo"])
 
 DEFAULT_SRC = "site"
-_TITLE = "Кто кого — угадай счёт матча Динамо-Минск"
-_DESCRIPTION = "Выбери победителя или точный счёт, набирай очки и сравнивайся с друзьями. Бесплатно, в Telegram."
+_TITLE = "Кто кого — угадай, кто победит в матче Динамо-Минск"
+_DESCRIPTION = "Тапни за команду, набирай очки и сравнивайся с друзьями. Бесплатно, в Telegram."
 _LOGO = "/logos/01-icon/glide-icon-teal-square-512.png"
 # Краулеры превью на t.me не уводим: иначе картинка и заголовок возьмутся с чужой страницы.
 _PREVIEW_BOTS = ("telegrambot", "twitterbot", "facebookexternalhit", "slackbot", "vkshare", "discordbot", "whatsapp")
