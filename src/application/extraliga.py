@@ -11,6 +11,11 @@
 
 Нагрузка на hockey.by: календарь раз в сутки (страница + ~31 запрос ajax), страницы матчей на
 неделю вперёд раз в сутки и каждые 15 минут в день матча, таблица раз в сутки. Между запросами пауза.
+
+Запасной источник — flashscore.com (TASK-364): hockey.by не ответил — до конца прохода его больше не
+спрашиваем (``Breaker``), а календарь, итоги и живой счёт берём одним запросом к flashscore. Строки,
+заведённые запасным, имеют ``source_match_id`` вида ``fs<id>`` и «усыновляются» hockey.by, как только он
+вернётся. Итог — тем же ``confirm_result``. Страниц матчей и таблицы у запасного нет.
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
@@ -26,6 +31,15 @@ from typing import Protocol
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ingestion.flashscore_sources import (
+    FLASHSCORE_EXTRALIGA_URL,
+    STATUS_FINAL as FS_FINAL,
+    STATUS_LIVE as FS_LIVE,
+    STATUS_SCHEDULED as FS_SCHEDULED,
+    FlashscoreMatch,
+    parse_flashscore_league,
+)
+from src.ingestion.hockey_sources import MINSK_TZ
 from src.ingestion.hockeyby_sources import (
     CALENDAR_AJAX_URL,
     CALENDAR_PAGE_URL,
@@ -69,6 +83,20 @@ POST_MATCH_EVERY = timedelta(hours=1)
 BACKFILL_PER_TICK = 10
 
 USER_AGENT = "Mozilla/5.0 (compatible; GlideBot/1.0; +https://glideclub.by)"
+
+# Запасной источник (flashscore.com): строка календаря ``fs<id>``; запрос не чаще раза в 10 минут.
+FALLBACK_PREFIX = "fs"
+FALLBACK_EVERY = timedelta(minutes=10)
+# В игру и на сайт новые матчи заводим не дальше этого: flashscore отдаёт ~8 недель вперёд.
+FALLBACK_HORIZON = timedelta(days=35)
+# Итоги запасной ставит только недавним матчам — как и страница матча (POST_MATCH_WINDOW).
+FALLBACK_RESULTS_BACK = POST_MATCH_WINDOW
+# Прошлый проход не достучался до hockey.by: сначала дешёвый пробный запрос с коротким таймаутом,
+# чтобы лежащий сайт не съедал по 25 секунд каждый тик (и не задерживал цикл Динамо).
+PROBE_URL = f"{HOCKEY_BY_BASE}/robots.txt"
+PROBE_TIMEOUT_SEC = 3.0
+# Отметка «hockey.by не отвечает» старше суток не в счёт: цикл мог просто стоять.
+SOURCE_DOWN_FRESH = timedelta(hours=24)
 
 
 @dataclass(frozen=True)
@@ -199,6 +227,69 @@ class Source(Protocol):
     async def get(self, url: str) -> str: ...
 
 
+Fetch = Callable[[str], Awaitable[str]]
+
+
+class SourceDown(RuntimeError):
+    """hockey.by уже не ответил в этом проходе — запрос не делали."""
+
+
+def is_network_failure(exc: BaseException) -> bool:
+    """Сайт недоступен (таймаут, нет соединения, 5xx), а не «страница не разобралась»."""
+    import aiohttp
+
+    if isinstance(exc, (TimeoutError, aiohttp.ClientConnectionError)):
+        return True
+    return isinstance(exc, aiohttp.ClientResponseError) and exc.status >= 500
+
+
+class Breaker:
+    """Автомат на hockey.by: первый сетевой сбой за проход — остальные запросы прохода не делаются.
+
+    Без него лежащий сайт стоил бы по 25 секунд таймаута на каждую страницу матча, а за Экстралигой
+    в том же цикле ждёт Динамо. ``down`` — причина; ``answered`` — сколько запросов прошло.
+    """
+
+    def __init__(self, source: Source) -> None:
+        self._source = source
+        self.down: str | None = None
+        self.answered = 0
+
+    async def _call(self, request: Callable[[], Awaitable[str]]) -> str:
+        if self.down is not None:
+            raise SourceDown(self.down)
+        try:
+            body = await request()
+        except Exception as exc:
+            if is_network_failure(exc):
+                self.down = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+                raise SourceDown(self.down) from exc
+            raise
+        self.answered += 1
+        return body
+
+    async def calendar_page(self, page: int) -> str:
+        return await self._call(lambda: self._source.calendar_page(page))
+
+    async def get(self, url: str) -> str:
+        return await self._call(lambda: self._source.get(url))
+
+    async def probe(self, timeout_sec: float | None = None) -> bool:
+        """Пробный запрос: ответил ли hockey.by вообще. Ответ с ошибкой (404) — сайт жив."""
+        timeout_sec = PROBE_TIMEOUT_SEC if timeout_sec is None else timeout_sec
+        try:
+            await asyncio.wait_for(self.get(PROBE_URL), timeout_sec)
+        except SourceDown:
+            return False
+        except TimeoutError:
+            self.down = f"нет ответа за {timeout_sec:g} с"
+            return False
+        except Exception:
+            logger.info("extraliga: hockey.by probe answered with an error", exc_info=True)
+            self.answered += 1
+        return True
+
+
 # ── База ─────────────────────────────────────────────────────────────
 
 _SELECT = text("""
@@ -265,7 +356,7 @@ _DETAILS = text("""
 _DUE_DETAILS = text("""
     SELECT id, source_match_id, starts_at, status, details_checked_at
     FROM hockey_matches
-    WHERE source = 'hockeyby'
+    WHERE source = 'hockeyby' AND source_match_id NOT LIKE 'fs%'
       AND (
         (status IN ('scheduled', 'review') AND starts_at >= :from_ AND starts_at <= :until)
         OR (status = 'final' AND starts_at >= :post_from
@@ -279,7 +370,8 @@ _DETAILS_FAILED = text("UPDATE hockey_matches SET details_checked_at = :now WHER
 _BACKFILL = text("""
     SELECT id, source_match_id, starts_at, status, details_checked_at
     FROM hockey_matches
-    WHERE source = 'hockeyby' AND status = 'final' AND details_checked_at IS NULL AND starts_at < :post_from
+    WHERE source = 'hockeyby' AND source_match_id NOT LIKE 'fs%'
+      AND status = 'final' AND details_checked_at IS NULL AND starts_at < :post_from
     ORDER BY starts_at DESC
     LIMIT :limit
     """)
@@ -383,6 +475,8 @@ async def confirm_result(
 async def upsert_calendar_match(session: AsyncSession, m: CalendarMatch, *, now: datetime) -> str:
     params = _params(m, now)
     record = (await session.execute(_SELECT, {"source_match_id": m.match_id})).one_or_none()
+    if record is None:
+        record = await _adopt_fallback_row(session, params)
     if record is None:
         await session.execute(_INSERT, params)
         await session.flush()
@@ -562,6 +656,10 @@ async def sync_details(session: AsyncSession, source: Source, *, now: datetime) 
             continue
         try:
             g = parse_gamecenter(await source.get(match_page_url(row.source_match_id)), match_id=row.source_match_id)
+        except SourceDown:
+            # Сайт лежит: остальные страницы не ждём, отметку не ставим — вернётся, прочитаем сразу.
+            counts["skipped"] = counts.get("skipped", 0) + 1
+            break
         except Exception:
             logger.warning("extraliga match %s failed", row.source_match_id, exc_info=True)
             # Битая страница не дёргается каждый тик: следующая попытка — по обычному расписанию.
@@ -620,6 +718,254 @@ async def sync_standings(session: AsyncSession, source: Source, *, now: datetime
     return stored
 
 
+# ── Запасной источник: flashscore.com ────────────────────────────────
+
+_ADOPT_SELECT = text("""
+    SELECT id FROM hockey_matches
+    WHERE source = 'hockeyby' AND source_match_id LIKE 'fs%'
+      AND home_club_id = :home_club_id AND away_club_id = :away_club_id
+      AND (starts_at AT TIME ZONE 'Europe/Minsk')::date = :day
+    ORDER BY id LIMIT 1
+    """)
+
+_ADOPT = text("UPDATE hockey_matches SET source_match_id = :source_match_id, updated_at = :now WHERE id = :id")
+
+_FALLBACK_ROWS = text("""
+    SELECT id, source_match_id, status, starts_at, home_club_id, away_club_id, home_score, away_score, decided_in
+    FROM hockey_matches
+    WHERE source = 'hockeyby' AND starts_at >= :since AND starts_at <= :until
+    ORDER BY starts_at, id
+    """)
+
+# Арена нового матча — та, где хозяева последний раз играли дома по данным hockey.by: без арены сайт
+# матч не покажет, а выдумывать её нельзя.
+_INSERT_FALLBACK = text("""
+    INSERT INTO hockey_matches (source, league, source_match_id, home_team, away_team, home_club_id, away_club_id,
+                                starts_at, arena, city, status, checked_at)
+    VALUES ('hockeyby', 'extraliga', :source_match_id, :home_team, :away_team, CAST(:home_club_id AS varchar),
+            :away_club_id, :starts_at,
+            (SELECT arena FROM hockey_matches
+             WHERE source = 'hockeyby' AND home_club_id = CAST(:home_club_id AS varchar) AND arena IS NOT NULL
+             ORDER BY starts_at DESC LIMIT 1),
+            :city, 'scheduled', :now)
+    """)
+
+_SOURCE_STATUS = text("""
+    INSERT INTO hockey_source_status (source, ok_at, failed_at)
+    VALUES (:source, :ok_at, :failed_at)
+    ON CONFLICT (source) DO UPDATE
+    SET ok_at = COALESCE(EXCLUDED.ok_at, hockey_source_status.ok_at),
+        failed_at = COALESCE(EXCLUDED.failed_at, hockey_source_status.failed_at)
+    """)
+
+_SOURCE_DOWN = text("""
+    SELECT failed_at > COALESCE(ok_at, '-infinity'::timestamptz) AND failed_at >= :fresh
+    FROM hockey_source_status WHERE source = :source
+    """)
+
+
+def _minsk_day(value: datetime):
+    return _utc(value).astimezone(MINSK_TZ).date()
+
+
+async def _adopt_fallback_row(session: AsyncSession, params: dict):
+    """hockey.by вернулся: матч, который завёл запасной (``fs…``), получает его id — без дубля.
+
+    Пара клубов и минский день; время, арену и прочее дальше правит обычный путь (основному верим)."""
+    found = (
+        await session.execute(
+            _ADOPT_SELECT,
+            {
+                "home_club_id": params["home_club_id"],
+                "away_club_id": params["away_club_id"],
+                "day": _minsk_day(params["starts_at"]),
+            },
+        )
+    ).one_or_none()
+    if found is None:
+        return None
+    await session.execute(_ADOPT, {"id": found.id, "source_match_id": params["source_match_id"], "now": params["now"]})
+    logger.info("extraliga: hockey.by %s adopted fallback row %s", params["source_match_id"], found.id)
+    return (await session.execute(_SELECT, {"source_match_id": params["source_match_id"]})).one()
+
+
+def _fs_params(m: FlashscoreMatch, now: datetime) -> dict:
+    home, away = CLUBS[m.home_club_id or ""], CLUBS[m.away_club_id or ""]
+    return {
+        "source_match_id": f"{FALLBACK_PREFIX}{m.source_match_id}",
+        "home_team": home.name,
+        "away_team": away.name,
+        "home_club_id": m.home_club_id,
+        "away_club_id": m.away_club_id,
+        "starts_at": _utc(m.starts_at),
+        "arena": None,
+        "city": home.city,
+        "now": _utc(now),
+    }
+
+
+async def _fallback_live(session: AsyncSession, row, m: FlashscoreMatch, *, now: datetime) -> int:
+    """Счёт идущего матча с flashscore — в живые очки игры, как ``_record_live_score``: молча при сбое."""
+    if m.home_score is None or m.away_score is None or _utc(now) < _utc(row.starts_at):
+        return 0
+    from src.application.hockey_game import set_live_score
+
+    try:
+        async with session.begin_nested():
+            ok = await set_live_score(session, match_id=row.id, home=m.home_score, away=m.away_score, now=now)
+    except Exception:
+        logger.warning("extraliga fallback live score %s failed", row.source_match_id, exc_info=True)
+        return 0
+    return int(ok)
+
+
+async def sync_fallback(session: AsyncSession, fetch: Fetch, *, now: datetime) -> dict[str, int]:
+    """Календарь, итоги и живой счёт с flashscore.com, пока hockey.by не отвечает. Один запрос.
+
+    * не сыгранный матч в пределах ``FALLBACK_HORIZON``: тот же день и те же клубы уже есть — не трогаем
+      (времени основного верим); нет — ищем строку с той же парой клубов, пропавшую со своего дня
+      (перенос: двигаем, ходы — через ``on_match_moved``), иначе вставляем ``fs<id>``;
+    * завершённый: итог через ``confirm_result`` (два одинаковых опроса не ближе 15 минут, иначе проверка);
+      уже закрытый основным матч не перезаписываем, расхождение — только в лог;
+    * идущий: живой счёт.
+    Клуб не из ``CLUBS`` пропускаем; исчезнувший матч сами не отменяем.
+    """
+    from src.application.hockey_matches import SEASON_MONTHS
+
+    counts = {
+        "inserted": 0,
+        "moved": 0,
+        "unchanged": 0,
+        "final": 0,
+        "pending": 0,
+        "disagree": 0,
+        "live": 0,
+        "skipped": 0,
+    }
+    matches = parse_flashscore_league(await fetch(FLASHSCORE_EXTRALIGA_URL))
+    now = _utc(now)
+    if not matches and now.astimezone(MINSK_TZ).month in SEASON_MONTHS:
+        raise CalendarEmpty("лента flashscore пуста в сезон — похоже, сменилась вёрстка")
+    known = [m for m in matches if m.home_club_id in CLUBS and m.away_club_id in CLUBS]
+    for m in matches:
+        if m not in known:
+            counts["skipped"] += 1
+            logger.warning("extraliga fallback: unknown flashscore club in %s — %s", m.home, m.away)
+    rows = list(
+        (
+            await session.execute(
+                _FALLBACK_ROWS,
+                {"since": now - FALLBACK_RESULTS_BACK, "until": now + FALLBACK_HORIZON + timedelta(days=1)},
+            )
+        ).all()
+    )
+    by_key = {(r.home_club_id, r.away_club_id, _minsk_day(r.starts_at)): r for r in rows}
+    by_id = {r.source_match_id: r for r in rows}
+    fs_keys = {(m.home_club_id, m.away_club_id, _minsk_day(m.starts_at)) for m in known}
+    last_fixture = max((_utc(m.starts_at) for m in known if m.status == FS_SCHEDULED), default=now)
+    # Несыгранные строки, у которых в ленте нет матча в их день, — кандидаты на «перенесён».
+    orphans = [
+        r
+        for r in rows
+        if r.status == "scheduled"
+        and now < _utc(r.starts_at) <= min(last_fixture, now + FALLBACK_HORIZON)
+        and (r.home_club_id, r.away_club_id, _minsk_day(r.starts_at)) not in fs_keys
+    ]
+    for m in known:
+        key = (m.home_club_id, m.away_club_id, _minsk_day(m.starts_at))
+        row = by_id.get(f"{FALLBACK_PREFIX}{m.source_match_id}") or by_key.get(key)
+        if m.status == FS_FINAL:
+            if row is None or _utc(row.starts_at) < now - FALLBACK_RESULTS_BACK:
+                continue
+            ours = (m.home_score, m.away_score, m.decided_in)
+            if row.status == "final":
+                if (row.home_score, row.away_score, row.decided_in) != ours:
+                    counts["disagree"] += 1
+                    logger.warning("extraliga fallback: match %s final differs from flashscore %s", row.id, ours)
+                continue
+            if row.status not in ("scheduled", "review"):
+                continue
+            if await confirm_result(
+                session, row.id, home=m.home_score, away=m.away_score, decided_in=m.decided_in, now=now
+            ):
+                closed = await session.execute(
+                    _FINAL,
+                    {
+                        "id": row.id,
+                        "home_score": m.home_score,
+                        "away_score": m.away_score,
+                        "decided_in": m.decided_in,
+                        "now": now,
+                    },
+                )
+                counts["final"] += closed.rowcount
+            else:
+                counts["pending"] += 1
+            continue
+        if m.status == FS_LIVE:
+            if row is not None and row.status == "scheduled":
+                counts["live"] += await _fallback_live(session, row, m, now=now)
+            continue
+        if m.status != FS_SCHEDULED or not now < _utc(m.starts_at) <= now + FALLBACK_HORIZON:
+            continue
+        params = _fs_params(m, now)
+        if row is not None:
+            # Свою строку запасной ведёт сам: другого источника у неё нет.
+            if row.source_match_id.startswith(FALLBACK_PREFIX) and _utc(row.starts_at) != params["starts_at"]:
+                await _move(session, row.id, params)
+                counts["moved"] += 1
+            else:
+                counts["unchanged"] += 1
+            continue
+        twins = [r for r in orphans if (r.home_club_id, r.away_club_id) == (m.home_club_id, m.away_club_id)]
+        if twins:
+            twin = min(twins, key=lambda r: abs(_utc(r.starts_at) - params["starts_at"]))
+            orphans.remove(twin)
+            await _move(session, twin.id, params)
+            counts["moved"] += 1
+            continue
+        await session.execute(_INSERT_FALLBACK, params)
+        counts["inserted"] += 1
+    return counts
+
+
+async def _move(session: AsyncSession, match_id: int, params: dict) -> None:
+    await session.execute(_MOVE, {**params, "id": match_id})
+    from src.application.hockey_game import on_match_moved
+
+    await on_match_moved(session, match_id=match_id, starts_at=params["starts_at"])
+
+
+async def mark_source(session: AsyncSession, *, down: bool, now: datetime) -> None:
+    """Отметка для сайта: последний разговор с hockey.by удался или нет (заглушка «статистика недоступна»)."""
+    now = _utc(now)
+    await session.execute(
+        _SOURCE_STATUS,
+        {"source": SOURCE_HOCKEYBY, "ok_at": None if down else now, "failed_at": now if down else None},
+    )
+
+
+async def hockeyby_down(session: AsyncSession, *, now: datetime) -> bool:
+    """hockey.by сейчас не отвечает: последняя отметка — сбой, и она свежая."""
+    found = (
+        await session.execute(_SOURCE_DOWN, {"source": SOURCE_HOCKEYBY, "fresh": _utc(now) - SOURCE_DOWN_FRESH})
+    ).scalar_one_or_none()
+    return bool(found)
+
+
+def _primary_problem(out: dict[str, object], breaker: Breaker) -> str | None:
+    """Почему этот проход нужен запасной: hockey.by не отвечает, календарь не читается или все страницы
+    матчей битые. ``None`` — основной в порядке."""
+    if breaker.down is not None:
+        return f"hockey.by не отвечает ({breaker.down})"
+    if out.get("calendar_failed"):
+        return f"календарь hockey.by не читается ({out.get('calendar_error')})"
+    det = out.get("details") or {}
+    if isinstance(det, dict) and det.get("failed") and not det.get("checked"):
+        return "страницы матчей hockey.by не читаются"
+    return None
+
+
 async def run_tick(
     session: AsyncSession,
     source: Source,
@@ -627,12 +973,22 @@ async def run_tick(
     now: datetime,
     calendar_due: bool,
     standings_due: bool,
+    probe_first: bool = False,
+    fallback: Fetch | None = None,
+    fallback_due: bool = False,
 ) -> dict[str, object]:
     """Один проход: календарь и таблица — когда пора, страницы матчей — всегда. Не коммитит.
 
     Сбой одной части не мешает остальным; ``*_failed`` — чтобы цикл повторил её на следующем тике.
+    ``probe_first`` — прошлый проход hockey.by не достучался: сначала пробный запрос с коротким таймаутом.
+    ``fallback`` — чтение flashscore (``None`` — запасной выключен); ``fallback_due`` — пора ли его спрашивать.
+    ``primary_down`` в ответе — почему основной не годится в этом проходе (``None`` — годится).
     """
     out: dict[str, object] = {"calendar": None, "calendar_failed": False, "standings": None, "standings_failed": False}
+    breaker = Breaker(source)
+    source = breaker
+    if probe_first:
+        await breaker.probe()
     if calendar_due:
         try:
             async with session.begin_nested():
@@ -650,7 +1006,26 @@ async def run_tick(
             out["standings_failed"] = True
             out["standings_error"] = str(exc) or type(exc).__name__
     out["details"] = await sync_details(session, source, now=now)
+    if breaker.down is not None or breaker.answered:
+        await mark_source(session, down=breaker.down is not None, now=now)
+    out["primary_down"] = _primary_problem(out, breaker)
+    out["fallback"] = None
+    if fallback is not None and fallback_due and out["primary_down"]:
+        try:
+            async with session.begin_nested():
+                out["fallback"] = await sync_fallback(session, fallback, now=now)
+        except Exception as exc:
+            logger.warning("extraliga fallback failed", exc_info=True)
+            out["fallback_failed"] = True
+            out["fallback_error"] = str(exc) or type(exc).__name__
     return out
+
+
+async def fetch_flashscore(url: str) -> str:
+    """Один запрос к flashscore: честный User-Agent, без повторов — следующий через 10 минут."""
+    from src.ingestion.source_io import fetch_http_text
+
+    return await fetch_http_text(url, headers={"User-Agent": USER_AGENT})
 
 
 def club_cities(names: Iterable[str]) -> dict[str, str]:
@@ -659,6 +1034,7 @@ def club_cities(names: Iterable[str]) -> dict[str, str]:
 
 
 __all__ = [
+    "Breaker",
     "CLUBS",
     "CalendarBroken",
     "CalendarEmpty",
@@ -671,8 +1047,11 @@ __all__ = [
     "details_due",
     "details_json",
     "enabled_clubs",
+    "fetch_flashscore",
+    "hockeyby_down",
     "match_page_url",
     "run_tick",
+    "sync_fallback",
     "sync_calendar",
     "sync_details",
     "sync_standings",

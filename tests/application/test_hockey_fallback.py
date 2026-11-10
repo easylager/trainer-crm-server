@@ -1,4 +1,4 @@
-"""TASK-363: запасной источник матчей Динамо — sportmail.ru, когда hcdinamo.by / hockey.by молчат."""
+"""TASK-364: запасной источник матчей Динамо — sportmail.ru, когда hcdinamo.by / hockey.by молчат."""
 
 from __future__ import annotations
 

@@ -28,7 +28,7 @@ from urllib.parse import quote
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.extraliga import CLUBS, LEAGUE_EXTRALIGA, enabled_clubs, match_page_url
+from src.application.extraliga import CLUBS, FALLBACK_PREFIX, LEAGUE_EXTRALIGA, enabled_clubs, hockeyby_down, match_page_url
 from src.application.hockey_matches import DINAMO, STATUS_CANCELLED, STATUS_FINAL
 from src.application.hockey_teams import TEAMS, slug_for, team_card
 from src.ingestion.hockey_sources import HCDINAMO_BASE, MINSK_TZ
@@ -647,7 +647,8 @@ def tickets_of(row: Any) -> dict[str, Any] | None:
 def protocol_url(row: Any) -> str | None:
     raw = (row.source_match_id or "").strip()
     if row.league == LEAGUE_EXTRALIGA and raw:
-        return match_page_url(raw)
+        # Матч, заведённый запасным источником (``fs…``), на hockey.by своей страницы ещё не имеет.
+        return None if raw.startswith(FALLBACK_PREFIX) else match_page_url(raw)
     if row.league == LEAGUE_KHL and raw.isdigit():
         return f"{HCDINAMO_BASE}/matches/{raw}/"
     return None
@@ -732,6 +733,17 @@ async def match_page_data(
         if r.id != row.id
     ][:OTHERS_LIMIT]
     preview = None if gone or (after and details) else await match_preview(session, int(row.id))
+    periods = _periods(details) if details else []
+    goals = _goals(details, row.home_team, row.away_team) if details else []
+    # Сыгранный матч Экстралиги без протокола, а hockey.by сейчас не отвечает — на месте пустоты заглушка.
+    stats_unavailable = (
+        after
+        and not gone
+        and row.league == LEAGUE_EXTRALIGA
+        and not periods
+        and not goals
+        and await hockeyby_down(session, now=now)
+    )
     return {
         "row": row,
         "match": card,
@@ -748,8 +760,9 @@ async def match_page_data(
             else None
         ),
         "preview": preview,
-        "periods": _periods(details) if details else [],
-        "goals": _goals(details, row.home_team, row.away_team) if details else [],
+        "periods": periods,
+        "goals": goals,
+        "stats_unavailable": stats_unavailable,
         "tickets": tickets_of(row) if card["phase"] == PHASE_BEFORE and not gone and not away else None,
         "protocol_url": protocol_url(row),
         "live": await live_score(session, row.id) if card["phase"] == PHASE_LIVE and not gone else None,

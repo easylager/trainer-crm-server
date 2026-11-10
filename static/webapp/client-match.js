@@ -298,9 +298,18 @@
 
   function paintAfter(ev) {
     var d = isXl(ev) ? ev.details : null;
+    var body = $('cmAfterBody');
+    // Сыгранный матч без протокола, пока его негде взять: та же карточка, спокойная строка вместо пустоты.
+    if (!d && isXl(ev) && ev.details_unavailable) {
+      $('cmAfter').hidden = false;
+      body.replaceChildren(
+        el('p', 'cm-after__line', 'Статистика матча временно недоступна. Счёт и\u00a0расписание обновляются, '
+          + 'голы и\u00a0периоды появятся здесь, как только станут доступны.')
+      );
+      return;
+    }
     $('cmAfter').hidden = !d;
     if (!d) return;
-    var body = $('cmAfterBody');
     var parts = [];
     if (d.periods && d.periods.length) {
       parts.push(el('p', 'cm-after__line', 'По периодам: ' + d.periods.map(function (p) { return p[0] + ':' + p[1]; }).join(' · ')));
