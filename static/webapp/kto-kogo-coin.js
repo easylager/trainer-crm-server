@@ -87,8 +87,18 @@
     onFinish: commit,
   });
 
+  /**
+   * Тот же матч, в который K.saveScore пишет ход. Список матчей держит свои копии (p.items), а сохранение
+   * ищет матч через K.findMatch (сначала главная, потом кэш): без этого ход оседал в «главной» копии, а бросок
+   * списка видел чужой pickSeq и молча отказывался сохранять.
+   */
+  function canon(m) {
+    return (m && typeof K.findMatch === 'function' && K.findMatch(m.id)) || m;
+  }
+
   /** Бросок этого матча, если он идёт на этом экране; иначе null (и бросок снимается, если экран или ход ушли). */
   function frameOf(m) {
+    m = canon(m);
     if (!ctl.busy(m.id)) return null;
     if (K.current() !== owner || !m.open) {
       ctl.cancel();
@@ -98,6 +108,7 @@
   }
 
   function press(m, fromAgain) {
+    m = canon(m);
     if (!m || !m.open) return;
     if (!ctl.busy(m.id)) {
       owner = K.current();
@@ -134,6 +145,7 @@
 
   /** Кнопка-монета: без текста, зона нажатия 44 px, золото 32 px. Ход закрыт — монеты нет (скрытая заглушка, а не null). */
   function button(m) {
+    m = canon(m);
     if (!m || !m.open) return h('span', { class: 'kk-coin-none', hidden: true, 'aria-hidden': 'true' });
     var f = frameOf(m);
     return h('button', {
@@ -217,6 +229,7 @@
 
   /** Блок под командами: барабаны (пока крутятся и после), затем строка «Монетка выбрала» с «Крутануть ещё». */
   function panel(m) {
+    m = canon(m);
     if (!m || !m.open) return null;
     var f = frameOf(m);
     if (f) {
