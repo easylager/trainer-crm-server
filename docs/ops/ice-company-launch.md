@@ -2,7 +2,6 @@
 
 Чеклист для человека после merge в `master`. Агент не деплоит и не меняет env.
 
-Пайплайн и «когда клиент узнаёт»: [`docs/plans/2026-10-18-release-18-10-26-pipeline.md`](../plans/2026-10-18-release-18-10-26-pipeline.md).
 
 ## До merge
 

@@ -50,7 +50,7 @@
 
 ## Надёжный шаринг объекта (TASK-223)
 
-Проверки после выката ветки `feat/TASK-223-reliable-object-share`. План: `docs/plans/2026-10-09-reliable-object-share.md`.
+Проверки после выката ветки `feat/TASK-223-reliable-object-share`.
 
 15. **Main Mini App у клиентского бота.** Без него `t.me/<bot>?startapp=arena_X_s_Y` не открывает карточку, и никто этого не замечает. Бот при старте спрашивает у Telegram `getMe` → `has_main_web_app` (Bot API 7.8) и пишет WARNING (и сообщение в Sentry), если `CLIENT_BOT_MAIN_MINI_APP=true`, а Telegram говорит «нет». В админ-боте `/version` есть строка `Main Mini App: ok` / `warn` / `unknown`. `warn` → BotFather → Main Mini App на тот же домен (или `CLIENT_BOT_MAIN_MINI_APP=false`, тогда ссылки идут через `/start`). `unknown` — Telegram не ответил за 5 с или токен не принят; не тревога, повторить `/version`. Поле `has_main_web_app` проверяет **наличие**, не совпадение URL: домен в BotFather глазами.
 16. **Стабильные id сеансов.** Публикация расписания больше не пересоздаёт строки: ссылка `?s=<id>` живёт, пока сеанс есть в расписании. Проверка на проде: выбрать одну арену, запомнить 5 id и дождаться следующего прогона парсера (днём до 45 минут).
