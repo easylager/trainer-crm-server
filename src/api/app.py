@@ -618,42 +618,6 @@ def webapp_admin_journey_page():
     return _webapp_file_response(path)
 
 
-@app.get("/webapp/admin-growth")
-def webapp_admin_growth_page():
-    """Serve the admin Growth tab Mini App (new trainer cohorts, trial→paid, referral program)."""
-    path = _WEBAPP_DIR / "admin-growth.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
-
-
-@app.get("/webapp/admin-retention")
-def webapp_admin_retention_page():
-    """Serve the admin Retention tab Mini App (churn, expiring subs, sleeping trainers, revival)."""
-    path = _WEBAPP_DIR / "admin-retention.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
-
-
-@app.get("/webapp/admin-engagement")
-def webapp_admin_engagement_page():
-    """Serve the admin Engagement tab Mini App (DAU/WAU/MAU, feature usage, top active trainers, DoW heat)."""
-    path = _WEBAPP_DIR / "admin-engagement.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
-
-
-@app.get("/webapp/admin-clients")
-def webapp_admin_clients_page():
-    """Serve the admin Clients tab Mini App (clients funnel, repeat rate, top cities/trainers, recent requests)."""
-    path = _WEBAPP_DIR / "admin-clients.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
-
-
 @app.get("/webapp/admin-activity")
 def webapp_admin_activity_page():
     """Admin audit log timeline — trainer/client/admin actions."""
@@ -661,28 +625,6 @@ def webapp_admin_activity_page():
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
-
-
-@app.get("/webapp/admin-product-analytics")
-def webapp_admin_product_analytics_page():
-    """Product analytics dashboard — activation funnel, proof-of-value, correlation table."""
-    path = _WEBAPP_DIR / "admin-product-analytics.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
-
-
-@app.get("/webapp/admin-product-analytics-main.js")
-def webapp_admin_product_analytics_main_js(request: Request):
-    """Product analytics page logic. Relative script URL from ``/webapp/admin-product-analytics`` resolves here."""
-    path = _WEBAPP_DIR / "admin-product-analytics-main.js"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="JS file not found")
-    return FileResponse(
-        path,
-        media_type="application/javascript",
-        headers=_webapp_versioned_asset_cache_headers(request),
-    )
 
 
 @app.get("/webapp/admin-subscription-tiers")

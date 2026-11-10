@@ -10,8 +10,6 @@
 → затем [`ICE-DISCOVERY-AGENT-GIT.md`](./ICE-DISCOVERY-AGENT-GIT.md) → при нескольких агентах [`ICE-DISCOVERY-AGENT-LANES.md`](./ICE-DISCOVERY-AGENT-LANES.md) → `.ai/tasks/TASK-NNN.md`.  
 Конец задачи = **merge в `release/ice-discovery`**, не ai-toolkit `/verify`, **не** `master`.  
 Toolkit: **ai-toolkit-max** (`/research` → `/plan` → `/estimate` → `/execute … supervised` → `/verify`).  
-**SDD / релизы:** [`docs/plans/2026-09-04-epic3-arenas-sdd-release-plan.md`](../docs/plans/2026-09-04-epic3-arenas-sdd-release-plan.md)  
-**R1 plan:** [`docs/plans/2026-09-04-epic3-r1-foundation.md`](../docs/plans/2026-09-04-epic3-r1-foundation.md)
 
 ## Визуальный источник истины
 
@@ -137,8 +135,6 @@ A. ДАННЫЕ АРЕНЫ            B. ПРАВДА О МЕСТЕ          C. 
 
 Гейт — это проверяемый вопрос, а не «сделано». Не проходить дальше, не ответив.
 
-**Агентский SDD + релизы:** [`docs/plans/2026-09-04-epic3-arenas-sdd-release-plan.md`](../docs/plans/2026-09-04-epic3-arenas-sdd-release-plan.md)  
-**Волна R1 (executable):** [`docs/plans/2026-09-04-epic3-r1-foundation.md`](../docs/plans/2026-09-04-epic3-r1-foundation.md)
 
 **R1 — фундамент и правда (параллельно A + B + перепись).**  
 TASK-048, TASK-056, TASK-057, TASK-058, **TASK-064**.  

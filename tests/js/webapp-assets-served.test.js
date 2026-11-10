@@ -25,7 +25,7 @@ const appPy = fs.readFileSync(path.join(ROOT, 'src/api/app.py'), 'utf8');
 /** Страницы, которые отдаются маршрутами /webapp/<name> и грузят модули. */
 const PAGES = fs
   .readdirSync(WEBAPP)
-  .filter((f) => f.endsWith('.html') && !f.startsWith('hub-priority-buttons'));
+  .filter((f) => f.endsWith('.html'));
 
 /**
  * Монтирование StaticFiles существует, но висит на /static/webapp, а страницы

@@ -98,22 +98,11 @@
 | [telegram-paywall-daily-digest-monetization.md](plans/telegram-paywall-daily-digest-monetization.md) | Paywall и daily digest как ядро монетизации |
 | [lead-mode-revenue-retention.md](plans/lead-mode-revenue-retention.md) | Удержание выручки после триала |
 | [organizations-completion-backlog.md](plans/organizations-completion-backlog.md) | Что осталось достроить в организациях |
-| [2026-09-04-epic3-arenas-sdd-release-plan.md](plans/2026-09-04-epic3-arenas-sdd-release-plan.md) · [r1](plans/2026-09-04-epic3-r1-foundation.md) | Релизный план EPIC3 для агентов |
-| [2026-09-09-merge-epics-to-master.md](plans/2026-09-09-merge-epics-to-master.md) | Кат двух эпиков (premium + региональные парсеры) в master/прод |
-| [2026-10-09-reliable-object-share.md](plans/2026-10-09-reliable-object-share.md) | Надёжный шаринг арены/сеанса (TASK-223): гэпы, потоки, контракты |
 | [2026-10-11-hockey-share-design.md](plans/2026-10-11-hockey-share-design.md) | Шаринг на вкладке «Хоккей»: отложен — петля шаринга не подтверждена данными прода |
 | [2026-10-28-place-suggestions-design.md](plans/2026-10-28-place-suggestions-design.md) | Места от людей: форма заявки, модерация, страны `/by/` `/ru/`, город без расписания |
-| [2026-10-28-place-suggestions-stage1.md](plans/2026-10-28-place-suggestions-stage1.md) | План этапа 1 «мест от людей»: 17 задач — таблица, API, модерация, бот, форма |
-| [2026-09-04-client-multi-profile-booking.md](plans/2026-09-04-client-multi-profile-booking.md) · [design](plans/2026-09-04-client-multi-profile-booking-design.md) | Запись ребёнка и раздельная статистика |
-| [2026-09-03-mobile-landing-hero-roadmap-design.md](plans/2026-09-03-mobile-landing-hero-roadmap-design.md) · [impl](plans/2026-09-03-mobile-landing-hero-roadmap-implementation.md) | Мобильный лендинг: hero и roadmap |
-| [2026-09-05-trainer-profile-s1-s2-data-guards.md](plans/2026-09-05-trainer-profile-s1-s2-data-guards.md) | Гарды данных профиля тренера |
 | [2026-10-02-ice-map-fullscreen.md](plans/2026-10-02-ice-map-fullscreen.md) | TASK-147: карта мест на весь экран — план, AC, риски (дизайн в `design/ice-map-fullscreen.md`) |
-| [2026-10-03-catalog-hub-v4-design.md](plans/2026-10-03-catalog-hub-v4-design.md) | TASK-148: подборки из данных, чипы без нулей, бесфотошные карточки (макет в `design/client-hub-catalog-final-v2.html`) |
 | [2026-10-03-hub-composition-05-06.md](plans/2026-10-03-hub-composition-05-06.md) | TASK-149: хаб как экраны 05/06 — узкая композиция; 150 пакет не стартовать |
-| [2026-09-25-search-places-label.md](plans/2026-09-25-search-places-label.md) | Поиск: «Покататься» → «Где заниматься» |
-| [2026-10-11-trainer-pass-validity.md](plans/2026-10-11-trainer-pass-validity.md) | Срок абонемента тренера: с выдачи, снимок на экземпляре, подсказка по числу занятий |
 | [2026-10-16-ice-company-pdn-draft.md](plans/2026-10-16-ice-company-pdn-draft.md) | Черновик согласия и политики для компании на льду. ПРОВЕРИТЬ ЮРИСТОМ |
-| [2026-10-18-release-18-10-26-pipeline.md](plans/2026-10-18-release-18-10-26-pipeline.md) | Релиз `release/18.10.26`: состав (компания, загрузка, «Для вас», билеты, рассылка), миграции 0237–0244, флаги, выкат |
 
 ## ops — эксплуатация
 
@@ -133,7 +122,7 @@
 
 ## Остальное
 
-- `reviews/` — 18 аудитов подсистем (запись, платежи, боты, абонементы и т.д.), плюс [продуктовое ревью клиньев](reviews/notes/product_review_wedges_activation.md) и [TASK-207 AC-3 Островец](reviews/2026-10-07-task-207-ostrovets-ac3.md).
+- `reviews/` — [продуктовое ревью клиньев](reviews/notes/product_review_wedges_activation.md).
 - `agents/` — системные промпты ревьюеров (backend, product, QA, refactor, security, UX) и агентов эпика (`prompt-*`).
 - `release-comms/` — сообщения релизов по аудиториям, есть [шаблон](release-comms/TEMPLATE.md).
 - `archive/` — [legacy-индекс задач](archive/legacy-tasks-index.md), [sprintq-backlog](archive/sprintq-backlog.md), [RFQ по локерам](archive/rfq-smart-sports-locker-v1.md).

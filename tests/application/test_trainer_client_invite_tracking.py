@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.admin_analytics_use_cases import get_admin_product_analytics
 from src.application.trainer_client_invite_tracking import (
     record_trainer_client_invite_link_first_copy,
     sql_trainer_shared_client_invite,
@@ -91,45 +89,6 @@ async def test_submitted_moderation_sql_counts_active_without_timestamp(db_sessi
         {"id": trainer_id},
     )
     assert r2.scalar_one() is True
-
-
-@pytest.mark.asyncio
-async def test_product_analytics_funnel_active_implies_submitted_moderation(db_session: AsyncSession) -> None:
-    before = await get_admin_product_analytics(db_session)
-    r = await db_session.execute(
-        text(
-            """
-            INSERT INTO trainers (status, schedule_grid_step_minutes, telegram_id, created_at)
-            VALUES ('active', 15, 123456789, :created_at)
-            RETURNING id
-            """
-        ),
-        {"created_at": datetime.now(timezone.utc) - timedelta(days=30)},
-    )
-    trainer_id = int(r.scalar_one())
-    r2 = await db_session.execute(
-        text(
-            """
-            INSERT INTO clients (first_name, phone, phone_normalized, telegram_id, is_sandbox)
-            VALUES ('A', '+375291111111', '+375291111111', 888001, false)
-            RETURNING id
-            """
-        )
-    )
-    client_id = int(r2.scalar_one())
-    await db_session.execute(
-        text(
-            "INSERT INTO trainer_client_roster (trainer_id, client_id) VALUES (:tid, :cid)"
-        ),
-        {"tid": trainer_id, "cid": client_id},
-    )
-    await db_session.commit()
-
-    after = await get_admin_product_analytics(db_session)
-    af = after.get("activation_funnel") or {}
-    assert af.get("activated", 0) >= before.get("activation_funnel", {}).get("activated", 0) + 1
-    assert af.get("submitted_moderation", 0) >= af.get("activated", 0)
-    assert af.get("copied_invite", 0) >= 1
 
 
 @pytest.mark.asyncio
