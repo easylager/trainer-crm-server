@@ -315,7 +315,7 @@
       "kind": "public_skate",
       "session_label": "Ночное катание",
       "price_adult_minor": 80000,
-      "price_child_minor": null,
+      "price_child_minor": 80000,
       "price_rental_minor": null,
       "price_tiers": [
         {

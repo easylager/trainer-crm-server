@@ -302,7 +302,7 @@ async def test_sokolniki_matches_expected_snapshot() -> None:
         assert slot.currency_code == "RUB"
         assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
         assert slot.price_adult_minor == gold["price_adult_minor"] == 60000
-        assert slot.price_child_minor is None
+        assert slot.price_child_minor == slot.price_adult_minor
         assert slot.price_rental_minor == gold["price_rental_minor"] == 30000
         assert slot.session_label == "МК"
 
@@ -386,7 +386,7 @@ async def test_yubileyny_matches_expected_events() -> None:
         assert slot.currency_code == "RUB"
         assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
         assert slot.price_adult_minor == gold["price_adult_minor"] == 80000
-        assert slot.price_child_minor is None
+        assert slot.price_child_minor == slot.price_adult_minor
         assert slot.price_rental_minor is None
         assert slot.session_label == gold["session_label"] == "Тренировка на льду — свои коньки"
 
@@ -447,7 +447,7 @@ async def test_baltic_arena_matches_expected_grid() -> None:
         assert slot.currency_code == "RUB"
         assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
         assert slot.price_adult_minor == gold["price_adult_minor"]
-        assert slot.price_child_minor is None
+        assert slot.price_child_minor == slot.price_adult_minor
         assert slot.price_rental_minor is None
 
 
@@ -505,7 +505,7 @@ async def test_iceburg_arena_filters_to_mass_skating_only() -> None:
         assert slot.kind == "public_skate"
         assert slot.currency_code == "RUB"
         assert slot.price_adult_minor == gold["price_adult_minor"] == 90000
-        assert slot.price_child_minor is None
+        assert slot.price_child_minor == slot.price_adult_minor
         assert slot.price_rental_minor is None
 
 
@@ -541,7 +541,7 @@ async def test_grand_canyon_ice_filters_to_free_skate_only() -> None:
         assert slot.currency_code == "RUB"
         assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
         assert slot.price_adult_minor == gold["price_adult_minor"]
-        assert slot.price_child_minor is None
+        assert slot.price_child_minor == slot.price_adult_minor
         assert slot.price_rental_minor is None
 
 
@@ -580,7 +580,7 @@ async def test_ozerki_filters_to_free_skate_only_across_both_rinks() -> None:
         assert slot.kind == "public_skate"
         assert slot.currency_code == "RUB"
         assert slot.price_adult_minor == gold["price_adult_minor"]
-        assert slot.price_child_minor is None
+        assert slot.price_child_minor == slot.price_adult_minor
         assert slot.price_rental_minor is None
         assert slot.session_label == gold["session_label"]
 
@@ -639,7 +639,7 @@ async def test_magnit_arena_excludes_hockey_hour_rink() -> None:
         assert slot.currency_code == "RUB"
         assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
         assert slot.price_adult_minor == gold["price_adult_minor"]
-        assert slot.price_child_minor is None
+        assert slot.price_child_minor == slot.price_adult_minor
         assert slot.price_rental_minor == gold["price_rental_minor"] == 30000
 
 

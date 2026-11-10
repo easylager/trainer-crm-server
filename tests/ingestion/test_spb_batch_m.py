@@ -79,7 +79,7 @@ async def test_dinamo_yunior_matches_expected_snapshot() -> None:
     assert slot.kind == "public_skate"
     assert slot.currency_code == "RUB"
     assert slot.price_adult_minor == gold["price_adult_minor"] == 50000
-    assert slot.price_child_minor is None
+    assert slot.price_child_minor == slot.price_adult_minor
     assert slot.price_rental_minor == gold["price_rental_minor"] == 30000
 
 

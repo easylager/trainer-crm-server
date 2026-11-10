@@ -183,7 +183,7 @@ async def test_novopolotsk_lds_table_matches_5_gold_sessions() -> None:
         assert slot.kind == "public_skate"
         assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
         assert slot.price_adult_minor == gold["price_adult_minor"]
-        assert (slot.price_child_minor is None) == (gold["price_child_minor"] is None)
+        assert slot.price_child_minor == (gold["price_child_minor"] or slot.price_adult_minor)
         assert slot.price_rental_minor == gold["price_rental_minor"] == 600
     # the malformed 06.09 15:00 row (место cell shifted into td-date) must still parse
     assert by_key[("2026-09-06", "15:00")].price_adult_minor == 1000

@@ -340,7 +340,12 @@ class IceSessionNormalizer:
                     starts_at_local=parts.starts_at_local,
                     ends_at_local=parts.ends_at_local,
                     price_adult_minor=bucket["price_adult_minor"],
-                    price_child_minor=bucket["price_child_minor"],
+                    # Массовое катание: детская не названа отдельно → столько же, сколько взрослая.
+                    price_child_minor=(
+                        bucket["price_adult_minor"]
+                        if bucket["price_child_minor"] is None and bucket["kind"] == "public_skate"
+                        else bucket["price_child_minor"]
+                    ),
                     price_rental_minor=bucket["price_rental_minor"],
                     currency_code=currency,
                     status=STATUS_ACTIVE,

@@ -120,7 +120,7 @@ async def test_bobruisk_arena_matches_expected_fixture() -> None:
 
     assert len(slots) == len(expected["sessions"]) == 15
     assert all(slot.kind == "public_skate" for slot in slots)
-    assert all(slot.price_child_minor is None for slot in slots)
+    assert all(slot.price_child_minor == slot.price_adult_minor for slot in slots)
 
     by_key = {(s.local_date, s.starts_at_local.strftime("%H:%M")): s for s in slots}
     for gold in expected["sessions"]:
@@ -311,7 +311,7 @@ async def test_gomel_lds_matches_expected_fixture() -> None:
 
     assert len(slots) == len(expected["sessions"]) == 7
     assert all(slot.kind == "public_skate" for slot in slots)
-    assert all(slot.price_child_minor is None for slot in slots)
+    assert all(slot.price_child_minor == slot.price_adult_minor for slot in slots)
     assert all(slot.price_rental_minor == 500 for slot in slots)
     assert all(slot.age_note == "детям до 10 лет вход после 21:00 запрещен" for slot in slots)
 

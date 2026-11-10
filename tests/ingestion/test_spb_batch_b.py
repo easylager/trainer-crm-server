@@ -77,7 +77,7 @@ async def test_kupchino_arena_matches_expected_snapshot() -> None:
         assert slot.currency_code == "RUB"
         assert slot.ends_at_local.strftime("%H:%M") == gold["ends_at_local"]
         assert slot.price_adult_minor == gold["price_adult_minor"] == 50000
-        assert slot.price_child_minor is None
+        assert slot.price_child_minor == slot.price_adult_minor
         assert slot.price_rental_minor == gold["price_rental_minor"] == 50000
 
 
