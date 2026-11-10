@@ -190,3 +190,23 @@ def test_description_price_says_group_or_pass_like_the_card() -> None:
     # Основание не передано — прежнее поведение.
     assert "От 41,87 BYN за занятие" in page_description(_page())
     assert len(group) <= DESCRIPTION_LIMIT and len(pass_) <= DESCRIPTION_LIMIT
+
+
+def test_week_slots_name_the_arena():
+    from datetime import date
+
+    from src.application.site_trainer_page import _week_html
+
+    page = {
+        "can_book": True,
+        "today": date(2026, 11, 19),
+        "contact_url": None,
+        "windows": [
+            {"starts_at": "2026-11-19T11:15:00", "time": "11:15", "arena_name": "ТЦ Замок"},
+            {"starts_at": "2026-11-19T12:15:00", "time": "12:15"},
+        ],
+    }
+    html = _week_html(page, "https://t.me/x", None)
+    assert '<small class="tp-wa">ТЦ Замок</small>' in html
+    assert html.count("tp-wa") == 1
+    assert "11:15, ТЦ Замок" in html

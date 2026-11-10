@@ -91,6 +91,8 @@
 .tp-day b { font-size: 13px; color: var(--g-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
 .tp-d { font: 400 22px var(--g-font-display); }
 .tp-slot { display: flex; align-items: center; justify-content: center; min-height: 44px; width: 100%; text-align: center; border-radius: 12px; padding: 8px 4px; font-weight: 700; font-size: 14px; background: var(--g-accent-wash); color: var(--g-ink) !important; border: 1px solid rgba(69, 185, 187, .38); font-variant-numeric: tabular-nums; }
+.tp-slot { flex-direction: column; gap: 2px; min-width: 0; }
+.tp-wa { display: block; max-width: 100%; font-weight: 600; font-size: 10.5px; line-height: 1.2; color: var(--g-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-slot:hover { background: var(--g-accent); color: var(--g-dark) !important; }
 .tp-no { font-size: 12px; line-height: 1.3; text-align: center; color: var(--g-muted); }
 .tp-request { background: var(--g-surface); border: 1.5px dashed var(--g-line); border-radius: 20px; padding: 16px; display: flex;

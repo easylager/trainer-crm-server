@@ -546,6 +546,9 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
             windows = [w for w in windows if (datetime.fromisoformat(w["starts_at"]).date() - first).days < WEEK_DAYS]
     name = trainer_name(body)
     arenas = await _arenas(session, int(trainer_id))
+    # Где окно: имя катка из публичных площадок тренера (чужой/скрытый каток не подписываем).
+    arena_names = {int(a["id"]): format_public_name(str(a["name"])) for a in arenas if a.get("is_ice")}
+    windows = [{**w, "arena_name": arena_names.get(int(w["arena_id"]))} if w.get("arena_id") else w for w in windows]
     await attach_arena_media_payloads(session, arenas)
     rentals = await _rentals(session, [a["id"] for a in arenas])
     peer_counts = await _arena_peer_counts(session, int(trainer_id), [a["id"] for a in arenas])
@@ -1026,6 +1029,15 @@ def _win_label(w: Mapping[str, Any]) -> str:
     return f"{_WEEKDAYS[starts.weekday()]}, {w['time']}"
 
 
+def _win_arena(w: Mapping[str, Any]) -> str:
+    name = w.get("arena_name")
+    return f'<small class="tp-wa">{esc(name)}</small>' if name else ""
+
+
+def _win_arena_aria(w: Mapping[str, Any]) -> str:
+    return f", {esc(w['arena_name'])}" if w.get("arena_name") else ""
+
+
 def _near_label(w: Mapping[str, Any], today: date) -> tuple[str, str]:
     """(«сб, 17:15», «сегодня» / «завтра» / «10 ноября»)."""
     return _win_label(w), human_date(datetime.fromisoformat(str(w["starts_at"])).date(), today=today)
@@ -1128,7 +1140,7 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
                 label, sub = _near_label(w, today)
                 near.append(
                     f'<a href="{esc(w.get("book_href") or app)}" rel="nofollow" aria-label="Записаться: {esc(label)}, {esc(sub)}">'
-                    f"{esc(label)}<small>{esc(sub)}</small></a>"
+                    f"{esc(label)}<small>{esc(sub)}</small>{_win_arena(w)}</a>"
                 )
             parts.append(
                 '<div><div class="tp-lbl">Ближайшее время — записаться</div>'
@@ -1285,7 +1297,8 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
         inner = (
             "".join(
                 f'<a class="tp-slot" href="{esc(w.get("book_href") or app)}" rel="nofollow" '
-                f'aria-label="Записаться: {esc(_WEEKDAYS[day.weekday()])}, {day.day}, {esc(w["time"])}">{esc(w["time"])}</a>'
+                f'aria-label="Записаться: {esc(_WEEKDAYS[day.weekday()])}, {day.day}, {esc(w["time"])}{_win_arena_aria(w)}">'
+                f'{esc(w["time"])}{_win_arena(w)}</a>'
                 for w in slots
             )
             if slots
