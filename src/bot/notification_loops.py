@@ -3489,7 +3489,16 @@ async def run_hockey_matches_loop() -> None:
                     last_calendar = now
                     health.ok("календарь матчей")
                 elif counts["calendar_failed"]:
-                    text = health.failed("календарь матчей", str(counts.get("calendar_error") or ""))
+                    via = counts.get("calendar_via")
+                    text = health.failed(
+                        "календарь матчей",
+                        str(counts.get("calendar_error") or ""),
+                        note=(
+                            f"Матчи и итоги идут с запасного источника {via}. Итог можно ввести вручную: команда /hockey в этом боте"
+                            if via
+                            else None
+                        ),
+                    )
                     if text:
                         await send_review_alert(text)
                 if counts.get("races_failed"):
