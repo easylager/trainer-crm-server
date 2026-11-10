@@ -736,3 +736,33 @@ async def test_live_score_shown_only_when_filled(app_use_test_db, db_session):
     await db_session.execute(text("UPDATE hockey_matches SET live_home_score=2, live_away_score=1, live_at=:t WHERE id=:i"), {"t": NOW, "i": mid})
     html = (await _get(await _path(db_session, mid))).text
     assert "2 : 1" in html and "обновлено в" in html
+
+
+@pytest.mark.asyncio
+async def test_bell_result_is_not_sent_to_a_player_whose_game_move_gets_its_own_result(app_use_test_db, db_session):
+    """Играющему итог пришлёт игра; колокольчик шлёт его только тем, у кого оценённого хода нет (дубля нет)."""
+    await _world(db_session)
+    mid = await _match(db_session, starts=NOW + timedelta(days=1))
+    player, plain, muted = 7_200_000_001, 7_200_000_002, 7_200_000_003
+    for tg in (player, plain, muted):
+        await match_bells.subscribe(db_session, telegram_id=tg, match_id=mid, now=NOW)
+    for tg in (player, muted):
+        await db_session.execute(
+            text("INSERT INTO hockey_players (player_key, display_name) VALUES (:k, 'Игрок')"), {"k": tg}
+        )
+        await db_session.execute(
+            text("INSERT INTO hockey_picks (match_id, player_key, side, points) VALUES (:m, :k, 'home', 0)"),
+            {"m": mid, "k": tg},
+        )
+    await db_session.execute(
+        text("INSERT INTO hockey_player_prefs (player_key, notify_result) VALUES (:k, false)"), {"k": muted}
+    )
+    await db_session.execute(
+        text(
+            "UPDATE hockey_matches SET status='final', home_score=4, away_score=0, decided_in='regulation', "
+            "result_source='auto', starts_at=:s WHERE id=:m"
+        ),
+        {"m": mid, "s": NOW - timedelta(hours=3)},
+    )
+    notices = await match_bells.due_notices(db_session, now=NOW)
+    assert sorted(n.telegram_id for n in notices if n.kind == match_bells.KIND_RESULT) == [plain, muted]

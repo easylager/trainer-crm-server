@@ -5,7 +5,7 @@
 Сообщение сначала «занимается» отметкой в самой строке и только потом уходит, поэтому второй цикл или
 повтор тика не пришлёт его дважды. Перенос матча даёт одно сообщение «перенесён на …» и новое
 напоминание; отмена и пропажа из календаря — одно «отменён или перенесён». Итог — только если он
-пришёл в течение суток после начала. Бот заблокирован — подписки человека снимаются, повторов нет.
+пришёл в течение суток после начала и игра «Кто кого» не шлёт его сама (есть оценённый ход). Бот заблокирован — подписки человека снимаются, повторов нет.
 """
 
 from __future__ import annotations
@@ -215,6 +215,12 @@ class Notice:
 
 _DUE = text(f"""
     SELECT b.telegram_id, b.match_id, b.known_starts_at, b.remind_for,
+           EXISTS (
+               SELECT 1 FROM hockey_picks AS hp
+               LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = hp.player_key
+               WHERE hp.player_key = b.telegram_id AND hp.match_id = b.match_id AND hp.points IS NOT NULL
+                 AND COALESCE(pr.remind, true) AND pr.bot_blocked_at IS NULL AND COALESCE(pr.notify_result, true)
+           ) AS game_tells_result,
            {", ".join("m." + c.strip() for c in site_matches._COLUMNS.split(",") if c.strip() and c.strip() != "id")}
     FROM hockey_match_bells b
     JOIN hockey_matches m ON m.id = b.match_id
@@ -276,7 +282,8 @@ async def due_notices(
         if site_matches.hidden(r):
             out.append(Notice(KIND_CANCEL, text=cancel_text(r), buttons=[], **common))
         elif r.status == STATUS_FINAL and r.home_score is not None:
-            if starts > now - FRESH:
+            # Играющему итог пришлёт сама игра («Мимо. Бывает…» с его местом): второе сообщение — дубль.
+            if starts > now - FRESH and not r.game_tells_result:
                 out.append(Notice(KIND_RESULT, text=result_text(r), buttons=_buttons(row, base_url=base, off=False), **common))
         elif now < starts:
             known = _utc(r.known_starts_at) if r.known_starts_at is not None else None
