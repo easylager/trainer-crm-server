@@ -144,6 +144,13 @@ def test_live_home_match_takes_the_slot_but_not_over_a_booking_today() -> None:
     assert booked is not None and booked["kind"] == "booking"
 
 
+def test_waiting_for_the_result_keeps_the_kk_card_on_the_home_slot() -> None:
+    """TASK-359: матч начался, итога нет — карточка игры на главной не исчезает."""
+    waiting = {"mode": "waiting", "match": {"id": 11}, "my_pick": {"side": "home"}}
+    slot = now_slot(bookings=None, hockey=waiting, upcoming=ICE, now=NOW)
+    assert slot is not None and slot["kind"] == "kk_before" and slot["hockey"]["mode"] == "waiting"
+
+
 def test_city_with_matches_gets_one_hockey_entry_into_the_mini_app_catalog() -> None:
     view = _view()
     view["matches"] = {

@@ -12,8 +12,10 @@ from src.api.deps import get_session
 from src.api.miniapp_auth.deps import get_admin_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPrincipal
 from src.application.hockey_game import score_finished_matches
+from src.application.hockey_league_reports import clear_identity_now
 from src.application.hockey_matches import STATUS_REVIEW, MatchRow, list_matches, set_manual_result
 from src.application.hockey_promo import promo_report
+from src.shared.audit import ACTOR_API, audit_log
 
 router = APIRouter(tags=["webapp-admin-hockey"])
 
@@ -106,3 +108,17 @@ async def get_admin_hockey_promo(
     """Рекламные метки «Кто кого»: заходов, новых игроков, сделавших ход, вернувшихся в другой день."""
     del principal
     return {"items": await promo_report(session)}
+
+
+@router.post("/admin/hockey/leagues/{league_id}/clear-identity")
+async def post_admin_hockey_league_clear_identity(
+    league_id: int,
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Жалоба на лигу подтвердилась: убрать её картинку и строку «на что играем». Название и таблица остаются."""
+    cleared = await clear_identity_now(session, league_id=league_id)
+    if cleared is None:
+        raise HTTPException(status_code=404, detail="Лига не найдена")
+    audit_log("hockey.league_identity_cleared", ACTOR_API, principal.user_id, {**cleared, "via": "admin_api"})
+    return cleared

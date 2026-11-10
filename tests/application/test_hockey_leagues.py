@@ -164,7 +164,14 @@ async def test_preview_has_no_keys(db_session) -> None:
     league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
     await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
     preview = await league_preview(db_session, league.invite_code)
-    assert preview == {"name": "ОХМ", "invite_code": league.invite_code, "members": 2, "names": ["Саша", "Катя"]}
+    assert preview == {
+        "name": "ОХМ",
+        "invite_code": league.invite_code,
+        "members": 2,
+        "names": ["Саша", "Катя"],
+        "image_key": None,
+        "stake_text": None,
+    }
 
 
 @pytest.mark.asyncio

@@ -30,6 +30,7 @@
 
   function tapSide(m, side) {
     if (!m.open) return openMatch(m);
+    if (K.coin && K.coin.busy(m)) return; // монета крутится: выбор делает она, пропуск — тап по ней
     var draft = state.drafts[m.id] || null;
     if (!S.sideTapSends(m.my_pick, draft, side)) return;
     clearTimeout(timers[m.id]);
@@ -92,10 +93,11 @@
   }
 
   function teamBtn(m, side, eff) {
-    var on = eff.side === side;
+    var cs = K.coin && K.coin.side(m, side); // бросок монеты идёт: кнопка рисуется по его кадру, а не по ходу
+    var on = cs ? cs.on : eff.side === side;
     return h('button', {
       type: 'button',
-      class: 'kk-ht' + (on ? ' is-on' : ''),
+      class: 'kk-ht' + (on ? ' is-on' : '') + (cs ? cs.cls : ''),
       'aria-pressed': on ? 'true' : 'false',
       'aria-label': 'Победит ' + nm(m[side]),
       onclick: function () { tapSide(m, side); },
@@ -129,13 +131,21 @@
     var doubled = !!(m.my_pick && m.my_pick.doubled);
     var bg = (club ? club.color : (m.away_team === M.DINAMO ? m.away : m.home).color) || M.NEUTRAL;
     var sum = eff.side ? S.moveSummary(eff, doubled, nm(m[eff.side])) : null;
+    var coin = K.coin ? K.coin.button(m) : null;
+    var coinBusy = !!(K.coin && K.coin.busy(m));
     var kids = [
       K.sticker(hero.tag),
-      h('button', { type: 'button', class: 'kk-hm', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); }, text: S.heroMeta(m) }),
+      h('div', { class: 'kk-hrow' }, [
+        h('button', { type: 'button', class: 'kk-hm', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); }, text: S.heroMeta(m) }),
+        coin,
+      ]),
       h('div', { class: 'kk-two kk-two--hero' }, [teamBtn(m, 'home', eff), teamBtn(m, 'away', eff)]),
+      K.coin ? K.coin.panel(m) : null,
     ];
-    if (!eff.side) kids.push(h('span', { class: 'kk-hh', text: 'Тапни, кто победит.' }));
-    else {
+    // Пока крутится монета, подсказка и счёт молчат: барабаны показывает блок выше.
+    if (!eff.side) {
+      if (!coinBusy) kids.push(h('span', { class: 'kk-hh', text: 'Тапни, кто победит.' }));
+    } else if (!coinBusy) {
       kids.push(h('div', { class: 'kk-hbox' }, [
         h('div', { class: 'kk-hbox__head' }, [
           h('span', { class: 'kk-hbox__t', text: 'Точный счёт' }),
@@ -155,10 +165,11 @@
   // ---------- матчи дня ----------
 
   function dayTeam(m, side, eff, colors) {
-    var on = eff.side === side;
+    var cs = K.coin && K.coin.side(m, side); // бросок монеты идёт: кнопка рисуется по его кадру, а не по ходу
+    var on = cs ? cs.on : eff.side === side;
     return h('button', {
       type: 'button',
-      class: 'kk-dt' + (on ? ' is-on' : '') + (m.open ? '' : ' is-off'),
+      class: 'kk-dt' + (on ? ' is-on' : '') + (m.open ? '' : ' is-off') + (cs ? cs.cls : ''),
       'aria-pressed': on ? 'true' : 'false',
       'aria-label': 'Победит ' + nm(m[side]),
       'aria-disabled': m.open ? null : 'true',
@@ -173,15 +184,19 @@
     var time = m.open || m.status === 'scheduled' || m.status === 'review' ? S.timeOnly(m.starts_at) : m.result ? m.result.home_score + ':' + m.result.away_score : '';
     var where = [mixed && m.league !== 'extraliga' ? 'КХЛ' : null, m.city || m.arena].filter(Boolean).join(' · ');
     var kids = [
-      h('button', { type: 'button', class: 'kk-dh', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); } }, [
-        h('b', { class: 'kk-dh__t', text: time }),
-        h('span', { class: 'kk-dh__w', text: where }),
+      h('div', { class: 'kk-dhr' }, [
+        h('button', { type: 'button', class: 'kk-dh', 'aria-label': 'Открыть матч ' + nm(m.home) + ' — ' + nm(m.away), onclick: function () { openMatch(m); } }, [
+          h('b', { class: 'kk-dh__t', text: time }),
+          h('span', { class: 'kk-dh__w', text: where }),
+        ]),
+        K.coin ? K.coin.button(m) : null,
       ]),
       h('div', { class: 'kk-two kk-two--day' }, [dayTeam(m, 'home', eff, colors), dayTeam(m, 'away', eff, colors)]),
     ];
     var moved = M.movedLine(m);
     if (moved) kids.push(h('span', { class: 'kk-moved', text: moved }));
-    if (m.open && eff.side) {
+    if (K.coin) kids.push(K.coin.panel(m));
+    if (m.open && eff.side && !(K.coin && K.coin.busy(m))) {
       if (!state.scoreOpen[m.id] && !eff.score) {
         kids.push(h('button', { type: 'button', class: 'kk-dofr', onclick: function () { state.scoreOpen[m.id] = true; K.render(); } }, [
           h('span', { text: 'Угадать точный счёт' }),
@@ -195,10 +210,32 @@
     return h('div', { class: 'kk-dr' }, kids);
   }
 
+  // ---------- начался, итога нет (TASK-359) ----------
+
+  /** Мои ходы на начавшихся матчах без итога: матч не пропадает из хаба между стартом и подтверждением итога. */
+  function pendingList() {
+    return S.pendingMatches(state.matches, new Date());
+  }
+
+  function pendingSection() {
+    if (!state.hubReady || !K.matchRows) return null;
+    var items = pendingList();
+    if (!items.length) return null;
+    var now = new Date();
+    var club = state.profile && state.profile.club ? state.profile.club.name : null;
+    return h('div', { class: 'kk-sec' }, [
+      h('div', { class: 'kk-sec__head' }, [h('h2', { class: 'kk-lbl kk-lbl--h', text: S.pendingHead(items, club, now) })]),
+      h('div', { class: 'kk-ml-list' }, items.slice(0, 3).map(function (m) { return K.matchRows.row(m, now); })),
+    ]);
+  }
+
   function daySection() {
     if (!state.hubReady) return h('div', { class: 'kk-skel kk-skel--card' });
     var hero = current();
-    var d = S.dayMatches(state.matches, new Date(), hero ? hero.match.id : null);
+    // Матчи из блока «ждём итог» и «Твоя команда» в день не повторяются.
+    var shown = pendingList().map(function (m) { return m.id; });
+    if (hero) shown.push(hero.match.id);
+    var d = S.dayMatches(state.matches, new Date(), shown);
     if (!d && !hero && !state.matches.length && state.matchesFailed) return K.retryCard('Матчи не загрузились.', function () { K.reset('hub', {}); });
     if (!d) return hero ? null : K.emptyCard('МАТЧИ ДНЯ', 'Ближайших матчей пока нет — календарь обновится, как только клубы их назначат.');
     return h('div', { class: 'kk-sec' }, [
@@ -236,5 +273,5 @@
     ], 'kk-sheet--pts');
   }
 
-  K.hubCards = { hero: heroCard, day: daySection, pointsLink: pointsLink, pointsSheet: pointsSheet };
+  K.hubCards = { hero: heroCard, pending: pendingSection, day: daySection, pointsLink: pointsLink, pointsSheet: pointsSheet };
 })();

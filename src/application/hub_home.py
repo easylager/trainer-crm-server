@@ -246,8 +246,9 @@ def _dinamo_card(hockey: Mapping[str, Any] | None) -> dict[str, Any] | None:
     # Итог месяца «Кто кого» (TASK-334) — сутки после финала, пока не открыли.
     if mode == "race_result" and (hockey or {}).get("race"):
         return {"kind": "kk_month", "hockey": dict(hockey or {})}
-    # live — идущий домашний матч-событие (TASK-304); рисуется той же карточкой, что before.
-    if mode in ("result", "before", "live") and (hockey or {}).get("match"):
+    # live — идущий домашний матч-событие (TASK-304), waiting — начался, итога ещё нет (TASK-359);
+    # рисуются той же карточкой, что before.
+    if mode in ("result", "before", "live", "waiting") and (hockey or {}).get("match"):
         return {"kind": "kk_result" if mode == "result" else "kk_before", "hockey": dict(hockey or {})}
     return None
 

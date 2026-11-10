@@ -229,6 +229,124 @@ _SIDE_COUNTS = text("""
     """)
 
 
+# ---------- список «Матчи и мои ходы» (TASK-359) ----------
+
+# Матч без итога идёт первые три часа (как окно «идёт» в хабе), дальше — «ждём итог»; запомненный итог
+# (``result_probe``) или ручная проверка (``review``) ставят «ждём итог» сразу.
+MATCH_LIVE_FOR = timedelta(hours=3)
+# Через трое суток автоподтверждение итога невозможно (AUTO_CONFIRM_WINDOW): такой матч уходит из «ждём итог».
+MATCH_STALE_AFTER = timedelta(days=3)
+UPCOMING_LIMIT = 40
+HISTORY_PAGE = 12
+HISTORY_MAX = 30
+
+PHASE_UPCOMING = "upcoming"
+PHASE_LIVE = "live"
+PHASE_WAITING = "waiting"
+PHASE_DONE = "done"
+PHASE_CANCELLED = "cancelled"
+
+
+def match_phase(status: str, starts_at: datetime, now: datetime, *, has_probe: bool = False) -> str:
+    """Где матч на пути «впереди → идёт → ждём итог → сыграли». Считает сервер, клиент лишь уточняет по часам."""
+    if status == "cancelled":
+        return PHASE_CANCELLED
+    if status == "final":
+        return PHASE_DONE
+    if _utc(now) < _utc(starts_at):
+        return PHASE_UPCOMING
+    if status == "review" or has_probe:
+        return PHASE_WAITING
+    return PHASE_LIVE if _utc(now) - _utc(starts_at) < MATCH_LIVE_FOR else PHASE_WAITING
+
+
+def match_stale(phase: str, starts_at: datetime, now: datetime) -> bool:
+    """Итога нет больше трёх суток: автоматика уже не подтвердит, дальше решает админ."""
+    return phase == PHASE_WAITING and _utc(now) - _utc(starts_at) >= MATCH_STALE_AFTER
+
+
+def my_points(points: int | None, doubled: bool) -> int | None:
+    """Очки хода с козырем: в базе — базовые (по ним «в точку»), в списке — итог."""
+    if points is None:
+        return None
+    return points * 2 if doubled else points
+
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def encode_cursor(starts_at: datetime, match_id: int) -> str:
+    """Курсор «раньше»: микросекунды от эпохи и id — без знаков, которые ломаются в адресной строке."""
+    return f"{(_utc(starts_at) - _EPOCH) // timedelta(microseconds=1)}_{int(match_id)}"
+
+
+def decode_cursor(raw: str) -> tuple[datetime, int]:
+    """Время начала и id последнего показанного матча. ``ValueError`` — мусор."""
+    micros, sep, ident = (raw or "").partition("_")
+    if not sep:
+        raise ValueError("cursor")
+    try:
+        return _EPOCH + timedelta(microseconds=int(micros)), int(ident)
+    except OverflowError:
+        raise ValueError("cursor") from None
+
+
+_LIST_COLUMNS = """
+    m.id, m.home_team, m.away_team, m.starts_at, m.status, m.league,
+    m.home_score, m.away_score, m.decided_in,
+    m.live_home_score, m.live_away_score, m.live_at,
+    m.previous_starts_at, m.arena, m.city, (m.result_probe IS NOT NULL) AS has_probe,
+    p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
+    p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
+"""
+_LIST_FROM = """
+    FROM game_matches AS m
+    LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
+"""
+
+# Начался, итога нет, трое суток ещё не прошли: идёт или ждём итог. Весь набор, без лимита: таких матчей единицы.
+_LIST_ACTIVE = text(f"""
+    SELECT {_LIST_COLUMNS} {_LIST_FROM}
+    WHERE m.status IN ('scheduled', 'review') AND m.starts_at <= :now AND m.starts_at >= :active_since
+      AND (NOT CAST(:mine AS boolean) OR p.match_id IS NOT NULL)
+      {SCOPE_SQL}
+    ORDER BY m.starts_at, m.id
+    """)
+
+# Впереди: ближайшие по времени; отменённый матч с моим ходом остаётся строкой «ход снят».
+_LIST_UPCOMING = text(f"""
+    SELECT {_LIST_COLUMNS} {_LIST_FROM}
+    WHERE m.starts_at > :now
+      AND (m.status IN ('scheduled', 'review') OR (m.status = 'cancelled' AND p.match_id IS NOT NULL))
+      {SCOPE_SQL}
+    ORDER BY m.starts_at, m.id
+    LIMIT :limit
+    """)
+
+# Сыграли: сезон страницами от новых к старым (keyset по времени начала и id). Старый матч без итога виден,
+# только если на него есть мой ход: чужие «зависшие» строки сезона списку не нужны.
+_LIST_HISTORY = text(f"""
+    SELECT {_LIST_COLUMNS} {_LIST_FROM}
+    WHERE m.starts_at >= :season_start
+      AND (m.status = 'final'
+           OR (m.status IN ('scheduled', 'review') AND m.starts_at < :active_since AND p.match_id IS NOT NULL)
+           OR (m.status = 'cancelled' AND p.match_id IS NOT NULL AND m.starts_at <= :now))
+      AND (NOT CAST(:mine AS boolean) OR p.match_id IS NOT NULL)
+      AND (CAST(:before_at AS timestamptz) IS NULL
+           OR (m.starts_at, m.id) < (CAST(:before_at AS timestamptz), CAST(:before_id AS integer)))
+      {SCOPE_SQL}
+    ORDER BY m.starts_at DESC, m.id DESC
+    LIMIT :limit
+    """)
+
+_AWAITING = text("""
+    SELECT COUNT(*)::int FROM hockey_picks AS p
+    JOIN game_matches AS m ON m.id = p.match_id
+    WHERE p.player_key = :player_key AND m.status IN ('scheduled', 'review')
+      AND m.starts_at <= :now AND m.starts_at >= :active_since
+    """)
+
+
 async def make_pick(
     session: AsyncSession,
     *,
@@ -532,6 +650,10 @@ async def player_matches(
     """
     params = {"player_key": player_key, "since": _utc(since), "limit": limit, **_scope(club, league).params}
     rows = [dict(r._mapping) for r in (await session.execute(_PLAYER_MATCHES, params)).all()]
+    return await _with_side_counts(session, rows)
+
+
+async def _with_side_counts(session: AsyncSession, rows: list[dict]) -> list[dict]:
     counts = {}
     if rows:
         found = await session.execute(_SIDE_COUNTS, {"match_ids": [int(r["id"]) for r in rows]})
@@ -543,8 +665,67 @@ async def player_matches(
     return rows
 
 
+async def player_match_list(
+    session: AsyncSession,
+    player_key: int,
+    *,
+    now: datetime,
+    mode: str = "all",
+    club: str | None = None,
+    league: str | None = None,
+    before: str | None = None,
+    limit: int = HISTORY_PAGE,
+) -> dict:
+    """Матчи для списка «Матчи и мои ходы» и хаба игры: идёт и ждём итог, впереди, страница сыгранных.
+
+    Первая страница (``before`` пуст) отдаёт сразу три набора, поэтому история не вытесняет будущее и идущие
+    матчи: все начавшиеся без итога за трое суток, ближайшие ``UPCOMING_LIMIT`` впереди и ``limit`` последних
+    сыгранных. С ``before`` — только следующая страница сыгранных, старше курсора.
+    ``mode`` — ``mine`` (матчи с моим ходом и все будущие) или ``all``. Строки по возрастанию времени начала.
+    Возвращает ``{"rows", "has_more", "next_before"}``.
+    """
+    now = _utc(now)
+    cursor = decode_cursor(before) if before else None
+    params = {
+        "player_key": player_key,
+        "now": now,
+        "active_since": now - MATCH_STALE_AFTER,
+        "mine": mode == "mine",
+        **_scope(club, league).params,
+    }
+    rows: list[dict] = []
+    if cursor is None:
+        rows += [dict(r._mapping) for r in (await session.execute(_LIST_ACTIVE, params)).all()]
+        rows += [dict(r._mapping) for r in (await session.execute(_LIST_UPCOMING, {**params, "limit": UPCOMING_LIMIT})).all()]
+    history_params = {
+        **params,
+        "season_start": season_start(now),
+        "before_at": None if cursor is None else cursor[0],
+        "before_id": None if cursor is None else cursor[1],
+        "limit": limit + 1,
+    }
+    history = [dict(r._mapping) for r in (await session.execute(_LIST_HISTORY, history_params)).all()]
+    has_more = len(history) > limit
+    history = history[:limit]
+    next_before = encode_cursor(history[-1]["starts_at"], history[-1]["id"]) if has_more else None
+    rows += history
+    rows.sort(key=lambda r: (_utc(r["starts_at"]), r["id"]))
+    return {"rows": await _with_side_counts(session, rows), "has_more": has_more, "next_before": next_before}
+
+
+async def awaiting_count(session: AsyncSession, player_key: int, *, now: datetime) -> int:
+    """Сколько моих ходов ждут итога: матч начался, итога нет, трое суток ещё не прошли (без фильтров списка)."""
+    now = _utc(now)
+    params = {"player_key": player_key, "now": now, "active_since": now - MATCH_STALE_AFTER}
+    return int((await session.execute(_AWAITING, params)).scalar_one())
+
+
 __all__ = [
     "FIRST_RACE_MONTH",
+    "HISTORY_MAX",
+    "HISTORY_PAGE",
+    "MATCH_LIVE_FOR",
+    "MATCH_STALE_AFTER",
     "MONTHS",
     "PICK_CLOSES_BEFORE",
     "POINTS_DIFF",
@@ -558,14 +739,22 @@ __all__ = [
     "PicksClosed",
     "RaceWindow",
     "Standing",
+    "UPCOMING_LIMIT",
+    "awaiting_count",
+    "decode_cursor",
+    "encode_cursor",
     "live_points",
     "make_pick",
+    "match_phase",
+    "match_stale",
     "my_double",
     "my_doubles",
+    "my_points",
     "month_bounds",
     "normalize_pick",
     "on_match_moved",
     "pick_open",
+    "player_match_list",
     "player_matches",
     "player_standing",
     "race_window",

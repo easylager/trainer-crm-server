@@ -692,6 +692,9 @@ class HockeyLeague(Base):
     __table_args__ = (
         UniqueConstraint("invite_code", name="uq_hockey_leagues_invite_code"),
         CheckConstraint("char_length(btrim(name)) BETWEEN 1 AND 28", name="ck_hockey_leagues_name"),
+        CheckConstraint(
+            "stake_text IS NULL OR char_length(btrim(stake_text)) BETWEEN 1 AND 80", name="ck_hockey_leagues_stake_text"
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
@@ -707,8 +710,26 @@ class HockeyLeague(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     extended_from: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    # Лицо лиги (TASK-361, миграция 0317): картинка в хранилище и строка «на что играем» — задаёт владелец.
+    image_key: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    stake_text: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyLeagueReport(Base):
+    """Жалоба участника на лигу «Кто кого» (TASK-361): повторные за сутки сообщение админам не дублируют."""
+
+    __tablename__ = "hockey_league_reports"
+    __table_args__ = (Index("ix_hockey_league_reports_league_created", "league_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger(), primary_key=True, autoincrement=True)
+    league_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), nullable=False
+    )
+    reporter_key: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    alerted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class HockeyLeagueMember(Base):

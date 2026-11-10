@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from src.application.hockey_teams import TEAMS, UNKNOWN_COLOR, logo_path, short_from_name
 from src.ingestion.hockey_sources import MINSK_TZ
@@ -447,13 +447,36 @@ def match_when(starts_at: datetime) -> str:
     return f"{_WEEKDAYS[local.weekday()]} {local:%d.%m, %H:%M}"
 
 
-def render_league_card(*, name: str, members: int, names: Sequence[str], next_match: str | None) -> bytes:
+def _paint_photo(image: Image.Image, photo: bytes, size: tuple[int, int]) -> None:
+    """Картинка лиги — фоном тёмной шапки: по ширине и высоте с обрезкой, затемнена, чтобы белое название читалось.
+
+    Битый файл не должен ломать карточку: превью ссылки важнее, остаётся однотонная шапка."""
+    try:
+        with Image.open(io.BytesIO(photo)) as src:
+            tile = ImageOps.fit(ImageOps.exif_transpose(src).convert("RGB"), size, Image.Resampling.LANCZOS)
+    except Exception:  # noqa: BLE001
+        return
+    image.paste(Image.blend(tile, Image.new("RGB", size, _NAVY), 0.62), (0, 0))
+
+
+def render_league_card(
+    *,
+    name: str,
+    members: int,
+    names: Sequence[str],
+    next_match: str | None,
+    photo: bytes | None = None,
+    stake: str | None = None,
+) -> bytes:
+    """Приглашение в лигу. ``photo`` — картинка лиги (фон шапки), ``stake`` — строка «на что играем» под названием."""
     image = Image.new("RGB", CARD_SIZE, _WHITE)
     draw = ImageDraw.Draw(image)
     width, height = CARD_SIZE
     inner = width - 2 * _PAD
     top_h = 460
     draw.rectangle((0, 0, width, top_h), fill=_NAVY)
+    if photo:
+        _paint_photo(image, photo, (width, top_h))
 
     draw.text((_PAD, 62), "КТО КОГО? · ЛИГА", font=_display(34), fill=_YELLOW)
 
@@ -476,6 +499,12 @@ def render_league_card(*, name: str, members: int, names: Sequence[str], next_ma
 
     face, overlap, ring = 64, 18, 5
     y = top_h - 52 - face
+    if stake:
+        # Одна строка под названием; выше кружков участников в любом случае. Не влезла — с многоточием.
+        line = f"На что играем: {stake}"
+        stake_font = _largest(draw, line, lambda s: _text(s, 700), (34, 32, 30, 28), inner)
+        stake_y = min(title_top + len(rows) * line_h + 10, y - ring - 12 - int(stake_font.size * 1.2))
+        draw.text((_PAD, stake_y), _ellipsize(draw, line, stake_font, inner), font=stake_font, fill=(232, 236, 244))
     x = _PAD
     initial_font = _text(26, 800)
     for i, member in enumerate(list(names)[:6]):
@@ -526,9 +555,18 @@ def crown_caption(*, title: str, where: str, winners: Sequence[str], won: bool) 
     return f"Кто кого: {title} {where} без короны. Новый месяц, все с нуля — играем?"
 
 
-def league_card_version(name: str, members: int, names: Sequence[str], next_match: str | None) -> str:
-    """Меняется вместе с картинкой — Telegram кэширует фото по адресу."""
+def league_card_version(
+    name: str,
+    members: int,
+    names: Sequence[str],
+    next_match: str | None,
+    image_key: str | None = None,
+    stake: str | None = None,
+) -> str:
+    """Меняется вместе с картинкой — Telegram кэширует фото по адресу. Без лица лиги версия прежняя."""
     raw = "\x1f".join([name, str(members), *names, next_match or ""])
+    if image_key or stake:
+        raw += "\x1e" + (image_key or "") + "\x1f" + (stake or "")
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 

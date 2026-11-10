@@ -364,6 +364,8 @@
     var m = card.match;
     var r = m.result;
     if (card.mode === 'live') return { text: 'ИДЁТ', dot: true, live: true };
+    // Начался, итога ещё нет (TASK-359): карточка остаётся, пока итог не подтверждён.
+    if (card.mode === 'waiting') return { text: 'ЖДЁМ ИТОГ', dot: false, live: false };
     if (r && r.home_score != null) return { text: 'ИТОГ ' + r.home_score + ':' + r.away_score, dot: false, live: false };
     // Последний матч месяца в гонке «Кто кого» (TASK-334): та же наклейка, другие слова.
     if (m.race_final) return { text: 'ПОСЛЕДНИЙ МАТЧ МЕСЯЦА', dot: false, live: false };
@@ -504,7 +506,7 @@
       what.appendChild(el('span', 'hn__sub', clubName(m.home.name) + ' — ' + clubName(m.away.name) + ', ' + whenLabel(m.starts_at)));
       row.appendChild(what);
       var hasScore = pick.home_score != null;
-      row.appendChild(el('span', 'hn__chip', hasScore ? pick.home_score + ':' + pick.away_score : 'Какой счёт?'));
+      row.appendChild(el('span', 'hn__chip', card.mode === 'waiting' ? 'Ждём итог' : hasScore ? pick.home_score + ':' + pick.away_score : 'Какой счёт?'));
       host.replaceChildren(row);
       return;
     }
