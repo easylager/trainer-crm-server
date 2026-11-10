@@ -16,7 +16,7 @@ CRM-платформа для тренеров в Беларуси. Два Teleg
 
 ## Cursor: Spec Kit (spec-driven фичи)
 
-**[GitHub Spec Kit](https://github.com/github/spec-kit)** — slash-команды вроде `/speckit.specify`, `/speckit.plan`, `/speckit.implement` подключаются локально через **`.cursor/`** и **`.specify/`** (игнорируются Git’ом). Кратко — **[docs/SPEC_KIT.md](docs/SPEC_KIT.md)**; черновики фич — в **`specs/`**.
+**[GitHub Spec Kit](https://github.com/github/spec-kit)** — slash-команды вроде `/speckit.specify`, `/speckit.plan`, `/speckit.implement` подключаются локально через **`.cursor/`** и **`.specify/`** (игнорируются Git’ом). Кратко — **[docs/SPEC_KIT.md](docs/SPEC_KIT.md)**.
 
 ## Деплой и CI/CD
 
