@@ -174,6 +174,9 @@
   }
 
   function rowEl(m, now) {
+    // Ход, сделанный в этой сессии (в том числе монеткой), лежит в копии матча, которую знает K.saveScore.
+    var own = typeof K.findMatch === 'function' ? K.findMatch(m.id) : null;
+    if (own && own !== m && own.pickSeq) m.my_pick = own.my_pick;
     var r = S.rowModel(m, now || new Date());
     var head = h('button', { type: 'button', class: 'kk-mc__open', onclick: function () { open(m); } }, [
       h('span', { class: 'kk-mc__bar' }, [h('span', { class: 'kk-mc__lbl', text: r.label }), chipEl(r.chip)]),
@@ -191,7 +194,9 @@
       r.phase === 'upcoming' && m.open ? coinSlot(m) : null,
       rightEl(m, r),
     ]);
-    return h('article', { class: 'kk-mc kk-mc--' + r.phase }, [head, foot]);
+    // Барабаны, «ВЫПАЛО» и «Монетка выбрала» — часть контракта K.coin; без панели монета крутилась бы вхолостую.
+    var panel = r.phase === 'upcoming' && m.open && K.coin && typeof K.coin.panel === 'function' ? K.coin.panel(m) : null;
+    return h('article', { class: 'kk-mc kk-mc--' + r.phase }, [head, foot, panel]);
   }
 
   // ---------- вход из хаба и профиля ----------
