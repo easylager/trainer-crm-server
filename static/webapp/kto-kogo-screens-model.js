@@ -1112,7 +1112,7 @@
   var WRITE_ASK = {
     title: 'Итог' + NBSP + '— в чат',
     text: 'Напишем, чем закончился матч, и' + NBSP + 'напомним о' + NBSP + 'следующем ходе. Не' + NBSP + 'чаще раза в' + NBSP + 'день, ночью не' + NBSP + 'пишем.',
-    allow: 'Разрешить',
+    allow: 'Да, писать в' + NBSP + 'чат',
     later: 'Не' + NBSP + 'сейчас',
   };
   var WRITE_ASK_KEY = 'kk_write_ask';

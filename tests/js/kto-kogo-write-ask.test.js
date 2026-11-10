@@ -140,7 +140,7 @@ describe('флаг «спрашивали»', () => {
 });
 
 describe('ответ на подводку', () => {
-  it('«Разрешить» и согласие: окно один раз, сохраняем, больше не спрашиваем', async () => {
+  it('«Да, писать в чат» и согласие: окно один раз, сохраняем, больше не спрашиваем', async () => {
     const { tg, calls } = makeTg({ granted: true });
     const memo = S.writeAskMemo(memStorage());
     let saved = 0;
@@ -150,7 +150,7 @@ describe('ответ на подводку', () => {
     assert.equal(saved, 1);
     assert.equal(S.shouldAskWrite(ctx({ tg, asked: memo.asked() })), false);
   });
-  it('«Разрешить» и отказ в окне Telegram: молча, без сохранения, флаг стоит', async () => {
+  it('«Да, писать в чат» и отказ в окне Telegram: молча, без сохранения, флаг стоит', async () => {
     const { tg, calls } = makeTg({ granted: false });
     const memo = S.writeAskMemo(memStorage());
     let saved = 0;
@@ -206,7 +206,7 @@ describe('тексты', () => {
     const T = S.WRITE_ASK;
     assert.equal(T.title, 'Итог' + NBSP + '— в чат');
     assert.equal(T.text.replace(/ /g, ' '), 'Напишем, чем закончился матч, и напомним о следующем ходе. Не чаще раза в день, ночью не пишем.');
-    assert.equal(T.allow, 'Разрешить');
+    assert.equal(T.allow, 'Да, писать в\u00a0чат');
     assert.equal(T.later.replace(/ /g, ' '), 'Не сейчас');
     const all = Object.values(T).join(' ');
     assert.ok(!/ставк|срок|источник|\p{Extended_Pictographic}/iu.test(all));
@@ -234,7 +234,7 @@ describe('подключение', () => {
     assert.ok(/try \{ window\.KK\.afterFirstPick\(owner\); \} catch/.test(body));
     assert.ok(/try \{\s*first = S\.isFirstPick/.test(body));
   });
-  it('«Разрешить» сохраняет тем же путём, что тумблер «Сообщения в чате»', () => {
+  it('«Да, писать в чат» сохраняет тем же путём, что тумблер «Сообщения в чате»', () => {
     assert.ok(/function setRemind[\s\S]*?saveRemind\(on\)/.test(board));
     assert.ok(/save: function \(\) \{ saveRemind\(true\); \}/.test(board));
     assert.ok(/K\.sheet\(T\.title/.test(board), 'общая шторка игры');
