@@ -329,9 +329,6 @@ def test_catalog_page_of_a_city_without_locative_warns(caplog) -> None:
 def test_new_cities_have_a_locative() -> None:
     from src.shared.city_locative import city_locative
 
-    assert [city_locative(c) for c in ("Борисов", "Полоцк", "Слуцк", "Новолукомль")] == [
-        "Борисове",
-        "Полоцке",
-        "Слуцке",
-        "Новолукомле",
-    ]
+    assert city_locative("Новолукомль") == "Новолукомле"
+    # Сельсоветы и города без каталога в таблице не нужны: нет падежа — нет «в …».
+    assert city_locative("Озёрский сельский Совет") is None

@@ -26,6 +26,6 @@ def test_b_trainers_lists_site_pages() -> None:
     html = _b_trainers(view)
     assert "Александр Гаевский" in html
     assert 'href="/t/42-' in html and "?via=p9" in html
-    assert 'href="/c/minsk/trenery"' in html
+    assert 'href="/c/minsk/trenery?arena=9"' in html
     assert "Все тренеры в Минске" in html
     assert "startapp=" not in html

@@ -325,7 +325,8 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert f'href="{base}/s-klyushkoy"' in html
     assert "Научиться кататься на коньках с нуля" in html and "Мне 35 — не поздно начинать?" in html
     # Лид на странице остаётся общим. В сниппете — только направления, которые реально есть.
-    assert "Учат кататься с нуля и ставят технику. Есть хоккей." in all_r.text
+    # «Учат» — у направления несколько тренеров, «ставит» — тренер один.
+    assert "Учат кататься с нуля и ставит технику. Есть хоккей." in all_r.text
     assert "фигурное катание" not in re.search(r'<p class="tcat-lead">(.*?)</p>', all_r.text).group(1)
     meta = re.search(r'name="description" content="([^"]*)"', all_r.text).group(1)
     assert "по катанию на коньках" in meta and "с нуля" in meta and "хоккейное катание" in meta

@@ -248,7 +248,8 @@ async def test_rink_page_block_with_and_without_trainers(app_use_test_db, db_ses
     assert trainers
     assert re.search(r"Ближайшее свободное время — [^.]+, \d\d:\d\d\.", trainers.group(1))
     assert c["names"]["A"] in with_trainers
-    assert f'href="{base}"' in with_trainers and f"{base}?arena=" not in with_trainers
+    # Со страницы катка — на тренеров этого катка.
+    assert f'href="{base}?arena={c["arena_id"]}"' in trainers.group(1)
     assert with_trainers.index('id="schedule"') < with_trainers.index('id="trainers"')
     assert "Здесь работают" not in with_trainers and 'id="learn"' not in with_trainers
     one_block = re.search(r'id="trainers">(.*?)</section>', one_trainer, re.S)
