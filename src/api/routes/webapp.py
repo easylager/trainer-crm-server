@@ -282,12 +282,7 @@ from src.application.admin_trainer_journey import (
     set_trainer_hidden,
 )
 from src.application.admin_analytics_use_cases import (
-    get_admin_clients_stats,
-    get_admin_engagement_stats,
-    get_admin_growth_stats,
     get_admin_money_stats,
-    get_admin_product_analytics,
-    get_admin_retention_stats,
     get_admin_trainers_hub_stats,
 )
 from src.application.platform_audit_use_cases import list_platform_audit_events_for_admin
@@ -4853,51 +4848,6 @@ async def set_admin_trainer_hidden_api(
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
     return {"ok": True, "hidden": body.hidden}
-
-
-@router.get("/admin/stats/growth")
-async def get_admin_stats_growth(
-    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """Growth tab: new trainer cohorts, trial→paid conversion, time-to-first-paid, referral program."""
-    return await get_admin_growth_stats(session)
-
-
-@router.get("/admin/stats/retention")
-async def get_admin_stats_retention(
-    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """Retention tab: churn rate, expiring subs, sleeping trainers, revival, retention curve by cohort."""
-    return await get_admin_retention_stats(session)
-
-
-@router.get("/admin/stats/engagement")
-async def get_admin_stats_engagement(
-    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """Engagement tab: DAU/WAU/MAU, feature adoption, top active trainers, day-of-week heat."""
-    return await get_admin_engagement_stats(session)
-
-
-@router.get("/admin/stats/clients")
-async def get_admin_stats_clients(
-    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """Clients tab: funnel, repeat rate, top cities/trainers, recent client requests."""
-    return await get_admin_clients_stats(session)
-
-
-@router.get("/admin/stats/product")
-async def get_admin_stats_product(
-    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
-    session: AsyncSession = Depends(get_session),
-):
-    """Product analytics: activation funnel, proof-of-value, marketplace, monetization, correlation."""
-    return await get_admin_product_analytics(session)
 
 
 @router.get("/admin/activity")

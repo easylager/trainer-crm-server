@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from src.application.admin_analytics_use_cases import get_admin_product_analytics
 from src.application.arena_profile import ensure_arena_profile
 from src.ingestion.health import (
     DEFAULT_SILENCE_MULTIPLES,
@@ -540,21 +539,6 @@ async def test_weekly_digest_lists_silent_stale_and_tier_a_change(db_session) ->
     assert "калибр" in body.lower()
     assert "BYN+RUB" not in body
     assert "2000" not in body  # must not sum 1200 BYN + 800 RUB
-
-
-@pytest.mark.asyncio
-async def test_product_analytics_includes_ice_health_slice(db_session) -> None:
-    city_id = await _city(db_session, "IceHealth-admin")
-    await _arena(db_session, city_id, "Каток-админ")
-    await db_session.flush()
-
-    data = await get_admin_product_analytics(db_session)
-    assert "ice_health" in data
-    health = data["ice_health"]
-    assert "cities" in health
-    assert "silent_sources" in health
-    city_rows = health["cities"]
-    assert any(row["city_id"] == city_id for row in city_rows)
 
 
 def test_notification_service_ticks_ice_health_loops() -> None:
