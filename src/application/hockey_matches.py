@@ -319,9 +319,7 @@ async def _adopt_fallback_row(session: AsyncSession, params: dict):
     ).one_or_none()
     if found is None:
         return None
-    await session.execute(
-        _ADOPT, {"id": found.id, "source_match_id": params["source_match_id"], "now": params["now"]}
-    )
+    await session.execute(_ADOPT, {"id": found.id, "source_match_id": params["source_match_id"], "now": params["now"]})
     return (await session.execute(_SELECT_BY_SOURCE, params)).one_or_none()
 
 
@@ -357,17 +355,12 @@ async def sync_calendar_fallback(session: AsyncSession, fetch: Fetch, *, now: da
     if not matches and _utc(now).astimezone(MINSK_TZ).month in SEASON_MONTHS:
         raise CalendarEmpty("календарь sportmail.ru пуст в сезон — похоже, сменилась вёрстка")
     since = _utc(now) - timedelta(days=1)
-    rows = [
-        _row(r)
-        for r in (await session.execute(_SELECT_FROM, {"source": SOURCE_HCDINAMO, "since": since})).all()
-    ]
+    rows = [_row(r) for r in (await session.execute(_SELECT_FROM, {"source": SOURCE_HCDINAMO, "since": since})).all()]
     by_day = {_local_day(r.starts_at): r for r in rows}
     wanted = [
         m
         for m in matches
-        if not m.played
-        and _utc(now) < _utc(m.starts_at) <= _utc(now) + FALLBACK_HORIZON
-        and DINAMO in (m.home, m.away)
+        if not m.played and _utc(now) < _utc(m.starts_at) <= _utc(now) + FALLBACK_HORIZON and DINAMO in (m.home, m.away)
     ]
     wanted_days = {_local_day(m.starts_at) for m in wanted}
     # Строки без пары в sportmail по дате — кандидаты на «перенесён» (ищем по сопернику).
@@ -586,9 +579,8 @@ class LoopHealth:
         if self.fails[what] < self.threshold or what in self.alerted:
             return None
         self.alerted.add(what)
-        return (
-            f"Кто кого: {what} не работает {self.fails[what]} раз подряд\n{reason}\n"
-            + (note or "Матчи и итоги не обновляются. Итог можно ввести вручную: команда /hockey в этом боте")
+        return f"Кто кого: {what} не работает {self.fails[what]} раз подряд\n{reason}\n" + (
+            note or "Матчи и итоги не обновляются. Итог можно ввести вручную: команда /hockey в этом боте"
         )
 
 
@@ -627,14 +619,23 @@ async def _sportmail_decision(
     match = _sportmail_for(row, await sportmail.matches())
     if match is None or not match.played or (match.home == DINAMO) != (row.home_team == DINAMO):
         return decision
+    if candidate is None and confirm is None:
+        # Основные источники молчат. В таблице sportmail.ru счёт стоит и у идущего матча (без «(ОТ)»/«(Бул)»), поэтому
+        # «сыгран» решает страница матча («Матч завершен»), а не наличие счёта: иначе ничья 0:0 в игре
+        # уходила бы на ручную проверку, а промежуточный счёт — в итог.
+        try:
+            second = parse_sportmail_match(await fetch(sportmail_match_url(match.source_match_id)))
+        except Exception:
+            logger.warning("sportmail match %s failed", match.source_match_id, exc_info=True)
+            return decision
+        if not second.is_played or (second.home_score, second.away_score) != (match.home_score, match.away_score):
+            return decision
     ours = (match.home_score, match.away_score, match.decided_in)
     try:
         validate_result(match.home_score, match.away_score, match.decided_in)  # type: ignore[arg-type]
     except ValueError as exc:
         return Decision(KIND_REVIEW, reason=f"sportmail.ru: {exc}")
-    final = Decision(
-        KIND_FINAL, home_score=match.home_score, away_score=match.away_score, decided_in=match.decided_in
-    )
+    final = Decision(KIND_FINAL, home_score=match.home_score, away_score=match.away_score, decided_in=match.decided_in)
     if candidate is not None:
         if (candidate.home_score, candidate.away_score, candidate.decided_in) == ours:
             return final
@@ -659,15 +660,7 @@ async def _sportmail_decision(
             KIND_REVIEW,
             reason=f"счёт не совпал: hockey.by {theirs[0]}:{theirs[1]}, sportmail.ru {ours[0]}:{ours[1]}",
         )
-    # Основные источники молчат: второе чтение sportmail.ru — страница матча.
-    try:
-        second = parse_sportmail_match(await fetch(sportmail_match_url(match.source_match_id)))
-    except Exception:
-        logger.warning("sportmail match %s failed", match.source_match_id, exc_info=True)
-        return decision
-    if second.is_played and (second.home_score, second.away_score) == (ours[0], ours[1]):
-        return final
-    return decision
+    return final  # страница матча уже подтвердила «сыгран» и счёт выше
 
 
 class _SportmailCache:
@@ -692,14 +685,15 @@ async def _sportmail_live(
 ) -> None:
     """Живой счёт со страницы матча sportmail.ru, когда ленты hockey.by нет."""
     match = _sportmail_for(row, await sportmail.matches())
-    if match is None or match.played:
+    if match is None:
         return
     try:
         page = parse_sportmail_match(await fetch(sportmail_match_url(match.source_match_id)))
     except Exception:
         logger.warning("sportmail live %s failed", match.source_match_id, exc_info=True)
         return
-    if not page.is_online or page.home_score is None or page.away_score is None:
+    # Идущий матч: в таблице у него уже есть счёт, поэтому судим по странице матча, а не по таблице.
+    if page.is_played or not page.is_online or page.home_score is None or page.away_score is None:
         return
     if (page.home == DINAMO) != (row.home_team == DINAMO):
         return

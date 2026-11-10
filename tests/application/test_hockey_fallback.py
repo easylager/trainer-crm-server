@@ -21,7 +21,13 @@ from src.application.hockey_matches import (
     sync_calendar_fallback,
     upsert_calendar_match,
 )
-from src.ingestion.hockey_sources import HCDINAMO_CALENDAR_URL, HOCKEY_BY_URL, MINSK_TZ, TickerResult, parse_hcdinamo_match
+from src.ingestion.hockey_sources import (
+    HCDINAMO_CALENDAR_URL,
+    HOCKEY_BY_URL,
+    MINSK_TZ,
+    TickerResult,
+    parse_hcdinamo_match,
+)
 from src.ingestion.sportmail_sources import (
     SPORTMAIL_DINAMO_MATCHES_URL,
     parse_sportmail_match,
@@ -114,10 +120,14 @@ async def test_calendar_fallback_inserts_upcoming_and_is_idempotent(db_session) 
     again = await sync_calendar_fallback(db_session, fetch, now=now)
     assert (again["inserted"], again["unchanged"]) == (0, 2)
     ids = (
-        await db_session.execute(
-            text("SELECT source_match_id FROM hockey_matches WHERE source = 'hcdinamo' ORDER BY starts_at")
+        (
+            await db_session.execute(
+                text("SELECT source_match_id FROM hockey_matches WHERE source = 'hcdinamo' ORDER BY starts_at")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert ids == ["sm8129342", "sm8129355"]
 
 
@@ -132,7 +142,9 @@ async def test_calendar_fallback_keeps_the_primary_horizon(db_session) -> None:
 @pytest.mark.asyncio
 async def test_calendar_fallback_trusts_the_primary_time_on_the_same_day(db_session) -> None:
     now = _minsk(2026, 11, 9, 12, 0)
-    await upsert_calendar_match(db_session, _hcd("1218891", _minsk(2026, 11, 13, 19, 25), "СКА", "Динамо-Минск"), now=now)
+    await upsert_calendar_match(
+        db_session, _hcd("1218891", _minsk(2026, 11, 13, 19, 25), "СКА", "Динамо-Минск"), now=now
+    )
     fetch = _fetch_with({SPORTMAIL_DINAMO_MATCHES_URL: _fx("sportmail-team-matches.html")})
     counts = await sync_calendar_fallback(db_session, fetch, now=now)
     assert counts["inserted"] == 1  # только Авангард
@@ -146,7 +158,9 @@ async def test_calendar_fallback_trusts_the_primary_time_on_the_same_day(db_sess
 async def test_calendar_fallback_moves_a_rescheduled_match_instead_of_duplicating(db_session) -> None:
     now = _minsk(2026, 11, 9, 12, 0)
     # У нас СКА стоял на 12.11, sportmail.ru ставит на 13.11: это один матч.
-    await upsert_calendar_match(db_session, _hcd("1218891", _minsk(2026, 11, 12, 19, 30), "СКА", "Динамо-Минск"), now=now)
+    await upsert_calendar_match(
+        db_session, _hcd("1218891", _minsk(2026, 11, 12, 19, 30), "СКА", "Динамо-Минск"), now=now
+    )
     fetch = _fetch_with({SPORTMAIL_DINAMO_MATCHES_URL: _fx("sportmail-team-matches.html")})
     counts = await sync_calendar_fallback(db_session, fetch, now=now)
     assert (counts["moved"], counts["inserted"]) == (1, 1)
@@ -176,10 +190,16 @@ async def test_primary_returning_adopts_the_fallback_row(db_session) -> None:
     page = _hcd("1218891", _minsk(2026, 11, 13, 19, 30), "СКА", "Динамо-Минск")
     assert await upsert_calendar_match(db_session, page, now=now) == "unchanged"
     ids = (
-        await db_session.execute(
-            text("SELECT source_match_id FROM hockey_matches WHERE (starts_at AT TIME ZONE 'Europe/Minsk')::date = '2026-11-13'")
+        (
+            await db_session.execute(
+                text(
+                    "SELECT source_match_id FROM hockey_matches WHERE (starts_at AT TIME ZONE 'Europe/Minsk')::date = '2026-11-13'"
+                )
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert ids == ["1218891"]  # ни дубля, ни «sm…»
 
 
@@ -209,9 +229,13 @@ def test_alert_tells_when_a_fallback_is_running() -> None:
 
 async def _sochi_row(db_session) -> int:
     await upsert_calendar_match(
-        db_session, _hcd("1218887", _minsk(2026, 11, 8, 17, 0), "ХК Сочи", "Динамо-Минск"), now=_minsk(2026, 11, 8, 12, 0)
+        db_session,
+        _hcd("1218887", _minsk(2026, 11, 8, 17, 0), "ХК Сочи", "Динамо-Минск"),
+        now=_minsk(2026, 11, 8, 12, 0),
     )
-    return (await db_session.execute(text("SELECT id FROM hockey_matches WHERE source_match_id = '1218887'"))).scalar_one()
+    return (
+        await db_session.execute(text("SELECT id FROM hockey_matches WHERE source_match_id = '1218887'"))
+    ).scalar_one()
 
 
 @pytest.mark.asyncio
@@ -288,7 +312,9 @@ async def test_sportmail_does_not_overrule_two_working_primary_sources(db_sessio
     )
     # Основные расходятся между собой — решение остаётся за ними, sportmail.ru его не меняет.
     d = await _decide_with_sportmail(db_session, page=page, ticker=[_sochi_confirm((3, 2))])
-    plain = hm.decide_result(page, [_sochi_confirm((3, 2))], starts_at=_minsk(2026, 11, 8, 17, 0), now=_minsk(2026, 11, 8, 20, 0))
+    plain = hm.decide_result(
+        page, [_sochi_confirm((3, 2))], starts_at=_minsk(2026, 11, 8, 17, 0), now=_minsk(2026, 11, 8, 20, 0)
+    )
     assert d == plain
 
 
@@ -310,5 +336,54 @@ async def test_live_score_comes_from_sportmail_when_the_ticker_has_no_match(db_s
         seen.append((match_id, home, away))
 
     monkeypatch.setattr("src.application.hockey_game.set_live_score", fake_set_live_score)
-    await hm._sportmail_live(db_session, row, hm._SportmailCache(fetch), fetch, now=_minsk(2026, 11, 8, 18, 30))  # noqa: SLF001
+    await hm._sportmail_live(
+        db_session, row, hm._SportmailCache(fetch), fetch, now=_minsk(2026, 11, 8, 18, 30)
+    )  # noqa: SLF001
     assert seen == [(mid, 3, 2)]
+
+
+def _live_page() -> str:
+    return (
+        _fx("sportmail-match-played.html")
+        .replace('"is_played": true', '"is_played": false')
+        .replace('"is_online": false', '"is_online": true')
+    )
+
+
+@pytest.mark.asyncio
+async def test_live_score_is_taken_from_the_page_even_when_the_table_already_shows_a_score(
+    db_session, monkeypatch
+) -> None:
+    # 10.11.2026: в таблице sportmail.ru у идущего матча уже стоит счёт; по нему матч считался сыгранным
+    # и живой счёт у нас замирал.
+    mid = await _sochi_row(db_session)
+    row = await get_match(db_session, mid)
+    fetch = _fetch_with(
+        {SPORTMAIL_DINAMO_MATCHES_URL: _fx("sportmail-team-matches.html"), sportmail_match_url(SOCHI): _live_page()}
+    )
+    seen: list[tuple[int, int, int]] = []
+
+    async def fake_set_live_score(session, *, match_id, home, away, now):
+        seen.append((match_id, home, away))
+
+    monkeypatch.setattr("src.application.hockey_game.set_live_score", fake_set_live_score)
+    await hm._sportmail_live(
+        db_session, row, hm._SportmailCache(fetch), fetch, now=_minsk(2026, 11, 8, 18, 30)
+    )  # noqa: SLF001
+    assert seen == [(mid, 3, 2)]
+
+
+@pytest.mark.asyncio
+async def test_live_tie_in_the_table_is_not_sent_to_review_and_a_live_score_is_not_a_result(db_session) -> None:
+    mid = await _sochi_row(db_session)
+    row = await get_match(db_session, mid)
+    for score in ("0:0", "1:0"):
+        table = _fx("sportmail-team-matches.html").replace('"text": "3:2"', f'"text": "{score}"')
+        fetch = _fetch_with({SPORTMAIL_DINAMO_MATCHES_URL: table, sportmail_match_url(SOCHI): _live_page()})
+        now = _minsk(2026, 11, 8, 19, 5)  # 2 ч 05 после старта: окно итога открыто, но страница матча «идёт»
+        plain = hm.decide_result(None, [], starts_at=row.starts_at, now=now)
+        d = await hm._sportmail_decision(  # noqa: SLF001
+            row, plain, None, [], hm._SportmailCache(fetch), fetch, now=now
+        )
+        assert d.kind != KIND_FINAL and d == plain, score
+        assert "ничьих" not in (d.reason or "")
