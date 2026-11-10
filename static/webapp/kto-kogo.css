@@ -483,6 +483,8 @@ body.kk-dark .kk-cn { --kk-coin-shadow: rgba(0, 0, 0, 0.55); }
 .kk-cp__stamp { position: absolute; right: 6px; top: 2px; padding: 7px 9px; border-radius: 9px; background: var(--kk-gold); color: var(--kk-on-gold); font: 400 12px/1 var(--kk-display); transform: rotate(-6deg); pointer-events: none; }
 .kk-cp__stamp.is-pop { animation: kk-stamp 0.28s cubic-bezier(0.3, 1.7, 0.5, 1) var(--kk-delay, 0ms) both; }
 @keyframes kk-stamp { from { transform: rotate(-6deg) scale(0); } to { transform: rotate(-6deg) scale(1); } }
+.kk-cp__fold { overflow: hidden; animation: kk-fold 320ms ease-in var(--kk-delay, 0ms) both; }
+@keyframes kk-fold { from { max-height: 110px; opacity: 1; } to { max-height: 0; opacity: 0; } }
 .kk-cp__sum { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
 .kk-cp__t { min-width: 0; font: 600 14px/1.3 var(--kk-text); color: var(--kk-ink); }
 .kk-cp__again { flex: none; height: 44px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--kk-chip); color: var(--kk-ink); font: 600 14px/1 var(--kk-text); }
@@ -494,6 +496,7 @@ body.kk-dark .kk-cn { --kk-coin-shadow: rgba(0, 0, 0, 0.55); }
 @media (prefers-reduced-motion: reduce) {
   .kk-cn__shine { animation: none; }
   .kk-cn.is-flip { animation: none; }
+  .kk-cp__fold { animation: none; }
   .kk-cp__strip.is-run { animation: none; transform: translateY(calc(var(--kk-n) * var(--kk-reel-h) * -1)); }
   .kk-cp__stamp.is-pop { animation: none; }
 }

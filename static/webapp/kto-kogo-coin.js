@@ -27,6 +27,8 @@
   var finishAt = {}; // id матча → когда бросок кончился (для наклейки «ВЫПАЛО»: хлопок один раз)
   var skipTap = { id: null, until: 0 }; // пропуск уже сделан на касании: клик, который за ним следует, новый бросок не начинает
   var live = null;
+  var HOLD_MS = 1600; // сколько барабаны остаются на виду после «ВЫПАЛО»
+  var FOLD_MS = 320; // и за сколько схлопываются: дальше счёт живёт только в обычных «+/−» карточки
 
   function reducedMotion() {
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -59,6 +61,8 @@
   /** Конец броска: ход сохраняется так же, как тап по команде и «+/−» у счёта. */
   function commit(key, target) {
     finishAt[key] = Date.now();
+    setTimeout(function () { K.render(); }, HOLD_MS + 20);
+    setTimeout(function () { K.render(); }, HOLD_MS + FOLD_MS + 40);
     var m = K.findMatch(key);
     if (!m) return;
     if (!m.open) {
@@ -231,10 +235,16 @@
       return null;
     }
     var fin = { phase: 'done', run: false, reelMs: 0, short: false, target: t };
+    var since = finishAt[m.id] ? Date.now() - finishAt[m.id] : Infinity; // после перезагрузки экрана барабанов нет
+    var show = null;
+    if (since < HOLD_MS) show = reels(m, fin);
+    else if (since < HOLD_MS + FOLD_MS) {
+      show = h('div', { class: 'kk-cp__fold', 'aria-hidden': 'true', style: '--kk-delay:-' + Math.round(since - HOLD_MS) + 'ms' }, [reels(m, fin)]);
+    }
     return h('div', { class: 'kk-cp' }, [
-      reels(m, fin),
+      show,
       h('div', { class: 'kk-cp__sum' }, [
-        h('span', { class: 'kk-cp__t', text: C.summaryLine(clubName(m, t.side), t) }),
+        h('span', { class: 'kk-cp__t', text: C.chosenLine(clubName(m, t.side)) }),
         h('button', {
           type: 'button',
           class: 'kk-cp__again',
