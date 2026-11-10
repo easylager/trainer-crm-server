@@ -25,6 +25,11 @@ from tests.api.test_public_place_page import _meta
 _HOME_SQL_MAX = 8
 
 
+def _markup(html: str) -> str:
+    """HTML без строки ``document.write('<script …><\\/script>')``: это текст внутри JS, а не тег."""
+    return re.sub(r"document\.write\('<script[^\n]*\n", "\n", html)
+
+
 def _client() -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
@@ -68,8 +73,9 @@ async def test_root_is_catalog_home_without_js(app_use_test_db, db_session, monk
     assert home.headers["content-type"].startswith("text/html")
     # JSON-LD, is-ready фото, карта, beacon просмотра, b-press, glide-motion, b-when-swap.
     # Кнопка Telegram — в футере.
-    script_tags = home.text.lower().count("<script")
-    assert script_tags == home.text.count("</script>")
+    markup = _markup(home.text)
+    script_tags = markup.lower().count("<script")
+    assert script_tags == markup.count("</script>")
     assert script_tags >= 7
     assert home.text.count('<script type="application/ld+json">') == 1
     assert "public-page-view-beacon.js" in home.text
@@ -164,7 +170,8 @@ async def test_catalog_home_jsonld_and_xss_safe_city_name(app_use_test_db, db_se
     # Имя города с «</script>» не ломает разметку.
     # Сравниваем закрывающие с открывающими, а не с числом скриптов на странице:
     # лишний «</script>» из имени города даст расхождение, новый скрипт — нет.
-    assert home.text.count("</script>") == home.text.count("<script")
+    markup = _markup(home.text)
+    assert markup.count("</script>") == markup.count("<script")
     assert "<img src=x" not in home.text
     ld = _json_ld(home.text)
     assert "@graph" in ld

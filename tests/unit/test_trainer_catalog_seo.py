@@ -41,8 +41,23 @@ def test_one_trainer_teaches_in_the_singular() -> None:
 
 
 def test_catalog_all_lead_without_trainers_is_honest() -> None:
-    assert _catalog_all_lead(_data("Минск", [])) == "Запись к тренеру — в Telegram, оплата на месте."
-    assert "хоккей" not in _catalog_all_lead(_data("Минск", []))
+    # Нет тренеров — не обещаем запись, зовём тренера на сайт.
+    lead = _catalog_all_lead(_data("Минск", []))
+    assert lead == "Тренируете в Минске? Создайте страницу бесплатно."
+    assert "Запись" not in lead and "хоккей" not in lead
+
+
+def test_catalog_all_lead_without_trainers_and_without_locative_is_empty() -> None:
+    assert _catalog_all_lead(_data("Несуществующий город", [])) == ""
+
+
+def test_catalog_all_lead_verb_follows_the_number_of_trainers() -> None:
+    one = _data("Минск", [_trainer(1, ["zero"]), _trainer(2, ["better"]), _trainer(3, ["better"])])
+    assert _catalog_all_lead(one) == "Учит кататься с нуля и ставят технику."
+    single = _data("Минск", [_trainer(1, ["zero", "better"])])
+    assert _catalog_all_lead(single) == "Учит кататься с нуля и ставит технику."
+    many = _data("Минск", [_trainer(1, ["zero"]), _trainer(2, ["zero"])])
+    assert _catalog_all_lead(many) == "Учат кататься с нуля."
 
 
 def test_catalog_all_lead_mentions_only_present_directions() -> None:
@@ -309,3 +324,14 @@ def test_catalog_page_of_a_city_without_locative_warns(caplog) -> None:
     with caplog.at_level(logging.WARNING, logger="src.shared.city_locative"):
         render_catalog_page(_data("Заславль", []), ALL, base_url="https://glideclub.by")
     assert not caplog.records
+
+
+def test_new_cities_have_a_locative() -> None:
+    from src.shared.city_locative import city_locative
+
+    assert [city_locative(c) for c in ("Борисов", "Полоцк", "Слуцк", "Новолукомль")] == [
+        "Борисове",
+        "Полоцке",
+        "Слуцке",
+        "Новолукомле",
+    ]

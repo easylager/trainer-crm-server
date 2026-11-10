@@ -590,13 +590,18 @@ def _present_direction_phrases(data: Mapping[str, Any]) -> list[str]:
 
 
 def _catalog_all_lead(data: Mapping[str, Any]) -> str:
-    """Подзаголовок «Все»: только направления, у которых в городе есть тренеры."""
-    present = {d.key for d in DIRECTIONS if listed_trainers(data, d)}
+    """Подзаголовок «Все»: только направления, у которых в городе есть тренеры.
+
+    «Учит» при одном тренере направления, «учат» при нескольких. Город без тренеров не обещает запись:
+    зовёт тренера создать страницу.
+    """
+    counts = {d.key: len(listed_trainers(data, d)) for d in DIRECTIONS}
+    present = {key for key, n in counts.items() if n}
     teaching: list[str] = []
     if "zero" in present:
-        teaching.append("учат кататься с нуля")
+        teaching.append("учит кататься с нуля" if counts["zero"] == 1 else "учат кататься с нуля")
     if "better" in present:
-        teaching.append("ставят технику")
+        teaching.append("ставит технику" if counts["better"] == 1 else "ставят технику")
     sentences: list[str] = []
     if teaching:
         teach = " и ".join(teaching)
@@ -613,7 +618,8 @@ def _catalog_all_lead(data: Mapping[str, Any]) -> str:
     if sentences:
         return " ".join(sentences)
     if not listed_trainers(data, ALL):
-        return "Запись к тренеру — в Telegram, оплата на месте."
+        _, loc = _city_public_locative(str(data["city"]["name"]))
+        return f"Тренируете в {loc}? Создайте страницу бесплатно." if loc else ""
     return ALL.lead
 
 
@@ -1012,8 +1018,8 @@ def render_catalog_page(
         '<section class="tcat-hero">'
         f'<span class="tcat-eyebrow">Учиться с тренером · {esc(public_city)}</span>'
         f'<h1 class="tcat-h1">{esc(h1)} <em>{esc(in_city)}</em></h1>'
-        f'<p class="tcat-lead">{esc(page_lead)}</p>'
-        f'<div class="tcat-facts">{"".join(facts)}</div></section>'
+        + (f'<p class="tcat-lead">{esc(page_lead)}</p>' if page_lead else "")
+        + f'<div class="tcat-facts">{"".join(facts)}</div></section>'
     )
 
     controls = ""

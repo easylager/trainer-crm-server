@@ -263,3 +263,13 @@ async def test_pass_offers_floor_scope_and_skip_inactive(app_use_test_db, db_ses
         tid: [{"per_session_cents": 4187, "service_ids": None}, {"per_session_cents": 3333, "service_ids": (sid,)}]
     }
     assert await load_pass_offers(db_session, []) == {}
+
+
+def test_trainer_line_names_the_price_basis_like_the_catalog() -> None:
+    from src.application.site_trainers import trainer_line
+
+    base = {"services": [{"service_name": "С нуля"}], "min_session_price_cents": 2500, "min_session_price_currency": "RUB"}
+    assert trainer_line({**base, "min_session_price_basis": "single"}).endswith("от 25 руб. за занятие")
+    assert trainer_line({**base, "min_session_price_basis": "group"}).endswith("от 25 руб. в группе")
+    assert trainer_line({**base, "min_session_price_basis": "pass"}).endswith("от 25 руб. по абонементу")
+    assert trainer_line(base).endswith("за занятие")

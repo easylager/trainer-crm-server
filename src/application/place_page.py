@@ -2073,7 +2073,8 @@ def _b_trainers(view: Mapping[str, Any], *, school_html: str = "", learn_line: s
     arena_id = int(card["id"])
     city_name = _city(card)
     coach = _b_coach_entry(card, first=False) if _ice(card) else ""
-    catalog_href = catalog_path(city_name) if city_name else "/trenery"
+    # ?arena= — со страницы катка человек попадает на тренеров этого катка (canonical каталога без фильтра).
+    catalog_href = f"{catalog_path(city_name)}?arena={arena_id}" if city_name else "/trenery"
     if city_name:
         from src.shared.city_locative import city_locative
 

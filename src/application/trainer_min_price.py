@@ -133,15 +133,16 @@ async def load_pass_offers(session: AsyncSession, trainer_ids: Iterable[int]) ->
 
 
 async def enrich_min_session_price(session: AsyncSession, trainers: list[dict[str, Any]]) -> dict[int, list[PassOffer]]:
-    """Дописывает ``min_session_price_cents`` / ``min_session_price_currency`` (или ``None``).
+    """Дописывает ``min_session_price_cents`` / ``_currency`` / ``_basis`` (или ``None``).
 
     Возвращает загруженные абонементы (trainer_id → ``PassOffer``) — для «от» по направлениям.
     """
     offers = await load_pass_offers(session, (int(t["id"]) for t in trainers))
     for trainer in trainers:
-        found = trainer_min_session_price(
+        found = trainer_min_session_offer(
             {"services": trainer.get("services") or [], "passes": offers.get(int(trainer["id"]), [])}
         )
         trainer["min_session_price_cents"] = found[0] if found else None
         trainer["min_session_price_currency"] = found[1] if found else None
+        trainer["min_session_price_basis"] = found[2] if found else None
     return offers

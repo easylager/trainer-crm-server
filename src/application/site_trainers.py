@@ -45,7 +45,7 @@ def trainer_photo_url(trainer: Mapping[str, Any]) -> str | None:
 def trainer_line(trainer: Mapping[str, Any]) -> str:
     """«Обучение катанию „с нуля“ · от 41,87 BYN за занятие»: первая услуга и самое дешёвое занятие.
 
-    Цена — ``min_session_price_cents`` из ``trainer_min_price`` (тарифы, групповые, абонементы).
+    Цена — ``min_session_price_cents`` из ``trainer_min_price`` (тарифы, групповые, абонементы), основание — как в каталоге: «за занятие», «в группе», «по абонементу».
     """
     services = list(trainer.get("services") or [])
     names = [str(s.get("service_name") or s.get("name") or "").strip() for s in services]
@@ -54,7 +54,12 @@ def trainer_line(trainer: Mapping[str, Any]) -> str:
     cents = trainer.get("min_session_price_cents")
     if cents:
         price = format_price_minor(int(cents), str(trainer.get("min_session_price_currency") or "BYN"))
-        bits.append("от\u00a0" + price.replace(" ", "\u00a0") + " за\u00a0занятие")
+        from src.application.trainer_min_price import BASIS_PHRASE, BASIS_SINGLE
+
+        basis = BASIS_PHRASE.get(
+            str(trainer.get("min_session_price_basis") or BASIS_SINGLE), BASIS_PHRASE[BASIS_SINGLE]
+        )
+        bits.append("от\u00a0" + price.replace(" ", "\u00a0") + " " + basis.replace(" ", "\u00a0"))
     profile = trainer.get("profile") or {}
     caption = trainer_rating_caption(profile.get("rating_avg"), profile.get("rating_count"))
     if caption:
