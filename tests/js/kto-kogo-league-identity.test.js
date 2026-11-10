@@ -144,3 +144,19 @@ describe('экраны и подключение', () => {
     assert.match(block, /\.kk-filebtn[^{]*\{[^}]*min-height:\s*44px/);
   });
 });
+
+describe('кнопка «Создать» оживает при вводе (TASK-363)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../../static/webapp/kto-kogo-leagues.js'), 'utf8');
+
+  it('название и «на что играем» пересчитывают кнопку на месте, а не ждут перерисовки', () => {
+    assert.match(src, /function syncCta\(f\)/);
+    assert.match(src, /id: 'kk-lname'[^\n]*oninput: function \(e\) \{ f\.name = e\.target\.value; syncCta\(f\); \}/);
+    assert.match(src, /stakeField\('kk-lstake', f\.stake, function \(v\) \{ f\.stake = v; syncCta\(f\); \}\)/);
+  });
+
+  it('кнопка пересчитывается без innerHTML', () => {
+    const body = src.slice(src.indexOf('function syncCta'), src.indexOf('var IDEAS'));
+    assert.ok(!/innerHTML/.test(body));
+    assert.match(body, /textContent = err \|\|/);
+  });
+});

@@ -85,6 +85,20 @@
     ]);
   }
 
+  /**
+   * Кнопка «Создать» перечитывает форму на каждый символ: полная перерисовка на вводе уронила бы клавиатуру,
+   * а без этого кнопка висела на «Назови лигу» до следующего тапа по вариантам.
+   */
+  function syncCta(f) {
+    var btn = document.querySelector('.kk-cta .kk-btn');
+    if (!btn) return;
+    var err = S.formError(f) || Id().stakeError(f.stake);
+    if (err || state.busy) btn.setAttribute('disabled', 'true');
+    else btn.removeAttribute('disabled');
+    btn.setAttribute('aria-disabled', err ? 'true' : 'false');
+    btn.textContent = err || (state.busy ? 'Создаём…' : 'Создать и позвать своих');
+  }
+
   var IDEAS = ['Раздевалка', 'Офис', 'Двор', 'Семья'];
   var SCOPES = [
     ['dinamo', 'Динамо-Минск', 'КХЛ, дома и на выезде'],
@@ -261,7 +275,7 @@
         h('p', { class: 'kk-sub kk-sub--tight', text: 'Своя таблица для своих. Ходы те же, что в общей игре, — отдельно ходить не нужно.' }),
         h('div', { class: 'kk-fld' }, [
           h('label', { for: 'kk-lname', class: 'kk-lbl', text: 'КАК НАЗОВЁМ' }),
-          h('input', { id: 'kk-lname', class: 'kk-input', maxlength: '28', autocomplete: 'off', value: f.name, placeholder: 'Например, Офис', oninput: function (e) { f.name = e.target.value; } }),
+          h('input', { id: 'kk-lname', class: 'kk-input', maxlength: '28', autocomplete: 'off', value: f.name, placeholder: 'Например, Офис', oninput: function (e) { f.name = e.target.value; syncCta(f); } }),
           h('div', { class: 'kk-chips' }, IDEAS.map(function (n) { return h('button', { type: 'button', class: 'kk-ch kk-ch--sm', onclick: function () { f.name = n; K.render(); refreshPreview(a); }, text: n }); })),
         ]),
         photoField({
@@ -272,7 +286,7 @@
           onFile: function (file) { pickFile(f, file, 'image', 'imageUrl', 'imageError'); K.render(); },
           onRemove: f.image ? function () { dropFile(f, 'image', 'imageUrl', 'imageError'); K.render(); } : null,
         }),
-        stakeField('kk-lstake', f.stake, function (v) { f.stake = v; }),
+        stakeField('kk-lstake', f.stake, function (v) { f.stake = v; syncCta(f); }),
         h('div', { class: 'kk-sec' }, [
           h('span', { class: 'kk-lbl', text: 'КАКИЕ МАТЧИ' }),
           h('div', { class: 'kk-opts', role: 'group', 'aria-label': 'Матчи' }, SCOPES.map(function (it) {
