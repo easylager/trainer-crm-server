@@ -548,3 +548,11 @@ describe('подключение и вёрстка', () => {
     assert.ok(/prefers-reduced-motion/.test(view));
   });
 });
+
+describe('строка после броска без счёта (счёт виден в «+/−» карточки)', () => {
+  it('называет клуб и не повторяет счёт', () => {
+    const line = C.chosenLine('Неман');
+    assert.equal(line, 'Монетка выбрала: Неман');
+    assert.ok(!/\d/.test(line));
+  });
+});

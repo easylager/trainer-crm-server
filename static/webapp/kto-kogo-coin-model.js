@@ -302,6 +302,11 @@
   }
 
   /** «Монетка выбрала: Химик · 3:1» — клуб, точка-разделитель и счёт не рвутся при переносе. */
+  /** Строка после броска без счёта: он уже виден в «+/−» карточки. */
+  function chosenLine(clubName) {
+    return TEXT.chosen + clubName;
+  }
+
   function summaryLine(clubName, target) {
     return TEXT.chosen + clubName + NBSP + '·' + NBSP + target.home + ':' + target.away;
   }
@@ -331,6 +336,7 @@
     sideLook: sideLook,
     sameAsDrawn: sameAsDrawn,
     summaryLine: summaryLine,
+    chosenLine: chosenLine,
     spokenLine: spokenLine,
     reelStops: reelStops,
   };
