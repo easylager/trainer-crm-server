@@ -234,7 +234,7 @@ async def test_old_match_without_result_is_listed_only_with_my_move(db_session) 
 
 
 @pytest.mark.asyncio
-async def test_awaiting_counts_my_started_matches_without_result_only(db_session) -> None:
+async def test_awaiting_counts_my_moves_without_result_including_matches_ahead(db_session) -> None:
     live = await _match(db_session, NOW - timedelta(hours=1))
     review = await _match(db_session, NOW - timedelta(hours=6), status="review")
     done = await _match(db_session, NOW - timedelta(hours=9), status="final")
@@ -244,5 +244,6 @@ async def test_awaiting_counts_my_started_matches_without_result_only(db_session
     for match_id in (live, review, done, ahead, stuck):
         await _pick(db_session, match_id)
     await _pick(db_session, foreign, OTHER)
-    assert await awaiting_count(db_session, ME, now=NOW) == 2
+    # Идёт, ждёт итога и ещё впереди; сыгранный и «зависший» на пятые сутки не считаются, чужой ход — тоже.
+    assert await awaiting_count(db_session, ME, now=NOW) == 3
     assert await awaiting_count(db_session, OTHER, now=NOW) == 1

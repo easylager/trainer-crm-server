@@ -114,6 +114,7 @@ async def test_each_match_carries_phase_and_my_points_and_old_fields_stay(app_us
     cancelled = await _match(db_session, now + timedelta(days=2), status="cancelled")
     await _pick(db_session, played, points=50, doubled=True)
     await _pick(db_session, live)
+    await _pick(db_session, ahead)
     await _pick(db_session, stuck)
     await _pick(db_session, cancelled)
 
@@ -138,7 +139,7 @@ async def test_each_match_carries_phase_and_my_points_and_old_fields_stay(app_us
     )
     assert items[played]["result"] == {"home_score": 3, "away_score": 2, "decided_in": "regulation"}
     assert {"me", "race", "double", "doubles", "leader"} <= set(body)
-    assert body["awaiting"] == 1  # идущий матч с моим ходом; «зависший» на четвёртые сутки не считается
+    assert body["awaiting"] == 2  # идущий матч и матч впереди с моим ходом; «зависший» на четвёртые сутки не считается
     assert body["history"] == {"has_more": False, "next_before": None}
 
 
