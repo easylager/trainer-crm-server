@@ -278,11 +278,14 @@ async def kk_subscription_counts(session: AsyncSession) -> list[dict[str, Any]]:
     return [{"club": r.club, "count": int(r.n)} for r in (await session.execute(_KK_SUBSCRIPTION_COUNTS)).all()]
 
 
-async def _extraliga_extra(session: AsyncSession, row: Any, *, player_key: int, final: bool) -> dict[str, Any]:
-    from src.application.extraliga import match_page_url
+async def _extraliga_extra(
+    session: AsyncSession, row: Any, *, player_key: int, final: bool, now: datetime
+) -> dict[str, Any]:
+    from src.application.extraliga import FALLBACK_PREFIX, hockeyby_down, match_page_url
     from src.application.extraliga_preview import match_preview
 
     d = row.details or {}
+    fallback_row = (row.source_match_id or "").startswith(FALLBACK_PREFIX)
     subscribed = (
         await session.execute(_KK_SUBSCRIBED, {"player_key": int(player_key), "club": row.home_team})
     ).first() is not None
@@ -293,9 +296,13 @@ async def _extraliga_extra(session: AsyncSession, row: Any, *, player_key: int, 
         "details": (
             {k: d.get(k) for k in ("periods", "goals", "shots", "attendance", "best_players")} if final and d else None
         ),
+        # Сыгранный без протокола, а hockey.by не отвечает — экран «Как сыграли» показывает заглушку.
+        "details_unavailable": bool(
+            final and not (d.get("periods") or d.get("goals")) and await hockeyby_down(session, now=now)
+        ),
         "tickets_url": row.tickets_url,
         "tickets_note": _host(row.tickets_url),
-        "source_url": match_page_url(row.source_match_id),
+        "source_url": None if fallback_row else match_page_url(row.source_match_id),
         "kk_subscribe": {"club": row.home_team, "subscribed": subscribed},
     }
 
@@ -494,7 +501,7 @@ async def event_view(
     }
     if extraliga:
         out["arena"]["city"] = row.city
-        out.update(await _extraliga_extra(session, row, player_key=player_key, final=final))
+        out.update(await _extraliga_extra(session, row, player_key=player_key, final=final, now=now))
     else:
         from src.application.extraliga_preview import match_preview
 

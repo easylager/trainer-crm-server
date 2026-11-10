@@ -588,6 +588,17 @@ def _after_card(data: Mapping[str, Any]) -> str:
     return f'<section class="m-panel">{"".join(parts)}</section>'
 
 
+def _stats_unavailable_card() -> str:
+    """Сыгранный матч без протокола, пока его негде взять: спокойная строка на месте голов и периодов.
+    ``data-nosnippet`` — поисковику в сниппет это не нужно."""
+    return (
+        '<section class="m-panel" data-nosnippet>'
+        '<span class="m-panel__head">Статистика матча временно недоступна</span>'
+        '<span class="m-panel__sub">Счёт и\u00a0расписание обновляются. Голы и\u00a0периоды появятся здесь, '
+        "как только станут доступны.</span></section>"
+    )
+
+
 def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -> str:
     game = data.get("game")
     if not game:
@@ -807,7 +818,10 @@ def render_match_page(
     middle = ""
     if not gone:
         middle = _before_card(data) if before else (_after_card(data) if phase == PHASE_AFTER else "")
-        if phase == PHASE_AFTER and not middle and data.get("protocol_url"):
+        if phase == PHASE_AFTER and data.get("stats_unavailable"):
+            # Ссылка «Протокол на hockey.by» сейчас вела бы на лежащий сайт.
+            middle = _stats_unavailable_card()
+        elif phase == PHASE_AFTER and not middle and data.get("protocol_url"):
             middle = (
                 f'<a class="m-text-link" href="{_e(data["protocol_url"])}" rel="noopener nofollow" target="_blank">'
                 "Протокол на hockey.by ›</a>"
