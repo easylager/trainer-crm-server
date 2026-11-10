@@ -35,6 +35,7 @@ from src.application.hockey_races import crown_card_data
 from src.application.hockey_matches import STATUS_FINAL, get_match
 from src.application.hockey_share import league_card
 from src.application.ice_company.service import minsk_arena
+from src.application.place_links import match_start_param, public_telegram_entry_link
 from src.infrastructure import s3
 from src.infrastructure.db.models import CLIENT_SHARE_KIND_PLACE
 from src.shared.config import Settings
@@ -235,7 +236,8 @@ async def get_match_share_page(
         invite=invite,
         story=False,
     )
-    go = match_link(int(row.id), cfg)
+    # Публичная страница: при public_entry_via_start — через /start бота, иначе как раньше.
+    go = public_telegram_entry_link(cfg, start_param=match_start_param(int(row.id))) or match_link(int(row.id), cfg)
     e = html.escape
     hop = ""
     if not _preview_bot(request):

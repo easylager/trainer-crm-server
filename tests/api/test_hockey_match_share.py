@@ -156,6 +156,21 @@ async def test_match_share_page_previews_the_card_and_opens_the_app(
     assert missing.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_match_share_page_goes_through_start_when_flag_on(
+    app_use_test_db, db_session, arena, monkeypatch
+) -> None:
+    """PUBLIC_ENTRY_VIA_START: друг по ссылке попадает в чат бота (/start kkm_<id>), а не сразу в Mini App."""
+    match_id = await _match(db_session, starts_at=START)
+    await db_session.commit()
+    monkeypatch.setenv("PUBLIC_ENTRY_VIA_START", "1")
+    async with _client() as client:
+        page = await client.get(f"/kk/m/{match_id}")
+    assert page.status_code == 200
+    assert f"https://t.me/glide_test_bot?start=kkm_{match_id}" in page.text
+    assert "startapp=" not in page.text
+
+
 # ---------- открытка-превью ----------
 
 

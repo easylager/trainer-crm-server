@@ -206,6 +206,13 @@
     if (current === target.key) {
       var wantQ = target.path.indexOf('?') >= 0 ? '?' + target.path.split('?')[1] : '';
       if (String(loc.search || '') === wantQ) return true;
+      // Пришли редиректом с параметром из адреса (carryStartParam): тот же экран, без startapp.
+      var have = new URLSearchParams(String(loc.search || ''));
+      if (have.has('startapp')) {
+        have.delete('startapp');
+        var rest = have.toString();
+        if ((rest ? '?' + rest : '') === wantQ) return true;
+      }
     }
     return false;
   }
@@ -284,6 +291,30 @@
     return true;
   }
 
+  function telegramStartParam(ctx) {
+    var tg =
+      (ctx && ctx.Telegram) ||
+      (typeof window !== 'undefined' && window.Telegram) ||
+      (typeof global !== 'undefined' && global.Telegram);
+    var webApp = tg && tg.WebApp;
+    return (webApp && webApp.initDataUnsafe && webApp.initDataUnsafe.start_param) || '';
+  }
+
+  /**
+   * Параметр пришёл адресом (``?startapp=`` — кнопка бота на ``/start``), а не от Telegram:
+   * несём его на экран назначения. От Telegram ``start_param`` виден на любой странице сеанса,
+   * из адреса — только здесь; без этого метка источника записи (``trainer_7_v_p3``) и учёт
+   * входа терялись бы на редиректе. Защёлка ``DEEP_LINK_FLAG`` уже стоит — петли нет.
+   */
+  function carryStartParam(pathAndQuery, sp, ctx) {
+    if (!sp || telegramStartParam(ctx)) return pathAndQuery;
+    var parts = String(pathAndQuery).split('?');
+    var query = new URLSearchParams(parts.slice(1).join('?'));
+    if (query.has('startapp') || query.has('tgWebAppStartParam')) return pathAndQuery;
+    query.set('startapp', sp);
+    return parts[0] + '?' + query.toString();
+  }
+
   /**
    * Синхронный redirect из <head> entry-страницы. Возвращает true, если ушли со страницы.
    */
@@ -303,7 +334,7 @@
       if (storage) storage.setItem(DEEP_LINK_FLAG, sp);
     } catch (e) { /* без storage — как в шелле */ }
     if (isAlreadyOnTarget(loc, target)) return false;
-    var pathAndQuery = resolveWebappPath(target.path, loc);
+    var pathAndQuery = carryStartParam(resolveWebappPath(target.path, loc), sp, ctx);
     var hash = loc.hash || '';
     notifyTelegramReady(ctx);
     loc.replace(pathAndQuery + hash);
@@ -324,6 +355,7 @@
     resolveWebappPath: resolveWebappPath,
     maybePublicRedirect: maybePublicRedirect,
     maybeEarlyRedirect: maybeEarlyRedirect,
+    carryStartParam: carryStartParam,
   };
 });
 

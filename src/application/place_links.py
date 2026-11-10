@@ -445,3 +445,20 @@ def telegram_open_link(
     if main_mini_app:
         return f"https://t.me/{bot}?startapp={start_param}"
     return f"https://t.me/{bot}?start={start_param}"
+
+
+def public_telegram_entry_link(settings: Any, *, start_param: str) -> str | None:
+    """Вход в Telegram с публичной точки (сайт, /kk, /go, открытка): куда ведёт «Открыть в Telegram».
+
+    ``public_entry_via_start`` выключен — ровно ``telegram_open_link`` по настройкам мини-аппа.
+    Включён — ``t.me/<bot>?start=…``: чат с ботом появляется у человека, бот отвечает кнопкой на
+    тот же экран (``cmd_start``). Для ссылок внутри чата бота и мини-аппа не используется.
+    """
+    if getattr(settings, "public_entry_via_start", False):
+        return telegram_bot_start_link(client_bot_username=settings.client_bot_username, start_param=start_param)
+    return telegram_open_link(
+        client_bot_username=settings.client_bot_username,
+        mini_app_short_name=settings.client_mini_app_short_name,
+        main_mini_app=settings.client_bot_main_mini_app,
+        start_param=start_param,
+    )

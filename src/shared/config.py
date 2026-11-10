@@ -269,6 +269,12 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # ссылки вида t.me/<bot>?startapp=… открывают мини-апп сразу на нужном экране.
     # false — ссылки идут через /start, и бот отвечает кнопкой.
     client_bot_main_mini_app: bool = True
+    # Публичные входы в Telegram (сайт, /kk, /go, открытки, превью матча) — через /start бота,
+    # а не сразу в мини-апп: так у человека появляется чат с Glide (кнопка «Главная», бот
+    # может написать первым). Бот отвечает одной кнопкой на тот же экран — на тап больше.
+    # false — как раньше, по client_bot_main_mini_app / client_mini_app_short_name.
+    # Ссылки внутри чата бота и мини-аппа не затрагивает.
+    public_entry_via_start: bool = False
     # Gift certificate PDF: client-facing branding (instructions reference the Telegram mini-app paths below).
     certificate_pdf_brand_display_name: str = "GLIDE"
     # Одна строка под названием бренда — не абзац: в PDF она стоит над номиналом, и всё,
