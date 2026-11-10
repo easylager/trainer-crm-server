@@ -23,12 +23,21 @@ PUBLIC_ICON_LINKS = (
 )
 
 
+#: Значения, с которыми страница живёт, если вызывающий их не задал: ``og:type`` в ``b.html`` есть у каждой
+#: страницы шаблона, а своё значение (``profile``, ``place``) нужно только некоторым. Сырая метка в HTML не уходит.
+DEFAULT_VALUES: Mapping[str, str] = {"__OG_TYPE__": "website"}
+
+
 def fill_placeholders(template: str, values: Mapping[str, str]) -> str:
-    """Заменить известные плейсхолдеры шаблона; незнакомые ``__X__`` остаются как есть."""
+    """Заменить известные плейсхолдеры шаблона; незнакомые ``__X__`` остаются как есть.
+
+    Не заданные вызывающим ``DEFAULT_VALUES`` берут значение по умолчанию.
+    """
+    merged = {**DEFAULT_VALUES, **values}
 
     def _sub(match: re.Match[str]) -> str:
         key = match.group(0)
-        return values[key] if key in values else key
+        return merged[key] if key in merged else key
 
     return inject_lcp_preload(_PLACEHOLDER_RE.sub(_sub, template))
 

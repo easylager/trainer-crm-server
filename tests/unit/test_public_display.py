@@ -58,3 +58,4 @@ def test_c10_names_quotes_hk_and_spb() -> None:
     assert format_public_name('Каток хк "Юность"') == "Каток ХК «Юность»"
     assert format_public_name("Каток Приорбанк | Visa") == "Каток Приорбанк | Visa"
     assert format_public_name("Санкт-Петербург/ЛО") == "Санкт-Петербург"
+    assert format_public_name("Москва/МО") == "Москва"

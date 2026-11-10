@@ -162,7 +162,8 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
         window_in_city,
     )
     from src.application.place_links import public_telegram_cta_url, trainer_start_param
-    from src.application.site_trainer_page import contact_url
+    from src.application.arena_public_use_cases import TRAINER_WINDOWS_LIMIT
+    from src.application.site_trainer_page import WEEK_LOOKAHEAD_DAYS, WEEK_WINDOWS_LIMIT, contact_url
     from src.application.site_trainers import trainer_initial, trainer_name, trainer_photo_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
     from src.application.trainer_min_price import enrich_min_session_price
@@ -194,8 +195,19 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     for tid in ids:
         can_book[tid] = bool((await get_trainer_booking_availability(session, tid)).get("can_book"))
     bookable = [tid for tid in ids if can_book[tid]]
+    # Тот же запас, что у страницы ``/t/``: слот через 8–14 дней (как 19-е у Влада) иначе
+    # есть на сайте и пропадает из витрины — диплинк открывает «время заняли».
     windows = (
-        await _trainer_windows_on_arena(session, None, bookable, timezone_name=NOTIFICATION_TZ) if bookable else {}
+        await _trainer_windows_on_arena(
+            session,
+            None,
+            bookable,
+            timezone_name=NOTIFICATION_TZ,
+            limit=WEEK_WINDOWS_LIMIT,
+            days=WEEK_LOOKAHEAD_DAYS,
+        )
+        if bookable
+        else {}
     )
 
     win_cities = await window_arena_cities(session, [w for ws in windows.values() for w in ws])
@@ -237,8 +249,11 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 "arenas": [arenas[a] for a in (t.get("arena_ids") or []) if a in arenas],
                 "windows": [
                     {k: w.get(k) for k in ("slot_id", "arena_id", "starts_at", "ends_at", "time", "day")}
-                    for w in windows.get(tid, [])
-                    if window_in_city(w.get("arena_id"), win_cities, city_id)
+                    for w in [
+                        w
+                        for w in windows.get(tid, [])
+                        if window_in_city(w.get("arena_id"), win_cities, city_id)
+                    ][:TRAINER_WINDOWS_LIMIT]
                 ],
             }
         )

@@ -142,6 +142,7 @@
       !list ? h('div', { class: 'kk-skel kk-skel--line' })
         : list.length ? h('div', { class: 'kk-rows' }, list.map(function (l) {
             return h('button', { type: 'button', class: 'kk-lg' + (l.active ? '' : ' is-ended'), onclick: function () { K.go('league', { id: l.id }); } }, [
+              K.leagueThumb ? K.leagueThumb(l) : null,
               h('span', { class: 'kk-col kk-grow' }, [h('b', { text: l.name }), h('span', { class: 'kk-sub', text: S.leagueSub(l) + (l.active ? '' : ' · закончилась') })]),
               h('span', { class: 'kk-lg__r' + (l.my_rank === 1 ? ' is-gold' : '') }, [l.my_rank === 1 ? K.crownIcon(15) : null, l.my_rank ? String(l.my_rank) : '—']),
             ]);
@@ -173,7 +174,9 @@
           ]),
           fanCard(),
           K.hubCards.hero(),
+          K.hubCards.pending(),
           K.hubCards.day(),
+          state.hubReady && K.matchRows ? K.matchRows.link() : null,
           K.hubCards.pointsLink(),
           peaksBlock(),
           leaguesSection(),
@@ -358,6 +361,7 @@
           h('div', { class: 'kk-duels' }, p.duels.map(function (d) { return h('span', { class: 'kk-cr kk-cr--c' }, [d.display_name, h('b', { text: d.won + ':' + d.lost })]); })),
         ]));
       }
+      if (K.matchRows) main.appendChild(K.matchRows.link());
       var league = (state.leagues || []).filter(function (l) { return l.active; })[0];
       main.appendChild(h('div', { class: 'kk-two' }, [
         h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { if (league) K.shareCard({ card: 'league', league_id: league.id }, league.invite_url, S.inviteText(league.name, league)); else K.go('leagueNew', {}); }, text: league ? 'Позвать в лигу' : 'Создать лигу' }),

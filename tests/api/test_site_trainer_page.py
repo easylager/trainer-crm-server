@@ -1,7 +1,7 @@
 """TASK-350/356: страница тренера ``/t/{id}-{slug}`` — та же логика, что у карточки тренера в Mini App.
 
 TASK-356 (PDEC-033, ``design/trainer.html``): карточка цены с вкладками направлений и ближайшим
-временем, неделя, цены по тарифам, «Ещё ведёт», оценка от 3 оценок, «В Glide с …», без числа занятий.
+временем, неделя, цены по тарифам, «Ещё ведёт», оценка с первой, «В Glide с …», без числа занятий.
 """
 
 from __future__ import annotations
@@ -55,6 +55,15 @@ async def _listed(db_session, client, *, tier: str | None) -> tuple[dict, int, s
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_trainer_page_og_type_is_profile(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        _place_row, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        html = (await client.get(trainer_path(tid, name))).text
+    assert 'property="og:type" content="profile"' in html
+
+
+@pytest.mark.asyncio
 async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use_test_db, db_session) -> None:
     async with _client() as client:
         place, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
@@ -71,7 +80,7 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
     assert resp.status_code == 200
     html = resp.text
     assert api["can_book"] is True
-    assert f'<h1 class="tp-name">{name}</h1>' in html
+    assert f'<h1 class="tp-name">{name}<span class="tp-trade"> — тренер по катанию на коньках' in html
     assert 'content="index, follow"' in html
     assert f'rel="canonical" href="https://glide.example{path}"' in html
     assert '"@type": "Person"' in html
@@ -300,10 +309,11 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
     assert "Постановка прыжков" in html
     # Ролики (не вкладка) и неразобранная своя услуга — «Ещё ведёт» словами тренера.
     assert "Ещё ведёт: Катание на роликах, Растяжка для фигуристов." in html
-    # Первый экран: стаж, строка направлений и аудитории, оценка от 3, галочки из анкеты.
+    # Первый экран: стаж, строка направлений и аудитории, оценка с первой, галочки из анкеты.
     assert "Тренирует 6 лет" in html
     assert "Занятия с нуля, для уже катающихся и по фигурному катанию. Дети и взрослые." in html
     assert "<span>· 7 оценок</span>" in html and "7 оценок — все на 5 из 5" in html
+    assert "AggregateRating" not in html
     assert "<li>Высшее профильное образование</li>" in html and f"<li>Каток: {place['name']}</li>" in html
     # «В Glide с» — месяц первой состоявшейся записи; запись тренера к себе (40 дней назад) не в счёт.
     from datetime import date, timedelta
@@ -338,7 +348,20 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
 
 
 @pytest.mark.asyncio
-async def test_few_ratings_hidden_and_no_photo_shows_letter(app_use_test_db, db_session) -> None:
+async def test_one_five_star_rating_says_one_not_all_fives(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        _, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_CRM)
+        await db_session.execute(
+            text("UPDATE trainer_profiles SET rating_avg = 5, rating_count = 1 WHERE trainer_id = :t"), {"t": tid}
+        )
+        await db_session.commit()
+        html = (await client.get(trainer_path(tid, name))).text
+    assert "1 оценка — 5 из 5" in html
+    assert "все на 5 из 5" not in html
+
+
+@pytest.mark.asyncio
+async def test_two_ratings_shown_and_no_photo_shows_letter(app_use_test_db, db_session) -> None:
     async with _client() as client:
         _place_row, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_CRM)
         await db_session.execute(text("DELETE FROM trainer_photos WHERE trainer_id = :t"), {"t": tid})
@@ -348,7 +371,8 @@ async def test_few_ratings_hidden_and_no_photo_shows_letter(app_use_test_db, db_
         await db_session.commit()
         html = (await client.get(trainer_path(tid, name))).text
     assert "tp-photo" not in html and 'class="tp-ava tp-ava--mono"' in html
-    assert "★" not in html and "Оценки учеников" not in html and "оценк" not in html.lower().replace("оценить", "")
+    assert "★" in html and "<span>· 2 оценки</span>" in html
+    assert "AggregateRating" not in html and "0 оценок" not in html
     assert "В Glide с" not in html
     assert "Онлайн-записи нет — напишите и договоритесь о времени." in html
     assert "Нужен Telegram — переписка идёт там." in html
@@ -382,7 +406,7 @@ async def test_peers_of_the_same_direction_in_city(app_use_test_db, db_session) 
         await db_session.commit()
         html = (await client.get(trainer_path(tid, name))).text
     more = html.split('class="tp-more"', 1)[1].split("</section>", 1)[0]
-    assert f"/t/{other}-" in more and "от 45 BYN" in more and place["name"] in more
+    assert f"/t/{other}-" in more and "от 25 BYN" in more and place["name"] in more
     assert f"/t/{tid}-" not in more
     assert "Здесь же ещё 1 тренер" in html
 
@@ -647,7 +671,7 @@ def test_horizontal_strip_gets_scroll_arrows_hooked_to_page_script() -> None:
 
     html = _scroller('<div class="tp-more">x</div>')
     assert html.startswith('<div class="tp-scroller" data-scroller><div class="tp-more">')
-    assert 'tp-arrow--prev' in html and 'tp-arrow--next' in html
+    assert "tp-arrow--prev" in html and "tp-arrow--next" in html
     assert "data-scroller" in _SCROLLER_SCRIPT and "has-next" in _SCROLLER_SCRIPT
 
 
@@ -725,3 +749,48 @@ async def test_save_heart_leads_to_telegram_and_is_absent_on_trainers_own_link(a
     m = re.search(r'<a class="tp-save" href="([^"]+)"', html)
     assert m and f"startapp=trainer_{tid}_i_save" in m.group(1).replace("&amp;", "&")
     assert 'class="tp-save"' not in own and "_i_request" not in own
+
+
+@pytest.mark.asyncio
+async def test_page_title_names_the_only_direction_and_snippet_price_matches_the_card(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    from src.shared import city_locative
+    from tests.api.test_site_trainer_catalog import _set_services
+
+    def meta(html: str) -> tuple[str, str]:
+        title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)
+        description = re.search(r'name="description" content="([^"]*)"', html).group(1)
+        return title.replace("\xa0", " "), description.replace("\xa0", " ")
+
+    async with _client() as client:
+        place, tid, name = await _listed(db_session, client, tier=None)
+        monkeypatch.setitem(city_locative._LOCATIVE, place["city_name"], "Плейсске")
+        path = trainer_path(tid, name)
+        # Одно направление (фигурное): групповая 25 дешевле тарифа 50 и абонемента 41,87.
+        await _set_services(db_session, tid, {3: [("adult", 5000)]})
+        await db_session.execute(
+            text("UPDATE trainer_services SET group_price_cents = 2500 WHERE trainer_id = :t"), {"t": tid}
+        )
+        await db_session.commit()
+        title, description = meta((await client.get(path)).text)
+        assert title.startswith(f"{name} — тренер по фигурному катанию в Плейсске")
+        assert "От 25 BYN в группе, запись в Telegram." in description and "за занятие" not in description
+
+        # Групповой нет — минимум даёт абонемент 670/16.
+        await db_session.execute(text("UPDATE trainer_services SET group_price_cents = NULL WHERE trainer_id = :t"), {"t": tid})
+        await db_session.commit()
+        description = meta((await client.get(path)).text)[1]
+        assert "От 41,87 BYN по абонементу, запись в Telegram." in description and "за занятие" not in description
+
+        # Абонемента нет — обычное занятие.
+        await db_session.execute(text("DELETE FROM trainer_pass_products WHERE trainer_id = :t"), {"t": tid})
+        await db_session.commit()
+        description = meta((await client.get(path)).text)[1]
+        assert "От 50 BYN за занятие, запись в Telegram." in description
+
+        # Два направления — общий шаблон.
+        await _set_services(db_session, tid, {3: [("adult", 5000)], 4: [("adult", 5500)]})
+        await db_session.commit()
+        title = meta((await client.get(path)).text)[0]
+        assert title.startswith(f"{name} — тренер по катанию на коньках в Плейсске")

@@ -42,6 +42,13 @@ class PhotoBytesCache:
                 _, evicted = self._items.popitem(last=False)
                 self._size -= len(evicted[0])
 
+    def discard(self, key: str) -> None:
+        """Забыть один кадр: убранная администратором картинка не должна отдаваться из памяти процесса."""
+        with self._lock:
+            item = self._items.pop(key, None)
+            if item is not None:
+                self._size -= len(item[0])
+
     def clear(self) -> None:
         with self._lock:
             self._items.clear()

@@ -214,13 +214,12 @@ def feed_section(feed: Mapping[str, Any] | None, *, city_name: str, base_url: st
         ) + assets_tail()
     cards = "".join(_feed_card(c, base_url=base_url, today=today, city_id=city_id) for c in feed["matches"])
     n = int(feed["week_count"])
-    more = (
-        f'<a class="b-more" href="{_e(list_href(city_name))}">'
-        f'{n} {plural_ru(n, "матч", "матча", "матчей")}</a>'
-    )
+    # Ссылка всегда «Все матчи» (как в Mini App); число описывает сам блок — строка над карточками.
+    more = f'<a class="b-more" href="{_e(list_href(city_name))}">Все матчи</a>'
+    count = f'<p class="m-feed-empty">{n} {plural_ru(n, "матч", "матча", "матчей")} на неделе</p>'
     return section(
         feed_title(feed, city_name),
-        f'<div class="b-scroll">{cards}</div>',
+        f'{count}<div class="b-scroll">{cards}</div>',
         aside_html=more,
         klass="b-sec--flush",
         sec_id="hockey",

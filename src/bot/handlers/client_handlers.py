@@ -529,13 +529,10 @@ def _trainer_caption(trainer: dict, *, currency: str = "BYN") -> str:
     profile = trainer.get("profile") or {}
     name = (profile.get("first_name") or "") + " " + (profile.get("last_name") or "")
     name = name.strip() or "Тренер"
-    # Rating: "5 ⭐ (1)" or "—" when no votes
-    avg = profile.get("rating_avg")
-    count = profile.get("rating_count") or 0
-    if avg is not None and count and count > 0:
-        rating_str = f"{float(avg):.1f} ⭐ ({count})"
-    else:
-        rating_str = msg.CLIENT_TRAINER_CARD_NO_RATING
+    from src.shared.ru_text import trainer_rating_caption
+
+    rating_str = trainer_rating_caption(profile.get("rating_avg"), profile.get("rating_count"))
+    rating_block = f"Рейтинг: {rating_str}\n" if rating_str else ""
     exp = profile.get("experience_years")
     experience_block = f"Опыт: {exp} лет\n" if exp is not None else ""
     arena_names = trainer.get("arena_names") or []
@@ -544,7 +541,7 @@ def _trainer_caption(trainer: dict, *, currency: str = "BYN") -> str:
     desc = (profile.get("description") or "").strip() or "—"
     return msg.CLIENT_TRAINER_CARD.format(
         name=name,
-        rating=rating_str,
+        rating_block=rating_block,
         experience_block=experience_block,
         arenas=arenas_str,
         services_prices=services_prices_str,

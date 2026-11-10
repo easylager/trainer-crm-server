@@ -365,7 +365,10 @@ def trainer_rows_html(
             continue
         photo = trainer.get("photo_url")
         if photo:
-            ava = f'<img class="b-row__ava" src="{esc(photo)}" alt="" width="44" height="44" loading="lazy" decoding="async" fetchpriority="low" />'
+            ava = (
+                f'<img class="b-row__ava" src="{esc(photo)}" alt="{esc(trainer.get("name") or "")}" '
+                f'width="44" height="44" loading="lazy" decoding="async" fetchpriority="low" />'
+            )
         else:
             ava = f'<span class="b-row__ava b-row__ava--mono" aria-hidden="true">{esc(trainer.get("initial") or "")}</span>'
         line = str(trainer.get("line") or "")

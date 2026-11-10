@@ -139,17 +139,45 @@ async def submit_urls(urls: Sequence[str], *, client: httpx.AsyncClient | None =
 
 
 async def fetch_sitemap_urls(session: AsyncSession) -> list[str]:
-    """Все URL, которые перечисляет sitemap.xml, в его порядке."""
+    """Все URL, которые перечисляет sitemap.xml, в том же порядке."""
+    from datetime import datetime, timezone
+
     base = _base()
     rows = (await session.execute(text(_PLACES_SQL.format(extra="")), public_scope_params())).mappings().all()
-    urls = [f"{base}/", f"{base}/trainers"]
-    seen_cities: set[str] = set()
+    by_city: dict[str, list[str]] = {}
+    order: list[str] = []
     for row in rows:
         city = str(row["city_name"])
-        if city not in seen_cities:
-            seen_cities.add(city)
-            urls.append(f"{base}/c/{city_slug(city)}")
-        urls.append(place_page_url(base_url=base, city_name=city, slug=str(row["slug"])))
+        if city not in by_city:
+            by_city[city] = []
+            order.append(city)
+        by_city[city].append(place_page_url(base_url=base, city_name=city, slug=str(row["slug"])))
+    urls = [f"{base}/", f"{base}/trainers"]
+    for city in order:
+        urls.append(f"{base}/c/{city_slug(city)}")
+        urls.extend(by_city[city])
+    settings = Settings()
+    if settings.seasonal_rinks_enabled:
+        from src.application import winter_public
+        from src.application.winter_page import winter_city_path
+
+        now = datetime.now(timezone.utc)
+        for city_name in await winter_public.cities_with_points(session, now=now):
+            urls.append(f"{base}{winter_city_path(city_name)}")
+        for point in await winter_public.sitemap_points(session, now=now):
+            urls.append(place_page_url(base_url=base, city_name=point["city"], slug=point["slug"]))
+    from src.application import site_matches
+
+    if site_matches.site_enabled():
+        now = datetime.now(timezone.utc)
+        match_rows = await site_matches.sitemap_rows(session, now=now)
+        if match_rows:
+            urls.append(f"{base}{site_matches.SITE_PATH}")
+        urls.extend(f"{base}{path}" for path, _stamp in match_rows)
+    from src.application import site_trainer_catalog, site_trainer_page
+
+    urls.extend(f"{base}{path}" for path, _stamp in await site_trainer_page.sitemap_rows(session))
+    urls.extend(f"{base}{path}" for path, _stamp in await site_trainer_catalog.sitemap_rows(session))
     return urls
 
 

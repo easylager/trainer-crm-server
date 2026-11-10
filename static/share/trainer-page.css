@@ -20,6 +20,7 @@
 .tp-head { display: grid; gap: 10px; justify-items: start; }
 .tp-badge { background: var(--g-dark); color: #fff; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 9px; letter-spacing: .02em; }
 .tp-name { margin: 0; font: 400 clamp(30px, 8.6vw, 44px)/1 var(--g-font-display); letter-spacing: -.015em; color: var(--g-ink); overflow-wrap: anywhere; }
+.tp-trade { display: block; margin-top: 4px; font: 400 17px/1.35 var(--g-font); letter-spacing: 0; color: var(--g-ink-2); }
 .tp-role { margin: -2px 0 0; font-size: 17px; line-height: 1.4; color: var(--g-ink-2); }
 .tp-rate { margin: 0; font-size: 16px; font-weight: 600; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .tp-rate i { font-style: normal; color: #f2b84b; }

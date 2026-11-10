@@ -1140,6 +1140,26 @@ async def on_hockey_close_month(callback: CallbackQuery) -> None:
     await _hockey_close_card(callback, "Месяц закрыт: короны записаны.")
 
 
+@router.callback_query(lambda c: c.data and c.data.startswith("hk:lclr:"))
+async def on_hockey_league_clear(callback: CallbackQuery) -> None:
+    """Жалоба на лигу подтвердилась (TASK-361): убрать картинку и строку «на что играем»."""
+    from src.application.hockey_league_reports import clear_identity_now
+
+    if not await _hockey_guard(callback):
+        return
+    league_id = _hockey_match_id(callback)  # id в хвосте данных кнопки — тот же разбор, что у матча
+    if league_id is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        cleared = await clear_identity_now(session, league_id=league_id)
+    if cleared is None:
+        await _hockey_close_card(callback, "Лиги уже нет.")
+        return
+    audit_log("hockey.league_identity_cleared", ACTOR_ADMIN_BOT, callback.from_user.id, {**cleared, "via": "admin_bot"})
+    await _hockey_close_card(callback, f"Картинка и строка лиги «{cleared['name']}» очищены.")
+
+
 @router.message(Command("subscription_tiers"))
 async def cmd_subscription_tiers(message: Message) -> None:
     """Open admin Mini App to edit subscription tier pricing."""

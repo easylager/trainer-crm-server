@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 _WEEKDAYS_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 _SPB_LO = re.compile(r"^санкт-петербург\s*/\s*ло$", re.IGNORECASE)
+_MOSCOW_MO = re.compile(r"^москва\s*/\s*мо$", re.IGNORECASE)
 _OBLAST = re.compile(r"(область|обл\.?)$", re.IGNORECASE)
 _PROSPEKT_DOT = re.compile(r"пр-т\.")
 # «ул. Ташкентская 19» → «ул. Ташкентская, 19»: номер дома после улицы — через запятую.
@@ -199,6 +200,8 @@ def format_public_name(name: str) -> str:
         return ""
     if _SPB_LO.match(_fold(text)):
         return "Санкт-Петербург"
+    if _MOSCOW_MO.match(_fold(text)):
+        return "Москва"
     return _HK.sub("ХК", _guillemets(text))
 
 

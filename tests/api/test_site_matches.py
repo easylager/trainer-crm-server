@@ -295,6 +295,10 @@ async def test_city_page_feed_tile_and_bell_only_with_matches(app_use_test_db, d
     assert (await _path(db_session, mid)) in html and f"startapp=mbell_{mid}" in html
     assert 'aria-label="Напомнить о матче Юность — Шахтер"' in html
     assert not has_forbidden_words(html)
+    # Ссылка блока ведёт на весь список и так подписана (как в Mini App); число — строка над карточками.
+    assert re.search(r'<a class="b-more" href="/hockey[^"]*">Все матчи</a>', html)
+    assert '<p class="m-feed-empty">1 матч на неделе</p>' in html
+    assert ">1 матч</a>" not in html
     del w
 
 

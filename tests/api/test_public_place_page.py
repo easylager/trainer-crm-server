@@ -208,11 +208,15 @@ async def test_place_page_shows_learn_block_for_arena_trainers(
         resp = await client.get(place["path"])
     assert resp.status_code == 200, resp.text
     html = resp.text
-    # TASK-354: тренеры катка — единый блок «Учиться с тренером» (в каталог, не в Telegram и не списком).
-    block = re.search(r'<section class="b-sec b-learn-sec" id="learn">(.*?)</section>', html, re.S).group(1)
-    assert "Александр Гаевский" not in html and "b-row--coach" not in html
+    trainers = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', html, re.S)
+    assert trainers, "нет раздела «Тренеры»"
+    block = trainers.group(1)
+    assert "Александр Гаевский" in block
+    assert f'href="/t/{tid}-' in block and f"?via=p{place['arena_id']}" in block
     assert f'href="/c/{city_slug(place["city_name"])}/trenery?arena={place["arena_id"]}"' in block
+    assert "Санкт-Петербург/ЛО" not in block
     assert "startapp=" not in block and "t.me" not in block
+    assert 'id="learn"' not in html
 
 
 @pytest.mark.asyncio
@@ -910,7 +914,8 @@ async def test_schedule_price_is_the_week_floor_not_the_most_frequent(app_use_te
 
 
 @pytest.mark.asyncio
-async def test_indexnow_urls_match_sitemap_exactly(app_use_test_db, db_session) -> None:
+async def test_indexnow_urls_match_sitemap_exactly(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("WEBAPP_BASE_URL", "https://glide.example")
     """IndexNow берёт те же URL, что sitemap (в т.ч. прячет draft-места)."""
     from src.application.indexnow import arena_page_urls, fetch_sitemap_urls
 

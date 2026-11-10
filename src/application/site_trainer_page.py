@@ -11,7 +11,7 @@
 
 Дизайн — PDEC-033, ``.ai/epics/trainer-catalog/design/trainer.html`` (TASK-356): первый экран —
 фото, имя, галочки из анкеты и тёмная карточка цены с ближайшим временем. Число занятий не
-показываем никогда, оценку — от 3 оценок, слова тренера — дословно, нет данных — нет блока.
+показываем никогда, оценку — с первой («★ 5,0 · 2 оценки»), слова тренера — дословно, нет данных — нет блока.
 
 Тренер не в каталоге (черновик, снят, пауза) — страница по его прямой ссылке открывается, но
 ``noindex``, её нет в sitemap и на страницах катков: «запись по вашей ссылке работает как обычно».
@@ -48,15 +48,19 @@ from src.application.place_links import place_page_url, public_telegram_cta_url,
 from src.application.site_trainers import trainer_initial, trainer_line, trainer_name, trainer_photo_url
 from src.application.style_b import esc
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL, trainer_is_listed
-from src.shared.city_locative import city_locative
+from src.shared.ru_text import trainer_rating_caption, trainer_rating_parts, trainer_rating_score, trainer_rating_summary
+from src.shared.city_locative import city_locative, warn_if_no_locative
 from src.shared.html_template import fill_placeholders
+from src.shared.public_display import format_public_name
 
 TRAINER_PREFIX = "/t"
 TRAINER_SURFACE = "trainer_page"
 _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
 _TELEGRAM_USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
+#: Сниппет около 160 знаков. Пример «От 25 BYN…, запись в Telegram.» — 161,
+#: поэтому потолок 165: один лишний знак не должен съедать цену.
+DESCRIPTION_LIMIT = 165
 TITLE_LIMIT = 60
-DESCRIPTION_LIMIT = 155
 #: Ближайшее время в карточке цены — дальше «Всё время на неделю».
 NEAR_SHOWN = 3
 #: Слотов на неделю с запасом: у тренера с плотным расписанием их бывает десятки.
@@ -65,8 +69,6 @@ WEEK_WINDOWS_LIMIT = 200
 #: Как далеко вперёд ищем окна: неделя сетки стартует с первого дня с окнами, он может быть не сегодня.
 WEEK_LOOKAHEAD_DAYS = 14
 WEEK_DAYS = 7
-#: Оценку показываем, когда оценок хотя бы столько (решение владельца).
-RATING_MIN_COUNT = 3
 #: Сколько других тренеров направления показываем внизу.
 PEERS_SHOWN = 6
 _WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
@@ -290,8 +292,7 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
     rows = (
         (
             await session.execute(
-                text(
-                    f"""
+                text(f"""
                 SELECT a.id, a.name, a.city_id, c.name AS city_name, COALESCE(a.venue_type, 'ice') AS venue_type,
                        CASE WHEN {SITEMAP_PLACE_WHERE_SQL} THEN p.slug END AS slug
                 FROM trainer_arenas ta
@@ -301,8 +302,7 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
                 WHERE ta.trainer_id = :tid AND COALESCE(ta.is_public, true) AND a.merged_into_arena_id IS NULL
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
                 ORDER BY a.sort_order NULLS LAST, a.id
-                """
-                ),
+                """),
                 {"tid": int(trainer_id), **public_scope_params()},
             )
         )
@@ -312,7 +312,7 @@ async def _arenas(session: AsyncSession, trainer_id: int) -> list[dict[str, Any]
     return [
         {
             "id": int(r["id"]),
-            "name": str(r["name"] or "").strip(),
+            "name": format_public_name(str(r["name"] or "").strip()),
             "city_id": int(r["city_id"]) if r["city_id"] is not None else None,
             "city_name": str(r["city_name"] or "").strip(),
             "is_ice": str(r["venue_type"]) == "ice",
@@ -330,8 +330,7 @@ async def _catalog_city(session: AsyncSession, trainer_id: int, profile_city_id:
     """
     row = (
         await session.execute(
-            text(
-                """
+            text("""
                 SELECT c.id, c.name FROM trainer_cities tc JOIN cities c ON c.id = tc.city_id
                 WHERE tc.trainer_id = :tid
                 ORDER BY EXISTS (
@@ -339,8 +338,7 @@ async def _catalog_city(session: AsyncSession, trainer_id: int, profile_city_id:
                     WHERE ta.trainer_id = :tid AND a.city_id = c.id AND COALESCE(ta.is_public, true)
                 ) DESC, c.id
                 LIMIT 1
-                """
-            ),
+                """),
             {"tid": int(trainer_id)},
         )
     ).first()
@@ -359,13 +357,11 @@ async def _glide_since(session: AsyncSession, trainer_id: int) -> date | None:
 
     first = (
         await session.execute(
-            text(
-                f"""
+            text(f"""
                 SELECT MIN(s.slot_date) FROM bookings b JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid AND b.status = 'completed' AND NOT COALESCE(b.is_sandbox, false)
                   AND {sql_booking_not_self(trainer_id_expr=":tid")}
-                """
-            ),
+                """),
             {"tid": int(trainer_id)},
         )
     ).scalar()
@@ -377,15 +373,13 @@ async def _rentals(session: AsyncSession, arena_ids: Sequence[int]) -> dict[int,
     if not arena_ids:
         return {}
     rows = await session.execute(
-        text(
-            """
+        text("""
             SELECT arena_id, MIN(price_rental_minor)
             FROM ice_sessions
             WHERE arena_id = ANY(:ids) AND status = 'active' AND price_rental_minor > 0
               AND ends_at_utc > NOW() AND starts_at_utc < NOW() + INTERVAL '14 days'
             GROUP BY arena_id
-            """
-        ),
+            """),
         {"ids": list(arena_ids)},
     )
     return {int(a): int(m) for a, m in rows.fetchall() if m is not None}
@@ -396,15 +390,13 @@ async def _arena_peer_counts(session: AsyncSession, trainer_id: int, arena_ids: 
     if not arena_ids:
         return {}
     rows = await session.execute(
-        text(
-            f"""
+        text(f"""
             SELECT ta.arena_id, COUNT(DISTINCT t.id)
             FROM trainer_arenas ta JOIN trainers t ON t.id = ta.trainer_id
             WHERE ta.arena_id = ANY(:ids) AND COALESCE(ta.is_public, true) AND t.id <> :tid
               AND t.status::text <> 'deactivated' AND {CATALOG_LISTED_SQL}
             GROUP BY ta.arena_id
-            """
-        ),
+            """),
         {"ids": list(arena_ids), "tid": int(trainer_id)},
     )
     return {int(a): int(n) for a, n in rows.fetchall()}
@@ -412,6 +404,8 @@ async def _arena_peer_counts(session: AsyncSession, trainer_id: int, arena_ids: 
 
 async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction: Direction) -> list[dict[str, Any]]:
     """Другие тренеры направления в городе — по правилу каталога: услуга направления и (цена или каток)."""
+    from src.application.site_trainer_catalog import direction_min_price, services_by_direction
+    from src.application.trainer_min_price import load_pass_offers
     from src.application.trainer_use_cases import list_active_trainers_for_client
     from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
@@ -421,10 +415,10 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
     if not bodies:
         return []
     await load_service_directions(session, [s for b in bodies for s in b.get("services") or []])
+    passes = await load_pass_offers(session, [int(b["id"]) for b in bodies])
     ids = [int(b["id"]) for b in bodies]
     rows = await session.execute(
-        text(
-            f"""
+        text(f"""
             SELECT ta.trainer_id, a.name FROM trainer_arenas ta JOIN arenas a ON a.id = ta.arena_id
             JOIN cities c ON c.id = a.city_id
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -432,8 +426,7 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
               AND a.merged_into_arena_id IS NULL AND COALESCE(a.venue_type, 'ice') = 'ice'
               AND {PUBLIC_ARENA_VISIBLE_SQL}
             ORDER BY ta.trainer_id, a.sort_order NULLS LAST, a.id
-            """
-        ),
+            """),
         {"ids": ids, "city": int(city_id), **public_scope_params()},
     )
     arenas: dict[int, list[str]] = {}
@@ -442,14 +435,14 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
             arenas.setdefault(int(tid), []).append(str(name).strip())
     out: list[dict[str, Any]] = []
     for body in bodies:
-        svcs = [s for s in body.get("services") or [] if service_direction(s) == direction.key]
+        by_dir = services_by_direction(body.get("services") or [])
+        svcs = by_dir.get(direction.key) or []
         if not svcs:
             continue
         tid = int(body["id"])
-        cents = sorted({c for s in svcs for c in ([*_tier_cents(s).values()] or [_min_cents(s) or 0]) if c > 0})
-        cur = str(svcs[0].get("currency_code") or "BYN")
+        found = direction_min_price({"services_by_dir": by_dir, "passes": passes.get(tid, [])}, direction)
         where = arenas.get(tid, [])
-        if not cents and not where:
+        if not found and not where:
             continue
         name = trainer_name(body)
         out.append(
@@ -458,14 +451,16 @@ async def _peers(session: AsyncSession, trainer_id: int, city_id: int, direction
                 "initial": trainer_initial(name),
                 "photo_url": trainer_photo_url(body),
                 "path": trainer_path(tid, name),
-                "price": (("" if len(cents) == 1 else "от\u00a0") + _money(cents[0], cur))
-                if cents
-                else "цену уточните",
+                "price": (f"от\u00a0{_money(*found)}" if found else "цену уточните"),
                 "where": (
-                    where[0] if len(where) == 1 else f"{len(where)} {plural_ru(len(where), 'каток', 'катка', 'катков')}"
-                )
-                if where
-                else "",
+                    (
+                        where[0]
+                        if len(where) == 1
+                        else f"{len(where)} {plural_ru(len(where), 'каток', 'катка', 'катков')}"
+                    )
+                    if where
+                    else ""
+                ),
             }
         )
         if len(out) >= PEERS_SHOWN:
@@ -482,16 +477,14 @@ async def _load_reviews(session: AsyncSession, trainer_id: int) -> list[dict[str
     from src.application.review_moderation_use_cases import display_name
 
     rows = await session.execute(
-        text(
-            """
+        text("""
             SELECT r.rating, r.review_text, r.created_at, c.first_name, c.last_name
             FROM trainer_ratings r
             LEFT JOIN clients c ON c.telegram_id = r.client_telegram_id
             WHERE r.trainer_id = :tid AND r.review_status = 'approved' AND btrim(COALESCE(r.review_text, '')) <> ''
             ORDER BY r.created_at DESC, r.id DESC
             LIMIT :lim
-            """
-        ),
+            """),
         {"tid": int(trainer_id), "lim": REVIEWS_SHOWN},
     )
     out = []
@@ -499,7 +492,7 @@ async def _load_reviews(session: AsyncSession, trainer_id: int) -> list[dict[str
         out.append(
             {
                 "rating": max(1, min(5, int(rating))),
-                "text": str(body).strip()[:REVIEW_PREVIEW_CHARS * 4],
+                "text": str(body).strip()[: REVIEW_PREVIEW_CHARS * 4],
                 "date": created.date() if created else None,
                 "name": display_name(first, last),
             }
@@ -513,7 +506,7 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
     from src.application.arena_public_use_cases import _trainer_windows_on_arena
     from src.application.style_b import b_photo_url, media_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
-    from src.application.trainer_min_price import enrich_min_session_price
+    from src.application.trainer_min_price import enrich_min_session_price, trainer_min_session_offer
     from src.application.trainer_use_cases import get_trainer
     from src.shared.notification_hours import NOTIFICATION_TZ
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
@@ -526,7 +519,7 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         await session.execute(text("SELECT telegram_username FROM trainers WHERE id = :id"), {"id": int(trainer_id)})
     ).scalar()
     body = sanitize_trainer_for_public_catalog(raw)
-    await enrich_min_session_price(session, [body])
+    offers = await enrich_min_session_price(session, [body])
     services = [dict(s) for s in body.get("services") or []]
     await load_service_directions(session, services)
     directions, other = group_services(services)
@@ -562,11 +555,16 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         a["rental_minor"] = rentals.get(a["id"])
         a["peers"] = peer_counts.get(a["id"], 0)
     city = await _catalog_city(session, int(trainer_id), profile.get("city_id"))
+    if city and listed:
+        warn_if_no_locative(str(city["name"]), where="trainer page")
     primary = direction_by_key(directions[0]["key"]) if directions else None
     peers = await _peers(session, int(trainer_id), city["id"], primary) if city and primary and listed else []
     photos = body.get("photos") or []
     big_photo = b_photo_url((photos[0] or {}).get("file_key")) if photos else None
     first_name = str(profile.get("first_name") or "").strip()
+    min_offer = trainer_min_session_offer(
+        {"services": body.get("services") or [], "passes": offers.get(int(trainer_id), [])}
+    )
     from src.shared.phone_guard import sanitize_public_phone
 
     return {
@@ -576,6 +574,12 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
         "initial": trainer_initial(name),
         "photo_url": big_photo or trainer_photo_url(body),
         "line": trainer_line(body),
+        "min_price": (
+            (int(body["min_session_price_cents"]), str(body.get("min_session_price_currency") or "BYN"))
+            if body.get("min_session_price_cents")
+            else None
+        ),
+        "min_price_basis": min_offer[2] if min_offer else None,
         "listed": listed,
         "can_book": can_book,
         "contact_url": contact_url(int(trainer_id), username, listed=listed),
@@ -605,24 +609,19 @@ async def load_trainer_page(session: AsyncSession, trainer_id: int) -> dict[str,
     }
 
 
-async def sitemap_rows(session: AsyncSession) -> list[str]:
-    """Пути ``/t/…`` всех, кто в каталоге — тот же предикат, что у списка тренеров в Mini App."""
-    rows = (
-        await session.execute(
-            text(
-                f"""
-                SELECT t.id, COALESCE(p.first_name, ''), COALESCE(p.last_name, '')
+async def sitemap_rows(session: AsyncSession) -> list[tuple[str, datetime | None]]:
+    """Пути ``/t/…`` всех, кто в каталоге, и дата правки анкеты для lastmod."""
+    rows = (await session.execute(text(f"""
+                SELECT t.id, COALESCE(p.first_name, ''), COALESCE(p.last_name, ''), p.updated_at
                 FROM trainers t LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
                 WHERE {CATALOG_LISTED_SQL}
                 ORDER BY t.id
-                """
-            )
-        )
-    ).all()
-    out = []
-    for tid, first, last in rows:
+                """))).all()
+    out: list[tuple[str, datetime | None]] = []
+    for tid, first, last, updated_at in rows:
         name = f"{str(first).strip()} {str(last).strip()}".strip() or "Тренер"
-        out.append(trainer_path(int(tid), name))
+        stamp = updated_at if isinstance(updated_at, datetime) else None
+        out.append((trainer_path(int(tid), name), stamp))
     return out
 
 
@@ -712,9 +711,7 @@ def app_url(
     return link
 
 
-def intent_app_url(
-    base_url: str, page: Mapping[str, Any], intent: str, *, via: str | None = None
-) -> str | None:
+def intent_app_url(base_url: str, page: Mapping[str, Any], intent: str, *, via: str | None = None) -> str | None:
     """«Сохранить» / «Оставить заявку» → Mini App выполняет действие при открытии карточки (``_i_save`` / ``_i_request``).
 
     Только тренеру из каталога: по личной ссылке тренера и у скрытого карточка Mini App недоступна —
@@ -793,34 +790,150 @@ def primary_cta(
 # ── SEO ──────────────────────────────────────────────────────────────
 
 
+def trainer_place_phrase(city_name: str, topic: str = "") -> str:
+    """«тренер по катанию на коньках в Минске»; с ``topic`` — «тренер по фигурному катанию в Минске».
+
+    Город — публичное имя в предложном: «Санкт-Петербург/ЛО» → «в Санкт-Петербурге».
+    """
+    raw = str(city_name or "").strip()
+    public = format_public_name(raw)
+    loc = city_locative(public) or city_locative(raw)
+    core = f"тренер по {topic}" if topic else "тренер по катанию на коньках"
+    if loc:
+        return f"{core} в {loc}"
+    return core
+
+
+def page_heading(page: Mapping[str, Any]) -> str:
+    """H1 и основа title: «Имя — тренер по катанию на коньках в Минске»."""
+    return f"{page['name']} — {trainer_place_phrase(str(page.get('city_name') or ''))}"
+
+
+def _single_topic(page: Mapping[str, Any]) -> str:
+    """«фигурному катанию», если у тренера одно направление и у него есть свой предмет; иначе пусто."""
+    keys = {str(d.get("key")) for d in page.get("directions") or []}
+    if len(keys) != 1:
+        return ""
+    return next((d.topic for d in DIRECTIONS if d.key in keys), "")
+
+
 def page_title(page: Mapping[str, Any]) -> str:
-    name = str(page["name"])
-    city = str(page.get("city_name") or "")
-    first_service = (page.get("services") or [{}])[0].get("name") if page.get("services") else ""
-    candidates = [
-        f"{name} — тренер{', ' + city if city else ''} · Glideclub",
-        f"{name} — тренер · Glideclub",
-        name,
-    ]
-    if first_service:
-        candidates.insert(0, f"{name} — {first_service}{', ' + city if city else ''} · Glideclub")
-    for c in candidates:
-        if len(c) <= TITLE_LIMIT:
-            return c
-    return candidates[-1][:TITLE_LIMIT]
+    """«Имя — тренер по фигурному катанию в Минске» с одним направлением, общая фраза — с несколькими.
+
+    К title добавляется « · Glideclub», только если вся строка помещается в 60 знаков.
+    """
+    place = trainer_place_phrase(str(page.get("city_name") or ""), _single_topic(page))
+    base = f"{page['name']} — {place}"
+    branded = f"{base} · Glideclub"
+    return branded if len(branded) <= TITLE_LIMIT else base
+
+
+def _seo_directions(page: Mapping[str, Any]) -> list[str]:
+    keys = {str(d.get("key")) for d in page.get("directions") or []}
+    return [d.seo for d in DIRECTIONS if d.key in keys and d.seo]
+
+
+def _join_and(parts: Sequence[str]) -> str:
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    return ", ".join(parts[:-1]) + " и " + parts[-1]
+
+
+def _ice_arena_names(page: Mapping[str, Any]) -> list[str]:
+    """Только лёд. Лыжероллерная трасса и прочие площадки без льда в сниппет не попадают."""
+    names: list[str] = []
+    for arena in page.get("arenas") or []:
+        if arena.get("is_ice") is False:
+            continue
+        name = format_public_name(str(arena.get("name") or "").strip())
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _price_from(page: Mapping[str, Any]) -> str:
+    """«От 25 BYN в группе» / «От 40 BYN по абонементу» / «От 50 BYN за занятие» — как на карточке каталога."""
+    from src.application.site_trainer_catalog import offer_phrase
+    from src.application.trainer_min_price import BASIS_SINGLE
+
+    price = page.get("min_price")
+    if not price or not price[0]:
+        return ""
+    return offer_phrase((int(price[0]), str(price[1]), str(page.get("min_price_basis") or BASIS_SINGLE)), capital=True)
 
 
 def page_description(page: Mapping[str, Any]) -> str:
-    bits = [str(page["name"]), "тренер"]
-    arenas = [a["name"] for a in page.get("arenas") or []]
-    if arenas:
-        bits.append("занимается: " + ", ".join(arenas[:3]))
-    line = str(page.get("line") or "")
-    if line:
-        bits.append(line.replace(" ", " "))
-    tail = "Запись в Telegram, ничего не устанавливая." if page.get("can_book") else "Написать тренеру в Telegram."
-    text_ = ". ".join([" — ".join(bits[:2])] + bits[2:]) + ". " + tail
-    return text_ if len(text_) <= DESCRIPTION_LIMIT else text_[: DESCRIPTION_LIMIT - 1].rstrip() + "…"
+    """«Имя — тренер … в Минске: с нуля. Каток: ТЦ Замок. От 25 BYN за занятие, запись в Telegram.»
+
+    Не влезает — сначала второй каток, потом цена, потом лишние направления.
+    Каток либо целиком, либо никак: имя не режем и кавычки в названии не рвём.
+    «запись в Telegram» остаётся всегда.
+    """
+    name = str(page["name"]).strip()
+    phrase = trainer_place_phrase(str(page.get("city_name") or ""))
+    dirs = _seo_directions(page)
+    arenas = _ice_arena_names(page)
+    price = _price_from(page)
+
+    def head(n_dirs: int) -> str:
+        if n_dirs:
+            return f"{name} — {phrase}: {_join_and(dirs[:n_dirs])}."
+        return f"{name} — {phrase}."
+
+    def rink(n: int) -> str:
+        if n <= 0 or n > len(arenas):
+            return ""
+        if n == 1:
+            return f" Каток: {arenas[0]}."
+        return f" Катки: {arenas[0]}, {arenas[1]}."
+
+    def tail(with_price: bool) -> str:
+        if with_price and price:
+            return f" {price}, запись в Telegram."
+        return " Запись в Telegram."
+
+    steps: list[tuple[int, int, bool]] = []
+    n_all = len(dirs)
+    # Сначала второй каток, потом цена. Два катка без цены оставляем, только если цены нет вовсе.
+    for n_dirs in range(n_all, -1, -1):
+        if len(arenas) >= 2:
+            steps.append((n_dirs, 2, True))
+        if arenas:
+            steps.append((n_dirs, 1, True))
+        if len(arenas) >= 2 and not price:
+            steps.append((n_dirs, 2, False))
+        if arenas:
+            steps.append((n_dirs, 1, False))
+        steps.append((n_dirs, 0, True))
+        steps.append((n_dirs, 0, False))
+    for n_dirs, n_arenas, with_price in steps:
+        if with_price and not price:
+            continue
+        cand = head(n_dirs) + rink(n_arenas) + tail(with_price)
+        if len(cand) <= DESCRIPTION_LIMIT:
+            return cand
+
+    ending = " Запись в Telegram."
+    room = DESCRIPTION_LIMIT - len(ending)
+    shortened = head(0)
+    if len(shortened) > room:
+        shortened = shortened[:room].rsplit(" ", 1)[0].rstrip(" ,;:—-.")
+        shortened = f"{shortened}."
+    return shortened + ending
+
+
+def _jsonld_description(text: str) -> str:
+    """Краткое bio для JSON-LD: без @-ников, обрезка по слову."""
+    import re
+
+    cleaned = re.sub(r"@[\w\d_]+", "", text)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    if len(cleaned) <= 300:
+        return cleaned
+    cut = cleaned[:300].rsplit(" ", 1)[0].rstrip(" ,;:—-.")
+    return cut or cleaned[:300]
 
 
 def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:
@@ -829,22 +942,23 @@ def jsonld(page: Mapping[str, Any], *, canonical: str, base_url: str) -> str:
         "@type": "Person",
         "name": page["name"],
         "url": canonical,
-        "jobTitle": "Тренер по катанию",
+        "jobTitle": trainer_place_phrase(str(page.get("city_name") or "")),
     }
     if page.get("photo_url"):
         person["image"] = _absolute(base_url, str(page["photo_url"]))
     if page.get("description"):
-        person["description"] = str(page["description"])[:300]
-    if page.get("city_name"):
-        person["address"] = {"@type": "PostalAddress", "addressLocality": page["city_name"]}
+        person["description"] = _jsonld_description(str(page["description"]))
+    locality = format_public_name(str(page.get("city_name") or ""))
+    if locality:
+        person["address"] = {"@type": "PostalAddress", "addressLocality": locality}
     places = [
         {
             "@type": "SportsActivityLocation",
-            "name": a["name"],
+            "name": format_public_name(str(a["name"])),
             "url": place_page_url(base_url=base_url, city_name=a["city_name"], slug=a["slug"]),
         }
         for a in page.get("arenas") or []
-        if a.get("slug") and a.get("city_name")
+        if a.get("slug") and a.get("city_name") and a.get("is_ice") is not False
     ]
     if places:
         person["workLocation"] = places
@@ -880,15 +994,7 @@ def write_beacon_url(page: Mapping[str, Any], *, via: str | None = None) -> str:
 
 
 def _rating_ok(page: Mapping[str, Any]) -> bool:
-    return bool(page.get("rating_avg")) and int(page.get("rating_count") or 0) >= RATING_MIN_COUNT
-
-
-def _n_ratings(n: int) -> str:
-    return f"{n} {plural_ru(n, 'оценка', 'оценки', 'оценок')}"
-
-
-def _avg(page: Mapping[str, Any]) -> str:
-    return f"{float(page['rating_avg']):.1f}".replace(".", ",")
+    return bool(trainer_rating_caption(page.get("rating_avg"), page.get("rating_count")))
 
 
 def _years(page: Mapping[str, Any]) -> int:
@@ -905,7 +1011,7 @@ def _since_text(page: Mapping[str, Any]) -> str:
 
 def _arenas_check(page: Mapping[str, Any]) -> str:
     """Галочка «Каток: …» — ледовые катки из анкеты (лыжероллерная трасса — не каток)."""
-    names = [str(a["name"]) for a in page.get("arenas") or [] if a.get("is_ice")]
+    names = [format_public_name(str(a["name"])) for a in page.get("arenas") or [] if a.get("is_ice")]
     if not names:
         return ""
     if len(names) > 2:
@@ -1043,7 +1149,9 @@ def _price_card(page: Mapping[str, Any], *, app: str | None, cta: tuple[str, str
             req = page.get("request_url")
             if req:
                 # Слотов нет: главное действие — заявка (бот ведёт её тренеру); «следующие недели» — тихой ссылкой.
-                nowin = "Индивидуального свободного времени на этой неделе нет — оставьте заявку, тренер предложит своё."
+                nowin = (
+                    "Индивидуального свободного времени на этой неделе нет — оставьте заявку, тренер предложит своё."
+                )
                 parts.append(
                     f'<p class="tp-nowin">{esc(nowin)} <a class="tp-link" href="{esc(app)}" rel="nofollow">Следующие недели — в Telegram</a></p>'
                     f'<div class="tp-act"><a class="tp-btn tp-btn--teal" href="{esc(req)}" rel="nofollow">Оставить заявку</a></div>'
@@ -1093,12 +1201,15 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
     if photo and not compact:
         media = f'<div class="tp-photo"><img src="{esc(photo)}" alt="{esc(page["name"])}" decoding="async" fetchpriority="high" /></div>'
     elif photo:
-        media = f'<img class="tp-ava" src="{esc(photo)}" alt="" width="72" height="72" decoding="async" />'
+        media = (
+            f'<img class="tp-ava" src="{esc(photo)}" alt="{esc(page["name"])}" width="72" height="72" decoding="async" />'
+        )
     else:
         media = f'<span class="tp-ava tp-ava--mono" aria-hidden="true">{esc(page["initial"])}</span>'
     years = _years(page)
     badge = f'<span class="tp-badge">Тренирует {years} {plural_ru(years, "год", "года", "лет")}</span>' if years else ""
-    head = f'{badge}<h1 class="tp-name">{esc(page["name"])}</h1>'
+    phrase = trainer_place_phrase(str(page.get("city_name") or ""))
+    head = f'{badge}<h1 class="tp-name">{esc(page["name"])}' f'<span class="tp-trade"> — {esc(phrase)}</span></h1>'
     if not compact:
         dirs = [direction_by_key(d["key"]) for d in page.get("directions") or []]
         role = " ".join(x for x in (_role_line(dirs), str(page.get("audience") or "")) if x)
@@ -1109,10 +1220,13 @@ def _hero(page: Mapping[str, Any], card: str, *, compact: bool) -> str:
             head += f'<p class="tp-bio">{esc(bio)}</p>'
         if _rating_ok(page):
             tag, href = ("a", ' href="#reviews"') if _reviews_ready(page) else ("p", "")
-            head += (
-                f'<{tag} class="tp-rate"{href}><i aria-hidden="true">★</i>{esc(_avg(page))} '
-                f"<span>· {esc(_n_ratings(int(page['rating_count'])))}</span></{tag}>"
-            )
+            parts = trainer_rating_parts(page.get("rating_avg"), page.get("rating_count"))
+            if parts:
+                score, label = parts
+                head += (
+                    f'<{tag} class="tp-rate"{href}><i aria-hidden="true">★</i>{esc(score)} '
+                    f"<span>· {esc(label)}</span></{tag}>"
+                )
         since = _since_text(page)
         if since:
             head += f'<p class="tp-since">{esc(since)}</p>'
@@ -1203,7 +1317,9 @@ def _price_rows(prices: Sequence[tuple[str, str]]) -> str:
     head, rest = list(prices[:2]), list(prices[2:])
     out = f'<dl class="tp-ptiles">{rows(head)}</dl>'
     if rest:
-        out += f'<details class="tp-pmore"><summary>Другие составы · {len(rest)}</summary><dl>{rows(rest)}</dl></details>'
+        out += (
+            f'<details class="tp-pmore"><summary>Другие составы · {len(rest)}</summary><dl>{rows(rest)}</dl></details>'
+        )
     return out
 
 
@@ -1233,7 +1349,9 @@ def _card_act(page: Mapping[str, Any], app: str | None, via: str | None) -> str:
         cls = "tp-go tp-go--quiet" if req else "tp-go"
         btns.append(f'<a class="{cls}" href="{esc(contact)}"{_write_attrs(page, via)}>Написать тренеру</a>')
     if phone and not req:
-        btns.append(f'<button type="button" class="tp-go tp-go--quiet" data-copy="{esc(phone)}">Скопировать телефон</button>')
+        btns.append(
+            f'<button type="button" class="tp-go tp-go--quiet" data-copy="{esc(phone)}">Скопировать телефон</button>'
+        )
     if not btns:
         return ""
     return f'<div class="tp-cardact"><span>Остались вопросы?</span>{"".join(btns)}</div>'
@@ -1292,16 +1410,23 @@ def _reviews_html(page: Mapping[str, Any]) -> str:
         return ""
     head = ""
     if _rating_ok(page):
-        avg = float(page["rating_avg"])
+        avg = trainer_rating_score(page.get("rating_avg")) or 0
+        parts = trainer_rating_parts(page.get("rating_avg"), page.get("rating_count"))
+        summary = trainer_rating_summary(page.get("rating_avg"), page.get("rating_count"))
         stars = "★" * max(1, min(5, round(avg)))
+        score = parts[0] if parts else ""
         head = (
-            f'<div class="tp-score"><b>{esc(_avg(page))}</b><div><i aria-hidden="true">{stars}</i>'
-            f"<span>{esc(_n_ratings(int(page['rating_count'])))}</span></div></div>"
+            f'<div class="tp-score"><b>{esc(score)}</b><div><i aria-hidden="true">{stars}</i>'
+            f"<span>{esc(summary)}</span></div></div>"
         )
     cards = []
     for r in page["reviews"]:
         d = r.get("date")
-        when = f'<time datetime="{d.isoformat()}">{d.day} {_MONTHS_GEN[d.month - 1]} {d.year}</time>' if isinstance(d, date) else ""
+        when = (
+            f'<time datetime="{d.isoformat()}">{d.day} {_MONTHS_GEN[d.month - 1]} {d.year}</time>'
+            if isinstance(d, date)
+            else ""
+        )
         body = str(r["text"])
         long_ = len(body) > 220
         cards.append(
@@ -1326,13 +1451,14 @@ def _about_html(page: Mapping[str, Any], *, ratings: bool) -> str:
     if desc:
         cards.append(f'<div class="tp-card"><h3>О тренере</h3><p class="tp-words">{esc(desc)}</p></div>')
     if ratings and _rating_ok(page) and not _reviews_ready(page):
-        n = int(page["rating_count"])
-        avg = float(page["rating_avg"])
+        avg = trainer_rating_score(page.get("rating_avg")) or 0
+        parts = trainer_rating_parts(page.get("rating_avg"), page.get("rating_count"))
+        summary = trainer_rating_summary(page.get("rating_avg"), page.get("rating_count"))
         stars = "★" * max(1, min(5, round(avg)))
-        what = f"{_n_ratings(n)} — все на 5 из 5" if avg >= 5 else f"{_n_ratings(n)}, в среднем {_avg(page)} из 5"
+        score = parts[0] if parts else ""
         cards.append(
             '<div class="tp-card"><h3>Оценки учеников</h3>'
-            f'<div class="tp-score"><b>{esc(_avg(page))}</b><div><i aria-hidden="true">{stars}</i><span>{esc(what)}</span></div></div>'
+            f'<div class="tp-score"><b>{esc(score)}</b><div><i aria-hidden="true">{stars}</i><span>{esc(summary)}</span></div></div>'
             '<p class="tp-muted">Оценить занятие можно только после того, как оно состоялось.</p></div>'
         )
     return f'<section class="tp-sec"><div class="tp-two">{"".join(cards)}</div></section>' if cards else ""
@@ -1362,8 +1488,9 @@ def _faq_html(page: Mapping[str, Any]) -> str:
     if not dirs:
         return ""
     d = direction_by_key(dirs[0]["key"])
+    cur = str(page.get("min_price")[1] if page.get("min_price") else "BYN")
     rents = [
-        (str(a["name"]), _money(int(a["rental_minor"]), "BYN"))
+        (format_public_name(str(a["name"])), _money(int(a["rental_minor"]), cur))
         for a in page.get("arenas") or []
         if a.get("rental_minor")
     ]
@@ -1406,10 +1533,11 @@ def _arenas_html(page: Mapping[str, Any], base_url: str) -> str:
             f'<img src="{esc(a["photo_url"])}" alt="" loading="lazy" decoding="async" />' if a.get("photo_url") else ""
         )
         peers = int(a.get("peers") or 0)
-        lines = f"<b>{esc(a['name'])}</b>"
+        lines = f"<b>{esc(format_public_name(str(a['name'])))}</b>"
         if peers:
             lines += f"<span>Здесь же ещё {peers} {plural_ru(peers, 'тренер', 'тренера', 'тренеров')}</span>"
-        rent = f"Прокат — {_money(int(a['rental_minor']), 'BYN')}" if a.get("rental_minor") else ""
+        cur = str(page.get("min_price")[1] if page.get("min_price") else "BYN")
+        rent = f"Прокат — {_money(int(a['rental_minor']), cur)}" if a.get("rental_minor") else ""
         href = (
             place_page_url(base_url=base_url, city_name=a["city_name"], slug=a["slug"])
             if a.get("slug") and a.get("city_name")
@@ -1441,7 +1569,8 @@ def _peers_html(page: Mapping[str, Any]) -> str:
     minis = []
     for p in peers:
         img = (
-            f'<img src="{esc(p["photo_url"])}" alt="" loading="lazy" decoding="async" />'
+            f'<img src="{esc(p["photo_url"])}" alt="{esc(p.get("name") or "")}" width="56" height="56" '
+            f'loading="lazy" decoding="async" />'
             if p.get("photo_url")
             else f'<span class="tp-mini__mono" aria-hidden="true">{esc(p["initial"])}</span>'
         )
@@ -1557,7 +1686,7 @@ def render_trainer_page(
     if city:
         crumbs_html = (
             '<nav class="tp-crumbs" aria-label="Навигация">'
-            f'<a href="/c/{esc(city_slug(city["name"]))}">{esc(city["name"])}</a> › '
+            f'<a href="/c/{esc(city_slug(city["name"]))}">{esc(format_public_name(str(city["name"])))}</a> › '
             f'<a href="{esc(catalog_path(city["name"]))}">Тренеры</a> › <span>{esc(page["name"])}</span></nav>'
         )
     card = _price_card(page, app=app, cta=cta, via=via)
@@ -1582,7 +1711,7 @@ def render_trainer_page(
     )
     crumbs = [("Glideclub", f"{base}/")]
     if city:
-        crumbs.append((str(city["name"]), f"{base}/c/{city_slug(str(city['name']))}"))
+        crumbs.append((format_public_name(str(city["name"])), f"{base}/c/{city_slug(str(city['name']))}"))
         crumbs.append(("Тренеры", f"{base}{catalog_path(str(city['name']))}"))
     crumbs.append((str(page["name"]), canonical))
     body += breadcrumb_script(canonical, crumbs)
@@ -1605,6 +1734,7 @@ def render_trainer_page(
             "__OG_IMAGE__": esc(og_image),
             "__LANG__": "ru",
             "__OG_LOCALE__": "ru_RU",
+            "__OG_TYPE__": "profile",
             "__ROBOTS__": "index, follow" if page["listed"] else "noindex, follow",
             "__HEAD_EXTRA__": f'<link rel="stylesheet" href="/static/share/trainer-page.css?v={TRAINER_PAGE_STYLE_VERSION}" />',
             "__JSONLD__": jsonld(page, canonical=canonical, base_url=base_url) if page["listed"] else "{}",

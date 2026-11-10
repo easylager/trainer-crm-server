@@ -63,6 +63,30 @@ def test_min_session_price_takes_tariffs_group_and_pass() -> None:
     assert trainer_min_session_price({"services": [{"price_cents": 150000, "currency_code": "RUB"}]}) == (150000, "RUB")
 
 
+def test_min_session_offer_says_what_the_minimum_is() -> None:
+    from src.application.trainer_min_price import (
+        BASIS_GROUP,
+        BASIS_PASS,
+        BASIS_SINGLE,
+        trainer_min_session_offer,
+    )
+
+    svc = {"service_id": 1, "currency_code": "BYN", "price_cents": 5000, "group_price_cents": 2500}
+    assert trainer_min_session_offer({"services": [svc]}) == (2500, "BYN", BASIS_GROUP)
+    every = {"per_session_cents": 4000, "service_ids": None}
+    assert trainer_min_session_offer({"services": [{**svc, "group_price_cents": None}], "passes": [every]}) == (
+        4000,
+        "BYN",
+        BASIS_PASS,
+    )
+    # Равная цена — обычное занятие честнее группового, групповое — абонемента.
+    assert trainer_min_session_offer({"services": [{**svc, "group_price_cents": 5000}]}) == (5000, "BYN", BASIS_SINGLE)
+    assert trainer_min_session_offer(
+        {"services": [{**svc, "price_cents": 6000}], "passes": [{"per_session_cents": 2500, "service_ids": None}]}
+    ) == (2500, "BYN", BASIS_GROUP)
+    assert trainer_min_session_offer({"services": [], "passes": [every]}) is None
+
+
 def test_trainer_line_shows_cheapest_session() -> None:
     trainer = {
         "services": [{"service_name": "Обучение катанию «с нуля»", "price_cents": 5500}],
@@ -73,6 +97,9 @@ def test_trainer_line_shows_cheapest_session() -> None:
     assert trainer_line(trainer) == "Обучение катанию «с нуля» · от\u00a041,87\u00a0BYN за\u00a0занятие"
     assert trainer_line({"services": [{"service_name": "Фигурное катание"}], "min_session_price_cents": None}) == "Фигурное катание"
     assert trainer_line({}) == ""
+    rated = {**trainer, "profile": {"rating_avg": 5, "rating_count": 2}}
+    assert trainer_line(rated).endswith("★ 5,0 · 2 оценки")
+    assert "★" not in trainer_line({**trainer, "profile": {"rating_avg": 5, "rating_count": 0}})
 
 
 def test_trainer_initial_skips_emoji() -> None:
@@ -143,21 +170,25 @@ async def _trainer_on(
 
 
 @pytest.mark.asyncio
-async def test_place_page_trainers_are_one_learn_block_not_a_list(app_use_test_db, db_session) -> None:
-    """TASK-354: список тренеров на катке заменён единым блоком «Учиться с тренером» → каталог."""
+async def test_place_page_lists_trainers_with_site_links(app_use_test_db, db_session) -> None:
+    """На катке — прямые ссылки ``/t/…`` и каталог тренеров; без learn-блока при наличии тренеров."""
     place = await _place(db_session)
     name = f"Анна{uuid.uuid4().hex[:4]}"
     async with _client() as client:
         tid = await _trainer_on(db_session, client, place, first_name=name)
         html = (await client.get(place["path"])).text
 
-    block = re.search(r'<section class="b-sec b-learn-sec" id="learn">(.*?)</section>', html, re.S)
-    assert block, "нет блока «Учиться с тренером»"
-    assert f"trainers/{tid}/a_list.jpg" in block.group(1)  # лицо тренера
-    assert f'href="/c/{city_slug(place["city_name"])}/trenery?arena={place["arena_id"]}"' in block.group(1)
-    assert f"{name} Тренерова" not in html and "b-row--coach" not in html
+    trainers = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', html, re.S)
+    assert trainers, "нет раздела «Тренеры»"
+    block = trainers.group(1)
+    assert f"{name} Тренерова" in block
+    assert f"trainers/{tid}/a_list.jpg" in block
+    from src.application.site_trainer_page import trainer_path
+
+    assert f'href="{trainer_path(tid, f"{name} Тренерова")}?via=p{place["arena_id"]}"' in block
+    assert f'href="/c/{city_slug(place["city_name"])}/trenery?arena={place["arena_id"]}"' in block
+    assert 'id="learn"' not in html
     assert "startapp=trainer_" not in html
-    # Список заменял счётчик «Здесь работает 1 тренер» в «На месте» — блок тоже.
     assert "Здесь работает" not in html
 
 
@@ -232,3 +263,13 @@ async def test_pass_offers_floor_scope_and_skip_inactive(app_use_test_db, db_ses
         tid: [{"per_session_cents": 4187, "service_ids": None}, {"per_session_cents": 3333, "service_ids": (sid,)}]
     }
     assert await load_pass_offers(db_session, []) == {}
+
+
+def test_trainer_line_names_the_price_basis_like_the_catalog() -> None:
+    from src.application.site_trainers import trainer_line
+
+    base = {"services": [{"service_name": "С нуля"}], "min_session_price_cents": 2500, "min_session_price_currency": "RUB"}
+    assert trainer_line({**base, "min_session_price_basis": "single"}).endswith("от 25 руб. за занятие")
+    assert trainer_line({**base, "min_session_price_basis": "group"}).endswith("от 25 руб. в группе")
+    assert trainer_line({**base, "min_session_price_basis": "pass"}).endswith("от 25 руб. по абонементу")
+    assert trainer_line(base).endswith("за занятие")

@@ -66,13 +66,17 @@
   }
 
   function sideButton(m, side, colors, mine) {
-    var sel = mine && mine.side === side;
+    var cs = K.coin && K.coin.side(m, side); // бросок монеты идёт: кнопка рисуется по его кадру, а не по ходу
+    var sel = cs ? cs.on : mine && mine.side === side;
     return h('button', {
       type: 'button',
-      class: 'kk-side' + (sel ? ' is-on' : ''),
+      class: 'kk-side' + (sel ? ' is-on' : '') + (cs ? cs.cls : ''),
       'aria-pressed': sel ? 'true' : 'false',
       style: sel ? 'background:' + colors[side] : '',
-      onclick: function () { K.pickSide(m, side); },
+      onclick: function () {
+        if (K.coin && K.coin.busy(m)) return;
+        K.pickSide(m, side);
+      },
       text: name(m[side]),
     });
   }
@@ -140,11 +144,15 @@
         movedNote(m),
         h('section', { class: 'kk-card kk-card--play' }, [
           K.sticker(m.race_final ? 'ПОСЛЕДНИЙ МАТЧ МЕСЯЦА' : mine ? 'ХОД СДЕЛАН' : 'КТО КОГО?'),
-          h('div', { class: 'kk-q' }, [
-            h('span', { class: 'kk-q__t' }, [S.questionLine(mine, team), doubled ? h('span', { class: 'kk-tag kk-tag--inline', text: 'с козырем' }) : null]),
-            h('span', { class: 'kk-sub', text: sub }),
+          h('div', { class: 'kk-qr' }, [
+            h('div', { class: 'kk-q' }, [
+              h('span', { class: 'kk-q__t' }, [S.questionLine(mine, team), doubled ? h('span', { class: 'kk-tag kk-tag--inline', text: 'с козырем' }) : null]),
+              h('span', { class: 'kk-sub', text: sub }),
+            ]),
+            K.coin ? K.coin.button(m) : null,
           ]),
           h('div', { class: 'kk-two' }, [sideButton(m, 'home', colors, mine), sideButton(m, 'away', colors, mine)]),
+          K.coin ? K.coin.panel(m) : null,
           h('button', { type: 'button', class: 'kk-mini kk-mini--wide', onclick: function () { openScore(m); } }, [mine && mine.home_score != null ? 'Изменить счёт ' + mine.home_score + ':' + mine.away_score : 'Угадать точный счёт']),
           h('button', {
             type: 'button',
@@ -163,6 +171,7 @@
   }
 
   function openScore(m) {
+    if (K.coin && K.coin.busy(m)) return; // монета ещё выбирает счёт
     var mine = m.my_pick || {};
     var home = mine.home_score != null ? mine.home_score : mine.side === 'home' ? 3 : 1;
     var away = mine.away_score != null ? mine.away_score : mine.side === 'away' ? 3 : 1;

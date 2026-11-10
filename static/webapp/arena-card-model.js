@@ -1378,6 +1378,16 @@
     return bits.join(' · ');
   }
 
+  function trainerRatingCaption(avg, count) {
+    var api =
+      typeof module === 'object' && module.exports && typeof require === 'function'
+        ? require('./ru-text.js')
+        : typeof globalThis !== 'undefined'
+          ? globalThis.RuText
+          : null;
+    return api && api.trainerRatingCaption ? api.trainerRatingCaption(avg, count) : '';
+  }
+
   function yearsWord(n) {
     var m10 = n % 10;
     var m100 = n % 100;
@@ -1395,8 +1405,8 @@
     trainer = trainer || {};
     opts = opts || {};
     var p = trainer.profile || {};
-    var count = Number(p.rating_count) || 0;
-    var rate = count > 0 && p.rating_avg != null ? Number(p.rating_avg).toFixed(1).replace('.', ',') + ' · ' + count : '';
+    var full = trainerRatingCaption(p.rating_avg, p.rating_count);
+    var rate = full ? full.replace(/^★ /, '') : '';
     var names = (trainer.services || [])
       .map(function (s) { return String(s.service_name || s.name || '').trim(); })
       .filter(Boolean);

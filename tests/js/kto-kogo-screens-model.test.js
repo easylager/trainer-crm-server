@@ -380,7 +380,7 @@ describe('карточка болельщика', () => {
 });
 
 describe('слова игры', () => {
-  const FILES = ['kto-kogo-model.js', 'kto-kogo-screens-model.js', 'kto-kogo.js', 'kto-kogo-views.js', 'kto-kogo-hub-cards.js', 'kto-kogo-board.js', 'kto-kogo-leagues.js', 'kto-kogo-boot.js'];
+  const FILES = ['kto-kogo-model.js', 'kto-kogo-screens-model.js', 'kto-kogo.js', 'kto-kogo-views.js', 'kto-kogo-hub-cards.js', 'kto-kogo-board.js', 'kto-kogo-leagues.js', 'kto-kogo-matches.js', 'kto-kogo-boot.js'];
   const BANNED = /ставк|коэффициент|прогноз|пари\b|выигрыш|букмекер|банк\b|ставь|поставить|срок/i;
   it('в строках игроку нет азартных слов', () => {
     for (const f of FILES) {
@@ -470,5 +470,32 @@ describe('таблица без периода в аргументах (повт
     const view = { players_with_points: 1, me: { rank: 1 }, to_crown: 0 };
     assert.equal(S.tableCrownLine(view, null, undefined, 'сезон 2026/27'), S.tableCrownLine(view, null, 'season', 'сезон 2026/27'));
     assert.deepEqual(S.fewPlayers(view, null, undefined), S.fewPlayers(view, null, 'season'));
+  });
+});
+
+describe('срок формы «Новая лига» (TASK-362)', () => {
+  const items = [
+    { term: 'season', starts_at: '2026-11-09T21:00:00Z', ends_at: '2027-04-30T21:00:00Z', monthly_crowns: true },
+    { term: 'weeks4', starts_at: '2026-11-09T21:00:00Z', ends_at: '2026-12-07T21:00:00Z', monthly_crowns: false },
+  ];
+  const opts = { items, season_ends_at: '2027-04-30T21:00:00Z' };
+
+  it('пока сроки не загружены, выбор не трогаем (раньше форма уходила на «Свои даты»)', () => {
+    assert.equal(S.settleTerm('season', null), 'season');
+    assert.equal(S.settleTerm('season', undefined), 'season');
+  });
+
+  it('выбор из списка сохраняется', () => {
+    assert.equal(S.settleTerm('season', opts), 'season');
+    assert.equal(S.settleTerm('weeks4', opts), 'weeks4');
+    assert.equal(S.settleTerm('dates', opts), 'dates');
+  });
+
+  it('выбранного окна уже нет — первый открытый срок', () => {
+    assert.equal(S.settleTerm('playoff', opts), 'season');
+  });
+
+  it('открытых сроков нет совсем — остаются «Свои даты»', () => {
+    assert.equal(S.settleTerm('season', { items: [], season_ends_at: '2027-04-30T21:00:00Z' }), 'dates');
   });
 });

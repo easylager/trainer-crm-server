@@ -29,11 +29,13 @@ from src.application.hockey_cards import (
 )
 from src.application.hockey_match_share import card_image_url, match_link, match_share_payload, when_phrase
 from src.application.hockey_cards import match_card_version
+from src.application.hockey_league_images import image_urls
 from src.application.hockey_leagues import league_preview
 from src.application.hockey_races import crown_card_data
 from src.application.hockey_matches import STATUS_FINAL, get_match
 from src.application.hockey_share import league_card
 from src.application.ice_company.service import minsk_arena
+from src.infrastructure import s3
 from src.infrastructure.db.models import CLIENT_SHARE_KIND_PLACE
 from src.shared.config import Settings
 
@@ -45,7 +47,9 @@ async def get_public_hockey_league(code: str, session: AsyncSession = Depends(ge
     preview = await league_preview(session, code)
     if preview is None:
         raise HTTPException(status_code=404, detail="Лига не найдена")
-    return {**preview, "invite_url": invite_url_for_code(preview["invite_code"])}
+    image_key = preview.pop("image_key", None)  # адрес в хранилище наружу не отдаём — только публичные ссылки
+    url, thumb = image_urls(image_key)
+    return {**preview, "invite_url": invite_url_for_code(preview["invite_code"]), "image_url": url, "image_thumb_url": thumb}
 
 
 @router.get("/hockey/matches/{match_id}/share")
@@ -143,6 +147,14 @@ async def get_crown_card_png(
     return Response(content=png, media_type="image/png", headers=_IMMUTABLE)
 
 
+def _league_photo(image_key: str | None) -> bytes | None:
+    """Картинка лиги для шапки карточки; нет файла — карточка без неё. Вызывается в потоке рисования."""
+    if not image_key:
+        return None
+    found = s3.get_file(image_key, allowed_prefixes=(s3.LEAGUE_PREFIX,))
+    return found[0] if found else None
+
+
 @card_router.get("/kk/l/{code}.png")
 async def get_league_card_png(code: str, session: AsyncSession = Depends(get_session)) -> Response:
     """Приглашение в лигу. Адрес несёт ?v= от содержимого — новая версия, новый адрес."""
@@ -150,8 +162,15 @@ async def get_league_card_png(code: str, session: AsyncSession = Depends(get_ses
     if card is None:
         raise HTTPException(status_code=404, detail="Лига не найдена")
     png = await cached_png(
-        ("league", card.name, card.members, tuple(card.names), card.next_match),
-        lambda: render_league_card(name=card.name, members=card.members, names=card.names, next_match=card.next_match),
+        ("league", card.name, card.members, tuple(card.names), card.next_match, card.image_key, card.stake_text),
+        lambda: render_league_card(
+            name=card.name,
+            members=card.members,
+            names=card.names,
+            next_match=card.next_match,
+            photo=_league_photo(card.image_key),
+            stake=card.stake_text,
+        ),
     )
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
 

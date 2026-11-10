@@ -73,7 +73,11 @@ def test_catalog_links_carry_site_catalog_source() -> None:
 
 def test_price_tiers_by_tariffs() -> None:
     def svc(*tiers, cents=None):
-        return {"currency_code": "BYN", "price_cents": cents, "price_tiers": [{"tier_kind": k, "price_cents": c} for k, c in tiers]}
+        return {
+            "currency_code": "BYN",
+            "price_cents": cents,
+            "price_tiers": [{"tier_kind": k, "price_cents": c} for k, c in tiers],
+        }
 
     nb = " "
     assert price_tiers([svc(("child", 4500), ("adult", 5000), ("adult_and_child", 6500))]) == [
@@ -96,9 +100,16 @@ def test_direction_min_price_takes_group_and_covering_passes() -> None:
             "price_tiers": [{"tier_kind": k, "price_cents": c} for k, c in tiers],
         }
 
-    zero, hock, better = direction_by_slug("s-nulya"), direction_by_slug("s-klyushkoy"), direction_by_slug("uzhe-katayus")
+    zero, hock, better = (
+        direction_by_slug("s-nulya"),
+        direction_by_slug("s-klyushkoy"),
+        direction_by_slug("uzhe-katayus"),
+    )
     t = {
-        "services_by_dir": {"zero": [svc(1, ("child", 4500), ("adult", 5000), group=2500)], "hock": [svc(4, ("adult", 5500))]},
+        "services_by_dir": {
+            "zero": [svc(1, ("child", 4500), ("adult", 5000), group=2500)],
+            "hock": [svc(4, ("adult", 5500))],
+        },
         "passes": [{"per_session_cents": 4187, "service_ids": (4,)}],
     }
     # Групповая 25 у «С нуля»; абонемент только на «Хоккейное» — у «С клюшкой», не у «С нуля».
@@ -109,7 +120,10 @@ def test_direction_min_price_takes_group_and_covering_passes() -> None:
     assert direction_min_price(only_hockey_pass, zero) == (5000, "BYN")
     assert direction_min_price(only_hockey_pass, ALL) == (4187, "BYN")
     # Абонемент без услуг — на все услуги тренера.
-    every = {"services_by_dir": {"zero": [svc(1, ("adult", 5000))]}, "passes": [{"per_session_cents": 4187, "service_ids": None}]}
+    every = {
+        "services_by_dir": {"zero": [svc(1, ("adult", 5000))]},
+        "passes": [{"per_session_cents": 4187, "service_ids": None}],
+    }
     assert direction_min_price(every, zero) == (4187, "BYN")
     # Ключи — как у вкладок Mini App.
     assert min_price_by_direction(t) == {
@@ -133,7 +147,10 @@ def test_all_tab_price_says_when_minimum_is_group_or_pass() -> None:
 
     group = {"services_by_dir": {"zero": [svc(("child", 4500), ("adult", 5000), group=3000)]}, "passes": []}
     assert "от 30\xa0BYN <small>в группе</small>" in _price_html(group, ALL)
-    by_pass = {"services_by_dir": {"zero": [svc(("adult", 5000))]}, "passes": [{"per_session_cents": 4000, "service_ids": None}]}
+    by_pass = {
+        "services_by_dir": {"zero": [svc(("adult", 5000))]},
+        "passes": [{"per_session_cents": 4000, "service_ids": None}],
+    }
     assert "от 40\xa0BYN <small>по абонементу</small>" in _price_html(by_pass, ALL)
     single = {"services_by_dir": {"zero": [svc(("child", 4500), ("adult", 5000), group=6000)]}, "passes": []}
     html = _price_html(single, ALL)
@@ -204,11 +221,15 @@ async def _city(db_session, client) -> dict:
         {"t": ids["B"], "a": other_arena},
     )
     await db_session.execute(
-        text("UPDATE trainer_profiles SET rating_avg = 5.0, rating_count = 2, experience_years = 6 WHERE trainer_id = :t"),
+        text(
+            "UPDATE trainer_profiles SET rating_avg = 5.0, rating_count = 2, experience_years = 6 WHERE trainer_id = :t"
+        ),
         {"t": ids["A"]},
     )
     await db_session.execute(
-        text("UPDATE trainer_profiles SET rating_avg = 4.7, rating_count = 3, education = 'Высшее профильное' WHERE trainer_id = :t"),
+        text(
+            "UPDATE trainer_profiles SET rating_avg = 4.7, rating_count = 3, education = 'Высшее профильное' WHERE trainer_id = :t"
+        ),
         {"t": ids["B"]},
     )
     await _ensure_trainer_subscription_tier(db_session, ids["A"], SUBSCRIPTION_TIER_ONLINE)
@@ -224,6 +245,62 @@ def _cards(html: str) -> list[str]:
 def _tab(html: str, label: str) -> str | None:
     m = re.search(rf'class="tcat-tab[^"]*"[^>]*>{re.escape(label)}<b>(\d+)</b>', html)
     return m.group(1) if m else None
+
+
+@pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_catalog_page_og_type_is_website(app_use_test_db, db_session) -> None:
+    async with _client() as client:
+        c = await _city(db_session, client)
+        html = (await client.get(f"/c/{city_slug(c['city_name'])}/trenery")).text
+    assert 'property="og:type" content="website"' in html
+
+
+@pytest.mark.asyncio
+async def test_spb_catalog_breadcrumb_uses_public_city_name(app_use_test_db, db_session) -> None:
+    from tests.api.test_public_arenas import _insert_city
+
+    city_id = await _insert_city(db_session, name="Санкт-Петербург/ЛО")
+    place = await _place(db_session)
+    await db_session.execute(text("UPDATE arenas SET city_id = :c WHERE id = :a"), {"c": city_id, "a": place["arena_id"]})
+    async with _client() as client:
+        tid = await _trainer_on(db_session, client, {**place, "city_id": city_id}, first_name="Пётр")
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+        await db_session.commit()
+        html = (await client.get("/c/sankt-peterburg-lo/trenery")).text
+    assert "Санкт-Петербург" in html and "/ЛО" not in html.split("<title>", 1)[1].split("</title>", 1)[0]
+
+
+def test_catalog_arena_rental_uses_city_currency() -> None:
+    from src.application.site_trainer_catalog import render_catalog_page
+
+    trainer = {
+        "id": 1,
+        "order": 0,
+        "name": "Игорь",
+        "initial": "И",
+        "photo_url": None,
+        "path": "/t/1-igor",
+        "experience_years": None,
+        "rating_avg": None,
+        "rating_count": 0,
+        "education": "",
+        "about": "",
+        "arenas": [{"id": 7, "name": "Ледовый"}],
+        "services_by_dir": {"zero": [{"service_id": 1, "price_cents": 4500, "currency_code": "RUB"}]},
+        "passes": [],
+        "can_book": False,
+        "windows": [],
+        "contact_url": None,
+    }
+    data = {
+        "city": {"id": 31, "name": "Санкт-Петербург/ЛО", "country": "RU", "currency_code": "RUB"},
+        "trainers": [trainer],
+        "arenas": {7: {"id": 7, "name": "Ледовый", "rental_minor": 60000, "slug": "ledovyy", "city_name": "Санкт-Петербург/ЛО"}},
+    }
+    html = render_catalog_page(data, ALL, base_url="https://glide.example")
+    assert "600" in html and "руб." in html
+    assert "600 BYN" not in html
 
 
 @pytest.mark.asyncio
@@ -247,24 +324,34 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert _tab(html, "С клюшкой") == "1" and _tab(html, "Фигурное") is None
     assert f'href="{base}/s-klyushkoy"' in html
     assert "Научиться кататься на коньках с нуля" in html and "Мне 35 — не поздно начинать?" in html
-    # Лид «Все» не обещает «ставят ход»; оплата на месте остаётся в шаге записи и в meta description.
-    assert "Учат кататься с нуля и ставят технику. Есть фигурное катание и хоккей." in all_r.text
-    assert 'name="description" content="Учат кататься с нуля и ставят технику.' in all_r.text
+    # Лид на странице остаётся общим. В сниппете — только направления, которые реально есть.
+    # «Учат» — у направления несколько тренеров, «ставит» — тренер один.
+    assert "Учат кататься с нуля и ставит технику. Есть хоккей." in all_r.text
+    assert "фигурное катание" not in re.search(r'<p class="tcat-lead">(.*?)</p>', all_r.text).group(1)
+    meta = re.search(r'name="description" content="([^"]*)"', all_r.text).group(1)
+    assert "по катанию на коньках" in meta and "с нуля" in meta and "хоккейное катание" in meta
+    assert "учат" not in meta
+    assert "фигурное" not in meta and "…" not in meta and meta.endswith("Запись в Telegram.")
     assert "Оплата тренеру на месте." not in re.search(r'<p class="tcat-lead">(.*?)</p>', all_r.text).group(1)
     # Сверху — с онлайн-записью: A первая; окно — ссылка в запись Mini App через учётный прокси.
     cards = _cards(html)
     assert names["A"] in cards[0] and names["B"] in cards[1]
     assert f'href="{trainer_path(ids["A"], names["A"])}?via=k' in cards[0]
     # Время — сразу запись на этот слот (TASK-357), источник — «каталог сайта».
-    assert re.search(rf"startapp=trainer_{ids['A']}_s_[1-9][0-9]*_v_k[1-9]", cards[0]) and "surface=trainer_catalog" in cards[0]
+    assert (
+        re.search(rf"startapp=trainer_{ids['A']}_s_[1-9][0-9]*_v_k[1-9]", cards[0])
+        and "surface=trainer_catalog" in cards[0]
+    )
     assert 'class="tc-slot"' in cards[0]
     # Цена — по тарифам направления; без цены — честно.
     assert "45 BYN <small>ребёнок</small>" in cards[0] and "50 BYN <small>взрослый</small>" in cards[0]
     assert "Цену уточните у тренера" in cards[1]
     # Абонемент A только на «Хоккейное» не трогает «от» вкладки «С нуля».
     assert "от <b>45 BYN</b> за занятие" in html
-    # Оценка — только от 3 оценок; стаж и образование — из полей; числа занятий нет.
-    assert "оценили" not in cards[0] and "3 ученика оценили занятия" in cards[1]
+    # Оценка — с первой, одна подпись; стаж и образование — из полей; числа занятий нет.
+    assert "★" in cards[0] and "2 оценки" in cards[0]
+    assert "★" in cards[1] and "3 оценки" in cards[1]
+    assert "оценили" not in cards[0] and "оценили" not in cards[1]
     assert "Тренирует 6 лет" in cards[0] and "Высшее профильное образование" in cards[1]
     assert not re.search(r"\d+\s*занят(ие|ия|ий)\b", html.replace("за занятие", ""))
     # «вместе с ребёнком» — из тарифов: 1 тренер с ценой «взрослый + ребёнок».
@@ -281,11 +368,24 @@ async def test_catalog_tabs_rule_and_cards(app_use_test_db, db_session) -> None:
     assert len(hcards) == 1 and "50 BYN <small>ребёнок</small>" in hcards[0]
     assert "Хоккейное катание" in hock.text and "Мне 35" not in hock.text
     # «от» вкладки и «Все» — с абонементом на занятие, дробь как есть.
-    assert "от <b>41,87 BYN</b> за занятие" in hock.text and "от <b>41,87 BYN</b> за занятие" in all_r.text
-    # Пустое направление — страница есть, но не в индексе.
+    assert "от <b>41,87\u00a0BYN</b> по абонементу" in hock.text and "от <b>41,87\u00a0BYN</b> по абонементу" in all_r.text
+    hock_meta = re.search(r'name="description" content="([^"]*)"', hock.text).group(1)
+    assert "от 41,87\u00a0BYN по абонементу" in hock_meta or "от 41,87 BYN по абонементу" in hock_meta
+    assert "за занятие" not in hock_meta
+    # Пустое направление — своего состава нет, в индексе ему нечего делать. Canonical — свой адрес.
     assert 'content="noindex, follow"' in fig.text and not _cards(fig.text)
-    assert 'content="index, follow"' in zero.text
+    assert f'rel="canonical" href="https://glide.example{base}/figurnoe"' in fig.text
+    # «С нуля» совпадает со «Всеми» по людям (двое) — копия «Всех»: noindex, follow, canonical на себя.
+    assert 'content="noindex, follow"' in zero.text
     assert f'rel="canonical" href="https://glide.example{base}/s-nulya"' in zero.text
+    # «С клюшкой» — один тренер из двух: свой состав, в индексе.
+    assert 'content="index, follow"' in hock.text
+    assert f'rel="canonical" href="https://glide.example{base}/s-klyushkoy"' in hock.text
+    assert 'content="index, follow"' in all_r.text
+    assert f'rel="canonical" href="https://glide.example{base}"' in all_r.text
+    # В JSON-LD — канонические адреса тренеров, без ?via=.
+    ld_urls = re.findall(r'"url":\s*"([^"]+)"', all_r.text)
+    assert any("/t/" in u for u in ld_urls) and not any("via=" in u for u in ld_urls if "/t/" in u)
 
 
 @pytest.mark.asyncio
@@ -331,13 +431,81 @@ async def test_sitemap_lists_only_directions_with_trainers(app_use_test_db, db_s
         xml = (await client.get("/sitemap.xml")).text
         all_html = (await client.get(f"/c/{c['slug']}/trenery")).text
     base = f"https://glide.example/c/{c['slug']}/trenery"
-    assert f"<loc>{base}/s-nulya</loc>" in xml
+    assert f"<loc>{base}</loc>" in xml
+    # «С нуля» — те же двое, что во «Всех»: вне sitemap. «Уже катаюсь» и «С клюшкой» — свой состав.
+    assert f"<loc>{base}/s-nulya</loc>" not in xml
     assert f"<loc>{base}/uzhe-katayus</loc>" in xml
     assert f"<loc>{base}/s-klyushkoy</loc>" in xml
     assert f"<loc>{base}/figurnoe</loc>" not in xml
-    # «Все» повторяет «С нуля» тем же составом — не индексируем.
-    assert f"<loc>{base}</loc>" not in xml
-    assert 'content="noindex, follow"' in all_html
+    assert re.search(rf"<loc>{re.escape(base)}</loc><lastmod>\d{{4}}-\d{{2}}-\d{{2}}T", xml)
+    assert re.search(r"<loc>https://glide\.example/t/[^<]+</loc><lastmod>\d{4}-\d{2}-\d{2}T", xml)
+    assert 'content="index, follow"' in all_html
+
+
+def _lastmod(xml: str, loc: str) -> str | None:
+    m = re.search(rf"<loc>{re.escape(loc)}</loc><lastmod>([^<]+)</lastmod>", xml)
+    return m.group(1) if m else None
+
+
+@pytest.mark.asyncio
+async def test_sitemap_lastmod_is_the_freshest_change_of_the_page_trainers(app_use_test_db, db_session) -> None:
+    """Профиль, услуги, цены и катки тренеров страницы двигают lastmod каталога и направления — каждой своей."""
+    from datetime import datetime, timezone
+
+    async with _client() as client:
+        c = await _city(db_session, client)
+        base = f"https://glide.example/c/{c['slug']}/trenery"
+        ids = c["ids"]
+        old = "2026-01-01T00:00:00Z"
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        async def freeze() -> None:
+            # Прямая правка профиля триггеров не запускает: возвращаем «старую» метку.
+            await db_session.execute(
+                text("UPDATE trainer_profiles SET updated_at = :t WHERE trainer_id = ANY(:ids)"),
+                {"t": datetime(2026, 1, 1, tzinfo=timezone.utc), "ids": list(ids.values())},
+            )
+            await db_session.execute(
+                text("UPDATE arena_profiles SET updated_at = :t WHERE arena_id = ANY(:a)"),
+                {"t": datetime(2026, 1, 1, tzinfo=timezone.utc), "a": [c["arena_id"], c["other_arena"]]},
+            )
+            await db_session.commit()
+
+        async def lastmods() -> dict[str, str | None]:
+            xml = (await client.get("/sitemap.xml")).text
+            return {k: _lastmod(xml, f"{base}{k}") for k in ("", "/uzhe-katayus", "/s-klyushkoy")}
+
+        await freeze()
+        assert await lastmods() == {"": old, "/uzhe-katayus": old, "/s-klyushkoy": old}
+
+        # Цена у тренера A (с нуля + хоккей): «Все» и «С клюшкой» свежее, «Уже катаюсь» (только B) — нет.
+        await db_session.execute(
+            text("UPDATE trainer_service_price_variants SET price_cents = price_cents + 100 WHERE trainer_id = :t"),
+            {"t": ids["A"]},
+        )
+        await db_session.commit()
+        got = await lastmods()
+        assert got[""].startswith(today) and got["/s-klyushkoy"].startswith(today) and got["/uzhe-katayus"] == old
+
+        # Цена услуги «Уже катаюсь» у тренера B: свежее «Уже катаюсь» и «Все», «С клюшкой» (A) — нет.
+        await freeze()
+        await db_session.execute(
+            text("UPDATE trainer_services SET price_cents = 3000 WHERE trainer_id = :t AND service_id = 2"),
+            {"t": ids["B"]},
+        )
+        await db_session.commit()
+        got = await lastmods()
+        assert got["/uzhe-katayus"].startswith(today) and got[""].startswith(today) and got["/s-klyushkoy"] == old
+
+        # Каток B (второй): его карточка правилась в июне — «Все» и «Уже катаюсь» берут июнь, «С клюшкой» (A) — нет.
+        await freeze()
+        await db_session.execute(
+            text("UPDATE arena_profiles SET updated_at = :t WHERE arena_id = :a"),
+            {"t": datetime(2026, 6, 1, tzinfo=timezone.utc), "a": c["other_arena"]},
+        )
+        await db_session.commit()
+        got = await lastmods()
+        assert got[""] == "2026-06-01T00:00:00Z" and got["/s-klyushkoy"] == old
 
 
 @pytest.mark.asyncio
@@ -350,6 +518,7 @@ async def test_city_with_one_trainer_has_no_tabs_or_filter(app_use_test_db, db_s
     assert len(_cards(html)) == 1 and f"{first} Тренерова" in html
     assert "tcat-tabs" not in html and "Где удобно заниматься?" not in html
     assert "Тренер по катанию на коньках" in html
+    assert "1 тренер по катанию на коньках" in html
     assert "Сверху — тренеры" not in html
 
 
@@ -366,7 +535,9 @@ async def _two_city_trainer(db_session, client) -> dict:
     b = await _place(db_session)
     tid = await _trainer_on(db_session, client, a, first_name=f"Двагорода{uuid.uuid4().hex[:4]}")
     await db_session.execute(
-        text("INSERT INTO trainer_arenas (trainer_id, arena_id, is_public) VALUES (:t, :a, true) ON CONFLICT DO NOTHING"),
+        text(
+            "INSERT INTO trainer_arenas (trainer_id, arena_id, is_public) VALUES (:t, :a, true) ON CONFLICT DO NOTHING"
+        ),
         {"t": tid, "a": b["arena_id"]},
     )
     await db_session.execute(
@@ -450,7 +621,9 @@ async def test_city_catalog_hides_window_on_unpublished_primary_arena(app_use_te
         await db_session.execute(
             text("UPDATE trainers SET primary_arena_id = :a WHERE id = :t"), {"a": t["a"]["arena_id"], "t": t["tid"]}
         )
-        await db_session.execute(text("UPDATE arenas SET is_confirmed = false WHERE id = :a"), {"a": t["a"]["arena_id"]})
+        await db_session.execute(
+            text("UPDATE arenas SET is_confirmed = false WHERE id = :a"), {"a": t["a"]["arena_id"]}
+        )
         await _slot(db_session, t["tid"], days=2, hour=13, arena_id=None)
         await db_session.commit()
         html_a = (await client.get(f"/c/{city_slug(t['a']['city_name'])}/trenery")).text
@@ -472,7 +645,9 @@ def test_window_in_city_hides_only_known_other_city() -> None:
 def test_split_service_summary_and_service_title() -> None:
     from src.application.catalog_directions import service_title, split_service_summary
 
-    hook, body = split_service_summary("Если вы почти не стояли на льду.\n\nСпокойный старт: равновесие.\nВторая строка.")
+    hook, body = split_service_summary(
+        "Если вы почти не стояли на льду.\n\nСпокойный старт: равновесие.\nВторая строка."
+    )
     assert hook == "Если вы почти не стояли на льду."
     assert body == "Спокойный старт: равновесие.\nВторая строка."
     assert split_service_summary(None) == ("", "") and split_service_summary("  \n ") == ("", "")
@@ -488,9 +663,20 @@ def test_card_has_save_heart_and_request_when_no_time() -> None:
     from src.application.site_trainer_catalog import _card_html
 
     t = {
-        "id": 9, "name": "Анна Тренерова", "initial": "А", "path": "/t/9-anna", "photo_url": None, "services_by_dir": {},
-        "arenas": [], "about": None, "education": None, "experience_years": None, "windows": [], "can_book": True,
-        "contact_url": "https://t.me/anna", "services": [],
+        "id": 9,
+        "name": "Анна Тренерова",
+        "initial": "А",
+        "path": "/t/9-anna",
+        "photo_url": None,
+        "services_by_dir": {},
+        "arenas": [],
+        "about": None,
+        "education": None,
+        "experience_years": None,
+        "windows": [],
+        "can_book": True,
+        "contact_url": "https://t.me/anna",
+        "services": [],
     }
     html = _card_html(t, ALL, base_url="https://glide.example", city_id=1, arena_id=None)
     assert 'class="tc-save"' in html and "_i_save" in html.replace("&amp;", "&")

@@ -28,7 +28,7 @@ import html as html_lib
 import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -1260,6 +1260,7 @@ def render_place_page(
         "__OG_IMAGE__": _esc(og_image_url),
         "__LANG__": lang,
         "__OG_LOCALE__": og_locale,
+        "__OG_TYPE__": "place",
         "__ROBOTS__": robots,
         "__HEAD_EXTRA__": _matches_head(view),
         "__JSONLD__": _json_ld(view, canonical_url=canonical_url, image_url=og_image_url),
@@ -1674,6 +1675,12 @@ def _b_day_strip(
     return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>'
 
 
+def _place_currency(card: Mapping[str, Any], slots: Sequence[Mapping[str, Any]] | None = None) -> str:
+    """Валюта города катка, а не BYN из сырых слотов импорта."""
+    _ = slots
+    return str(card.get("currency_code") or "BYN")
+
+
 def _place_visit(view: Mapping[str, Any]) -> dict[str, Any]:
     """Модель блоков карточки v2 (arena_visit_info). Тренеры — из view: школа катка встаёт к ним."""
     from src.application.arena_visit_info import visit_view
@@ -1684,7 +1691,7 @@ def _place_visit(view: Mapping[str, Any]) -> dict[str, Any]:
     rental = price_floors(slots).get("rental")
     rental_price = ""
     if rental:
-        text = format_price_minor(rental[0], str(card.get("currency_code") or "BYN"))
+        text = format_price_minor(rental[0], _place_currency(card, slots))
         rental_price = f"от {text}" if rental[1] else text
     return visit_view(
         card, has_trainers=bool(view.get("trainers")), rental_price=rental_price, has_slots=bool(slots)
@@ -1780,7 +1787,7 @@ def _b_schedule_parts(
     all_slots = [s for slots in by_date.values() for s in slots]
     _aside_price, common = _b_price_floor(all_slots)
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
-    currency = str(all_slots[0].get("currency_code") or card.get("currency_code") or "BYN")
+    currency = _place_currency(card, all_slots)
     prices = prices_html(all_slots, vv, currency=currency)
     foot: list[str] = []
     zovi = zovi_entry_path(view)
@@ -2053,16 +2060,37 @@ def _b_arrive(
     return section(title or t("hub.directions"), body, klass="b-sec--place", sec_id=sec_id)
 
 
-def _b_trainers(view: Mapping[str, Any], *, school_html: str = "") -> str:
-    """Раздел «Тренеры» на катке с тренерами: школа катка и вход для тренера. Сами тренеры — единый
-    блок «Учиться с тренером» после расписания (TASK-354); нет тренеров — раздела нет, вход в «Ещё на катке»."""
-    from src.application.style_b import section
+def _b_trainers(view: Mapping[str, Any], *, school_html: str = "", learn_line: str = "") -> str:
+    """Тренеры катка: прямые ссылки на ``/t/…`` и каталог тренеров города."""
+    from src.application.site_trainer_catalog import catalog_path
+    from src.application.site_trainer_page import trainer_path
+    from src.application.style_b import section, trainer_rows_html
 
-    if not view.get("trainers"):
+    trainers = list(view.get("trainers") or [])
+    if not trainers:
         return ""
     card = view["card"]
+    arena_id = int(card["id"])
+    city_name = _city(card)
     coach = _b_coach_entry(card, first=False) if _ice(card) else ""
-    return section(t("place.trainers"), school_html + coach, klass="b-sec--place", sec_id="trainers")
+    # ?arena= — со страницы катка человек попадает на тренеров этого катка (canonical каталога без фильтра).
+    catalog_href = f"{catalog_path(city_name)}?arena={arena_id}" if city_name else "/trenery"
+    if city_name:
+        from src.shared.city_locative import city_locative
+
+        public_city = format_public_name(city_name)
+        loc = city_locative(public_city) or city_locative(city_name)
+        link_text = f"Все тренеры в {loc}" if loc else "Все тренеры города"
+    else:
+        link_text = "Все тренеры города"
+
+    def href_for(trainer: Mapping[str, Any]) -> str:
+        return f"{trainer_path(int(trainer['id']), str(trainer['name']))}?via=p{arena_id}"
+
+    soon = f'<p class="b-learn__line">{_esc(learn_line)}</p>' if learn_line else ""
+    body = soon + school_html + trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go"))
+    body += f'<p class="b-trainer-catalog"><a href="{_esc(catalog_href)}">{_esc(link_text)}</a></p>'
+    return section(t("place.trainers"), body + coach, klass="b-sec--place", sec_id="trainers")
 
 
 def _b_coach_entry(card: Mapping[str, Any], *, first: bool) -> str:
@@ -2397,16 +2425,22 @@ def render_place_body_b(
     trainers_listed = bool(view.get("trainers"))
     coach_in_more = _b_coach_entry(card, first=True) if _ice(card) and not trainers_listed else ""
     hours = card.get("opening_hours") if isinstance(card.get("opening_hours"), Mapping) else {}
+    learn_block = view.get("learn")
+    learn_line = str(learn_block.line or "").strip() if trainers_listed and learn_block else ""
+    ice_html = _b_ice(view, base_path=base_path, invite=invite, links=links, vv=vv)
+    trainers_html = _b_trainers(
+        view, school_html=school_in_trainers_html(vv.get("school")), learn_line=learn_line
+    )
+    ice_and_trainers = ice_html + trainers_html
     # Порядок блоков — arena_visit_info.PLACE_BLOCKS: cover, ice, facts, services, trainers, partners, more.
     parts = [
         _b_hero(card, status_html=_b_status(view), chips_html=_b_hero_chips(card, links)),
         _b_plan(view, invite=invite),
-        _b_ice(view, base_path=base_path, invite=invite, links=links, vv=vv),
-        render_learn_block(view.get("learn")),
+        ice_and_trainers,
+        "" if trainers_listed else render_learn_block(learn_block),
         _b_matches_here(view),
         facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
         services_html(vv, title=_rental_section_title(card, hours) if hours.get("rental_title") else "Прокат и услуги"),
-        _b_trainers(view, school_html=school_in_trainers_html(vv.get("school"))),
         _b_partners(card),
         more_html(vv, coach_html=coach_in_more, tel_href=str(links.get("tel") or "")),
         _b_about(card),

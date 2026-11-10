@@ -139,8 +139,9 @@ describe('факт для выбора: цена → стаж → рейтинг
     const unrated = trainerCardView(
       trainer({ profile: { first_name: 'A', rating_avg: 5, rating_count: 0 } })
     );
-    assert.match(rated.meta, /★ 4\.8/);
+    assert.match(rated.meta, /★ 4,8 · 12 оценок/);
     assert.ok(!unrated.meta.includes('★'), 'нулевой рейтинг — не рейтинг');
+    assert.ok(!unrated.meta.includes('0 оцен'), 'ноль оценок не пишем');
   });
 
   it('нет ни одного факта — остаётся только арена, без заглушек', () => {
@@ -152,7 +153,7 @@ describe('факт для выбора: цена → стаж → рейтинг
     }
   });
 
-  it('в мета-строку не набивается больше одного факта', () => {
+  it('цена вытесняет стаж, звёзды остаются с числом оценок', () => {
     const { trainerCardView } = loadModel();
     const view = trainerCardView(
       trainer({
@@ -160,7 +161,9 @@ describe('факт для выбора: цена → стаж → рейтинг
         services: [{ service_name: 'Хоккейное катание', price_byn_min: 45 }],
       })
     );
-    assert.equal(view.meta.split(' · ').length, 2, 'арена + один факт, не больше');
+    assert.match(view.meta, /от 45 BYN/);
+    assert.match(view.meta, /★ 4,8 · 12 оценок/);
+    assert.ok(!view.meta.includes('опыта'));
   });
 });
 

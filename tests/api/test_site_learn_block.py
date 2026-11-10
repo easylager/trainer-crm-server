@@ -153,7 +153,7 @@ async def test_city_page_block_numbers_match_catalog_and_old_list_is_gone(app_us
     assert "Учиться с тренером" in block and "Выбрать тренера" in block and _go(block) == base
     # Цифры — те же, что в каталоге: «2 тренера», «от 41,87 BYN» (абонемент A на хоккей), вкладки с числами.
     assert "2 тренера" in _plain(block) and _tab(catalog, "Все") == "2"
-    assert "от <b>41,87 BYN</b> за занятие" in _plain(catalog) and _line(block).startswith("От 41,87 BYN за занятие.")
+    assert "от <b>41,87 BYN</b> по абонементу" in _plain(catalog) and _line(block).startswith("От 41,87 BYN по абонементу.")
     assert re.search(r"Ближайшее свободное время — [^.]+, \d\d:\d\d\.$", _line(block))
     assert "окно" not in block.lower()
     # Чипы — только вкладки с ненулевыми числами; ведут на направление.
@@ -244,20 +244,20 @@ async def test_rink_page_block_with_and_without_trainers(app_use_test_db, db_ses
         one_trainer = (await client.get(other_path)).text
         no_trainers = (await client.get(empty["path"])).text
     base = f"/c/{c['slug']}/trenery"
-    b = _block(with_trainers)
-    assert _line(b).startswith("На этом катке занимаются 2 тренера.")
-    assert re.search(r"Ближайшее свободное время — [^.]+, \d\d:\d\d\.$", _line(b))
-    assert _go(b) == f"{base}?arena={c['arena_id']}" and "b-learn__chips" not in b
-    # После расписания, не перебивая выбор сеанса; старый список тренеров ушёл.
-    assert with_trainers.index('id="schedule"') < with_trainers.index('id="learn"')
-    assert "b-row--coach" not in with_trainers and c["names"]["A"] not in with_trainers
-    assert "Здесь работают" not in with_trainers
-    # Один тренер на катке; окна у него нет — строки про время нет.
-    o = _block(one_trainer)
-    assert _line(o) == "На этом катке занимается 1 тренер." and _go(o) == f"{base}?arena={c['other_arena']}"
+    trainers = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', with_trainers, re.S)
+    assert trainers
+    assert re.search(r"Ближайшее свободное время — [^.]+, \d\d:\d\d\.", trainers.group(1))
+    assert c["names"]["A"] in with_trainers
+    # Со страницы катка — на тренеров этого катка.
+    assert f'href="{base}?arena={c["arena_id"]}"' in trainers.group(1)
+    assert with_trainers.index('id="schedule"') < with_trainers.index('id="trainers"')
+    assert "Здесь работают" not in with_trainers and 'id="learn"' not in with_trainers
+    one_block = re.search(r'id="trainers">(.*?)</section>', one_trainer, re.S)
+    assert one_block and c["names"]["B"] in one_trainer and 'id="learn"' not in one_trainer
+    assert "Ближайшее" not in (one_block.group(1) if one_block else "")
     # Каток без тренеров — строка про город, цель — весь город.
     n = _block(no_trainers)
-    assert re.fullmatch(r"На этом катке тренеров пока нет\. В [^—]+ — 2, от 41,87 BYN за занятие\.", _line(n))
+    assert re.fullmatch(r"На этом катке тренеров пока нет\. В [^—]+ — 2, от 41,87 BYN по абонементу\.", _line(n))
     assert _go(n) == base and "t.me" not in n and "startapp" not in n
 
 

@@ -7,7 +7,7 @@ vertical ice): таблица направлений и их тексты — ``
 * Тренер во вкладке: есть услуга направления **и** (есть цена **или** ледовый каток в этом городе).
 * Цена в карточке — тарифы услуги; «от» — ``trainer_min_price`` (тарифы, групповая, абонементы).
 * Окна — те же, что на ``/t/`` (``_trainer_windows_on_arena``), запись — ``booking_url``.
-* Число занятий тренера не показываем (решение владельца 2026-11-07); оценку — от 3 оценок.
+* Число занятий тренера не показываем (решение владельца 2026-11-07); оценку — с первой, «★ 5,0 · 2 оценки».
 
 Загрузка (``load_city_catalog``) — один раз на город; что показать во вкладке и с фильтром катка
 (``catalog_view``) — чистая функция, её же берёт sitemap.
@@ -16,6 +16,7 @@ vertical ice): таблица направлений и их тексты — ``
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -42,8 +43,10 @@ from src.application.catalog_directions import (  # noqa: F401 — реэксп�
 )
 from src.application.ice_city_day import city_slug, format_price_minor, plural_ru
 from src.application.style_b import esc
-from src.shared.city_locative import city_locative
+from src.shared.city_locative import city_locative, warn_if_no_locative
+from src.shared.ru_text import trainer_rating_parts
 from src.shared.html_template import fill_placeholders, json_for_script
+from src.shared.public_display import format_public_name
 
 CATALOG_SURFACE = "trainer_catalog"
 _B_TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "b.html"
@@ -53,8 +56,9 @@ TRAINER_CATALOG_STYLE_VERSION = _file_version("static/share/trainer-catalog.css"
 CARD_WINDOWS = 3
 #: Сколько катков в «Где проходят занятия».
 ARENAS_SHOWN = 6
-#: Оценку показываем, когда оценок хотя бы столько (решение владельца).
-RATING_MIN_COUNT = 3
+#: Сниппет каталога — тот же потолок, что у страницы тренера.
+DESCRIPTION_LIMIT = 165
+TITLE_LIMIT = 60
 
 
 # ── Запись ───────────────────────────────────────────────────────────
@@ -116,9 +120,9 @@ async def _ice_arenas(
     if not trainer_ids:
         return {}
     rows = (
-        await session.execute(
-            text(
-                f"""
+        (
+            await session.execute(
+                text(f"""
                 SELECT ta.trainer_id, a.id, a.name, c.name AS city_name,
                        CASE WHEN {SITEMAP_PLACE_WHERE_SQL} THEN p.slug END AS slug
                 FROM trainer_arenas ta
@@ -130,14 +134,16 @@ async def _ice_arenas(
                   AND COALESCE(a.venue_type, 'ice') = 'ice'
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
                 ORDER BY ta.trainer_id, a.sort_order NULLS LAST, a.id
-                """
-            ),
-            {"tids": trainer_ids, "city": int(city_id) if city_id is not None else None, **public_scope_params()},
+                """),
+                {"tids": trainer_ids, "city": int(city_id) if city_id is not None else None, **public_scope_params()},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     out: dict[int, list[dict[str, Any]]] = {}
     for r in rows:
-        name = str(r["name"] or "").strip()
+        name = _public_arena_name(str(r["name"] or ""))
         if name:
             out.setdefault(int(r["trainer_id"]), []).append(
                 {"id": int(r["id"]), "name": name, "city_name": str(r["city_name"] or ""), "slug": r["slug"]}
@@ -150,15 +156,13 @@ async def _rentals(session: AsyncSession, arena_ids: Sequence[int]) -> dict[int,
     if not arena_ids:
         return {}
     rows = await session.execute(
-        text(
-            """
+        text("""
             SELECT arena_id, MIN(price_rental_minor)
             FROM ice_sessions
             WHERE arena_id = ANY(:ids) AND status = 'active' AND price_rental_minor > 0
               AND ends_at_utc > NOW() AND starts_at_utc < NOW() + INTERVAL '14 days'
             GROUP BY arena_id
-            """
-        ),
+            """),
         {"ids": list(arena_ids)},
     )
     return {int(a): int(m) for a, m in rows.fetchall() if m is not None}
@@ -217,9 +221,9 @@ async def _primary_public_arenas(
     if not trainer_ids:
         return {}
     rows = (
-        await session.execute(
-            text(
-                f"""
+        (
+            await session.execute(
+                text(f"""
                 SELECT t.id AS trainer_id, a.id, a.name
                 FROM trainers t
                 JOIN arenas a ON a.id = t.primary_arena_id
@@ -230,13 +234,15 @@ async def _primary_public_arenas(
                   AND NOT EXISTS (SELECT 1 FROM trainer_arenas ta
                                   WHERE ta.trainer_id = t.id AND ta.arena_id = a.id AND NOT COALESCE(ta.is_public, true))
                   AND {PUBLIC_ARENA_VISIBLE_SQL}
-                """
-            ),
-            {"tids": trainer_ids, "city": int(city_id), **public_scope_params()},
+                """),
+                {"tids": trainer_ids, "city": int(city_id), **public_scope_params()},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return {
-        int(r["trainer_id"]): [{"id": int(r["id"]), "name": str(r["name"] or "").strip()}] for r in rows
+        int(r["trainer_id"]): [{"id": int(r["id"]), "name": _public_arena_name(str(r["name"] or ""))}] for r in rows
     }
 
 
@@ -293,9 +299,24 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     can_book: dict[int, bool] = {}
     for tid in ids:
         can_book[tid] = bool((await get_trainer_booking_availability(session, tid)).get("can_book"))
+    from src.application.site_trainer_page import WEEK_DAYS, WEEK_LOOKAHEAD_DAYS, WEEK_WINDOWS_LIMIT
+
     windows = await _trainer_windows_on_arena(
-        session, None, [t for t in ids if can_book[t]], timezone_name=NOTIFICATION_TZ
+        session,
+        None,
+        [t for t in ids if can_book[t]],
+        timezone_name=NOTIFICATION_TZ,
+        limit=WEEK_WINDOWS_LIMIT,
+        days=WEEK_LOOKAHEAD_DAYS,
     )
+
+    def _align_windows(wins: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not wins:
+            return []
+        first = min(datetime.fromisoformat(w["starts_at"]).date() for w in wins)
+        return [w for w in wins if (datetime.fromisoformat(w["starts_at"]).date() - first).days < WEEK_DAYS]
+
+    windows = {tid: _align_windows(ws) for tid, ws in windows.items()}
     win_cities = await window_arena_cities(session, [w for ws in windows.values() for w in ws])
     trainers: list[dict[str, Any]] = []
     for order, body in enumerate(bodies):
@@ -344,23 +365,55 @@ async def load_city_catalog(session: AsyncSession, city: Mapping[str, Any]) -> d
     await attach_arena_media_payloads(session, media_items)
     for a in media_items:
         a["rental_minor"] = rentals.get(a["id"])
-    return {"city": dict(city), "trainers": trainers, "arenas": arena_rows}
+    from src.shared.currency import currency_for_country
+
+    city_out = dict(city)
+    city_out["currency_code"] = currency_for_country(city.get("country"))
+    for a in media_items:
+        a["name"] = _public_arena_name(str(a.get("name") or ""))
+    return {"city": city_out, "trainers": trainers, "arenas": arena_rows}
 
 
 # ── Что показать во вкладке ──────────────────────────────────────────
 
 
-def direction_min_price(trainer: Mapping[str, Any], direction: Direction) -> tuple[int, str] | None:
-    """«от» тренера в направлении (во «Всех» — по всем направлениям) — ``trainer_min_price``.
+def direction_min_offer(trainer: Mapping[str, Any], direction: Direction) -> tuple[int, str, str] | None:
+    """«от» тренера в направлении (во «Всех» — по всем направлениям): копейки, валюта, основание.
 
     Кандидаты — услуги направления (тарифы/цена, групповая) и абонементы тренера, покрывающие
-    хоть одну из них. Ролики и ОФП/СФП — не направления, в «от» не входят.
+    хоть одну из них. Ролики и ОФП/СФП — не направления, в «от» не входят. Основание
+    (``trainer_min_price.BASIS_*``) говорит, что за занятие: обычное, групповое или абонемент.
     """
-    from src.application.trainer_min_price import trainer_min_session_price
+    from src.application.trainer_min_price import trainer_min_session_offer
 
     by_dir = trainer["services_by_dir"]
     svcs = [s for k in ([direction.key] if direction is not ALL else list(by_dir)) for s in by_dir.get(k, [])]
-    return trainer_min_session_price({"services": svcs, "passes": trainer.get("passes") or []})
+    return trainer_min_session_offer({"services": svcs, "passes": trainer.get("passes") or []})
+
+
+def direction_min_price(trainer: Mapping[str, Any], direction: Direction) -> tuple[int, str] | None:
+    """``direction_min_offer`` без основания — «от» тренера в направлении."""
+    found = direction_min_offer(trainer, direction)
+    return (found[0], found[1]) if found else None
+
+
+def best_offer(trainers: Sequence[Mapping[str, Any]], direction: Direction) -> tuple[int, str, str] | None:
+    """Самое дешёвое «от» среди тренеров; при равной цене — обычное занятие, потом групповое, потом абонемент."""
+    from src.application.trainer_min_price import basis_rank
+
+    offers = [o for o in (direction_min_offer(t, direction) for t in trainers) if o]
+    return min(offers, key=lambda o: (o[0], basis_rank(o[2]), o[1])) if offers else None
+
+
+def offer_phrase(offer: tuple[int, str, str], *, capital: bool = False) -> str:
+    """«от 25 BYN в группе», «от 40 BYN по абонементу», «от 50 BYN за занятие» — как на карточке тренера."""
+    from src.application.trainer_min_price import BASIS_PHRASE
+
+    amount = format_price_minor(offer[0], offer[1])
+    if not amount:
+        return ""
+    phrase = f"от {amount} {BASIS_PHRASE.get(offer[2], BASIS_PHRASE['single'])}"
+    return phrase[:1].upper() + phrase[1:] if capital else phrase
 
 
 def min_price_by_direction(trainer: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
@@ -416,15 +469,23 @@ def _id_set(data: Mapping[str, Any], direction: Direction) -> frozenset[int]:
     return frozenset(t["id"] for t in data["trainers"] if is_listed(t, direction))
 
 
+MIN_TRAINERS_FOR_OWN_INDEX = 3
+
+
 def indexable(data: Mapping[str, Any], direction: Direction) -> bool:
-    """В индексе — направление с тренерами (порог ≥1, PDEC-033 открытый вопрос). «Все» — если не
-    повторяет одно из направлений тем же составом (в Минске сейчас все пятеро — «С нуля»)."""
+    """В индексе ли страница.
+
+    «Все» — пока в городе есть тренеры. Направление — только когда у него есть свой состав:
+    он отличается от «Всех» или в нём не меньше ``MIN_TRAINERS_FOR_OWN_INDEX`` тренеров. Иначе это
+    копия «Всех» с другим заголовком: ``noindex, follow``, canonical на себя, вне sitemap.
+    Пустая вкладка в индексе не нужна ни при каком составе «Всех».
+    """
     ids = _id_set(data, direction)
     if not ids:
         return False
     if direction is ALL:
-        return all(_id_set(data, d) != ids for d in DIRECTIONS)
-    return True
+        return True
+    return ids != _id_set(data, ALL) or len(ids) >= MIN_TRAINERS_FOR_OWN_INDEX
 
 
 def sitemap_paths(data: Mapping[str, Any]) -> list[str]:
@@ -432,8 +493,48 @@ def sitemap_paths(data: Mapping[str, Any]) -> list[str]:
     return [catalog_path(name, d) for d in (ALL, *DIRECTIONS) if indexable(data, d)]
 
 
-async def sitemap_rows(session: AsyncSession) -> list[str]:
-    """Пути каталога для sitemap: города, где есть опубликованные тренеры, × направления с тренерами."""
+async def _profile_updated_at(session: AsyncSession, trainer_ids: Sequence[int]) -> dict[int, datetime]:
+    """Правка анкеты тренера. Услуги, цены, абонементы и катки тоже её двигают (триггеры, миграция 0317)."""
+    if not trainer_ids:
+        return {}
+    rows = (
+        await session.execute(
+            text("SELECT trainer_id, updated_at FROM trainer_profiles WHERE trainer_id = ANY(:ids)"),
+            {"ids": list(trainer_ids)},
+        )
+    ).all()
+    return {int(tid): stamp for tid, stamp in rows if isinstance(stamp, datetime)}
+
+
+async def _arena_updated_at(session: AsyncSession, arena_ids: Sequence[int]) -> dict[int, datetime]:
+    """Правка карточки катка (название, фото, адрес) — то, что видно в карточке тренера и в «Где проходят занятия»."""
+    if not arena_ids:
+        return {}
+    rows = (
+        await session.execute(
+            text("SELECT arena_id, updated_at FROM arena_profiles WHERE arena_id = ANY(:ids)"),
+            {"ids": list(arena_ids)},
+        )
+    ).all()
+    return {int(aid): stamp for aid, stamp in rows if isinstance(stamp, datetime)}
+
+
+def page_lastmod(
+    data: Mapping[str, Any],
+    direction: Direction,
+    trainer_stamps: Mapping[int, datetime],
+    arena_stamps: Mapping[int, datetime],
+) -> datetime | None:
+    """Самая свежая дата среди тренеров страницы (профиль, услуги, цены) и их катков в этом городе."""
+    listed = {int(t["id"]): t for t in listed_trainers(data, direction)}
+    fresh = [trainer_stamps[i] for i in listed if i in trainer_stamps]
+    for trainer in listed.values():
+        fresh.extend(arena_stamps[int(a["id"])] for a in trainer["arenas"] if int(a["id"]) in arena_stamps)
+    return max(fresh) if fresh else None
+
+
+async def sitemap_rows(session: AsyncSession) -> list[tuple[str, datetime | None]]:
+    """Пути каталога и lastmod — самая свежая правка тренеров страницы и их катков в городе."""
     from src.application.ice_city_day import list_public_cities
     from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 
@@ -448,11 +549,153 @@ async def sitemap_rows(session: AsyncSession) -> list[str]:
             )
         ).fetchall()
     }
-    out: list[str] = []
+    out: list[tuple[str, datetime | None]] = []
     for city in await list_public_cities(session):
-        if int(city["id"]) in city_ids:
-            out.extend(sitemap_paths(await load_city_catalog(session, city)))
+        if int(city["id"]) not in city_ids:
+            continue
+        warn_if_no_locative(str(city["name"]), where="sitemap")
+        data = await load_city_catalog(session, city)
+        trainer_stamps = await _profile_updated_at(session, [int(t["id"]) for t in data["trainers"]])
+        arena_stamps = await _arena_updated_at(session, list(data["arenas"]))
+        name = str(data["city"]["name"])
+        for direction in (ALL, *DIRECTIONS):
+            if indexable(data, direction):
+                out.append((catalog_path(name, direction), page_lastmod(data, direction, trainer_stamps, arena_stamps)))
     return out
+
+
+def _city_public_locative(city_name: str) -> tuple[str, str | None]:
+    raw = str(city_name or "").strip()
+    public = format_public_name(raw)
+    return public, city_locative(public) or city_locative(raw)
+
+
+def _present_direction_phrases(data: Mapping[str, Any]) -> list[str]:
+    """«с нуля, для уже катающихся, фигурное и хоккейное катание» — только то, что есть в городе.
+
+    Фигурное и хоккейное делят слово «катание», чтобы не повторять его дважды.
+    """
+    present = {d.key for d in DIRECTIONS if d.seo and listed_trainers(data, d)}
+    bits: list[str] = []
+    if "zero" in present:
+        bits.append("с нуля")
+    if "better" in present:
+        bits.append("для уже катающихся")
+    skating = [label for key, label in (("fig", "фигурное"), ("hock", "хоккейное")) if key in present]
+    if len(skating) == 2:
+        bits.append("фигурное и хоккейное катание")
+    elif skating:
+        bits.append(f"{skating[0]} катание")
+    return bits
+
+
+def _catalog_all_lead(data: Mapping[str, Any]) -> str:
+    """Подзаголовок «Все»: только направления, у которых в городе есть тренеры.
+
+    «Учит» при одном тренере направления, «учат» при нескольких. Город без тренеров не обещает запись:
+    зовёт тренера создать страницу.
+    """
+    counts = {d.key: len(listed_trainers(data, d)) for d in DIRECTIONS}
+    present = {key for key, n in counts.items() if n}
+    teaching: list[str] = []
+    if "zero" in present:
+        teaching.append("учит кататься с нуля" if counts["zero"] == 1 else "учат кататься с нуля")
+    if "better" in present:
+        teaching.append("ставит технику" if counts["better"] == 1 else "ставят технику")
+    sentences: list[str] = []
+    if teaching:
+        teach = " и ".join(teaching)
+        sentences.append(teach[0].upper() + teach[1:] + ".")
+    skating: list[str] = []
+    if "fig" in present:
+        skating.append("фигурное катание")
+    if "hock" in present:
+        skating.append("хоккей")
+    if skating:
+        sentences.append(
+            f"Есть {skating[0]} и {skating[1]}." if len(skating) == 2 else f"Есть {skating[0]}."
+        )
+    if sentences:
+        return " ".join(sentences)
+    if not listed_trainers(data, ALL):
+        _, loc = _city_public_locative(str(data["city"]["name"]))
+        return f"Тренируете в {loc}? Создайте страницу бесплатно." if loc else ""
+    return ALL.lead
+
+
+def _public_arena_name(name: str) -> str:
+    return format_public_name(str(name or "").strip())
+
+
+def fit_meta(text_: str, limit: int) -> str:
+    """Режем по границе слова и заканчиваем точкой. Многоточия нет, «Запись в Telegram.» держим."""
+    if len(text_) <= limit:
+        return text_
+    ending = " Запись в Telegram."
+    if text_.endswith(ending) and len(ending) < limit:
+        room = limit - len(ending)
+        head = text_[: -len(ending)].rstrip()
+        if len(head) > room:
+            head = head[:room].rsplit(" ", 1)[0].rstrip(" ,;:—-")
+        if head and not head.endswith("."):
+            head += "."
+        return head + ending
+    cut = text_[:limit].rsplit(" ", 1)[0].rstrip(" ,;:—-")
+    return cut if cut.endswith(".") else f"{cut}."
+
+
+def catalog_description(data: Mapping[str, Any], direction: Direction) -> str:
+    """Сниппет каталога: город, живое число, только направления, которые в городе есть."""
+    public, loc = _city_public_locative(str(data["city"]["name"]))
+    n = len(listed_trainers(data, direction))
+    if direction is ALL:
+        phrases = _present_direction_phrases(data)
+        clause = f": {_join_catalog(phrases)}" if phrases else ""
+        if n:
+            noun = plural_ru(n, "тренер", "тренера", "тренеров")
+            who = f"{n} {noun} по катанию на коньках"
+            head = f"В {loc} {who}" if loc else f"{public} — {who}"
+            text_ = f"{head}{clause}. Запись в Telegram."
+        elif loc:
+            text_ = f"В {loc} пока нет тренеров по катанию на коньках."
+        else:
+            text_ = f"{public} — тренеров по катанию на коньках пока нет."
+        return fit_meta(text_, DESCRIPTION_LIMIT)
+    if loc:
+        head = f"{direction.h1} в {loc}"
+    elif public:
+        head = f"{direction.h1} — {public}"
+    else:
+        head = direction.h1
+    if n:
+        noun = plural_ru(n, "тренер", "тренера", "тренеров")
+        text_ = f"{head}: {n} {noun}{_direction_price_clause(data, direction)}. Запись в Telegram."
+    else:
+        text_ = f"{head}. Тренеров пока нет."
+    return fit_meta(text_, DESCRIPTION_LIMIT)
+
+
+def _direction_price_clause(data: Mapping[str, Any], direction: Direction) -> str:
+    """«, от 25 BYN в группе» — как на карточке; только если у направления есть цена."""
+    offer = best_offer(listed_trainers(data, direction), direction)
+    phrase = offer_phrase(offer) if offer else ""
+    return f", {phrase}" if phrase else ""
+
+
+def catalog_title(h1: str, in_city: str) -> str:
+    """« · Glideclub» в конце, только если весь title не длиннее 60 знаков."""
+    base = f"{h1} {in_city}".replace("\u00a0", " ").strip()
+    branded = f"{base} · Glideclub"
+    return branded if len(branded) <= TITLE_LIMIT else base
+
+
+def _join_catalog(parts: Sequence[str]) -> str:
+    if len(parts) <= 1:
+        return "".join(parts)
+    # «фигурное и хоккейное катание» уже содержит «и» — перед ним запятая, не второе «и».
+    if " и " in parts[-1]:
+        return ", ".join(parts)
+    return ", ".join(parts[:-1]) + " и " + parts[-1]
 
 
 # ── Вёрстка ──────────────────────────────────────────────────────────
@@ -475,7 +718,9 @@ def price_tiers(services: Sequence[Mapping[str, Any]]) -> list[tuple[str, str]] 
     """
     for svc in services:
         cur = str(svc.get("currency_code") or "BYN")
-        tiers = {str(t.get("tier_kind")): int(t["price_cents"]) for t in svc.get("price_tiers") or [] if t.get("price_cents")}
+        tiers = {
+            str(t.get("tier_kind")): int(t["price_cents"]) for t in svc.get("price_tiers") or [] if t.get("price_cents")
+        }
         child, adult = tiers.get("child"), tiers.get("adult")
         if child and adult:
             if child == adult:
@@ -494,14 +739,11 @@ def price_tiers(services: Sequence[Mapping[str, Any]]) -> list[tuple[str, str]] 
 
 
 def _rating_html(t: Mapping[str, Any]) -> str:
-    avg, n = t.get("rating_avg"), int(t.get("rating_count") or 0)
-    if not avg or n < RATING_MIN_COUNT:
+    parts = trainer_rating_parts(t.get("rating_avg"), t.get("rating_count"))
+    if not parts:
         return ""
-    who = plural_ru(n, "ученик оценил", "ученика оценили", "учеников оценили")
-    return (
-        f'<div class="tc-rate"><i aria-hidden="true">★</i>{float(avg):.1f}'.replace(".", ",")
-        + f" <span>· {n} {who} занятия</span></div>"
-    )
+    score, label = parts
+    return f'<div class="tc-rate"><i aria-hidden="true">★</i>{esc(score)} <span>· {esc(label)}</span></div>'
 
 
 def _arenas_check(arenas: Sequence[Mapping[str, Any]]) -> str:
@@ -514,36 +756,36 @@ def _arenas_check(arenas: Sequence[Mapping[str, Any]]) -> str:
     return "Каток: " + ", ".join(names)
 
 
-def _min_price_basis(t: Mapping[str, Any], cents: int) -> str:
+def _min_price_basis(t: Mapping[str, Any], direction: Direction) -> str:
     """Пометка к «от», если минимум дают не обычные занятия: иначе «от 30» спорит с 45/50 на странице."""
-    from src.application.trainer_min_price import service_price_from
+    from src.application.trainer_min_price import BASIS_LABEL
 
-    svcs = [s for rows in t["services_by_dir"].values() for s in rows]
-    singles = [p for p in (service_price_from(s) for s in svcs) if p is not None]
-    if singles and min(singles) <= cents:
-        return ""
-    if any(int(s.get("group_price_cents") or 0) == cents for s in svcs):
-        return "в группе"
-    return "по абонементу"
+    found = direction_min_offer(t, direction)
+    return BASIS_LABEL.get(found[2], "") if found else ""
 
 
 def _price_html(t: Mapping[str, Any], direction: Direction) -> str:
     if direction is ALL:
         label = "Занятие"
         found = direction_min_price(t, ALL)
-        basis = _min_price_basis(t, found[0]) if found else ""
+        basis = _min_price_basis(t, direction) if found else ""
         note = f" <small>{esc(basis)}</small>" if basis else ""
         val = f'<div class="tc-val">от {esc(_money(*found))}{note}</div>' if found else ""
     else:
         label = "Занятие · " + direction.short
+        found = direction_min_price(t, direction)
+        basis = _min_price_basis(t, direction) if found else ""
+        note = f" <small>{esc(basis)}</small>" if basis else ""
+        head_val = f'<div class="tc-val">от {esc(_money(*found))}{note}</div>' if found else ""
         tiers = price_tiers(t["services_by_dir"].get(direction.key, []))
-        val = (
+        tier_html = (
             '<div class="tc-tiers">'
             + "".join(f'<div class="tc-val">{esc(v)} <small>{esc(sub)}</small></div>' for v, sub in tiers)
             + "</div>"
             if tiers
             else ""
         )
+        val = head_val + tier_html
     if not val:
         val = '<div class="tc-no">Цену уточните у тренера</div>'
     return f'<div class="tc-price"><div><div class="tc-lbl">{esc(label)}</div>{val}</div></div>'
@@ -557,12 +799,10 @@ def _window_label(w: Mapping[str, Any]) -> str:
 _ICON_HEART = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 
-def _card_html(
-    t: Mapping[str, Any], direction: Direction, *, base_url: str, city_id: int, arena_id: int | None
-) -> str:
+def _card_html(t: Mapping[str, Any], direction: Direction, *, base_url: str, city_id: int, arena_id: int | None) -> str:
     photo = t.get("photo_url")
     ph = (
-        f'<img class="tc-ph" src="{esc(photo)}" alt="" width="128" height="148" loading="lazy" decoding="async" />'
+        f'<img class="tc-ph" src="{esc(photo)}" alt="{esc(t["name"])}" width="128" height="148" loading="lazy" decoding="async" />'
         if photo
         else f'<span class="tc-ph tc-ph--mono" aria-hidden="true">{esc(t["initial"])}</span>'
     )
@@ -576,9 +816,7 @@ def _card_html(
     dirs_text = " · ".join(dirs)
     dirs_html = f'<div class="tc-dirs">{esc(dirs_text[:1].upper() + dirs_text[1:])}</div>' if dirs_text else ""
     checks = [c for c in (t.get("education"), _arenas_check(t["arenas"])) if c]
-    checks_html = (
-        '<ul class="tc-checks">' + "".join(f"<li>{esc(c)}</li>" for c in checks) + "</ul>" if checks else ""
-    )
+    checks_html = '<ul class="tc-checks">' + "".join(f"<li>{esc(c)}</li>" for c in checks) + "</ul>" if checks else ""
     about = f'<p class="tc-about">{esc(t["about"])}</p>' if t.get("about") else ""
     wins = _card_windows(t, arena_id)[:CARD_WINDOWS]
     book = booking_url(base_url, int(t["id"]), city_id=city_id) if wins else None
@@ -640,7 +878,9 @@ def _faq_answer(q: str, a: str | None, ctx: Mapping[str, Any]) -> str | None:
         n = ctx["pairs"]
         if not n:
             return None
-        return esc(f"Да, у {n} {plural_ru(n, 'тренера', 'тренеров', 'тренеров')} есть цена «взрослый + ребёнок» — она на странице тренера.")
+        return esc(
+            f"Да, у {n} {plural_ru(n, 'тренера', 'тренеров', 'тренеров')} есть цена «взрослый + ребёнок» — она на странице тренера."
+        )
     if q == _Q_PLAY:
         return f'Расписание ОХМ — в разделе «С клюшкой» на <a href="{esc(ctx["city_href"])}">странице города</a>.'
     return None
@@ -724,34 +964,49 @@ def render_catalog_page(
     from src.application.public_analytics import public_analytics_head_html_from_settings
     from src.application.public_site_footer import render_site_footer_html
     from src.application.public_web_cta import public_page_view_beacon_script
-    from src.application.style_b import COMPONENTS_VERSION, STYLE_VERSION, TOKENS_VERSION, media_url, public_fonts_head_html
+    from src.application.style_b import (
+        COMPONENTS_VERSION,
+        STYLE_VERSION,
+        TOKENS_VERSION,
+        media_url,
+        public_fonts_head_html,
+    )
 
     base = (base_url or "").rstrip("/")
     city = data["city"]
     city_name = str(city["name"])
     city_id = int(city["id"])
-    loc = city_locative(city_name)
-    in_city = f"в {loc}" if loc else city_name
+    city_currency = str(city.get("currency_code") or "BYN")
+    public_city, loc = _city_public_locative(city_name)
+    in_city = f"в {loc}" if loc else public_city
     arenas = data["arenas"]
     if arena_id is not None and arena_id not in arenas:
         arena_id = None
     everyone = listed_trainers(data, ALL)
+    if everyone:
+        warn_if_no_locative(city_name, where="catalog page")
     one = len(everyone) == 1
     pool = listed_trainers(data, direction)
     shown = listed_trainers(data, direction, arena_id)
-    canonical = f"{base}{catalog_path(city_name, direction)}"
+    own_url = f"{base}{catalog_path(city_name, direction)}"
+    canonical = own_url
     city_href = f"/c/{city_slug(city_name)}"
 
+    public_city = format_public_name(city_name)
     h1 = "Тренер по катанию на коньках" if one and direction is ALL else direction.h1
-    prices = [p for p in (direction_min_price(t, direction) for t in shown) if p]
-    facts = [f"<span><b>{esc(_n_trainers(len(shown)))}</b></span>"]
-    if prices:
-        low = min(prices)
-        facts.append(f"<span>от <b>{esc(_money(*low))}</b> за занятие</span>")
-    facts.append("<span>оплата на месте</span>")
+    page_lead = _catalog_all_lead(data) if direction is ALL else direction.lead
+    low = best_offer(shown, direction)
+    facts: list[str] = []
+    if shown:
+        facts = [f"<span><b>{esc(_n_trainers(len(shown)))}</b></span>"]
+        if low:
+            from src.application.trainer_min_price import BASIS_PHRASE
+
+            facts.append(f"<span>от <b>{esc(_money(low[0], low[1]))}</b> {esc(BASIS_PHRASE[low[2]])}</span>")
+        facts.append("<span>оплата на месте</span>")
     crumbs_html = (
         '<nav class="tcat-crumbs" aria-label="Навигация">'
-        f'<a href="{esc(city_href)}">{esc(city_name)}</a> › '
+        f'<a href="{esc(city_href)}">{esc(public_city)}</a> › '
         + (
             f'<a href="{esc(catalog_path(city_name))}">Тренеры</a> › <span>{esc(direction.crumb)}</span>'
             if direction is not ALL
@@ -761,10 +1016,10 @@ def render_catalog_page(
     )
     hero = (
         '<section class="tcat-hero">'
-        f'<span class="tcat-eyebrow">Учиться с тренером · {esc(city_name)}</span>'
+        f'<span class="tcat-eyebrow">Учиться с тренером · {esc(public_city)}</span>'
         f'<h1 class="tcat-h1">{esc(h1)} <em>{esc(in_city)}</em></h1>'
-        f'<p class="tcat-lead">{esc(direction.lead)}</p>'
-        f'<div class="tcat-facts">{"".join(facts)}</div></section>'
+        + (f'<p class="tcat-lead">{esc(page_lead)}</p>' if page_lead else "")
+        + f'<div class="tcat-facts">{"".join(facts)}</div></section>'
     )
 
     controls = ""
@@ -785,9 +1040,11 @@ def render_catalog_page(
         controls += '<p class="tcat-sortnote">Сверху — тренеры с онлайн-записью, по ближайшему свободному времени.</p>'
 
     if shown:
-        grid = '<div class="tcat-grid">' + "".join(
-            _card_html(t, direction, base_url=base, city_id=city_id, arena_id=arena_id) for t in shown
-        ) + "</div>"
+        grid = (
+            '<div class="tcat-grid">'
+            + "".join(_card_html(t, direction, base_url=base, city_id=city_id, arena_id=arena_id) for t in shown)
+            + "</div>"
+        )
         grid += (
             '<div class="tcat-request"><b>Не подошло время?</b>'
             "<span>Напишите тренеру — он предложит своё.</span></div>"
@@ -802,7 +1059,7 @@ def render_catalog_page(
         else:
             grid = (
                 f'<div class="tcat-empty"><b>{esc(aname)}: тренеров «{esc(direction.tab)}» здесь пока нет</b>'
-                f'<span>Посмотрите всех тренеров этого катка или тренеров «{esc(direction.tab)}» на других катках.</span>'
+                f"<span>Посмотрите всех тренеров этого катка или тренеров «{esc(direction.tab)}» на других катках.</span>"
                 '<div class="tcat-empty__act">'
                 f'<a class="tcat-ghost" href="{esc(catalog_path(city_name, ALL, arena_id=arena_id))}">Все тренеры этого катка</a>'
                 f'<a class="tcat-ghost" href="{esc(catalog_path(city_name, direction))}">«{esc(direction.tab)}» на всех катках</a>'
@@ -822,7 +1079,9 @@ def render_catalog_page(
         body += _sec(
             "Что будет после записи",
             '<div class="tcat-after">'
-            + "".join(f"<div><i>{i}</i><b>{esc(b)}</b><span>{esc(s)}</span></div>" for i, (b, s) in enumerate(_AFTER, 1))
+            + "".join(
+                f"<div><i>{i}</i><b>{esc(b)}</b><span>{esc(s)}</span></div>" for i, (b, s) in enumerate(_AFTER, 1)
+            )
             + "</div>",
         )
     body += _sec(
@@ -839,7 +1098,7 @@ def render_catalog_page(
             counts[a["id"]] = counts.get(a["id"], 0) + 1
     arena_order = sorted(counts, key=lambda aid: (-counts[aid], str(arenas[aid]["name"])))
     rentals = [
-        (str(arenas[aid]["name"]), _money(arenas[aid]["rental_minor"]))
+        (str(arenas[aid]["name"]), _money(arenas[aid]["rental_minor"], city_currency))
         for aid in arena_order
         if arenas[aid].get("rental_minor")
     ]
@@ -855,14 +1114,16 @@ def render_catalog_page(
             faq_items.append((q, ans))
     body += _sec(
         "Частые вопросы",
-        '<div class="tcat-faq">'
-        + "".join(
-            f'<details{" open" if i == 0 else ""}><summary>{esc(q)}</summary><p>{a}</p></details>'
-            for i, (q, a) in enumerate(faq_items)
-        )
-        + "</div>"
-        if faq_items
-        else "",
+        (
+            '<div class="tcat-faq">'
+            + "".join(
+                f'<details{" open" if i == 0 else ""}><summary>{esc(q)}</summary><p>{a}</p></details>'
+                for i, (q, a) in enumerate(faq_items)
+            )
+            + "</div>"
+            if faq_items
+            else ""
+        ),
     )
 
     cards = []
@@ -870,7 +1131,7 @@ def render_catalog_page(
         a = arenas[aid]
         img = media_url(a.get("hero"), size="card")
         img_html = f'<img src="{esc(img)}" alt="" loading="lazy" decoding="async" />' if img else ""
-        rent = f"Прокат — {_money(a['rental_minor'])} · " if a.get("rental_minor") else ""
+        rent = f"Прокат — {_money(a['rental_minor'], city_currency)} · " if a.get("rental_minor") else ""
         inner = (
             f"{img_html}<div><b>{esc(a['name'])}</b><span>{esc(_n_trainers(counts[aid]))}</span>"
             + (f"<em>{esc(rent)}расписание ›</em>" if a.get("slug") else (f"<em>{esc(rent[:-3])}</em>" if rent else ""))
@@ -910,29 +1171,23 @@ def render_catalog_page(
     if not one and everyone:
         body += _DIALOG_SCRIPT
 
-    crumbs = [("Glideclub", f"{base}/"), (city_name, f"{base}{city_href}"), ("Тренеры", f"{base}{catalog_path(city_name)}")]
+    crumbs = [
+        ("Glideclub", f"{base}/"),
+        (public_city, f"{base}{city_href}"),
+        ("Тренеры", f"{base}{catalog_path(city_name)}"),
+    ]
     if direction is not ALL:
-        crumbs.append((direction.crumb, canonical))
-    body += breadcrumb_script(canonical, crumbs)
+        crumbs.append((direction.crumb, own_url))
+    body += breadcrumb_script(own_url, crumbs)
 
-    title = f"{h1} {in_city} · Glideclub".replace(" ", " ")
-    desc_bits = [direction.lead]
-    if pool:
-        ps = [p for p in (direction_min_price(t, direction) for t in pool) if p]
-        desc_bits.append(
-            _n_trainers(len(pool)).replace(" ", " ")
-            + (f", от {_money(*min(ps))} за занятие".replace(" ", " ") if ps else "")
-            + ". Запись в Telegram, оплата тренеру на месте."
-        )
-    description = " ".join(desc_bits)
-    if len(description) > 155:
-        description = description[:154].rstrip() + "…"
+    title = catalog_title(h1, in_city)
+    description = catalog_description(data, direction)
     ld = {
         "@context": "https://schema.org",
         "@type": "ItemList",
         "name": f"{h1} {in_city}".replace(" ", " "),
         "itemListElement": [
-            {"@type": "ListItem", "position": i + 1, "name": t["name"], "url": f"{base}{t['path']}"}
+            {"@type": "ListItem", "position": i + 1, "name": t["name"], "url": f"{base}{t['path'].split('?', 1)[0]}"}
             for i, t in enumerate(pool)
         ],
     }
@@ -949,6 +1204,7 @@ def render_catalog_page(
             "__OG_IMAGE__": esc(catalog_home_og_image_url(base)),
             "__LANG__": "ru",
             "__OG_LOCALE__": "ru_RU",
+            "__OG_TYPE__": "website",
             "__ROBOTS__": "index, follow" if indexable(data, direction) else "noindex, follow",
             "__HEAD_EXTRA__": f'<link rel="stylesheet" href="/static/share/trainer-catalog.css?v={TRAINER_CATALOG_STYLE_VERSION}" />',
             "__JSONLD__": json_for_script(ld) if pool else "{}",
@@ -971,4 +1227,3 @@ def render_catalog_page(
 def parse_arena_param(raw: str | None) -> int | None:
     value = (raw or "").strip()
     return int(value) if re.fullmatch(r"[1-9][0-9]{0,8}", value) else None
-

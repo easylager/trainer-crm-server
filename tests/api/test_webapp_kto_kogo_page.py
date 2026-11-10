@@ -13,7 +13,7 @@ def test_kto_kogo_page_served_with_versioned_assets() -> None:
     client = TestClient(app)
     r = client.get("/webapp/kto-kogo")
     assert r.status_code == 200
-    for asset in ("kto-kogo.css", "kto-kogo-model.js", "kto-kogo.js"):
+    for asset in ("kto-kogo.css", "kto-kogo-model.js", "kto-kogo.js", "kto-kogo-matches.js"):
         assert re.search(rf"/static/webapp/{re.escape(asset)}\?v=\d+", r.text), asset
         assert client.get(f"/static/webapp/{asset}").status_code == 200
 

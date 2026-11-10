@@ -27,7 +27,7 @@ describe('превью тренера на катке (вариант А)', () =
 
   it('рейтинг, опыт, услуги и цена — только то, что есть', () => {
     const v = M.trainerPreview(base, {});
-    assert.equal(v.rate, '4,9 · 23');
+    assert.equal(v.rate, '4,9 · 23 оценки');
     assert.equal(v.what, 'С нуля · Техника · Дети');
     assert.equal(v.facts, '6 лет на льду · есть абонементы');
     assert.match(v.price, /^от 41,87/);

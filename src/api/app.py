@@ -58,6 +58,7 @@ from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.api.middleware.maintenance import MaintenanceModeMiddleware
 from src.api.middleware.security_headers import SecurityHeadersMiddleware
+from src.api.middleware.trailing_slash import TrailingSlashMiddleware
 from src.api.middleware.www_redirect import WwwRedirectMiddleware
 from src.api.middleware.trainer_webapp_benchmark import TrainerWebappBenchmarkMiddleware
 from src.shared.catalog_entry import catalog_browse_redirect
@@ -118,6 +119,7 @@ app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
 # HSTS, nosniff, Referrer-Policy на всё; frame-ancestors на HTML сайта (не /webapp/).
 # www.glideclub.by → glideclub.by (301); добавлен раньше SecurityHeaders, т.е. внутри него — редирект получает HSTS.
 app.add_middleware(ScrapeGuardMiddleware)
+app.add_middleware(TrailingSlashMiddleware)
 app.add_middleware(WwwRedirectMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 # Outermost: full wall time for trainer Mini App API (after gzip/CORS/body/rate-limit stack).

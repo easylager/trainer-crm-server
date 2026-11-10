@@ -62,8 +62,8 @@ async def test_coach_entry_in_trainers_section_leads_to_rink_landing(app_use_tes
     section = re.search(r'<section class="b-sec b-sec--place" id="trainers">(.*?)</section>', html, re.S)
     assert section
     body = section.group(1)
-    # Списка тренеров нет (его заменил единый блок) — в разделе школа и вход для тренера.
-    assert name not in body and "Тренируете на этом катке?" in body
+    # В разделе сами тренеры и вход для тренера.
+    assert name in body and "Тренируете на этом катке?" in body
     # Без промежуточной шторки: сразу лендинг этого катка, тап считается (coach_open).
     rink_landing = "/trainers" + place["path"][len("/p"):]
     assert f'class="b-coach tg-out" href="{rink_landing}" data-coach-open' in body
