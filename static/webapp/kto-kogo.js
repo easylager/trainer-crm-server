@@ -437,6 +437,8 @@
     return api('GET', '/client/hockey/matches?league=all').then(function (data) {
       mergeMatches((data && data.items) || []);
       state.me = data && data.me;
+      // Сколько ходов ждут матча: число — список загрузился (нужно, чтобы узнать первый ход, см. isFirstPick).
+      state.awaiting = data && typeof data.awaiting === 'number' ? data.awaiting : null;
       state.race = (data && data.race) || null;
       state.double = (data && data.double) || null;
       state.doubles = (data && data.doubles) || [];
@@ -530,6 +532,7 @@
   // Козырь: порядковый номер последнего запроса и число запросов в пути (см. toggleTrump).
   var trumpSeq = 0;
   var trumpPending = 0;
+  var picksSaved = 0; // ходы, которые сервер принял за эту сессию
 
   function sendPick(match, body, optimistic) {
     match = findMatch(match.id) || match;
@@ -546,6 +549,12 @@
       settled = true;
     }
     var trumpAtSend = trumpSeq;
+    // Первый ход игрока: после него хаб может попросить разрешить сообщения (kto-kogo-board.js). Сбой здесь ход не трогает.
+    var first = false;
+    var owner = current();
+    try {
+      first = S.isFirstPick({ awaiting: state.awaiting, me: state.me, saved: picksSaved, matches: state.matches, cache: state.matchCache });
+    } catch (e) { first = false; }
     // Козырь живёт на ходе: смена стороны или счёта его не снимает.
     if (before && before.doubled) optimistic.doubled = true;
     match.my_pick = optimistic;
@@ -554,6 +563,10 @@
     return api('PUT', '/client/hockey/matches/' + match.id + '/pick', body)
       .then(function (data) {
         settle();
+        picksSaved++;
+        if (first && window.KK && typeof window.KK.afterFirstPick === 'function') {
+          try { window.KK.afterFirstPick(owner); } catch (e) { /* просьба не мешает ходу */ }
+        }
         if (match.pickSeq !== seq) return;
         var doubled = match.my_pick && match.my_pick.doubled;
         match.my_pick = data && data.my_pick;
@@ -704,7 +717,13 @@
     var body = sc ? sc.render(c.args) : null;
     if (body) nodes = nodes.concat(body);
     var prevSheet = root.querySelector('.kk-sheet');
-    if (state.sheet && sc && sc.sheet) {
+    if (state.sheet && state.sheet.kind === 'writeAsk') {
+      // Общая шторка «Итог — в чат» (kto-kogo-board.js): рисуется поверх любого экрана; не нарисовалась — её нет.
+      var ask = null;
+      try { ask = window.KK && window.KK.writeAskSheet ? window.KK.writeAskSheet() : null; } catch (e) { ask = null; }
+      if (ask) nodes.push(ask);
+      else state.sheet = null;
+    } else if (state.sheet && sc && sc.sheet) {
       var s = sc.sheet(state.sheet, c.args);
       if (s) {
         nodes.push(s);

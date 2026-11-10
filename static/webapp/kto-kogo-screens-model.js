@@ -1106,6 +1106,104 @@
     return { items: (prev.items || []).concat(add).sort(byStart), hasMore: !!(history && history.has_more), cursor: (history && history.next_before) || null };
   }
 
+  // ---------- «Итог — в чат»: после первого хода просим разрешить боту писать первым ----------
+
+  /** Тексты подводки: в одном тоне со строкой «Сообщения в чате» на хабе. */
+  var WRITE_ASK = {
+    title: 'Итог' + NBSP + '— в чат',
+    text: 'Напишем, чем закончился матч, и' + NBSP + 'напомним о' + NBSP + 'следующем ходе. Не' + NBSP + 'чаще раза в' + NBSP + 'день, ночью не' + NBSP + 'пишем.',
+    allow: 'Да, писать в' + NBSP + 'чат',
+    later: 'Не' + NBSP + 'сейчас',
+  };
+  var WRITE_ASK_KEY = 'kk_write_ask';
+
+  function hasPick(list) {
+    for (var k in list || {}) {
+      if (Object.prototype.hasOwnProperty.call(list, k) && list[k] && list[k].my_pick) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Это первый ход игрока? Смотрим перед отправкой хода. Ответ сервера про сам ход этого не говорит, а
+   * profile.played считает только ходы на сыгранные матчи — поэтому сверяем всё, что знаем:
+   * awaiting (ходы на несыгранные матчи, число из /matches; не число — список не загрузился, «не знаем» = нет),
+   * me (строка сезона: есть очки за сыгранные), ходы в загруженных матчах и успешные ходы этой сессии.
+   */
+  function isFirstPick(o) {
+    o = o || {};
+    if (typeof o.awaiting !== 'number' || o.awaiting !== 0) return false;
+    if (o.me) return false;
+    if ((o.saved || 0) > 0) return false;
+    return !hasPick(o.matches) && !hasPick(o.cache);
+  }
+
+  /** Флаг «уже спрашивали» на устройстве; хранилище недоступно — помним до конца сессии. */
+  function writeAskMemo(storage) {
+    var mem = false;
+    return {
+      asked: function () {
+        if (mem) return true;
+        try {
+          return !!storage && storage.getItem(WRITE_ASK_KEY) === '1';
+        } catch (e) {
+          return false;
+        }
+      },
+      mark: function () {
+        mem = true;
+        try {
+          if (storage) storage.setItem(WRITE_ASK_KEY, '1');
+        } catch (e) { /* в памяти уже отмечено */ }
+      },
+    };
+  }
+
+  /**
+   * Показывать ли подводку. o: {first, tg, wa (GlideWriteAccess), asked, remind, sheet}.
+   * wa.writeAccessState(tg) === 'askable' — это Telegram, метод есть, а боту писать ещё нельзя.
+   */
+  function shouldAskWrite(o) {
+    o = o || {};
+    // remind === false — игрок сам выключил сообщения: не спорим. «Включено» (true) у нового игрока — просто значение по умолчанию
+    // на сервере (нет строки настроек), а писать ему бот при этом не может, ради него подводка и нужна.
+    if (o.first !== true || o.asked === true || o.remind === false || o.sheet) return false;
+    if (!o.tg || !o.wa || typeof o.wa.writeAccessState !== 'function') return false;
+    try {
+      return o.wa.writeAccessState(o.tg) === 'askable';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Ответ на подводку: флаг ставится всегда. 'allow' — системное окно Telegram (wa.requestWriteAccess),
+   * и только при согласии o.save(). Промис не отклоняется: 'later' | 'granted' | 'denied' | 'unsupported' | 'error'.
+   */
+  function answerWriteAsk(choice, o) {
+    o = o || {};
+    try {
+      if (o.memo) o.memo.mark();
+    } catch (e) { /* */ }
+    if (choice !== 'allow') return Promise.resolve('later');
+    var req;
+    try {
+      req = o.wa.requestWriteAccess(o.tg);
+    } catch (e) {
+      return Promise.resolve('error');
+    }
+    return Promise.resolve(req).then(function (outcome) {
+      if (outcome === 'granted') {
+        try {
+          if (typeof o.save === 'function') o.save();
+        } catch (e) { /* */ }
+      }
+      return outcome;
+    }, function () {
+      return 'error';
+    });
+  }
+
   var api = {
     clubName: clubName,
     clubGen: clubGen,
@@ -1206,6 +1304,12 @@
     MATCHES_TITLE: MATCHES_TITLE,
     ENTRY_TITLE: ENTRY_TITLE,
     MATCHES_EMPTY: MATCHES_EMPTY,
+    WRITE_ASK: WRITE_ASK,
+    WRITE_ASK_KEY: WRITE_ASK_KEY,
+    isFirstPick: isFirstPick,
+    writeAskMemo: writeAskMemo,
+    shouldAskWrite: shouldAskWrite,
+    answerWriteAsk: answerWriteAsk,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
