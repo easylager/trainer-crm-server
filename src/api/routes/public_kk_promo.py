@@ -12,7 +12,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from src.application.hockey_promo import clean_src
-from src.application.place_links import telegram_open_link
+from src.application.place_links import public_telegram_entry_link
 from src.shared.config import Settings
 
 router = APIRouter(tags=["public-kk-promo"])
@@ -36,12 +36,7 @@ async def get_kk_promo_page(request: Request, s: str = Query("", max_length=64))
     cfg = Settings()  # type: ignore[call-arg]
     base = (cfg.webapp_base_url or "").strip().rstrip("/")
     go = (
-        telegram_open_link(
-            client_bot_username=cfg.client_bot_username,
-            mini_app_short_name=cfg.client_mini_app_short_name,
-            main_mini_app=cfg.client_bot_main_mini_app,
-            start_param=f"kks_{src}",
-        )
+        public_telegram_entry_link(cfg, start_param=f"kks_{src}")
         or f"{base}/webapp/kto-kogo?src={src}"
     )
     e = html.escape

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.application.ice_invites import InviteRejected, get_invite, get_invite_status
-from src.application.place_links import telegram_open_link
+from src.application.place_links import public_telegram_entry_link
 from src.application.png_render_cache import render_png_cached
 from src.application.zovi_card_image import render_zovi_og, render_zovi_ticket
 from src.shared.config import Settings
@@ -54,12 +54,7 @@ def _exit_url(invite: dict[str, Any], origin: str) -> str:
     match = invite.get("match") or {}
     if match.get("start_param"):
         cfg = Settings()  # type: ignore[call-arg]
-        link = telegram_open_link(
-            client_bot_username=cfg.client_bot_username,
-            mini_app_short_name=cfg.client_mini_app_short_name,
-            main_mini_app=cfg.client_bot_main_mini_app,
-            start_param=str(match["start_param"]),
-        )
+        link = public_telegram_entry_link(cfg, start_param=str(match["start_param"]))
         if link:
             return link
     return f"{origin}/"

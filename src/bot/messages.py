@@ -28,6 +28,12 @@ CLIENT_START_WELCOME = (
     "👋 Привет! Здесь можно найти тренера и записаться на занятие. "
     "Нажмите кнопку <b>Главная</b> слева от поля ввода — там каталог, записи и заявки. Помощь: /guide"
 )
+# /start <параметр> с публичной страницы, который не забрала ни одна особая ветка cmd_start:
+# одна фраза и одна кнопка на тот же экран Mini App (public_entry_via_start).
+CLIENT_START_ENTRY_GAME = "<b>Кто кого</b> — игра для болельщиков: угадайте, кто победит в матче."
+CLIENT_BUTTON_START_ENTRY_GAME = "Играть"
+CLIENT_START_ENTRY_APP = "Откройте Glide, чтобы продолжить."
+CLIENT_BUTTON_START_ENTRY_APP = "Открыть"
 CLIENT_FALLBACK = "Катки, расписание и запись — в приложении."
 CLIENT_RINK_QUERY_REPLY = "Катки и расписание — в приложении."
 CLIENT_BUTTON_OPEN_RINKS = "Открыть катки"

@@ -13,6 +13,7 @@ from urllib.parse import quote
 from aiogram import Bot, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ChatAction, ChatType, ParseMode
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     BufferedInputFile,
@@ -112,6 +113,7 @@ from src.shared.catalog_visibility import trainer_is_listed
 from src.shared.catalog_entry import client_discovery_webapp_url
 from src.application.support_use_cases import create_support_message
 from src.bot.rink_query import RINK_QUERY_MAX_LEN, is_rink_query, known_city_names
+from src.bot.start_entry import start_entry_reply
 from src.application.group_attendance_use_cases import (
     attendance_rsvp_verify,
     respond_attendance_rsvp,
@@ -1404,6 +1406,25 @@ async def cmd_start(message: Message) -> None:
                 base, trainer_id, include_catalog_alternative=False, service_id=service_id
             ),
         )
+        return
+
+    # Универсальный вход с публичной страницы (public_entry_via_start): параметр, который не
+    # забрала ни одна ветка выше, открывает тот же экран Mini App кнопкой. Строго последняя ветка.
+    entry = start_entry_reply(payload, webapp_base_url=Settings().webapp_base_url)
+    if entry is not None:
+        try:
+            await message.answer(
+                entry["text"],
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=entry["button_text"], web_app=WebAppInfo(url=entry["url"]))]
+                    ]
+                ),
+            )
+        except TelegramAPIError:
+            # Бот заблокирован или чат недоступен: ответить некому, вход не роняем.
+            logger.warning("start entry reply failed telegram_id=%s payload=%s", telegram_id, payload, exc_info=True)
         return
     await message.answer(msg.CLIENT_START_WELCOME)
 
