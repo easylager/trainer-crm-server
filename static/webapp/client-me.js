@@ -39,6 +39,11 @@
     return typeof value === 'number' && isFinite(value) && value > 0;
   }
 
+  /* Честный ноль тоже число: сервер отдаёт null, только когда играть было нечего. */
+  function isCount(value) {
+    return typeof value === 'number' && isFinite(value) && value >= 0;
+  }
+
   function text(value) {
     return typeof value === 'string' ? value.trim() : '';
   }
@@ -122,10 +127,10 @@
     if (positive(s.streak_weeks)) {
       cells.push({ key: 'streak_weeks', value: String(s.streak_weeks), label: pluralRu(s.streak_weeks, 'неделя подряд', 'недели подряд', 'недель подряд'), href: 'client-stats' });
     }
-    if (positive(s.kk_points)) {
+    if (isCount(s.kk_points)) {
       cells.push({ key: 'kk_points', value: String(s.kk_points), label: pluralRu(s.kk_points, 'очко', 'очка', 'очков'), href: 'kto-kogo' });
     }
-    if (positive(s.kk_place)) {
+    if (isCount(s.kk_place)) {
       cells.push({ key: 'kk_place', value: String(s.kk_place), label: 'место', href: 'kto-kogo' });
     }
     return cells.length ? cells : null;
