@@ -13,6 +13,7 @@ from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, 
 from src.application.hockey_game import (
     HISTORY_MAX,
     HISTORY_PAGE,
+    PHASE_WAITING,
     DoubleUnavailable,
     Pick,
     PicksClosed,
@@ -27,6 +28,7 @@ from src.application.hockey_game import (
     my_points,
     pick_open,
     player_match_list,
+    result_checking,
     set_double,
 )
 from src.application.hockey_hub import hub_card, mark_result_seen
@@ -160,7 +162,8 @@ def _match_out(
         my_pick = _pick_out(
             row["pick_side"], row["pick_home_score"], row["pick_away_score"], row["pick_points"], row["pick_doubled"]
         )
-    phase = match_phase(row["status"], starts_at, now, has_probe=bool(row.get("has_probe")))
+    has_probe = bool(row.get("has_probe"))
+    phase = match_phase(row["status"], starts_at, now, has_probe=has_probe)
     return {
         "id": row["id"],
         "home_team": row["home_team"],
@@ -188,6 +191,9 @@ def _match_out(
         # Серверная фаза (TASK-359): upcoming | live | waiting | done | cancelled. «stale» — итога нет больше трёх суток.
         "phase": phase,
         "stale": match_stale(phase, starts_at, now),
+        # «Ждём итог», но матч уже окончен: итог запомнен опросом или на ручной проверке — «сверяем счёт».
+        # Без флага такой матч не отличить от идущего дольше трёх часов.
+        "checking": phase == PHASE_WAITING and result_checking(row["status"], has_probe=has_probe),
         # Очки хода с козырем: у ``my_pick.points`` базовые, здесь — итог, который видит игрок.
         "my_points": my_points(row["pick_points"], bool(row["pick_doubled"])) if my_pick else None,
         "league": row.get("league"),

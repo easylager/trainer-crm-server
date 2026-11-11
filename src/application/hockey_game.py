@@ -247,6 +247,13 @@ PHASE_DONE = "done"
 PHASE_CANCELLED = "cancelled"
 
 
+def result_checking(status: str, *, has_probe: bool = False) -> bool:
+    """Итог уже увидели (запомненный опрос) или он на ручной проверке: матч окончен, сверяем счёт.
+
+    Отличает такой матч от того, что просто идёт дольше трёх часов, — оба в фазе «ждём итог»."""
+    return status == "review" or has_probe
+
+
 def match_phase(status: str, starts_at: datetime, now: datetime, *, has_probe: bool = False) -> str:
     """Где матч на пути «впереди → идёт → ждём итог → сыграли». Считает сервер, клиент лишь уточняет по часам."""
     if status == "cancelled":
@@ -255,7 +262,7 @@ def match_phase(status: str, starts_at: datetime, now: datetime, *, has_probe: b
         return PHASE_DONE
     if _utc(now) < _utc(starts_at):
         return PHASE_UPCOMING
-    if status == "review" or has_probe:
+    if result_checking(status, has_probe=has_probe):
         return PHASE_WAITING
     return PHASE_LIVE if _utc(now) - _utc(starts_at) < MATCH_LIVE_FOR else PHASE_WAITING
 
@@ -746,6 +753,7 @@ __all__ = [
     "live_points",
     "make_pick",
     "match_phase",
+    "result_checking",
     "match_stale",
     "my_double",
     "my_doubles",

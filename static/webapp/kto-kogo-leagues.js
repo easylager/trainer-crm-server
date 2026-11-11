@@ -520,7 +520,7 @@
           K.render();
           loadLeague(a).then(K.render, function (e) { K.fail(e); a.failed = true; K.render(); });
         }, 'Период таблицы'),
-        h('div', { class: 'kk-crownbar' }, [K.crownIcon(18), h('span', { text: S.leagueCrownLine(l, a.tab, me, items[0] ? items[0].points : 0) })]),
+        h('div', { class: 'kk-crownbar' + (S.leagueCrownMuted(l) ? ' kk-crownbar--muted' : '') }, [K.crownIcon(18), h('span', { text: S.leagueCrownLine(l, a.tab, me, items[0] ? items[0].points : 0) })]),
         items.length > 1 ? h('div', { class: 'kk-tbl' }, items.map(leagueRow)) : h('span', { class: 'kk-sub', text: 'Пока в лиге только ты. Позови своих — таблица оживёт после первого матча.' }),
         a.tab === 'all' ? crownWall(l.wall) : null,
         h('div', { class: 'kk-two kk-two--cta' }, [

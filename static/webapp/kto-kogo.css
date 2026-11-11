@@ -265,6 +265,9 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-sc.is-on { background: var(--kk-chip); color: var(--kk-ink); }
 .kk-crownbar { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 12px; background: var(--kk-crownbg); color: var(--kk-crownink); font: 500 13px/1.3 var(--kk-text); }
 .kk-crownbar svg { flex: none; }
+/* Корона пока невозможна (мало игроков с очками): не золото, а нейтральная подсказка. */
+.kk-crownbar--muted { background: var(--kk-chip); color: var(--kk-soft); }
+.kk-crownbar--muted .kk-crown-ic { color: var(--kk-muted); }
 .kk-tbl { display: flex; flex-direction: column; gap: 3px; }
 .kk-r { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 52px; padding: 4px 12px; border-radius: 14px; font-variant-numeric: tabular-nums; }
 .kk-r:nth-child(odd) { background: var(--kk-row); }
@@ -355,6 +358,16 @@ body:not(.kk-dark) .kk-puck { box-shadow: inset 0 -3px 0 #3a4756; }
 .kk-rl__trump { border-radius: 18px; background: var(--kk-chip); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
 .kk-rl__trump b { font: 700 15px/1.2 var(--kk-text); }
 .kk-rl__trump span { font: 500 14px/1.4 var(--kk-text); color: var(--kk-soft); }
+/* «Таблицы и короны»: свёрнутый блок правил под козырем. */
+.kk-rl__tables { border-radius: 18px; border: 1px solid var(--kk-line); }
+.kk-rl__more { width: 100%; min-height: 48px; border: 0; border-radius: 18px; background: none; color: var(--kk-ink); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; text-align: left; font: 700 15px/1.2 var(--kk-text); }
+.kk-rl__more svg { flex: none; color: var(--kk-muted); transition: transform 0.2s ease; }
+.kk-rl__more.is-open svg { transform: rotate(180deg); }
+.kk-rl__panel { display: flex; flex-direction: column; gap: 14px; padding: 2px 16px 16px; }
+.kk-rl__it { display: flex; flex-direction: column; gap: 4px; }
+.kk-rl__k { font: 700 11px/1.2 var(--kk-text); letter-spacing: 0.06em; text-transform: uppercase; color: var(--kk-gold-ink); }
+.kk-rl__x { font: 500 14px/1.4 var(--kk-text); color: var(--kk-soft); }
+@media (prefers-reduced-motion: reduce) { .kk-rl__more svg { transition: none; } }
 
 /* Стикер в строке и широкие кнопки хода */
 .kk-tag--inline { position: static; display: inline-block; vertical-align: middle; margin-left: 8px; height: 24px; line-height: 24px; font-size: 10px; padding: 0 8px; }

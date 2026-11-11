@@ -143,6 +143,29 @@ async def test_each_match_carries_phase_and_my_points_and_old_fields_stay(app_us
 
 
 @pytest.mark.asyncio
+async def test_checking_marks_a_finished_match_whose_result_is_being_confirmed(app_use_test_db, db_session) -> None:
+    """«Матч окончен · сверяем счёт» — только когда итог запомнен или на проверке, а не когда матч идёт дольше трёх часов."""
+    now = datetime.now(timezone.utc)
+    probed = await _match(db_session, now - timedelta(hours=2), probe=True)
+    review = await _match(db_session, now - timedelta(hours=4), status="review")
+    long_live = await _match(db_session, now - timedelta(hours=4))
+    live = await _match(db_session, now - timedelta(hours=1))
+    played = await _match(db_session, now - timedelta(hours=9), status="final")
+    ahead = await _match(db_session, now + timedelta(days=1))
+
+    items = _by_id(await _get(db_session))
+    assert items[probed]["phase"] == "waiting" and items[long_live]["phase"] == "waiting"
+    assert {k: items[k]["checking"] for k in (probed, review, long_live, live, played, ahead)} == {
+        probed: True,
+        review: True,
+        long_live: False,
+        live: False,
+        played: False,
+        ahead: False,
+    }
+
+
+@pytest.mark.asyncio
 async def test_more_than_twenty_played_matches_do_not_push_out_the_future(app_use_test_db, db_session) -> None:
     now = datetime.now(timezone.utc)
     played = [await _match(db_session, now - timedelta(hours=4 + i), status="final") for i in range(25)]
