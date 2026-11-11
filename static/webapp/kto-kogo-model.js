@@ -423,6 +423,42 @@
   }
 
   /**
+   * TASK-374: что делает «назад». inTab — игра живёт во вкладке (флаг season_ui): корень вкладки — `hub`,
+   * с него «назад» никуда не ведёт. Без вкладки корень уходит на главную приложения, как раньше.
+   * 'sheet' — закрыть шторку, 'pop' — снять экран, 'stay' — ничего, 'home' — на главную приложения.
+   */
+  function backAction(stackLen, hasSheet, inTab) {
+    if (hasSheet) return 'sheet';
+    if (stackLen > 1) return 'pop';
+    return inTab ? 'stay' : 'home';
+  }
+
+  /** Нужна ли нативная «назад» Telegram: во вкладке на корне её нет, на вложенных экранах есть. */
+  function nativeBackShown(stackLen, inTab) {
+    return !inTab || stackLen > 1;
+  }
+
+  /**
+   * Повторный тап по вкладке «Кто кого»: шторку закрыть; не на корне — сбросить стек на `hub`.
+   * На корне игра не перерисовывается — только прокрутка наверх (её делает вызывающий).
+   */
+  function retapAction(stack, hasSheet) {
+    var atRoot = stack.length === 1 && stack[0].name === 'hub';
+    return { closeSheet: !!hasSheet, reset: !atRoot };
+  }
+
+  /**
+   * Экран, который вход по ссылке кладёт поверх `hub`: приглашение в лигу, матч (?match/?reveal/?pick), таблица.
+   * null — вход остаётся на `hub` (?from=, ?src=). Итоги месяца (?month=) кладутся поверх отдельно, после загрузки.
+   */
+  function entryScreen(code, openId, tab) {
+    if (code) return { name: 'join', args: { code: code } };
+    if (openId) return { name: 'match', args: { id: openId } };
+    if (tab === 'table') return { name: 'table', args: {} };
+    return null;
+  }
+
+  /**
    * Переход между экранами без фантомов в стеке: show(next) ставит стек и рисует экран.
    * Бросил рендер — возвращаем прежний стек и перерисовываем его; иначе «Назад» снимал бы невидимые экраны,
    * а кнопки переходов молчали бы (DOM остаётся старым, стек уже новый). true — переход состоялся.
@@ -528,6 +564,10 @@
     crowd: crowd,
     friendMove: friendMove,
     commitNav: commitNav,
+    backAction: backAction,
+    nativeBackShown: nativeBackShown,
+    retapAction: retapAction,
+    entryScreen: entryScreen,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
