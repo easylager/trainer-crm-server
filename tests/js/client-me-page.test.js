@@ -311,8 +311,8 @@ describe('TASK-383: «Изменить» на узком экране', () => {
     assert.match(src, /data-act="name" aria-label="Изменить">.*<span class="cm-edit__t">Изменить<\/span>/);
     assert.ok(header === '' || /aria-label="Изменить"/.test(header));
   });
-  it('до 389 px — иконка 36 px с зоной касания 44 px, с 390 — по макету', () => {
-    const m = css.match(/@media \(max-width: 389px\) \{([\s\S]*?)\n\}\n/);
+  it('до 429 px — иконка 36 px с зоной касания 44 px, с 430 — по макету', () => {
+    const m = css.match(/@media \(max-width: 429px\) \{([\s\S]*?)\n\}\n/);
     assert.ok(m, 'media query есть');
     assert.match(m[1], /\.cm-edit \{[^}]*width: 36px/);
     assert.match(m[1], /\.cm-edit::after \{[^}]*inset: -4px;/);
