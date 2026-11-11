@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
 _ZWJ = "\u200d"
+# Cc/Cf — управляющие и форматные, Cs — суррогаты, Co — private use, Cn — не назначены.
+_DROPPED_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co", "Cn"})
+# Буквы и знаки, которые рисуются пустыми: Hangul filler, braille blank и родня.
+_BLANK_FILLERS = frozenset("\u115f\u1160\u3164\uffa0\u2800")
 _NAME_ERROR = "Имя — от 1 до 40 знаков"
 _ARENA_ERROR = "Каток не найден"
 
@@ -50,16 +54,31 @@ _SET_HOME = text("""
 
 
 def normalize_display_name(raw: str) -> str:
-    """Пробелы схлопнуть, края обрезать, управляющие знаки убрать. Эмодзи и ZWJ остаются."""
+    """Имя для показа: пробелы схлопнуть, края обрезать, невидимое убрать. Эмодзи и ZWJ-склейки остаются.
+
+    Убираются управляющие и форматные знаки, суррогаты, private use и неназначенные кодпоинты,
+    а также «пустые» заполнители (U+3164, U+2800 и родня). ZWJ живёт только между двумя видимыми
+    знаками. В имени должна быть буква, цифра или эмодзи, иначе оно выглядит пустым.
+    """
     kept: list[str] = []
     for ch in raw:
         if ch == _ZWJ:
             kept.append(ch)
+        elif ch in _BLANK_FILLERS or unicodedata.category(ch) in _DROPPED_CATEGORIES:
             continue
-        if unicodedata.category(ch) in ("Cc", "Cf"):
-            continue
-        kept.append(ch)
-    name = " ".join("".join(kept).split())
+        else:
+            kept.append(ch)
+    chars = list(" ".join("".join(kept).split()))
+    glued: list[str] = []
+    for i, ch in enumerate(chars):
+        if ch == _ZWJ:
+            after = next((c for c in chars[i + 1 :] if c != _ZWJ), " ")
+            if not glued or glued[-1] in (" ", _ZWJ) or after == " ":
+                continue
+        glued.append(ch)
+    name = " ".join("".join(glued).split())
+    if not any(unicodedata.category(ch)[0] in ("L", "N") or unicodedata.category(ch) == "So" for ch in name):
+        raise ValueError(_NAME_ERROR)
     if not 1 <= len(name) <= 40:
         raise ValueError(_NAME_ERROR)
     return name
