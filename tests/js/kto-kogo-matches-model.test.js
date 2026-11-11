@@ -88,11 +88,11 @@ describe('десять состояний строки (макет States)', () 
     assert.equal(S.rowModel(mk({ my_pick: SIDE_ONLY }), NOW).move.text, 'Шахтёр');
   });
 
-  it('идёт: неофициальный счёт, очков нет', () => {
+  it('идёт: прочерк и без счёта, даже если промежуточный счёт уже пришёл', () => {
     const m = mk({ starts_at: at(-H), open: false, phase: 'live', my_pick: PICK, live: { home_score: 1, away_score: 0 } });
     const r = S.rowModel(m, NOW);
     assert.deepEqual(r.chip, { kind: 'live', text: 'ИДЁТ' });
-    assert.deepEqual(r.center, { big: '1:0', cap: 'по' + NBSP + 'ходу игры' });
+    assert.deepEqual(r.center, { big: '—:—', cap: 'идёт' + NBSP + 'матч' });
     assert.deepEqual(r.right, { kind: 'note', text: 'Очки' + NBSP + '— после' + NBSP + 'итога' });
     assert.equal(S.rowModel(Object.assign({}, m, { live: null }), NOW).center.big, '—:—');
   });
