@@ -108,6 +108,14 @@ a{color:#0B6E70}a:hover{color:#073C3E}
     <nav style="background: {{t.surface}}; border-radius: 20px; box-shadow: {{t.shadow}}; padding: 0 16px">
       <sc-if value="{{isSeason}}" hint-placeholder-val="{{true}}">
         <a href="#" style="display: flex; align-items: center; gap: 14px; min-height: 56px; border-bottom: 1px solid {{t.line}}; color: inherit; text-decoration: none">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{t.ink2}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg>
+          <span style="flex: none; font-weight: 600; font-size: 16px">Мой тренер</span>
+          <span style="flex: 1; min-width: 0; text-align: right; font-size: 14px; line-height: 1.25; color: {{t.muted}}">Анна&nbsp;Соколова</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.muted}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+        </a>
+      </sc-if>
+      <sc-if value="{{isSeason}}" hint-placeholder-val="{{true}}">
+        <a href="#" style="display: flex; align-items: center; gap: 14px; min-height: 56px; border-bottom: 1px solid {{t.line}}; color: inherit; text-decoration: none">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{t.ink2}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
           <span style="flex: 1; font-weight: 600; font-size: 16px">Мои записи</span>
           <span style="font-size: 14px; color: {{t.muted}}">завтра, 18:30</span>

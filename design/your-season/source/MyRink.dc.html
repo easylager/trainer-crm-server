@@ -58,7 +58,7 @@ a{color:#0B6E70}a:hover{color:#073C3E}
       <span style="margin-top: 16px; width: 64px; height: 64px; border-radius: 20px; background: #D3EFEF; display: flex; align-items: center; justify-content: center; color: #0B6E70">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
       </span>
-      <h2 id="bellTitle" style="margin: 8px 0 0; font-family: 'Dela Gothic One', sans-serif; font-weight: 400; font-size: 22px; line-height: 1.15">{{chosenName}} — твой каток</h2>
+      <h2 id="bellTitle" style="margin: 8px 0 0; font-family: 'Dela Gothic One', sans-serif; font-weight: 400; font-size: 22px; line-height: 1.15">{{chosenName}} — твой каток</h2>
       <p style="margin: 0; font-size: 15px; color: #4a5f71">Писать в&nbsp;Telegram, когда каток выложит новое расписание?</p>
       <div style="width: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: 10px">
         <a href="Main.dc.html" style="display: flex; align-items: center; justify-content: center; height: 52px; border-radius: 14px; background: #45B9BB; color: #04262A; font-weight: 700; font-size: 16px; text-decoration: none">Да, писать</a>
@@ -78,12 +78,12 @@ class Component extends DCLogic {
     var self = this;
     var picked = this.state.picked;
     var list = [
-      { id: 'chizh', name: '«Чижовка-арена»', sub: 'сегодня ещё 2 сеанса' },
-      { id: 'zamok', name: '«Замок»', sub: 'сегодня ещё 1 сеанс' },
-      { id: 'yun', name: '«Юность»', sub: 'сегодня ещё 3 сеанса' },
-      { id: 'dvor', name: 'Ледовый дворец', sub: 'сегодня сеансов нет, завтра — с 9:00' },
-      { id: 'arena', name: 'Минск-Арена', sub: 'сегодня ещё 1 сеанс' },
-      { id: 'konk', name: 'Конькобежный стадион', sub: 'сегодня ещё 2 сеанса' }
+      { id: 'chizh', name: '«Чижовка-арена»', sub: 'сегодня ещё 2 сеанса' },
+      { id: 'zamok', name: '«Замок»', sub: 'сегодня ещё 1 сеанс' },
+      { id: 'yun', name: '«Юность»', sub: 'сегодня ещё 3 сеанса' },
+      { id: 'dvor', name: 'Ледовый дворец', sub: 'сегодня сеансов нет, завтра — с 9:00' },
+      { id: 'arena', name: 'Минск-Арена', sub: 'сегодня ещё 1 сеанс' },
+      { id: 'konk', name: 'Конькобежный стадион', sub: 'сегодня ещё 2 сеанса' }
     ];
     var chosen = list.filter(function (r) { return r.id === picked; })[0];
     return {
