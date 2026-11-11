@@ -418,3 +418,109 @@ async def test_existing_params_stay_on_their_handlers(app_use_test_db, _test_db_
 
 def test_module_has_no_aiogram() -> None:
     assert not re.search(r"^\s*(from|import) aiogram", inspect.getsource(start_entry), re.M)
+
+
+# ---------- приглашения и шаринг из приложения: тот же флаг ----------
+
+LEAGUE_CODE = "AB12CD34"  # алфавит кодов лиги — заглавные и цифры, 8 символов
+COMPANY_CODE = "k3x9abcd"  # алфавит кодов компании — строчные и цифры, 8 символов
+
+
+def _expect(param: str, via_start: bool) -> str:
+    return f"https://t.me/{BOT}?start={param}" if via_start else f"https://t.me/{BOT}?startapp={param}"
+
+
+@pytest.mark.parametrize("via_start", [False, True])
+def test_league_invite_and_cards_follow_the_flag(bot_env, via_start) -> None:
+    from src.api.routes.webapp_client_hockey_leagues import invite_url_for_code
+    from src.api.routes.webapp_client_hockey_share import START_LEAGUE_CARD, START_RESULT_CARD, card_link
+
+    if via_start:
+        bot_env.setenv("PUBLIC_ENTRY_VIA_START", "1")
+    assert invite_url_for_code(LEAGUE_CODE) == _expect(f"kk_{LEAGUE_CODE}", via_start)
+    assert card_link(START_LEAGUE_CARD, LEAGUE_CODE) == _expect(f"kkl_{LEAGUE_CODE}", via_start)
+    assert card_link(START_RESULT_CARD, LEAGUE_CODE) == _expect(f"kkr_{LEAGUE_CODE}", via_start)
+    assert card_link(START_RESULT_CARD) == _expect("kkr", via_start)
+
+
+def test_league_invite_with_short_name_when_flag_off(bot_env) -> None:
+    from src.api.routes.webapp_client_hockey_leagues import invite_url_for_code
+
+    bot_env.setenv("CLIENT_MINI_APP_SHORT_NAME", "app")
+    assert invite_url_for_code(LEAGUE_CODE) == f"https://t.me/{BOT}/app?startapp=kk_{LEAGUE_CODE}"
+    bot_env.setenv("PUBLIC_ENTRY_VIA_START", "1")
+    assert invite_url_for_code(LEAGUE_CODE) == f"https://t.me/{BOT}?start=kk_{LEAGUE_CODE}"
+
+
+@pytest.mark.parametrize("via_start", [False, True])
+def test_match_share_link_follows_the_flag(via_start) -> None:
+    from src.application.hockey_match_share import match_link
+
+    settings = _settings(via_start=via_start)
+    settings.webapp_base_url = BASE
+    assert match_link(5, settings) == _expect("kkm_5", via_start)
+    no_bot = _settings(via_start=via_start)
+    no_bot.client_bot_username = None
+    no_bot.webapp_base_url = BASE
+    assert match_link(5, no_bot).startswith(f"{BASE}/webapp/")  # без бота — Mini App в вебе, как раньше
+
+
+@pytest.mark.parametrize("via_start", [False, True])
+def test_ice_company_invites_follow_the_flag(via_start) -> None:
+    from src.application.ice_company.service import ice_slot_url, match_page_url
+
+    settings = _settings(via_start=via_start)
+    settings.webapp_base_url = BASE
+    match_company = {"public_code": COMPANY_CODE, "event_kind": "hockey_match", "source_ref": "hockey_match:5"}
+    assert match_page_url(match_company, settings) == _expect(f"kkm_5_{COMPANY_CODE}", via_start)
+    assert ice_slot_url(match_company, settings) == _expect(f"kkm_5_{COMPANY_CODE}", via_start)
+    ice_company = {"public_code": COMPANY_CODE, "venue_ref": "arena:42", "source_ref": "ice_session:9001"}
+    assert ice_slot_url(ice_company, settings) == _expect("arena_42_s_9001", via_start)
+
+
+def test_hub_city_invite_uses_public_entry() -> None:
+    """«Позвать» на главной (город): замыкание внутри bootstrap — проверяем, чем строится ссылка."""
+    from src.api.routes import webapp
+
+    source = inspect.getsource(webapp.get_client_hub_bootstrap)
+    body = source[source.index("async def _home_city(") : source.index("async def _home_hockey(")]
+    assert "public_telegram_entry_link(settings, start_param=place_start_param(arena_id, session_id))" in body
+    assert "telegram_open_link" not in body
+
+
+# ---------- /start для параметров приглашений: тот же экран, не приветствие ----------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "param, path",
+    [
+        (f"kk_{LEAGUE_CODE}", "kto-kogo"),  # приглашение в лигу
+        (f"kkl_{LEAGUE_CODE}", "kto-kogo"),  # открытка лиги
+        (f"kkr_{LEAGUE_CODE}", "kto-kogo"),  # открытка итога / короны с лигой
+        ("kkr", "kto-kogo"),
+        ("kkm_5", "client-home"),  # шаринг матча
+        (f"kkm_5_{COMPANY_CODE}", "client-home"),  # компания на матч
+    ],
+)
+async def test_cmd_start_invite_params_open_the_same_screen(monkeypatch, param, path) -> None:
+    monkeypatch.setattr(client_handlers, "Settings", lambda: SimpleNamespace(webapp_base_url=BASE))
+    message = _message(param)
+    await client_handlers.cmd_start(message)
+    assert message.answer.await_count == 1
+    assert _button(message).web_app.url == f"{BASE}/webapp/{path}?startapp={param}"
+
+
+@pytest.mark.asyncio
+async def test_cmd_start_arena_invite_opens_that_session(app_use_test_db, _test_db_core, db_session, monkeypatch) -> None:
+    """«Позвать» на лёд / компания на сеанс: ``arena_<id>_s_<сеанс>`` — карточка катка на этом сеансе."""
+    from tests.api.test_public_arenas import _insert_arena, _insert_city
+
+    city_id = await _insert_city(db_session, name=f"Позвинск {uuid.uuid4().hex[:6]}")
+    arena_id = await _insert_arena(db_session, city_id, name="Каток Зов")
+    await db_session.commit()
+    monkeypatch.setattr(client_handlers, "async_session_factory", _test_db_core["factory"])
+    monkeypatch.setenv("WEBAPP_BASE_URL", BASE)
+    message = _message(f"arena_{arena_id}_s_77")
+    await client_handlers.cmd_start(message)
+    assert _button(message).web_app.url == f"{BASE}/webapp/arena?ref={arena_id}&s=77"

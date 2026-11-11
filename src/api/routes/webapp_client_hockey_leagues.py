@@ -48,7 +48,7 @@ from src.application.hockey_leagues import (
 from src.application.hockey_races import crown_counts, league_crown_wall, race_summary
 from src.application.hockey_share import record_card_event
 from src.application.hockey_slices import parse_period
-from src.application.place_links import telegram_open_link
+from src.application.place_links import public_telegram_entry_link
 from src.shared.config import Settings
 
 router = APIRouter(tags=["webapp"])
@@ -98,14 +98,8 @@ class PatchLeagueBody(BaseModel):
 
 
 def invite_url_for_code(code: str) -> str | None:
-    """Ссылка в Mini App. Без настроенного бота ссылки нет."""
-    settings = Settings()  # type: ignore[call-arg]
-    return telegram_open_link(
-        client_bot_username=settings.client_bot_username,
-        mini_app_short_name=settings.client_mini_app_short_name,
-        main_mini_app=settings.client_bot_main_mini_app,
-        start_param=f"kk_{code}",
-    )
+    """Приглашение в лигу — публичный вход: при ``public_entry_via_start`` через ``/start``. Без бота ссылки нет."""
+    return public_telegram_entry_link(Settings(), start_param=f"kk_{code}")  # type: ignore[call-arg]
 
 
 def _raise_league(exc: Exception) -> NoReturn:

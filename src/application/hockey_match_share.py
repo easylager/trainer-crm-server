@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application import hockey_event
 from src.application.hockey_cards import match_card_version
-from src.application.place_links import match_start_param, telegram_open_link
+from src.application.place_links import match_start_param, public_telegram_entry_link
 from src.ingestion.hockey_sources import MINSK_TZ
 from src.shared.config import Settings
 
@@ -43,13 +43,11 @@ def when_phrase(starts_at: datetime) -> str:
 
 
 def match_link(match_id: int, settings: Settings) -> str:
-    """Вход на страницу матча: ``t.me/<бот>?startapp=kkm_<id>``; без бота — страница Mini App в вебе."""
-    link = telegram_open_link(
-        client_bot_username=settings.client_bot_username,
-        mini_app_short_name=settings.client_mini_app_short_name,
-        main_mini_app=settings.client_bot_main_mini_app,
-        start_param=match_start_param(match_id),
-    )
+    """Вход на страницу матча (``kkm_<id>``) — публичный: при ``public_entry_via_start`` через ``/start``.
+
+    Без бота — страница Mini App в вебе.
+    """
+    link = public_telegram_entry_link(settings, start_param=match_start_param(match_id))
     if link:
         return link
     base = (settings.webapp_base_url or "").strip().rstrip("/")

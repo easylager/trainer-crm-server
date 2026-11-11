@@ -623,6 +623,21 @@ async def test_ice_after_lists_two_sessions_after_the_match(app_use_test_db, db_
     assert {"time", "day", "badge", "place", "price", "arena_id", "href", "photo", "invite_url"} <= set(items[0])
     assert items[0]["arena_id"] == arena["arena_id"]
     assert items[0]["href"] == f"arena?ref={arena['arena_id']}&s={later[0]}"
+    invite = f"arena_{arena['arena_id']}_s_{later[0]}"
+    assert items[0]["invite_url"] == f"https://t.me/glide_test_bot?startapp={invite}"
+
+
+@pytest.mark.asyncio
+async def test_ice_after_invite_goes_through_start_with_flag(app_use_test_db, db_session, arena, monkeypatch) -> None:
+    """«Позвать» на лёд после матча уходит друзьям без чата с ботом — при флаге через /start."""
+    monkeypatch.setenv("PUBLIC_ENTRY_VIA_START", "1")
+    starts = datetime.now(timezone.utc) + timedelta(days=2)
+    match_id = await _match(db_session, starts_at=starts)
+    sid = await _insert_session(db_session, arena["arena_id"], starts_at=starts + timedelta(hours=4))
+    await db_session.commit()
+    async with _client() as client, as_client(ME):
+        items = (await client.get(f"{BASE}/matches/{match_id}/event")).json()["ice_after"]
+    assert items[0]["invite_url"] == f"https://t.me/glide_test_bot?start=arena_{arena['arena_id']}_s_{sid}"
 
 
 # ---------- слот главной ----------

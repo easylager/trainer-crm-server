@@ -237,7 +237,7 @@ async def get_match_share_page(
         story=False,
     )
     # Публичная страница: при public_entry_via_start — через /start бота, иначе как раньше.
-    go = public_telegram_entry_link(cfg, start_param=match_start_param(int(row.id))) or match_link(int(row.id), cfg)
+    go = match_link(int(row.id), cfg)  # публичный вход по флагу, без бота — Mini App в вебе
     e = html.escape
     hop = ""
     if not _preview_bot(request):

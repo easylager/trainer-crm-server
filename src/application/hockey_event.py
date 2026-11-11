@@ -40,7 +40,7 @@ from src.application.ice_company.service import (
     respond,
     snap_from,
 )
-from src.application.place_links import place_start_param, telegram_open_link
+from src.application.place_links import place_start_param, public_telegram_entry_link
 from src.ingestion.hockey_sources import HCDINAMO_BASE
 from src.shared.config import Settings
 from src.shared.ice_discovery_scope import public_scope_params
@@ -367,12 +367,8 @@ async def _ice_after(
     }
 
     def invite(arena_id: int, session_id: int | None) -> str | None:
-        return telegram_open_link(
-            client_bot_username=settings.client_bot_username,
-            mini_app_short_name=settings.client_mini_app_short_name,
-            main_mini_app=settings.client_bot_main_mini_app,
-            start_param=place_start_param(arena_id, session_id),
-        )
+        # «Позвать» уходит друзьям без чата с ботом — публичный вход.
+        return public_telegram_entry_link(settings, start_param=place_start_param(arena_id, session_id))
 
     view = {
         "upcoming": cards,

@@ -33,7 +33,7 @@ from src.application.hockey_cards import (
 from src.application.hockey_races import crown_card_data, race_by_id, race_result
 from src.application.hockey_leagues import league_table, player_leagues
 from src.application.hockey_share import league_card, record_card_event, result_card
-from src.application.place_links import telegram_open_link
+from src.application.place_links import public_telegram_entry_link
 from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -57,13 +57,8 @@ class OpenedBody(BaseModel):
 
 
 def card_link(prefix: str, code: str | None = None) -> str | None:
-    settings = Settings()  # type: ignore[call-arg]
-    return telegram_open_link(
-        client_bot_username=settings.client_bot_username,
-        mini_app_short_name=settings.client_mini_app_short_name,
-        main_mini_app=settings.client_bot_main_mini_app,
-        start_param=f"{prefix}_{code}" if code else prefix,
-    )
+    """Кнопка открытки: её видят друзья без чата с ботом — публичный вход."""
+    return public_telegram_entry_link(Settings(), start_param=f"{prefix}_{code}" if code else prefix)  # type: ignore[call-arg]
 
 
 def _public_root() -> str | None:

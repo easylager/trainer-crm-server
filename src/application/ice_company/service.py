@@ -189,18 +189,13 @@ def _match_id(source_ref: str) -> int | None:
 
 def match_page_url(company: dict[str, Any], settings: Settings) -> str:
     """«Подробнее» на карточке матча: страница матча в Mini App, с кодом компании для ответа от друга."""
-    from src.application.place_links import match_start_param, telegram_open_link
+    from src.application.place_links import match_start_param, public_telegram_entry_link
 
     code = str(company["public_code"])
     match_id = _match_id(str(company.get("source_ref") or ""))
     if match_id is None:
         return _page_url(settings, code)
-    link = telegram_open_link(
-        client_bot_username=settings.client_bot_username,
-        mini_app_short_name=settings.client_mini_app_short_name,
-        start_param=match_start_param(match_id, code),
-        main_mini_app=settings.client_bot_main_mini_app,
-    )
+    link = public_telegram_entry_link(settings, start_param=match_start_param(match_id, code))
     if link:
         return link
     base = (settings.webapp_base_url or "").strip().rstrip("/")
@@ -210,19 +205,14 @@ def match_page_url(company: dict[str, Any], settings: Settings) -> str:
 def ice_slot_url(company: dict[str, Any], settings: Settings) -> str:
     from urllib.parse import urlencode
 
-    from src.application.place_links import place_start_param, telegram_open_link
+    from src.application.place_links import place_start_param, public_telegram_entry_link
 
     if company.get("event_kind") == MATCH_KIND:
         return match_page_url(company, settings)
     arena_id = _arena_id(str(company.get("venue_ref") or ""))
     session_id = _session_id(str(company.get("source_ref") or ""))
     if arena_id:
-        link = telegram_open_link(
-            client_bot_username=settings.client_bot_username,
-            mini_app_short_name=settings.client_mini_app_short_name,
-            start_param=place_start_param(arena_id, session_id),
-            main_mini_app=settings.client_bot_main_mini_app,
-        )
+        link = public_telegram_entry_link(settings, start_param=place_start_param(arena_id, session_id))
         if link:
             return link
     base = (settings.webapp_base_url or "").strip().rstrip("/")
