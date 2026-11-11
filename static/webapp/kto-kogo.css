@@ -633,3 +633,17 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
    В полосе поверх шапки матча и лиги кнопку только прячем: место и соседняя кнопка («Настройки лиги») остаются на своих местах. */
 .kk-native-back .kk-top > .kk-round[aria-label="Назад"] { display: none; }
 .kk-native-back .kk-hero__bar > .kk-round[aria-label="Назад"] { visibility: hidden; }
+
+/* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
+ * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
+ * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.
+ * Низ: 104px + safe-area (макет kk-tab.html), но не меньше замеренного бара + затухание. */
+body.kk-in-tab.client-shell-body {
+  --app-canvas-bg: #f2f5fa;
+  padding-bottom: max(calc(104px + env(safe-area-inset-bottom, 0px)), calc(var(--client-shell-tab-inset) + 20px));
+}
+body.kk-in-tab.kk-dark.client-shell-body { --app-canvas-bg: #17212b; }
+/* Шторки и тост игры — поверх бара; кнопка-«хвост» экрана лиги — над баром, а не под ним. */
+body.kk-in-tab .kk-scrim { z-index: 9300; }
+body.kk-in-tab .kk-toast { z-index: 9300; bottom: calc(var(--client-shell-tab-inset) + 12px); }
+body.kk-in-tab .kk-cta { bottom: var(--client-shell-tab-inset); z-index: 9000; }

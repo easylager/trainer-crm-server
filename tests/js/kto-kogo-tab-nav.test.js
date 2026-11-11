@@ -124,3 +124,98 @@ describe('проводка в kto-kogo.js', () => {
     assert.match(js, /if \(act === 'stay'\) return;\s*location\.href = '\/webapp\/client-home'/);
   });
 });
+
+describe('S2: бар оболочки на странице игры', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../../static/webapp/kto-kogo.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../../static/webapp/kto-kogo.css'), 'utf8');
+  const tokens = fs.readFileSync(path.join(__dirname, '../../static/shared/glide-tokens.css'), 'utf8');
+
+  it('тег оболочки подключается только за проверкой кэша флага', () => {
+    const head = html.slice(0, html.indexOf('</head>'));
+    const outside = html.replace(/<script id="kk-shell-gate">[\s\S]*?<\/script>/, '');
+    assert.doesNotMatch(outside, /mini-app-client-shell/);
+    assert.doesNotMatch(html, /^\s*<link rel="stylesheet" href="\/static\/webapp\/mini-app-client-shell\.css/m);
+    const gate = head.indexOf('id="kk-shell-gate"');
+    assert.ok(gate > 0, 'inline-гейт в <head>');
+    assert.ok(gate > head.indexOf('telegram-web-app.js'), 'после SDK Telegram (нужен id пользователя)');
+    assert.ok(gate > head.indexOf('glide-tokens.css') && gate < head.indexOf('kto-kogo.css'), 'css оболочки между токенами и css игры');
+  });
+  describe('гейт оболочки (inline-скрипт kto-kogo.html)', () => {
+    const vm = require('node:vm');
+    const src = /<script id="kk-shell-gate">([\s\S]*?)<\/script>/.exec(html)[1];
+    function run({ user = { id: 42 }, stored, storageThrows = false } = {}) {
+      const writes = [];
+      const requests = [];
+      const ls = { getItem(k) { if (storageThrows) throw new Error('denied'); return k === 'cw_ui_flags_v1' ? (stored === undefined ? null : stored) : null; } };
+      const win = {
+        Telegram: { WebApp: { initDataUnsafe: user ? { user } : {} } },
+        fetch(u) { requests.push(String(u)); return Promise.resolve({}); },
+        XMLHttpRequest: function () { this.open = (m, u) => requests.push(String(u)); this.send = () => {}; },
+      };
+      Object.defineProperty(win, 'localStorage', { get() { return ls; } });
+      win.window = win;
+      win.document = { write(h) { writes.push(h); } };
+      vm.runInNewContext(src, win);
+      return { writes, requests };
+    }
+    const off = {
+      'нет кэша': {},
+      'season_ui false': { stored: JSON.stringify({ u: '42', season_ui: false, bookings_tab: false }) },
+      'битый JSON': { stored: '{season_ui:true' },
+      'чужой u': { stored: JSON.stringify({ u: '7', season_ui: true }) },
+      'season_ui не true, а строка': { stored: JSON.stringify({ u: '42', season_ui: 'true' }) },
+      'нет пользователя Telegram': { user: null, stored: JSON.stringify({ u: '42', season_ui: true }) },
+      'storage недоступен': { storageThrows: true },
+    };
+    for (const [name, opts] of Object.entries(off)) {
+      it(`${name} → оболочка не грузится, запросов к client/session и ui-flags нет`, () => {
+        const r = run(opts);
+        assert.deepEqual(r.writes, []);
+        assert.deepEqual(r.requests, []);
+      });
+    }
+    it('season_ui true со своим u → оболочка и её css пишутся синхронно (document.write), без запросов из гейта', () => {
+      const r = run({ stored: JSON.stringify({ u: '42', season_ui: true, bookings_tab: false }) });
+      assert.equal(r.writes.length, 1);
+      assert.match(r.writes[0], /<script src="\/static\/webapp\/mini-app-client-shell\.js\?v=[^"]+"><\/script>$/);
+      assert.match(r.writes[0], /^<link rel="stylesheet" href="\/static\/webapp\/mini-app-client-shell\.css\?v=[^"]+">/);
+      assert.doesNotMatch(r.writes[0], /async|defer/);
+      assert.deepEqual(r.requests, []);
+    });
+    it('версии ассетов в гейте совпадают с остальными тегами страницы', () => {
+      const v = /kto-kogo\.css\?v=(\d+)/.exec(html)[1];
+      for (const m of src.matchAll(/\?v=(\d+)/g)) assert.equal(m[1], v);
+    });
+  });
+  it('без оболочки режима вкладки нет: inTab() требует window.ClientShell', () => {
+    assert.match(js, /function inTab\(\) \{\s*var shell = window\.ClientShell;[\s\S]*?shell && typeof shell\.uiFlags === 'function' && shell\.uiFlags\(\)\.season_ui/);
+  });
+  it('без флага бар не монтируется: body без data-client-shell, тема клиента не подключена', () => {
+    assert.doesNotMatch(html, /data-client-shell/);
+    assert.doesNotMatch(html, /client-mini-app-theme\.js/);
+  });
+  it('классы вкладки ставятся только при флаге и пересчитываются при смене флага', () => {
+    assert.match(js, /classList\.toggle\('kk-in-tab', on\)/);
+    assert.match(js, /classList\.toggle\('tg-dark', on && b\.classList\.contains\('kk-dark'\)\)/);
+    assert.match(js, /'client-shell:ui-flags', function \(\) \{ syncTabMode\(\); syncBack\(\); \}/);
+  });
+  it('правила вкладки в css — только за body.kk-in-tab; шторки выше бара (9000)', () => {
+    const tail = css.slice(css.indexOf('/* ─── TASK-374: игра во вкладке')).replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const m of tail.matchAll(/^([^\s/*}][^{}]*)\{/gm)) assert.match(m[1], /^body\.kk-in-tab/, m[1]);
+    const z = /body\.kk-in-tab \.kk-scrim \{ z-index: (\d+);/.exec(tail);
+    assert.ok(z && Number(z[1]) > 9000);
+    assert.match(css, /104px \+ env\(safe-area-inset-bottom, 0px\)/);
+  });
+  it('подпись неактивной вкладки на плашке бара — контраст ≥ 4.5 в обеих темах', () => {
+    const pick = (block, name) => new RegExp('--' + name + ':\\s*(#[0-9a-fA-F]{6})').exec(block)[1];
+    const darkStart = tokens.indexOf('body.tg-dark {');
+    const light = tokens.slice(0, darkStart);
+    const dark = tokens.slice(darkStart, tokens.indexOf('}', darkStart));
+    const lum = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+      .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    assert.ok(ratio(pick(light, 'g-muted'), pick(light, 'g-surface')) >= 4.5, 'светлая');
+    assert.ok(ratio(pick(dark, 'g-muted'), pick(dark, 'g-surface')) >= 4.5, 'тёмная');
+  });
+});

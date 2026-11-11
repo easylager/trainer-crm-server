@@ -65,6 +65,7 @@
     // Тему сообщает Telegram; вне его (браузер, превью) — системная.
     var dark = tg && tg.initData ? tg.colorScheme === 'dark' : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.body.classList.toggle('kk-dark', !!dark);
+    syncTabMode();
     if (tg && tg.setHeaderColor) {
       try {
         tg.setHeaderColor(dark ? '#17212b' : '#f2f5fa');
@@ -404,6 +405,17 @@
     } catch (e) {
       return false;
     }
+  }
+
+  /**
+   * Режим вкладки на <body>: kk-in-tab — отступ под бар и шторки поверх него (kto-kogo.css);
+   * tg-dark — тёмные токены бара оболочки. Только во вкладке: без флага классов нет, игра как была.
+   */
+  function syncTabMode() {
+    var on = inTab();
+    var b = document.body;
+    b.classList.toggle('kk-in-tab', on);
+    b.classList.toggle('tg-dark', on && b.classList.contains('kk-dark'));
   }
 
   /** Нативная «назад» Telegram: во вкладке на корне её нет, на вложенных экранах снимает экран. */
@@ -807,7 +819,7 @@
     window.addEventListener('client-shell:retap', function (e) {
       if (e && e.detail && e.detail.tab === 'kk' && inTab()) retap();
     });
-    window.addEventListener('client-shell:ui-flags', syncBack);
+    window.addEventListener('client-shell:ui-flags', function () { syncTabMode(); syncBack(); });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && state.sheet) return closeSheet();
       if (e.key !== 'Tab' || !state.sheet) return;
