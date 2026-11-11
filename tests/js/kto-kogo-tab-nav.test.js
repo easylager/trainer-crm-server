@@ -130,11 +130,65 @@ describe('S2: бар оболочки на странице игры', () => {
   const css = fs.readFileSync(path.join(__dirname, '../../static/webapp/kto-kogo.css'), 'utf8');
   const tokens = fs.readFileSync(path.join(__dirname, '../../static/shared/glide-tokens.css'), 'utf8');
 
-  it('оболочка подключена синхронно в <head>, её css — до css игры', () => {
+  it('тег оболочки подключается только за проверкой кэша флага', () => {
     const head = html.slice(0, html.indexOf('</head>'));
-    assert.match(head, /<script src="\/static\/webapp\/mini-app-client-shell\.js\?v=[^"]+"><\/script>/);
-    assert.ok(head.indexOf('mini-app-client-shell.css') >= 0);
-    assert.ok(head.indexOf('mini-app-client-shell.css') < head.indexOf('kto-kogo.css'));
+    const outside = html.replace(/<script id="kk-shell-gate">[\s\S]*?<\/script>/, '');
+    assert.doesNotMatch(outside, /mini-app-client-shell/);
+    assert.doesNotMatch(html, /^\s*<link rel="stylesheet" href="\/static\/webapp\/mini-app-client-shell\.css/m);
+    const gate = head.indexOf('id="kk-shell-gate"');
+    assert.ok(gate > 0, 'inline-гейт в <head>');
+    assert.ok(gate > head.indexOf('telegram-web-app.js'), 'после SDK Telegram (нужен id пользователя)');
+    assert.ok(gate > head.indexOf('glide-tokens.css') && gate < head.indexOf('kto-kogo.css'), 'css оболочки между токенами и css игры');
+  });
+  describe('гейт оболочки (inline-скрипт kto-kogo.html)', () => {
+    const vm = require('node:vm');
+    const src = /<script id="kk-shell-gate">([\s\S]*?)<\/script>/.exec(html)[1];
+    function run({ user = { id: 42 }, stored, storageThrows = false } = {}) {
+      const writes = [];
+      const requests = [];
+      const ls = { getItem(k) { if (storageThrows) throw new Error('denied'); return k === 'cw_ui_flags_v1' ? (stored === undefined ? null : stored) : null; } };
+      const win = {
+        Telegram: { WebApp: { initDataUnsafe: user ? { user } : {} } },
+        fetch(u) { requests.push(String(u)); return Promise.resolve({}); },
+        XMLHttpRequest: function () { this.open = (m, u) => requests.push(String(u)); this.send = () => {}; },
+      };
+      Object.defineProperty(win, 'localStorage', { get() { return ls; } });
+      win.window = win;
+      win.document = { write(h) { writes.push(h); } };
+      vm.runInNewContext(src, win);
+      return { writes, requests };
+    }
+    const off = {
+      'нет кэша': {},
+      'season_ui false': { stored: JSON.stringify({ u: '42', season_ui: false, bookings_tab: false }) },
+      'битый JSON': { stored: '{season_ui:true' },
+      'чужой u': { stored: JSON.stringify({ u: '7', season_ui: true }) },
+      'season_ui не true, а строка': { stored: JSON.stringify({ u: '42', season_ui: 'true' }) },
+      'нет пользователя Telegram': { user: null, stored: JSON.stringify({ u: '42', season_ui: true }) },
+      'storage недоступен': { storageThrows: true },
+    };
+    for (const [name, opts] of Object.entries(off)) {
+      it(`${name} → оболочка не грузится, запросов к client/session и ui-flags нет`, () => {
+        const r = run(opts);
+        assert.deepEqual(r.writes, []);
+        assert.deepEqual(r.requests, []);
+      });
+    }
+    it('season_ui true со своим u → оболочка и её css пишутся синхронно (document.write), без запросов из гейта', () => {
+      const r = run({ stored: JSON.stringify({ u: '42', season_ui: true, bookings_tab: false }) });
+      assert.equal(r.writes.length, 1);
+      assert.match(r.writes[0], /<script src="\/static\/webapp\/mini-app-client-shell\.js\?v=[^"]+"><\/script>$/);
+      assert.match(r.writes[0], /^<link rel="stylesheet" href="\/static\/webapp\/mini-app-client-shell\.css\?v=[^"]+">/);
+      assert.doesNotMatch(r.writes[0], /async|defer/);
+      assert.deepEqual(r.requests, []);
+    });
+    it('версии ассетов в гейте совпадают с остальными тегами страницы', () => {
+      const v = /kto-kogo\.css\?v=(\d+)/.exec(html)[1];
+      for (const m of src.matchAll(/\?v=(\d+)/g)) assert.equal(m[1], v);
+    });
+  });
+  it('без оболочки режима вкладки нет: inTab() требует window.ClientShell', () => {
+    assert.match(js, /function inTab\(\) \{\s*var shell = window\.ClientShell;[\s\S]*?shell && typeof shell\.uiFlags === 'function' && shell\.uiFlags\(\)\.season_ui/);
   });
   it('без флага бар не монтируется: body без data-client-shell, тема клиента не подключена', () => {
     assert.doesNotMatch(html, /data-client-shell/);
