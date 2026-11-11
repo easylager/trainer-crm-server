@@ -11,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.arena_public_use_cases import public_arena_session_days
 from src.application.booking_use_cases import _SQL_SLOT_END_TS, _SQL_SLOT_START_TS
+from src.application.booking_use_cases import (
+    client_latest_booking_primary_candidate,
+    client_upcoming_booking_primary_candidate,
+)
 from src.application.client_account import get_home_arena_id
+from src.application.client_trainer_edge_use_cases import get_primary_edge, trainer_display_hints_by_ids
 from src.application.client_profile_use_cases import list_accessible_profiles, resolve_acting_client_id
 from src.application.client_stats_use_cases import get_client_activity_snapshot
 from src.application.client_use_cases import get_client_id_by_telegram_id
@@ -320,6 +325,30 @@ async def _requests(session: AsyncSession, client_id: int) -> dict | None:
     return None if n == 0 else {"count": n}
 
 
+async def _my_trainer(session: AsyncSession, *, account_key: int, acting: int) -> dict | None:
+    """«Мой тренер» для строки в «Я»: только чтение, упрощённое зеркало «Главной».
+
+    Порядок как в хабе (hub_booking_primary_ids + resolve_primary_trainer_strict):
+    ближайшая предстоящая запись, иначе последняя запись, иначе явный primary edge.
+    Осознанное расхождение с «Главной»: НЕ учитываются session_tid (временный выбор
+    тренера по приглашению из bot-session), ever_booked-пол и «сохранённые».
+    Имя — из trainer_display_hints_by_ids, как у хаба; тренера нет в выдаче → None.
+    """
+    tid, _ = await client_upcoming_booking_primary_candidate(session, account_key, acting_client_id=acting)
+    if tid is None:
+        tid, _ = await client_latest_booking_primary_candidate(session, account_key, acting_client_id=acting)
+    if tid is None:
+        edge = await get_primary_edge(acting, session)
+        tid = int(edge["trainer_id"]) if edge and edge.get("trainer_id") else None
+    if tid is None:
+        return None
+    hint = (await trainer_display_hints_by_ids(session, [int(tid)])).get(int(tid))
+    name = ((hint or {}).get("trainer_display_name") or "").strip()
+    if not name:
+        return None
+    return {"name": name, "href": f"/webapp/catalog?trainer_id={int(tid)}"}
+
+
 async def client_me(
     session: AsyncSession,
     *,
@@ -357,12 +386,13 @@ async def client_me(
         kk_place = int(overall["rank"])
 
     if acting is None:
-        bookings = passes = saved = requests = None
+        bookings = passes = saved = requests = trainer = None
     else:
         bookings = await _bookings(session, acting)
         passes = await _passes(session, acting)
         saved = await _saved(session, acting)
         requests = await _requests(session, acting)
+        trainer = await _my_trainer(session, account_key=account_key, acting=acting)
 
     profiles = await list_accessible_profiles(session, account_key)
     return {
@@ -383,6 +413,7 @@ async def client_me(
             "saved": saved,
             "family": _family(profiles, account_name=name, acting=acting),
             "requests": requests,
+            "trainer": trainer,
         },
         "profile_name": _profile_name(profiles, acting=acting, own=own),
     }
