@@ -622,7 +622,10 @@ async def test_one_query_per_source(app_use_test_db, db_session, client_me_auth)
     for day in range(2, 6):
         await _booking(day)
     n_many, many = await _once()
-    assert n_one == n_many == 26, f"SQL statements: 1 booking {n_one}, 5 bookings {n_many}"
+    # 26 до TASK-384 + 3 на rows.trainer (в этом сценарии есть предстоящая запись: кандидат upcoming,
+    # затем trainer_display_hints_by_ids = выборка + валюта). Худший случай: без предстоящей записи
+    # +latest, без записей +primary edge, итого +5; число от числа записей не зависит.
+    assert n_one == n_many == 29, f"SQL statements: 1 booking {n_one}, 5 bookings {n_many}"
     assert one.json()["rows"]["requests"] == {"count": 1}
     assert many.json()["rows"]["requests"] == {"count": 5}
     print(f"GET /client/me SQL statements: {n_one}")
@@ -758,3 +761,196 @@ async def test_t380_arena_hidden_after_pick_is_null_prefs_kept(
         )
     ).scalar_one()
     assert kept == rink
+
+
+# ---- TASK-384: rows.trainer ------------------------------------------------
+
+
+async def _trainer(db: AsyncSession, first: str | None, last: str | None = None) -> int:
+    tid = (
+        await db.execute(
+            text("""
+                INSERT INTO trainers (status, is_catalog_visible, catalog_state)
+                VALUES ('active', true, 'published') RETURNING id
+                """)
+        )
+    ).scalar_one()
+    if first is not None:
+        await db.execute(
+            text("INSERT INTO trainer_profiles (trainer_id, first_name, last_name) VALUES (:t, :f, :l)"),
+            {"t": tid, "f": first, "l": last},
+        )
+    return tid
+
+
+async def _visit(db: AsyncSession, trainer_id: int, client_id: int, *, days: int) -> None:
+    local = (datetime.now(MINSK_TZ) + timedelta(days=days)).astimezone(MINSK_TZ)
+    service = (await db.execute(text("INSERT INTO services (name) VALUES ('Лёд') RETURNING id"))).scalar_one()
+    slot = (
+        await db.execute(
+            text("""
+                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+                VALUES (:t, :d, TIME '18:00', TIME '18:45', 'booked') RETURNING id
+                """),
+            {"t": trainer_id, "d": local.date()},
+        )
+    ).scalar_one()
+    await db.execute(
+        text(
+            "INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)"
+            " VALUES (:s, :t, :c, :sv, 'confirmed')"
+        ),
+        {"s": slot, "t": trainer_id, "c": client_id, "sv": service},
+    )
+
+
+async def _primary_edge(db: AsyncSession, client_id: int, telegram_id: int, trainer_id: int) -> None:
+    await db.execute(
+        text("INSERT INTO client_sessions (telegram_id, state) VALUES (:tg, 'idle') ON CONFLICT DO NOTHING"),
+        {"tg": telegram_id},
+    )
+    await db.execute(
+        text("""
+            INSERT INTO client_trainer_edges (client_id, telegram_id, trainer_id, is_primary)
+            VALUES (:c, :tg, :t, true)
+            """),
+        {"c": client_id, "tg": telegram_id, "t": trainer_id},
+    )
+
+
+async def _hub_trainer(db: AsyncSession, tg: int, acting: int) -> tuple[int | None, str | None]:
+    """Тренер по логике хаба (те же функции и порядок, что в _hub_session), для сверки."""
+    from src.application.booking_use_cases import (
+        client_ever_booked_primary_candidate,
+        client_latest_booking_primary_candidate,
+        client_upcoming_booking_primary_candidate,
+    )
+    from src.application.client_trainer_edge_use_cases import (
+        get_all_edges,
+        get_primary_edge,
+        trainer_display_hints_by_ids,
+    )
+    from src.application.client_trainer_primary_graph import compute_primary_edge_meta, hub_booking_primary_ids
+
+    edges = await get_all_edges(acting, db)
+    up = await client_upcoming_booking_primary_candidate(db, tg, acting_client_id=acting)
+    last = await client_latest_booking_primary_candidate(db, tg, acting_client_id=acting)
+    ever = await client_ever_booked_primary_candidate(db, tg, acting_client_id=acting)
+    bp = hub_booking_primary_ids(up[0], up[1], last[0], last[1])
+    edge, _ = compute_primary_edge_meta(
+        edges,
+        None,
+        booking_primary_trainer_id=bp[0],
+        booking_primary_service_id=bp[1],
+        explicit_primary_edge=await get_primary_edge(acting, db),
+        ever_booked_trainer_id=ever[0],
+        ever_booked_service_id=ever[1],
+    )
+    if not edge:
+        return None, None
+    pid = int(edge["trainer_id"])
+    hint = (await trainer_display_hints_by_ids(db, [pid])).get(pid)
+    return pid, (hint or {}).get("trainer_display_name")
+
+
+@pytest.mark.asyncio
+async def test_ac1_ac2_trainer_matches_home_for_booking_and_primary(
+    app_use_test_db, db_session, client_me_auth
+) -> None:
+    """Случаи а/б/в: тренер из /client/me совпадает с хабовской логикой (id/имя), href без service_id."""
+    base = 384_100_000
+    cases = {}
+    for n, kind in enumerate(("upcoming", "latest", "primary")):
+        uid = base + n
+        cid = await _client_row(db_session, uid, "Клиент")
+        tid = await _trainer(db_session, "Иван 🏒", "Петров")
+        other = await _trainer(db_session, "Другой")
+        if kind == "upcoming":
+            await _visit(db_session, other, cid, days=-3)
+            await _visit(db_session, tid, cid, days=2)
+        elif kind == "latest":
+            await _visit(db_session, other, cid, days=-9)
+            await _visit(db_session, tid, cid, days=-1)
+            await _primary_edge(db_session, cid, uid, other)  # booking бьёт явный primary
+        else:
+            await _primary_edge(db_session, cid, uid, tid)
+        cases[kind] = (uid, cid, tid)
+    for uid, cid, tid in cases.values():
+        _auth(uid)
+        body = (await _get()).json()
+        assert body["rows"]["trainer"] == {"name": "Иван 🏒 Петров", "href": f"/webapp/catalog?trainer_id={tid}"}
+        assert await _hub_trainer(db_session, uid, cid) == (tid, "Иван 🏒 Петров")
+
+
+@pytest.mark.asyncio
+async def test_ac1_trainer_null_for_nobody_catalog_and_unnamed(app_use_test_db, db_session, client_me_auth) -> None:
+    uid = 384_100_010
+    _auth(uid)
+    assert (await _get()).json()["rows"]["trainer"] is None  # человек из каталога, acting is None
+    cid = await _client_row(db_session, uid, "Клиент")
+    assert (await _get()).json()["rows"]["trainer"] is None  # клиент без тренера
+    await _primary_edge(db_session, cid, uid, await _trainer(db_session, None))
+    # профиль тренера пуст: хинты подставляют заглушку «Тренер» — строки в «Я» нет
+    assert (await _get()).json()["rows"]["trainer"] is None
+
+
+@pytest.mark.asyncio
+async def test_ac3_child_profile_trainer_is_childs_own(app_use_test_db, db_session, client_me_auth) -> None:
+    uid = 384_100_020
+    _auth(uid)
+    parent = await _client_row(db_session, uid, "Максим")
+    child = await create_guardian_profile(db_session, uid, first_name="Миша", last_name="К")
+    t_parent = await _trainer(db_session, "Родительский")
+    t_child = await _trainer(db_session, "Детский")
+    await _visit(db_session, t_parent, parent, days=2)
+    own = (await _get()).json()["rows"]["trainer"]
+    assert own["href"].endswith(f"={t_parent}")
+    # у ребёнка тренера нет — родительский не раскрывается
+    assert (await _get({"X-Profile-Id": str(child)})).json()["rows"]["trainer"] is None
+    await _visit(db_session, t_child, child, days=3)
+    kid = (await _get({"X-Profile-Id": str(child)})).json()["rows"]["trainer"]
+    assert kid == {"name": "Детский", "href": f"/webapp/catalog?trainer_id={t_child}"}
+    assert (await _get()).json()["rows"]["trainer"] == own
+    # чужой профиль: не из семьи — тренер не раскрывается
+    stranger_uid = 384_100_021
+    stranger = await _client_row(db_session, stranger_uid, "Чужой")
+    await _visit(db_session, await _trainer(db_session, "Чужого"), stranger, days=2)
+    base = await _get()
+    leak = await _get({"X-Profile-Id": str(stranger)})
+    assert leak.json() == base.json()  # чужой профиль откатывается к своему
+
+
+@pytest.mark.asyncio
+async def test_trainer_known_divergence_session_and_ever_booked(app_use_test_db, db_session, client_me_auth) -> None:
+    """Осознанное расхождение с «Главной»: session_tid и ever_booked в «Я» не учитываются."""
+    from src.application.client_trainer_primary_graph import compute_primary_edge_meta
+
+    uid = 384_100_030
+    _auth(uid)
+    await _client_row(db_session, uid, "Клиент")
+    tid = await _trainer(db_session, "Сессионный")
+    # хаб при единственном session_tid / ever_booked показал бы тренера, «Я» — нет
+    assert compute_primary_edge_meta([], tid)[0] is not None
+    assert compute_primary_edge_meta([], None, ever_booked_trainer_id=tid)[0] is not None
+    assert (await _get()).json()["rows"]["trainer"] is None
+
+
+@pytest.mark.asyncio
+async def test_trainer_divergence_ever_booked_on_real_data(app_use_test_db, db_session, client_me_auth) -> None:
+    """Запись, снятая тренером (trainer_removed): хаб (ever_booked-пол) тренера даёт, «Я» — null."""
+    from src.application.booking_use_cases import client_ever_booked_primary_candidate
+    from src.application.client_trainer_primary_graph import compute_primary_edge_meta
+
+    uid = 384_100_040
+    _auth(uid)
+    cid = await _client_row(db_session, uid, "Клиент")
+    tid = await _trainer(db_session, "Иван", "Петров")
+    await _visit(db_session, tid, cid, days=-2)
+    await db_session.execute(
+        text("UPDATE bookings SET status = 'trainer_removed' WHERE client_id = :c"), {"c": cid}
+    )
+    ever = await client_ever_booked_primary_candidate(db_session, uid, acting_client_id=cid)
+    assert ever[0] == tid
+    edge, src = compute_primary_edge_meta([], None, ever_booked_trainer_id=ever[0], ever_booked_service_id=ever[1])
+    assert edge is not None and src == "ever_booked"  # «Главная» показала бы тренера
+    assert (await _get()).json()["rows"]["trainer"] is None

@@ -100,6 +100,12 @@ class _Family(BaseModel):
     people: list[_Person] = Field(min_length=1)
 
 
+class _MyTrainer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    href: str
+
+
 class _Rows(BaseModel):
     model_config = ConfigDict(extra="forbid")
     bookings: _Bookings | None
@@ -107,6 +113,7 @@ class _Rows(BaseModel):
     saved: _Count | None
     family: _Family
     requests: _Count | None
+    trainer: _MyTrainer | None
 
 
 class ClientMeOut(BaseModel):
