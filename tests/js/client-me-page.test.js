@@ -300,6 +300,26 @@ describe('TASK-381: фокус с клавиатуры', () => {
   });
 });
 
+describe('TASK-383: «Изменить» на узком экране', () => {
+  const css = fs.readFileSync(path.join(webapp, 'client-me.css'), 'utf8');
+  it('разметка: aria-label и текст в отдельном span', async () => {
+    const t = boot({ responses: [{ body: data() }] });
+    await settle();
+    await settle();
+    const header = t.calls.replaced.length ? t.calls.replaced[0][1] : '';
+    const src = fs.readFileSync(path.join(webapp, 'client-me.js'), 'utf8');
+    assert.match(src, /data-act="name" aria-label="Изменить">.*<span class="cm-edit__t">Изменить<\/span>/);
+    assert.ok(header === '' || /aria-label="Изменить"/.test(header));
+  });
+  it('до 374 px — иконка 36 px с зоной касания 44 px, с 375 — по макету', () => {
+    const m = css.match(/@media \(max-width: 374px\) \{([\s\S]*?)\n\}\n/);
+    assert.ok(m, 'media query есть');
+    assert.match(m[1], /\.cm-edit \{[^}]*width: 36px/);
+    assert.match(m[1], /\.cm-edit::after \{[^}]*inset: -4px;/);
+    assert.match(css, /\.cm-edit::after \{[^}]*inset: -4px 0/);
+  });
+});
+
 describe('TASK-381: гонка сохранения и порядок отрисовки', () => {
   async function ready() {
     const t = boot({ responses: [{ body: data() }] });

@@ -177,10 +177,21 @@ describe('цифры сезона', () => {
     assert.equal(label('kk_points', 340), 'очков');
   });
 
-  it('ноль очков при сыгранных матчах — ячейки нет (ни одного нуля на экране)', () => {
+  it('честный ноль очков при сыгранных — ячейка «0 очков» есть; null — нет', () => {
     const d = newcomer();
     d.stats = { trainings: null, streak_weeks: null, kk_points: 0, kk_place: 30 };
-    assert.deepEqual(model(d).stats.map((c) => c.key), ['kk_place']);
+    const cells = model(d).stats;
+    assert.deepEqual(cells.map((c) => c.key), ['kk_points', 'kk_place']);
+    assert.equal(cells[0].value, '0');
+    assert.equal(cells[0].label, 'очков');
+    d.stats = { trainings: null, streak_weeks: null, kk_points: null, kk_place: null };
+    assert.equal(model(d).stats, null);
+  });
+
+  it('тренировки и недели подряд при нуле по-прежнему скрыты', () => {
+    const d = newcomer();
+    d.stats = { trainings: 0, streak_weeks: 0, kk_points: 5, kk_place: null };
+    assert.deepEqual(model(d).stats.map((c) => c.key), ['kk_points']);
   });
 });
 
