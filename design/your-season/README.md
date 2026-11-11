@@ -17,6 +17,9 @@
 | «Мой каток» — шаг 2, «Писать о новом расписании?» | [rink-picker-step2.html](rink-picker-step2.html) | [png](png/rink-picker-step2.png) | TASK-372 |
 | «Как тебя зовут?» — имя изменено | [name-sheet.html](name-sheet.html) | [png](png/name-sheet.png) | TASK-373 |
 | «Как тебя зовут?» — пусто | [name-sheet-empty.html](name-sheet-empty.html) | [png](png/name-sheet-empty.png) | TASK-373 |
+| «Семья» — люди и общий доступ | [family.html](family.html) | [png](png/family.png) | TASK-387 |
+| «Семья» — пока только вы | [family-empty.html](family-empty.html) | [png](png/family-empty.png) | TASK-387 |
+| «Семья» — добавить близкого | [family-add.html](family-add.html) | [png](png/family-add.png) | TASK-387 |
 | «Кто кого» во вкладке (скриншоты игры 11.11 + бар) | [kk-tab.html](kk-tab.html) | [png](png/kk-tab.png) | TASK-374 |
 
 PNG — 390 px по ширине в масштабе 2× (780 px), как экран телефона. HTML — та же разметка с inline-стилями: отступы, кегли, радиусы, тексты брать прямо из неё (DevTools → Inspect).

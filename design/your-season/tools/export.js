@@ -33,6 +33,9 @@ const JOBS = [
   { name: 'rink-picker-step2', file: 'MyRink.dc.html', w: 390, h: 844, state: { step2: true }, title: '«Мой каток» — шаг 2, подписка' },
   { name: 'name-sheet', file: 'NameSheet.dc.html', w: 390, h: 844, state: { value: 'Макс' }, title: '«Как тебя зовут?» — изменено' },
   { name: 'name-sheet-empty', file: 'NameSheet.dc.html', w: 390, h: 844, state: { value: '' }, title: '«Как тебя зовут?» — пусто' },
+  { name: 'family', file: 'Family.dc.html', w: 390, h: 844, state: { mode: 'list' }, title: '«Семья» — люди и общий доступ' },
+  { name: 'family-empty', file: 'Family.dc.html', w: 390, h: 844, state: { mode: 'empty' }, title: '«Семья» — пока только вы' },
+  { name: 'family-add', file: 'Family.dc.html', w: 390, h: 844, state: { mode: 'add' }, title: '«Семья» — добавить близкого' },
   { name: 'kk-tab', file: 'KKTab.dc.html', w: 390, h: 1440, title: '«Кто кого» во вкладке' },
 ];
 
