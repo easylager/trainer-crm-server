@@ -311,8 +311,8 @@ describe('TASK-383: «Изменить» на узком экране', () => {
     assert.match(src, /data-act="name" aria-label="Изменить">.*<span class="cm-edit__t">Изменить<\/span>/);
     assert.ok(header === '' || /aria-label="Изменить"/.test(header));
   });
-  it('до 374 px — иконка 36 px с зоной касания 44 px, с 375 — по макету', () => {
-    const m = css.match(/@media \(max-width: 374px\) \{([\s\S]*?)\n\}\n/);
+  it('до 429 px — иконка 36 px с зоной касания 44 px, с 430 — по макету', () => {
+    const m = css.match(/@media \(max-width: 429px\) \{([\s\S]*?)\n\}\n/);
     assert.ok(m, 'media query есть');
     assert.match(m[1], /\.cm-edit \{[^}]*width: 36px/);
     assert.match(m[1], /\.cm-edit::after \{[^}]*inset: -4px;/);
@@ -407,5 +407,24 @@ describe('тапы и шторки', () => {
     const u = await ready({ home_arena: home });
     assert.doesNotThrow(() => u.click({ 'data-act': 'rink' }));
     assert.deepEqual(u.calls.nav, ['ice']);
+  });
+});
+
+describe('TASK-385: строка «Мой тренер»', () => {
+  const css = fs.readFileSync(path.join(webapp, 'client-me.css'), 'utf8');
+  const src = fs.readFileSync(path.join(webapp, 'client-me.js'), 'utf8');
+  it('подпись не сжимается, имя занимает остаток и переносится по словам без многоточия', () => {
+    assert.match(css, /\.cm-row--trainer \.cm-row__label \{[^}]*flex: none;/);
+    const v = css.match(/\.cm-row--trainer \.cm-row__value \{([^}]*)\}/);
+    assert.ok(v);
+    assert.match(v[1], /flex: 1;/);
+    assert.match(v[1], /min-width: 0;/);
+    assert.match(v[1], /overflow-wrap: break-word;/);
+    assert.doesNotMatch(v[1], /ellipsis|anywhere|break-all/);
+  });
+  it('иконка-человек по макету, строка — ga-press', () => {
+    assert.match(src, /trainer: '<circle cx="12" cy="8" r="3\.5"\/><path d="M5 20c\.8-3\.6 3\.6-5\.5 7-5\.5s6\.2 1\.9 7 5\.5"\/>'/);
+    assert.match(src, /cm-row' \+ \(r\.key === 'trainer'/);
+    assert.match(src, /' ga-press" href=/);
   });
 });

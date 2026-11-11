@@ -193,6 +193,11 @@
   function iceRows(rows, opts, now) {
     var r = isObject(rows) ? rows : {};
     var out = [];
+    /* Поля может не быть (кэш старой схемы) — это «нет тренера». Без имени строка пустая, её нет. */
+    var tr = isObject(r.trainer) ? r.trainer : null;
+    if (tr && text(tr.name) && text(tr.href)) {
+      out.push({ key: 'trainer', label: 'Мой тренер', value: text(tr.name), href: text(tr.href) });
+    }
     if (isObject(r.bookings) && !opts.bookingsTab) {
       out.push({ key: 'bookings', label: 'Мои записи', value: whenLabel(r.bookings.next_starts_at, now), href: 'client-bookings' });
     }
@@ -307,6 +312,7 @@
     plus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     skate: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15h11.5c1.5 0 2.5-.8 2.5-2V6h-4v4l-3 1.2c-1.2.5-2 1.6-2 2.8"/><path d="M3 19h17"/><path d="M7 15v4M15 15v4"/></svg>',
     chevron: '<svg class="cm-row__chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
+    trainer: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>',
     bookings: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
     passes: '<path d="M3.5 7h17v3a2 2 0 0 0 0 4v3h-17v-3a2 2 0 0 0 0-4z"/><path d="M14.5 7v10" stroke-dasharray="1.5 2.5"/>',
     saved: '<path d="M7 4h10v16l-5-3.5L7 20z"/>',
@@ -434,7 +440,7 @@
       block.rows
         .map(function (r) {
           return (
-            '<a class="cm-row ga-press" href="' + r.href + '" data-nav="' + r.href + '">' +
+            '<a class="cm-row' + (r.key === 'trainer' ? ' cm-row--trainer' : '') + ' ga-press" href="' + esc(r.href) + '" data-nav="' + esc(r.href) + '">' +
             rowIcon(r.key) +
             '<span class="cm-row__label">' + esc(r.label) + '</span>' +
             (r.value ? '<span class="cm-row__value">' + esc(r.value) + '</span>' : '') +
