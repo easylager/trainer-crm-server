@@ -628,3 +628,8 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-filebtn { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; border-radius: 14px; background: var(--kk-chip); color: var(--kk-ink); font: 600 14px var(--kk-text); cursor: pointer; }
 .kk-filebtn:focus-within { outline: 3px solid var(--kk-focus); outline-offset: 2px; }
 .kk-pick__rm { align-self: flex-start; color: var(--kk-danger); }
+
+/* В Telegram «назад» — нативная стрелка в шапке; своя круглая кнопка рядом с ней дублирует её.
+   В полосе поверх шапки матча и лиги кнопку только прячем: место и соседняя кнопка («Настройки лиги») остаются на своих местах. */
+.kk-native-back .kk-top > .kk-round[aria-label="Назад"] { display: none; }
+.kk-native-back .kk-hero__bar > .kk-round[aria-label="Назад"] { visibility: hidden; }

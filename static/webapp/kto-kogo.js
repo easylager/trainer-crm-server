@@ -773,6 +773,8 @@
       if (tg.onEvent) tg.onEvent('themeChanged', function () { applyTheme(); render(); });
       // Одна нативная «назад» на страницу: помощник сам не вешает обработчик дважды.
       if (window.MiniAppBack) window.MiniAppBack.set(back);
+      // Нативная стрелка есть — своя круглая «назад» на экранах рядом с ней лишняя (см. .kk-native-back в css).
+      if (window.MiniAppBack && window.MiniAppBack.isNative()) document.body.classList.add('kk-native-back');
     }
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && state.sheet) return closeSheet();
