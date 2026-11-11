@@ -77,6 +77,10 @@ KIND_COMPANY_UNSUBSCRIBED = "company_unsubscribed"
 KIND_BOT_BLOCKED = "bot_blocked"
 KIND_COMPANY_ATTENDED = "company_attended"
 KIND_OUTBOUND_429 = "outbound_429"
+# TASK-368: вкладка «Я». me_open — не чаще раза в сутки на аккаунт.
+KIND_ME_OPEN = "me_open"
+KIND_ME_NAME_SET = "me_name_set"
+KIND_ME_HOME_ARENA_SET = "me_home_arena_set"
 
 INVITE_FUNNEL_KINDS = (
     KIND_INVITE_CREATE,
@@ -102,6 +106,9 @@ CATALOG_CONSUMER_KINDS = (
     KIND_BOT_BLOCKED,
     KIND_COMPANY_ATTENDED,
     KIND_OUTBOUND_429,
+    KIND_ME_OPEN,
+    KIND_ME_NAME_SET,
+    KIND_ME_HOME_ARENA_SET,
 )
 
 SURFACE_PLACE_PAGE = "place_page"
@@ -110,6 +117,7 @@ SURFACE_ICE_CITY_DAY = "ice_city_day"
 SURFACE_MINIAPP_ICE = "miniapp_ice"
 SURFACE_MINIAPP_ARENA = "miniapp_arena"
 SURFACE_MINIAPP_SHELL = "miniapp_shell"
+SURFACE_MINIAPP_ME = "miniapp_me"
 
 _MINIAPP_DEDUP_GROUP = "miniapp"
 
@@ -275,7 +283,7 @@ def event_dedup_hash(
     """
     if not actor_hash:
         return None
-    group = _MINIAPP_DEDUP_GROUP if kind == KIND_MINIAPP_CATALOG_ENTRY else surface
+    group = _MINIAPP_DEDUP_GROUP if kind in (KIND_MINIAPP_CATALOG_ENTRY, KIND_ME_OPEN) else surface
     raw = f"{kind}|{group}|{actor_hash}|{day.isoformat()}|{city_id or 0}|{arena_id or 0}"
     if variant:
         raw += f"|{variant}"
