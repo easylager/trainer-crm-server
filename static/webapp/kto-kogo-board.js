@@ -322,7 +322,7 @@
         main.appendChild(a.failed ? K.retryCard('Таблица не загрузилась.', function () { a.failed = false; K.render(); load(a); }) : K.loading());
         return [main];
       }
-      main.appendChild(h('div', { class: 'kk-crownbar' }, [K.crownIcon(18), h('span', { text: S.tableCrownLine(view, a.club, a.period, view.period && view.period.kind === 'season' ? view.period.title : seasonTitle) })]));
+      main.appendChild(h('div', { class: 'kk-crownbar' + (S.tableCrownMuted(view, a.period) ? ' kk-crownbar--muted' : '') }, [K.crownIcon(18), h('span', { text: S.tableCrownLine(view, a.club, a.period, view.period && view.period.kind === 'season' ? view.period.title : seasonTitle) })]));
       var few = S.fewPlayers(view, a.club, a.period);
       if (few) {
         main.appendChild(h('section', { class: 'kk-card kk-note' }, [
@@ -408,7 +408,7 @@
         h('span', { class: 'kk-lbl', text: 'КОРОНЫ' }),
         crowns.length
           ? h('div', { class: 'kk-rows' }, crowns.map(function (c) { return h('div', { class: 'kk-cr' }, [K.crownIcon(20), h('span', { class: 'kk-grow', text: S.crownLabel(c) })]); }))
-          : h('div', { class: 'kk-cr kk-cr--empty' }, [K.crownIcon(20), h('span', { class: 'kk-grow', text: 'Корона — за первое место месяца, если очки хотя бы у троих' })]),
+          : h('div', { class: 'kk-cr kk-cr--empty' }, [K.crownIcon(20), h('span', { class: 'kk-grow', text: 'Корона — за первое место месяца, если очки хотя бы у троих. В лиге друзей хватит двоих' })]),
       ]));
       var lines = S.seasonTitleLine(p, p.season);
       var earned = (p.titles || []).map(function (t) {

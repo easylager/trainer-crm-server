@@ -506,6 +506,13 @@
       ],
       trumpTitle: 'Козырь',
       trumpText: 'Один на неделю. Выбери матч для козыря — очки за него удвоятся. Передумаешь — перенеси его на другой матч недели, пока игра не началась.',
+      tablesTitle: 'Таблицы и короны',
+      tables: [
+        { title: 'Кто выше', text: 'Больше очков — выше. Очки равны — выше тот, у кого больше точных счётов. Совпали и они — выше тот, кто сыграл меньше матчей. Всё поровну — место делите.' },
+        { title: 'Корона', text: 'Корона — лидеру таблицы после последнего матча месяца. Её разыгрывают в общей таблице и в таблице каждой команды. Первое место поделили — корона у каждого. В лиге друзей её отдают, когда лига закончится.' },
+        { title: 'Сколько игроков нужно', text: 'Для короны в таблице должно быть минимум трое игроков с очками. В лиге друзей хватит двоих. Без очков корону не дают.' },
+        { title: 'Когда придёт', text: 'В течение двух суток после последнего матча: мы сверяем итоги. Если игроков для короны не хватило, над таблицей так и написано.' },
+      ],
       foot: 'Ход можно изменить до минуты перед стартом матча. Очки приходят после финальной сирены.',
     };
   }
@@ -535,7 +542,7 @@
     var month = x.period_title;
     var matches = x.left + NBSP + Base.plural(x.left, 'матч', 'матча', 'матчей') + (x.club ? ' ' + clubGen(x.club) : '');
     if (x.crown && x.left > 0) return 'Корона за ' + month + ' пока твоя. Впереди ещё ' + matches + ' — удержи до ' + endLabel(x.ends_at) + '.';
-    if (x.crown) return 'Это был последний матч месяца в таблице «' + sliceLabel(x.club, month) + '»: корона появится после проверки итога.';
+    if (x.crown) return 'Это был последний матч месяца в таблице «' + sliceLabel(x.club, month) + '»: корона придёт в течение двух суток, когда сверим итоги.';
     if (x.left > 0) return 'До короны за ' + month + ' — ' + Base.points(x.to_crown || 0) + '. Впереди ещё ' + matches + '.';
     return 'Матчи месяца в таблице «' + sliceLabel(x.club, month) + '» сыграны.';
   }
@@ -600,6 +607,17 @@
     return spaced(n) + NBSP + Base.plural(n, 'игрок', 'игрока', 'игроков') + ' · ' + what;
   }
 
+  /** Пороги короны — те же, что CROWN_MIN_PLAYERS и LEAGUE_CROWN_MIN_MEMBERS в hockey_slices.py. */
+  var CROWN_MIN = 3;
+  var LEAGUE_CROWN_MIN = 2;
+  var HOW_MANY = ['ни одного', 'один', 'двое'];
+
+  /** Месячная таблица, где для короны пока мало игроков с очками: плашка приглушена, не золотая. */
+  function tableCrownMuted(view, periodKey) {
+    if (!periodKey || periodKey === 'season') return false;
+    return !view || (view.players_with_points || 0) < CROWN_MIN;
+  }
+
   /** Плашка про корону под фильтрами. Период не задан — это сезон, как у таблицы по умолчанию. */
   function tableCrownLine(view, club, periodKey, seasonTitle) {
     periodKey = periodKey || 'season';
@@ -610,16 +628,18 @@
         : 'В конце сезона первому — звание «Знаток сезона ' + (seasonTitle || '').replace(/^сезон /, '') + '». Значок у имени — все короны игрока: месяцы, клубы, лиги.';
     }
     var title = periodLabel(periodKey).toLowerCase();
-    var enough = view && view.players_with_points >= 3;
-    if (!enough) return 'Корона за ' + title + team + ' появится, когда очки будут хотя бы у троих.';
+    if (tableCrownMuted(view, periodKey)) {
+      var n = (view && view.players_with_points) || 0;
+      return 'Корона за ' + title + team + ' появится, когда в таблице будет минимум трое игроков с очками. Сейчас — ' + HOW_MANY[n] + '.';
+    }
     var me = view && view.me;
     var tail = me ? (me.rank === 1 ? ' Сейчас первое место твоё.' : ' До первого места — ' + Base.points((view && view.to_crown) || 0) + '.') : '';
-    return 'Корона за ' + title + team + ' — у лидера после последнего матча месяца.' + tail;
+    return 'Корона за ' + title + team + ' — у лидера после последнего матча месяца. Придёт в течение двух суток.' + tail;
   }
 
   /** Мало игроков с очками: таблица честная, короны нет. Позвать болельщиков клуба. */
   function fewPlayers(view, club, periodKey) {
-    if (!view || view.players_with_points >= 3) return null;
+    if (!view || view.players_with_points >= CROWN_MIN) return null;
     periodKey = periodKey || 'season';
     var n = view.players_with_points || 0;
     var label = sliceLabel(club, periodLabel(periodKey, '').toLowerCase());
@@ -777,7 +797,21 @@
 
   // ---------- лига изнутри ----------
 
+  /** Сколько участников лиги с очками в показанной таблице (ходящий с нулём не считается, как на сервере). */
+  function leagueWithPoints(l) {
+    return ((l && l.items) || []).filter(function (r) { return r.points > 0; }).length;
+  }
+
+  /** Очки меньше чем у двоих: корону лиги пока не дать — плашка приглушена. */
+  function leagueCrownMuted(l) {
+    return leagueWithPoints(l) < LEAGUE_CROWN_MIN;
+  }
+
+  /** Плашка над таблицей лиги. Число игроков с очками — по строкам той же таблицы (l.items). */
   function leagueCrownLine(l, tab, me, leaderPoints) {
+    if (leagueCrownMuted(l)) {
+      return 'Корону лиги получит лидер, когда очки будут хотя бы у двоих. ' + (leagueWithPoints(l) ? 'Пока очки только у одного.' : 'Пока их нет ни у кого.');
+    }
     if (tab === 'month' && l.period) {
       var mon = periodLabel(l.period.key).toLowerCase();
       var base = 'Корону лиги за ' + mon + ' заберёт лидер после последнего матча месяца.';
@@ -785,8 +819,7 @@
       if (me.rank === 1) return base + ' Сейчас первое место твоё.';
       return base + ' Сейчас ты на ' + me.rank + '-м месте, до первого — ' + Base.points(Math.max(0, leaderPoints - me.points)) + '.';
     }
-    if (l.term === 'season' || l.term === 'dates' || l.term === 'playoff') return 'Чемпиона лиги определим ' + endLabel(l.ends_at) + '. Короны за месяцы копятся у имени.';
-    return 'Корону лиги заберёт лидер, когда лига закончится — ' + endLabel(l.ends_at) + '.';
+    return 'Корона лиги — у лидера, когда лига закончится. Для неё хватит и двоих игроков с очками.';
   }
 
   function leagueMeta(l, members) {
@@ -907,6 +940,8 @@
   }
 
   var NO_MOVE = 'ты не ходил';
+  /** Сервер уже увидел итог или проверяет его (m.checking) — матч окончен, а не идёт дольше трёх часов. */
+  var CHECKING_CAP = 'Матч окончен · сверяем счёт';
   var AFTER_RESULT = 'Очки — после итога';
 
   /** Подпись под счётом сыгранного матча: «итог», «в овертайме», «по буллитам». */
@@ -958,7 +993,7 @@
       if (mine) out.right = { kind: 'note', text: AFTER_RESULT };
     } else if (phase === 'waiting') {
       out.chip = { kind: 'wait', text: stale ? 'БЕЗ ИТОГА' : 'ЖДЁМ ИТОГ' };
-      out.center = { big: '—:—', cap: stale ? 'итог не подтверждён' : 'итог уточняем' };
+      out.center = { big: '—:—', cap: stale ? 'итог не подтверждён' : m.checking ? CHECKING_CAP : 'итог уточняем' };
       if (mine) out.right = { kind: 'note', text: AFTER_RESULT };
     } else if (phase === 'done') {
       var r = m.result;
@@ -1266,6 +1301,7 @@
     tableRows: tableRows,
     tableCaption: tableCaption,
     tableCrownLine: tableCrownLine,
+    tableCrownMuted: tableCrownMuted,
     fewPlayers: fewPlayers,
     noMeLine: noMeLine,
     peakChip: peakChip,
@@ -1282,6 +1318,7 @@
     scopePhrase: scopePhrase,
     termsSummary: termsSummary,
     leagueCrownLine: leagueCrownLine,
+    leagueCrownMuted: leagueCrownMuted,
     leagueMeta: leagueMeta,
     inviteText: inviteText,
     crownLabel: crownLabel,

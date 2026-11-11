@@ -240,30 +240,6 @@ _UPDATE_TEXTS = text("""
 
 _SET_IMAGE = text("UPDATE hockey_leagues SET image_key = :image_key, updated_at = now() WHERE id = :league_id")
 
-# Очки каждого участника за матчи гонки, начавшиеся после его вступления; у кого их нет — ноль.
-_LEAGUE_TABLE = text("""
-    WITH members AS (
-        SELECT player_key, joined_at FROM hockey_league_members WHERE league_id = :league_id
-    ), totals AS (
-        SELECT p.player_key,
-               SUM(p.points * (1 + p.doubled::int))::int AS points,
-               COUNT(*) FILTER (WHERE p.points = :exact)::int AS exact,
-               COUNT(*)::int AS played
-        FROM hockey_picks AS p
-        JOIN members AS me ON me.player_key = p.player_key
-        JOIN kk_matches AS m ON m.id = p.match_id
-        WHERE p.points IS NOT NULL AND m.starts_at >= GREATEST(:since, me.joined_at) AND m.starts_at < :until
-        GROUP BY p.player_key
-    )
-    SELECT RANK() OVER (ORDER BY COALESCE(t.points, 0) DESC, COALESCE(t.exact, 0) DESC)::int AS rank,
-           mb.player_key, pl.display_name,
-           COALESCE(t.points, 0) AS points, COALESCE(t.exact, 0) AS exact, COALESCE(t.played, 0) AS played
-    FROM members AS mb
-    JOIN hockey_players AS pl ON pl.player_key = mb.player_key
-    LEFT JOIN totals AS t ON t.player_key = mb.player_key
-    ORDER BY rank, pl.display_name, mb.player_key
-    """)
-
 # Лиги игрока. Закончившиеся без границы копились бы вечно, а на каждую считается таблица, поэтому по
 # умолчанию — только идущие и недавно закончившиеся (ends_at > :ends_after), не больше :limit: сперва идущие,
 # среди равных — позже кончающиеся. Выдаём по-прежнему в порядке вступления.

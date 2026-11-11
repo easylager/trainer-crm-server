@@ -106,6 +106,19 @@ describe('десять состояний строки (макет States)', () 
     }
   });
 
+  it('матч окончен, итог сверяем (m.checking с сервера) — своя подпись; идущий дольше трёх часов — прежняя', () => {
+    const probed = S.rowModel(mk({ starts_at: at(-2 * H), open: false, phase: 'waiting', checking: true, my_pick: PICK }), NOW);
+    assert.deepEqual(probed.chip, { kind: 'wait', text: 'ЖДЁМ ИТОГ' });
+    assert.deepEqual(probed.center, { big: '—:—', cap: 'Матч' + NBSP + 'окончен · сверяем' + NBSP + 'счёт' });
+    const review = S.rowModel(mk({ starts_at: at(-5 * H), open: false, status: 'review', phase: 'waiting', checking: true }), NOW);
+    assert.equal(review.center.cap, 'Матч' + NBSP + 'окончен · сверяем' + NBSP + 'счёт');
+    const longLive = S.rowModel(mk({ starts_at: at(-4 * H), open: false, phase: 'waiting', checking: false, my_pick: PICK }), NOW);
+    assert.equal(longLive.center.cap, 'итог' + NBSP + 'уточняем');
+    // Трое суток без итога — «не подтверждён», даже если сервер его видел.
+    const stale = S.rowModel(mk({ starts_at: at(-4 * 86400000), open: false, phase: 'waiting', checking: true, my_pick: PICK }), NOW);
+    assert.equal(stale.center.cap, 'итог' + NBSP + 'не' + NBSP + 'подтверждён');
+  });
+
   it('итог не подтверждён больше трёх суток — честная подпись, всё ещё без счёта', () => {
     const r = S.rowModel(mk({ starts_at: at(-4 * 86400000), open: false, phase: 'waiting', my_pick: PICK }), NOW);
     assert.equal(r.stale, true);

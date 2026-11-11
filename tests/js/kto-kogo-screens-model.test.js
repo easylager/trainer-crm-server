@@ -227,7 +227,7 @@ describe('итог и движение', () => {
     const base = { kind: 'slice', club: 'Юность', period_title: 'ноябрь', ends_at: '2026-11-30T21:00:00Z', crown: true, left: 3, to_crown: 0 };
     assert.match(S.crownLineAfter([base]), /Корона за ноябрь пока твоя\. Впереди ещё 3.матча Юности — удержи до 30.ноября\./);
     assert.match(S.crownLineAfter([Object.assign({}, base, { crown: false, to_crown: 10 })]), /^До короны за ноябрь — 10.очков\. Впереди ещё 3.матча Юности\.$/);
-    assert.match(S.crownLineAfter([Object.assign({}, base, { left: 0 })]), /последний матч/);
+    assert.match(S.crownLineAfter([Object.assign({}, base, { left: 0 })]), /последний матч месяца в таблице «Юность · ноябрь»: корона придёт в течение двух суток, когда сверим итоги\.$/);
     assert.equal(S.crownLineAfter([{ kind: 'league' }]), '');
   });
 });
@@ -270,11 +270,23 @@ describe('таблица', () => {
   });
   it('строка про корону: порог трёх, моё положение, звание сезона', () => {
     const view = { players_with_points: 5, me: { rank: 3 }, to_crown: 20 };
-    assert.match(S.tableCrownLine(view, 'Юность', '2026-11', 'сезон 2026/27'), /^Корона за ноябрь по матчам Юности — у лидера после последнего матча месяца\. До первого места — 20.очков\.$/);
-    assert.match(S.tableCrownLine({ players_with_points: 5, me: { rank: 1 }, to_crown: 0 }, null, '2026-11', ''), /Сейчас первое место твоё/);
-    assert.match(S.tableCrownLine({ players_with_points: 2 }, null, '2026-11', ''), /хотя бы у троих/);
+    assert.match(S.tableCrownLine(view, 'Юность', '2026-11', 'сезон 2026/27'), /^Корона за ноябрь по матчам Юности — у лидера после последнего матча месяца\. Придёт в течение двух суток\. До первого места — 20.очков\.$/);
+    assert.equal(S.tableCrownMuted(view, '2026-11'), false);
+    assert.match(S.tableCrownLine({ players_with_points: 5, me: { rank: 1 }, to_crown: 0 }, null, '2026-11', ''), /Придёт в течение двух суток\. Сейчас первое место твоё/);
+    assert.match(S.tableCrownLine({ players_with_points: 3 }, null, '2026-11', ''), /^Корона за ноябрь — у лидера после последнего матча месяца\. Придёт в течение двух суток\.$/);
     assert.match(S.tableCrownLine(view, null, 'season', 'сезон 2026/27'), /Знаток сезона 2026\/27/);
     assert.match(S.tableCrownLine(view, 'Юность', 'season', 'сезон 2026/27'), /Знаток Юности 2026\/27/);
+  });
+  it('плашка короны: игроков с очками меньше трёх — приглушённая, со счётом словами', () => {
+    const line = (n, club) => S.tableCrownLine({ players_with_points: n }, club, '2026-11', '');
+    assert.equal(line(0, 'Динамо-Минск'), 'Корона за ноябрь по матчам Динамо-Минск появится, когда в таблице будет минимум трое игроков с очками. Сейчас — ни одного.');
+    assert.equal(line(1, null), 'Корона за ноябрь появится, когда в таблице будет минимум трое игроков с очками. Сейчас — один.');
+    assert.equal(line(2, 'Юность'), 'Корона за ноябрь по матчам Юности появится, когда в таблице будет минимум трое игроков с очками. Сейчас — двое.');
+    for (const n of [0, 1, 2]) assert.equal(S.tableCrownMuted({ players_with_points: n }, '2026-11'), true, String(n));
+    assert.equal(S.tableCrownMuted({ players_with_points: 3 }, '2026-11'), false);
+    // Сезон — звание, а не корона: плашка не приглушается.
+    assert.equal(S.tableCrownMuted({ players_with_points: 0 }, 'season'), false);
+    assert.equal(S.tableCrownMuted({ players_with_points: 0 }, undefined), false);
   });
   it('вершины: чип и плитка, корона записью', () => {
     const p = { club: 'Юность', period: '2026-11', period_title: 'ноябрь', rank: 2, players: 38 };
@@ -354,12 +366,25 @@ describe('лиги', () => {
     assert.equal(monthly.crowns, 'Корона лидеру каждого месяца и чемпион лиги в конце.');
     assert.equal(monthly.what, 'Матчи Динамо-Минск');
   });
-  it('строка про корону лиги: месяц и весь срок', () => {
-    const l = { term: 'season', ends_at: '2027-07-31T21:00:00Z', period: { key: '2026-11' } };
+  it('строка про корону лиги: месяц и весь срок, порог двоих', () => {
+    const two = [{ points: 230 }, { points: 210 }, { points: 0 }];
+    const l = { term: 'season', ends_at: '2027-07-31T21:00:00Z', period: { key: '2026-11' }, items: two };
     assert.equal(S.leagueCrownLine(l, 'month', { rank: 3, points: 210 }, 230), 'Корону лиги за ноябрь заберёт лидер после последнего матча месяца. Сейчас ты на 3-м месте, до первого — 20' + NBSP + 'очков.');
     assert.match(S.leagueCrownLine(l, 'month', { rank: 1, points: 230 }, 230), /Сейчас первое место твоё/);
-    assert.match(S.leagueCrownLine(l, 'all', null, 0), /^Чемпиона лиги определим 31.июля/);
-    assert.match(S.leagueCrownLine({ term: 'month', ends_at: '2026-11-30T21:00:00Z' }, 'all', null, 0), /^Корону лиги заберёт лидер, когда лига закончится — 30.ноября/);
+    const full = 'Корона лиги — у лидера, когда лига закончится. Для неё хватит и двоих игроков с очками.';
+    assert.equal(S.leagueCrownLine(l, 'all', null, 0), full);
+    assert.equal(S.leagueCrownLine({ term: 'month', ends_at: '2026-11-30T21:00:00Z', items: two }, 'all', null, 0), full);
+    assert.equal(S.leagueCrownMuted(l), false);
+  });
+  it('корона лиги: очков меньше чем у двоих — приглушённая плашка', () => {
+    const none = { term: 'season', ends_at: '2027-07-31T21:00:00Z', period: { key: '2026-11' }, items: [{ points: 0 }, { points: 0 }] };
+    const one = Object.assign({}, none, { items: [{ points: 30 }, { points: 0 }] });
+    assert.equal(S.leagueCrownLine(none, 'all', null, 0), 'Корону лиги получит лидер, когда очки будут хотя бы у двоих. Пока их нет ни у кого.');
+    assert.equal(S.leagueCrownLine(one, 'all', null, 0), 'Корону лиги получит лидер, когда очки будут хотя бы у двоих. Пока очки только у одного.');
+    assert.equal(S.leagueCrownLine(one, 'month', { rank: 1, points: 30 }, 30), 'Корону лиги получит лидер, когда очки будут хотя бы у двоих. Пока очки только у одного.');
+    assert.equal(S.leagueCrownMuted(none), true);
+    assert.equal(S.leagueCrownMuted(one), true);
+    assert.equal(S.leagueCrownMuted({ items: [] }), true);
   });
   it('приглашение без азартных слов', () => {
     assert.match(S.inviteText('Офис', { scope: 'extraliga', clubs: [] }), /Вся Экстралига/);
@@ -460,6 +485,75 @@ describe('шторка «Как считаются очки»', () => {
     assert.match(r.trumpText, /удвоятся/);
     assert.equal(M.PICK_CLOSES_BEFORE_SEC, 60);
     assert.match(r.foot, /до минуты перед стартом матча/);
+  });
+  it('«Таблицы и короны»: четыре пункта макета, пороги три и два, два дня на сверку', () => {
+    const r = S.pointsRules();
+    assert.equal(r.tablesTitle, 'Таблицы и короны');
+    assert.deepEqual(r.tables.map((x) => x.title), ['Кто выше', 'Корона', 'Сколько игроков нужно', 'Когда придёт']);
+    assert.match(r.tables[0].text, /больше точных счётов.*меньше матчей.*место делите/);
+    assert.match(r.tables[1].text, /Первое место поделили — корона у каждого/);
+    assert.match(r.tables[2].text, /минимум трое игроков с очками\. В лиге друзей хватит двоих\./);
+    assert.match(r.tables[3].text, /^В течение двух суток после последнего матча/);
+  });
+  it('блок «Таблицы и короны» в шторке: свёрнут, кнопка с aria-expanded раскрывает и сворачивает', () => {
+    const vm = require('node:vm');
+    function el(tag) {
+      const attrs = {};
+      const listeners = {};
+      const classes = new Set();
+      return {
+        tag, attrs, children: [], hidden: false, textContent: '',
+        setAttribute(k, v) { attrs[k] = String(v); if (k === 'hidden') this.hidden = true; },
+        getAttribute(k) { return k in attrs ? attrs[k] : null; },
+        addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
+        click() { (listeners.click || []).forEach((fn) => fn({})); },
+        classList: { toggle(c, on) { if (on) classes.add(c); else classes.delete(c); }, contains: (c) => classes.has(c) },
+        appendChild(c) { this.children.push(c); },
+      };
+    }
+    function h(tag, attrs, kids) {
+      const e = el(tag);
+      Object.keys(attrs || {}).forEach((k) => {
+        const v = attrs[k];
+        if (v === null || v === undefined || v === false) return;
+        if (k === 'class') e.className = v;
+        else if (k === 'text') e.textContent = v;
+        else if (k.indexOf('on') === 0) e.addEventListener(k.slice(2), v);
+        else e.setAttribute(k, v === true ? '' : v);
+      });
+      (kids || []).forEach((c) => { if (c) e.appendChild(c); });
+      return e;
+    }
+    const state = { sheet: { kind: 'points' } };
+    const K = { h, M: {}, S, I: { down: [], chev: [] }, state, icon: () => el('svg'), sheet: (title, sub, kids) => h('div', { class: 'sheet' }, kids) };
+    const ctx = { window: { KK: K } };
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../static/webapp/kto-kogo-hub-cards.js'), 'utf8'), ctx);
+    const walk = (n, out) => { out.push(n); (n.children || []).forEach((c) => walk(c, out)); return out; };
+    const find = (root, cls) => walk(root, []).find((n) => n.className === cls || (n.className || '').split(' ').includes(cls));
+    let root = K.hubCards.pointsSheet();
+    let btn = find(root, 'kk-rl__more');
+    let panel = find(root, 'kk-rl__panel');
+    assert.equal(btn.tag, 'button');
+    assert.equal(btn.getAttribute('aria-expanded'), 'false');
+    assert.equal(btn.getAttribute('aria-controls'), panel.getAttribute('id'));
+    assert.equal(panel.hidden, true);
+    // Блок стоит между карточкой «Козырь» и нижней подписью.
+    const kids = root.children.map((c) => c.className);
+    assert.deepEqual(kids.slice(1), ['kk-rl__trump', 'kk-rl__tables', 'kk-sub']);
+    assert.equal(panel.children.length, 4);
+    btn.click();
+    assert.equal(btn.getAttribute('aria-expanded'), 'true');
+    assert.equal(panel.hidden, false);
+    assert.equal(state.sheet.tablesOpen, true);
+    // Перерисовка шторки не сворачивает открытый блок.
+    root = K.hubCards.pointsSheet();
+    btn = find(root, 'kk-rl__more');
+    panel = find(root, 'kk-rl__panel');
+    assert.equal(btn.getAttribute('aria-expanded'), 'true');
+    assert.equal(panel.hidden, false);
+    btn.click();
+    assert.equal(btn.getAttribute('aria-expanded'), 'false');
+    assert.equal(panel.hidden, true);
   });
 });
 

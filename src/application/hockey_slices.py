@@ -35,8 +35,11 @@ from src.ingestion.hockey_sources import MINSK_TZ
 DINAMO = "Динамо-Минск"
 KIND_SEASON = "season"
 KIND_MONTH = "month"
-# Корона и вершина — только там, где соревнуются хотя бы трое с очками.
+# Корона и вершина среза («все», клуб) — только там, где соревнуются хотя бы трое с очками.
 CROWN_MIN_PLAYERS = 3
+# Лига друзей — закрытый круг: корону разыгрывают уже двое с очками. PDEC-031 ставил лигам общий порог из
+# трёх; 2026-11-11 владелец вернул лигам порог из двоих (минимума ходов за период нет).
+LEAGUE_CROWN_MIN_MEMBERS = 2
 PEAK_MIN_MOVES = 3
 PEAKS_LIMIT = 3
 NEIGHBORS = 2
@@ -251,14 +254,16 @@ def with_points(rows: list[Row]) -> list[Row]:
     return [r for r in rows if r.points > 0]
 
 
-def crown_eligible(rows: list[Row]) -> bool:
-    """Корона возможна: хотя бы трое с очками (ходящий с нулём не считается)."""
-    return len(with_points(rows)) >= CROWN_MIN_PLAYERS
+def crown_eligible(rows: list[Row], *, min_players: int = CROWN_MIN_PLAYERS) -> bool:
+    """Корона возможна: хотя бы ``min_players`` с очками (ходящий с нулём не считается).
+
+    Срезы «все» и «клуб» — порог по умолчанию (трое), лиги — ``LEAGUE_CROWN_MIN_MEMBERS`` (двое)."""
+    return len(with_points(rows)) >= min_players
 
 
-def crown_leaders(rows: list[Row]) -> list[Row]:
-    """Лидеры среза, которым положена корона: порог 3, ничья по всем критериям — всем, ноль очков — никому."""
-    if not crown_eligible(rows):
+def crown_leaders(rows: list[Row], *, min_players: int = CROWN_MIN_PLAYERS) -> list[Row]:
+    """Лидеры, которым положена корона: порог ``min_players``, ничья по всем критериям — всем, ноль очков — никому."""
+    if not crown_eligible(rows, min_players=min_players):
         return []
     top = min(r.rank for r in rows)
     return [r for r in rows if r.rank == top and r.points > 0]
@@ -552,7 +557,7 @@ async def stakes(session: AsyncSession, *, player_key: int, match_id: int, now: 
                 "rank_now": now_rank,
                 "rank_if": if_rank,
                 "players": len(rows),
-                "crown": if_rank == 1 and crown_eligible(rows),
+                "crown": if_rank == 1 and crown_eligible(rows, min_players=LEAGUE_CROWN_MIN_MEMBERS),
             }
         )
     # Показываем только срезы, где угаданный победитель что-то меняет; сильнее всего — выше.
@@ -575,6 +580,7 @@ __all__ = [
     "MAX_YEAR",
     "MIN_YEAR",
     "KIND_SEASON",
+    "LEAGUE_CROWN_MIN_MEMBERS",
     "Period",
     "Row",
     "Scope",

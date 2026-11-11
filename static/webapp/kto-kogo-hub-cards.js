@@ -262,6 +262,31 @@
     ]);
   }
 
+  var TABLES_PANEL_ID = 'kk-rl-tables';
+
+  /**
+   * «Таблицы и короны» — раскрывающийся блок шторки, по умолчанию свёрнут. Открытость живёт в state.sheet,
+   * чтобы перерисовка шторки не сворачивала его; сам тап меняет DOM на месте, без K.render.
+   */
+  function tablesBlock(r) {
+    var sh = state.sheet || {};
+    var open = !!sh.tablesOpen;
+    var panel = h('div', { class: 'kk-rl__panel', id: TABLES_PANEL_ID, hidden: !open }, r.tables.map(function (x) {
+      return h('div', { class: 'kk-rl__it' }, [h('span', { class: 'kk-rl__k', text: x.title }), h('span', { class: 'kk-rl__x', text: x.text })]);
+    }));
+    var btn = h('button', {
+      type: 'button', class: 'kk-rl__more' + (open ? ' is-open' : ''), 'aria-expanded': open ? 'true' : 'false', 'aria-controls': TABLES_PANEL_ID,
+      onclick: function () {
+        open = !open;
+        if (state.sheet) state.sheet.tablesOpen = open;
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        btn.classList.toggle('is-open', open);
+        panel.hidden = !open;
+      },
+    }, [h('span', { text: r.tablesTitle }), icon(I.down, 18)]);
+    return h('div', { class: 'kk-rl__tables' }, [btn, panel]);
+  }
+
   function pointsSheet() {
     var r = S.pointsRules();
     return K.sheet('Как считаются очки', null, [
@@ -269,6 +294,7 @@
         return h('div', { class: 'kk-rl__r' }, [h('span', { class: 'kk-rl__v' + (x.gold ? ' is-gold' : ''), text: x.value }), h('span', { class: 'kk-rl__t', text: x.text })]);
       })),
       h('div', { class: 'kk-rl__trump' }, [h('b', { text: r.trumpTitle }), h('span', { text: r.trumpText })]),
+      tablesBlock(r),
       h('span', { class: 'kk-sub', text: r.foot }),
     ], 'kk-sheet--pts');
   }

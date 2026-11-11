@@ -18,6 +18,7 @@ from src.application.release_comms_use_cases import (
     markup_without_kk_optout,
     parse_release_comms_file,
     record_kk_promo_optout,
+    wave_targets,
 )
 from src.shared.config import Settings
 from tests.application.test_ice_forecast import _arena, _booking_at, _Bot, _city, _client, _session_city
@@ -265,3 +266,143 @@ def test_repo_draft_file_parses_and_is_a_draft() -> None:
     assert (spec.draft, spec.segment, spec.audience) == (True, "by_clients", "clients")
     assert spec.webapp_path == "/webapp/kto-kogo?src=push1"
     assert "×" not in spec.html_body and "%" not in spec.html_body
+
+
+# --- Фильтры шапки: cities и exclude_campaigns -------------------------------------------------
+
+
+def _filtered_spec(tmp_path: Path, rid: str, extra: str):
+    path = tmp_path / f"{rid}.clients.md"
+    path.write_text(
+        CLIENTS_MD.format(rid=rid).replace("segment: by_clients", f"segment: by_clients\n{extra}"), encoding="utf-8"
+    )
+    return parse_release_comms_file(path)
+
+
+def test_parse_cities_and_exclude_campaigns(tmp_path: Path) -> None:
+    spec = _filtered_spec(
+        tmp_path, "kk-parse", "cities: Орша,  Могилёв , Барановичи, Орша\nexclude_campaigns: a-1, b-2"
+    )
+    assert spec.cities == ("Орша", "Могилёв", "Барановичи")
+    assert spec.exclude_campaigns == ("a-1", "b-2")
+    assert (_spec(tmp_path).cities, _spec(tmp_path).exclude_campaigns) == (None, None)
+    with pytest.raises(ValueError, match="cities"):
+        _filtered_spec(tmp_path, "kk-empty", "cities: , ")
+    other = tmp_path / "o.clients.md"
+    other.write_text("---\naudience: clients\ncities: Орша\n---\nhi", encoding="utf-8")
+    with pytest.raises(ValueError, match="by_clients"):
+        parse_release_comms_file(other)
+
+
+@pytest.mark.asyncio
+async def test_cities_filter_ignores_case_and_yo_and_uses_booking_city(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    sfx = unique_test_telegram_id()
+    yo = await _city(db_session, f"Тёстоград{sfx}")
+    plain = await _city(db_session, f"Другойград{sfx}")
+    skip = await _city(db_session, f"Мимоград{sfx}")
+    yo_arena = await _arena(db_session, yo, "Арена ё", f"kk-yo-{sfx}", None)
+    skip_arena = await _arena(db_session, skip, "Арена мимо", f"kk-skip-{sfx}", None)
+
+    _id, yo_tg = await _client(db_session)
+    await _session_city(db_session, yo_tg, yo)
+    _id, plain_tg = await _client(db_session)
+    await _session_city(db_session, plain_tg, plain)
+    _id, skip_tg = await _client(db_session)
+    await _session_city(db_session, skip_tg, skip)
+    # Нет города в сессии — берётся город арены записи.
+    book_id, book_tg = await _client(db_session)
+    await _session_city(db_session, book_tg, None)
+    await _booking_at(db_session, book_id, yo_arena)
+    # Город сессии важнее записи: записан в выбранном городе, но живёт в другом — не попадает.
+    moved_id, moved_tg = await _client(db_session)
+    await _session_city(db_session, moved_tg, skip)
+    await _booking_at(db_session, moved_id, yo_arena)
+    other_id, other_tg = await _client(db_session)
+    await _session_city(db_session, other_tg, None)
+    await _booking_at(db_session, other_id, skip_arena)
+
+    spec = _filtered_spec(tmp_path, "kk-cities", f"cities: ТЕСТОГРАД{sfx}, другойград{sfx}")
+    res = await broadcast_release_comms(db_session, spec, settings=Settings(), dry_run=True)
+    assert res.filters is not None
+    assert res.filters["cities"] == {f"ТЕСТОГРАД{sfx}": 2, f"другойград{sfx}": 1}
+    assert res.total == res.filters["after_filters"] == 3
+    bot = _Bot()
+    await broadcast_release_comms(db_session, spec, settings=Settings(), bot=bot, send_delay_sec=0)
+    assert set(bot.sent) == {yo_tg, plain_tg, book_tg}
+    assert not ({skip_tg, moved_tg, other_tg} & set(bot.sent))
+
+
+@pytest.mark.asyncio
+async def test_unknown_city_is_an_error_before_sending(db_session: AsyncSession, tmp_path: Path) -> None:
+    await _city(db_session, "Минск")
+    spec = _filtered_spec(tmp_path, "kk-unknown", "cities: Минск, Нетакогограда")
+    bot = _Bot()
+    with pytest.raises(ValueError, match="Нетакогограда"):
+        await broadcast_release_comms(db_session, spec, settings=Settings(), dry_run=True)
+    with pytest.raises(ValueError, match="Нетакогограда"):
+        await broadcast_release_comms(db_session, spec, settings=Settings(), bot=bot, send_delay_sec=0)
+    assert bot.sent == []
+    # Российский город для сегмента by_clients тоже неизвестен.
+    ru = await _ru_city(db_session)
+    assert ru
+    with pytest.raises(ValueError, match="Тест-РФ"):
+        await broadcast_release_comms(
+            db_session, _filtered_spec(tmp_path, "kk-ru", "cities: Тест-РФ"), settings=Settings(), dry_run=True
+        )
+
+
+@pytest.mark.asyncio
+async def test_exclude_campaigns_skips_recipients_of_any_status(db_session: AsyncSession, tmp_path: Path) -> None:
+    sfx = unique_test_telegram_id()
+    city = await _city(db_session, f"Исклград{sfx}")
+    tgs = []
+    for _ in range(4):
+        _id, tg = await _client(db_session)
+        await _session_city(db_session, tg, city)
+        tgs.append(tg)
+    sent_tg, failed_tg, elsewhere_tg, fresh_tg = tgs
+    for tg, key, status in (
+        (sent_tg, f"kk-prev-{sfx}", "sent"),
+        (failed_tg, f"kk-prev2-{sfx}", "failed"),
+        (elsewhere_tg, f"kk-unrelated-{sfx}", "sent"),
+    ):
+        await db_session.execute(
+            text("INSERT INTO client_broadcast_log (telegram_id, campaign_key, status) VALUES (:t, :k, :s)"),
+            {"t": tg, "k": key, "s": status},
+        )
+    spec = _filtered_spec(
+        tmp_path, "kk-excl", f"cities: Исклград{sfx}\nexclude_campaigns: kk-prev-{sfx}, kk-prev2-{sfx}"
+    )
+    dry = await broadcast_release_comms(db_session, spec, settings=Settings(), dry_run=True)
+    assert dry.filters == {
+        "by_clients_total": dry.filters["by_clients_total"],
+        "cities": {f"Исклград{sfx}": 4},
+        "excluded_by_campaigns": 2,
+        "after_filters": 2,
+    }
+    bot = _Bot()
+    await broadcast_release_comms(db_session, spec, settings=Settings(), bot=bot, send_delay_sec=0)
+    assert sorted(bot.sent) == sorted([elsewhere_tg, fresh_tg])
+    # Без cities: исключение кампаний работает по всей BY-аудитории.
+    only_excl = _filtered_spec(tmp_path, "kk-excl-only", f"exclude_campaigns: kk-prev-{sfx}")
+    got = await broadcast_release_comms(db_session, only_excl, settings=Settings(), dry_run=True)
+    assert got.filters is not None and "cities" not in got.filters
+    assert got.filters["excluded_by_campaigns"] == 1
+
+
+@pytest.mark.asyncio
+async def test_without_filter_fields_audience_and_result_are_unchanged(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    by = await _city(db_session, "Минск")
+    for _ in range(3):
+        _id, tg = await _client(db_session)
+        await _session_city(db_session, tg, by)
+    spec = _spec(tmp_path, "kk-nofilter")
+    base = await fetch_audience_telegram_ids(db_session, "clients", segment="by_clients")
+    dry = await broadcast_release_comms(db_session, spec, settings=Settings(), dry_run=True, percent=50, limit=2)
+    assert dry.filters is None
+    assert dry.total == len(base)
+    assert dry.sample_ids == wave_targets("kk-nofilter", base, set(), percent=50, limit=2)[:5]
