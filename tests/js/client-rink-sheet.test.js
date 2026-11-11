@@ -50,11 +50,16 @@ describe('подписи и шаг', () => {
     );
   });
 
-  it('из ленты «Поиска» берёт ближайший сеанс: сегодня N = more_count + 1', () => {
-    assert.deepEqual(
-      rink.countsFromLive({ live: { kind: 'session', local_date: TODAY, more_count: 1, starts_at_local: '19:00' } }, TODAY),
-      { sessionsLeftToday: 2, tomorrowFirst: null },
+  it('ближайший сегодня при многих будущих не берёт more_count как «сегодня ещё»', () => {
+    const todayMany = {
+      live: { kind: 'session', local_date: TODAY, more_count: 34, starts_at_local: '19:00' },
+    };
+    assert.equal(rink.rinkCaption(todayMany, TODAY), '');
+    assert.equal(
+      rink.rinkCaption(Object.assign({ sessions_left_today: 2 }, todayMany), TODAY),
+      'сегодня ещё 2 сеанса',
     );
+    assert.deepEqual(rink.countsFromLive(todayMany, TODAY), { sessionsLeftToday: null, tomorrowFirst: null });
     assert.equal(
       rink.rinkCaption({ live: { kind: 'session', local_date: '2026-11-12', more_count: 4, starts_at_local: '09:00' } }, TODAY),
       'сегодня сеансов нет, завтра — с 9:00',
@@ -122,9 +127,10 @@ describe('подписи и шаг', () => {
     assert.deepEqual(rink.orderedRinks(items, null, ice).map((item) => item.id), [1, 2]);
   });
 
-  it('заголовок шага 2 — имя катка как пришло, без новой фразы', () => {
+  it('заголовок шага 2 берёт имя в ёлочки', () => {
+    assert.equal(rink.stepTitle('Чижовка-арена'), '«Чижовка-арена» — твой каток');
+    assert.equal(rink.stepTitle('Ледовый дворец'), '«Ледовый дворец» — твой каток');
     assert.equal(rink.stepTitle('«Чижовка-арена»'), '«Чижовка-арена» — твой каток');
-    assert.equal(rink.stepTitle('Ледовый дворец'), 'Ледовый дворец — твой каток');
   });
 
   it('не звучит как букмекерка и не красит хексами', () => {
@@ -268,12 +274,16 @@ class El {
     const ev = Object.assign({ bubbles: true }, event || {});
     ev.target = ev.target || this;
     ev.preventDefault = () => { ev.defaultPrevented = true; };
+    ev.stopPropagation = () => { ev.stopped = true; };
     let node = this;
     while (node) {
       const list = (node.listeners && node.listeners[type]) ? node.listeners[type].slice() : [];
       for (const fn of list) fn(ev);
-      if (!ev.bubbles || !node.parentNode) break;
+      if (ev.stopped || !ev.bubbles || !node.parentNode) break;
       node = node.parentNode;
+    }
+    if (!ev.stopped && ev.bubbles && this.doc && this.doc.listeners && this.doc.listeners[type]) {
+      for (const fn of this.doc.listeners[type].slice()) fn(ev);
     }
     return ev;
   }
@@ -393,9 +403,10 @@ function harness(options) {
       if (href.includes('bell-follow')) {
         const body = JSON.parse((opts && opts.body) || '{}');
         if (href.includes('/outcome')) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+        const status = options.bellStatus || (options.bellOk === false ? 500 : 200);
         return Promise.resolve({
-          ok: options.bellOk !== false,
-          status: options.bellOk === false ? 500 : 200,
+          ok: status >= 200 && status < 300,
+          status: status,
           json: () => Promise.resolve({ arena_name: '«Чижовка-арена»', arena_id: body.arena_id }),
         });
       }
@@ -430,7 +441,7 @@ function harness(options) {
     Telegram: options.telegram === false ? undefined : {
       WebApp: {
         initData: options.initData == null ? 'init-1' : options.initData,
-        initDataUnsafe: { user: { id: 7, allows_write_to_pm: false } },
+        initDataUnsafe: { user: { id: options.userId == null ? 7 : options.userId, allows_write_to_pm: false } },
         BackButton: back,
         HapticFeedback: { notificationOccurred(kind) { haptic.push(kind); } },
         isVersionAtLeast() { return true; },
@@ -641,6 +652,67 @@ describe('ClientRinkSheet', () => {
     await flush();
     assert.equal(h.popups[0].message, bell.copyDone('«Чижовка-арена»'));
     assert.equal(JSON.parse(h.calls.find((call) => call.url.includes('outcome')).opts.body).outcome, 'granted');
+    assert.equal(sheet.el.isConnected, false);
+  });
+
+  it('не Telegram — шага 2 нет, колокольчик не зовётся', async () => {
+    const saved = [];
+    const h = harness({ userId: -1 });
+    const sheet = h.sandbox.ClientRinkSheet.open({ currentId: 10, onSaved(home) { saved.push(home); } });
+    await flush();
+    sheet.el.querySelector('.cr-save').dispatch('click', {});
+    await flush();
+    assert.equal(saved.length, 1);
+    assert.equal(sheet.el.isConnected, false);
+    assert.equal(h.haptic.length, 0);
+    assert.equal(h.calls.some((call) => call.url.includes('bell-follow')), false);
+    assert.equal(sheet.el.querySelector('.cr-bell-title'), null);
+  });
+
+  it('409 колокольчика не закрывает шторку и пишет его фразу отказа', async () => {
+    const h = harness({ bellStatus: 409 });
+    const sheet = h.sandbox.ClientRinkSheet.open({ currentId: 10, onSaved() {} });
+    await flush();
+    sheet.el.querySelector('.cr-save').dispatch('click', {});
+    await flush();
+    sheet.el.querySelector('.cr-yes').dispatch('click', {});
+    await flush();
+    assert.equal(sheet.el.isConnected, true);
+    assert.equal(sheet.el.querySelector('.cr-toast').textContent, 'Не удалось сохранить подписку.');
+    assert.equal(h.popups.length, 0);
+  });
+
+  it('успешный PUT после закрытия всё равно зовёт onSaved', async () => {
+    const saved = [];
+    const h = harness({ hangSave: true });
+    const sheet = h.sandbox.ClientRinkSheet.open({ currentId: 10, onSaved(home) { saved.push(home); } });
+    await flush();
+    sheet.el.querySelector('.cr-save').dispatch('click', {});
+    h.back.fn();
+    assert.equal(sheet.el.isConnected, false);
+    assert.equal(saved.length, 0);
+    h.saveGate().resolve({
+      ok: true,
+      json: () => Promise.resolve({ home_arena: { id: 10, name: 'Чижовка-арена', subscribed: false } }),
+    });
+    await flush();
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].id, 10);
+  });
+
+  it('Escape в поиске с текстом очищает поле и не закрывает шторку', async () => {
+    const h = harness();
+    const sheet = h.sandbox.ClientRinkSheet.open({ currentId: 10 });
+    await flush();
+    const input = sheet.el.querySelector('input');
+    input.value = 'замок';
+    input.dispatch('input', {});
+    assert.equal(radios(sheet).length, 1);
+    input.dispatch('keydown', { key: 'Escape' });
+    assert.equal(input.value, '');
+    assert.equal(sheet.el.isConnected, true);
+    assert.equal(radios(sheet).length, 4);
+    input.dispatch('keydown', { key: 'Escape' });
     assert.equal(sheet.el.isConnected, false);
   });
 });

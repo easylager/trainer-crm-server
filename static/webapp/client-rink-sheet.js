@@ -5,8 +5,9 @@
  * Список — тот же GET, что вкладка «Поиск»: IceTabModel.buildListUrl
  * (intent=skate, город из GET /api/webapp/client/session, окно «когда» как у «Поиска»).
  * Порядок — IceTabModel.orderForFeed, без «Рядом».
- * Подписи: sessions_left_today / tomorrow_first, если они есть в строке.
- * В ленте «Поиска» их нет: ближайший сеанс и more_count (все будущие минус один).
+ * Подпись «сегодня ещё N» — только из sessions_left_today ленты (TASK-379).
+ * Нет поля — число не показываем. Завтра и «сеансов нет» берём из ближайшего сеанса.
+ * more_count — все будущие сеансы горизонта, в подпись не входит.
  */
 (function (root) {
   'use strict';
@@ -14,6 +15,8 @@
   var SESSION_URL = '/api/webapp/client/session';
   var SAVE_URL = '/api/webapp/client/me/home-arena';
   var SAVE_ERROR = 'Не сохранилось. Попробуй ещё раз';
+  /* Та же фраза, что COPY_FAILED в bell-follow.js. Модуль её не экспортирует. */
+  var BELL_FAILED = 'Не удалось сохранить подписку.';
   var PAGE_CAP = 20;
 
   var COPY = {
@@ -96,19 +99,15 @@
   }
 
   /**
-   * Строка ленты «Поиска» не несёт sessions_left_today.
-   * Сегодня и этот сеанс ближайший: N = more_count + 1 (все будущие, не только сегодня).
-   * Ближайший завтра: сегодня пусто, время — starts_at_local.
-   * Ближайший позже завтра или сеанса нет: «сегодня сеансов нет».
+   * Ближайший сеанс ленты, без числа «сегодня ещё».
+   * sessionsLeftToday === null — сеанс сегодня есть, но сколько их, из live не узнать.
    */
   function countsFromLive(item, todayIso) {
     var live = (item && item.live) || {};
     var date = String(live.local_date || '').slice(0, 10);
     var today = String(todayIso || '');
     if (String(live.kind || '') === 'session' && date && date === today) {
-      var more = Number(live.more_count);
-      if (!isFinite(more) || more < 0) more = 0;
-      return { sessionsLeftToday: Math.floor(more) + 1, tomorrowFirst: null };
+      return { sessionsLeftToday: null, tomorrowFirst: null };
     }
     if (String(live.kind || '') === 'session' && today && date === addDaysIso(today, 1)) {
       return { sessionsLeftToday: 0, tomorrowFirst: formatClock(live.starts_at_local) || null };
@@ -117,13 +116,17 @@
   }
 
   function rinkCaption(item, todayIso) {
-    if (item && typeof item.sessions_left_today === 'number') {
-      return sessionsCaption({
-        sessionsLeftToday: item.sessions_left_today,
-        tomorrowFirst: item.tomorrow_first,
-      });
+    var live = countsFromLive(item, todayIso);
+    if (item && typeof item.sessions_left_today === 'number' && isFinite(item.sessions_left_today)) {
+      var left = Math.floor(item.sessions_left_today);
+      if (left < 0) left = 0;
+      if (left > 0) return sessionsCaption({ sessionsLeftToday: left, tomorrowFirst: null });
+      var tomorrow = item.tomorrow_first;
+      if (tomorrow == null || tomorrow === '') tomorrow = live.tomorrowFirst;
+      return sessionsCaption({ sessionsLeftToday: 0, tomorrowFirst: tomorrow });
     }
-    return sessionsCaption(countsFromLive(item, todayIso));
+    if (live.sessionsLeftToday == null) return '';
+    return sessionsCaption({ sessionsLeftToday: 0, tomorrowFirst: live.tomorrowFirst });
   }
 
   function norm(value) {
@@ -149,7 +152,11 @@
   }
 
   function stepTitle(name) {
-    return String(name || '') + ' — твой каток';
+    var raw = String(name || '').trim();
+    if (raw.charAt(0) === '\u00ab' && raw.charAt(raw.length - 1) === '\u00bb') {
+      return raw + ' \u2014 твой каток';
+    }
+    return '\u00ab' + raw + '\u00bb \u2014 твой каток';
   }
 
   function searchQuery(input) {
@@ -431,7 +438,8 @@
       mark.appendChild(skateIcon());
       var text = el('span', 'cr-text');
       text.appendChild(el('span', 'cr-name', item.name || ''));
-      text.appendChild(el('span', 'cr-line', rinkCaption(item, todayIso)));
+      var caption = rinkCaption(item, todayIso);
+      if (caption) text.appendChild(el('span', 'cr-line', caption));
       var radio = document.createElement('input');
       radio.type = 'radio';
       radio.name = 'cr-rink';
@@ -500,42 +508,48 @@
         if (!alive || busy) return;
         var bell = bellApi();
         var arenaId = home && home.id != null ? home.id : (selected && selected.id);
-        if (!bell || typeof bell.run !== 'function' || arenaId == null) {
-          showBellError(box);
-          return;
-        }
+        var tg = root.Telegram && root.Telegram.WebApp;
+        if (!bell || typeof bell.run !== 'function' || arenaId == null) return;
         busy = true;
         yes.disabled = true;
         no.disabled = true;
-        var tg = root.Telegram && root.Telegram.WebApp;
         bell.run({
           tg: tg,
           startParam: 'follow_arena_' + String(arenaId),
           storage: null,
           post: bell.makePost(initData(), root.fetch.bind(root)),
-        }).then(function () {
+        }).then(function (result) {
           if (!alive) return;
+          if (result && result.status === 'skipped') {
+            busy = false;
+            yes.disabled = false;
+            no.disabled = false;
+            showBellFailed(box, bell);
+            return;
+          }
           alive = false;
           sheet.close();
-        }).catch(function () {
-          if (!alive) return;
-          busy = false;
-          yes.disabled = false;
-          no.disabled = false;
-          showBellError(box);
         });
       });
     }
 
-    function showBellError(box) {
+    function showBellFailed(box, bell) {
+      var phrase = bell && bell.COPY_FAILED ? bell.COPY_FAILED : BELL_FAILED;
       var note = box.querySelector ? box.querySelector('.cr-toast') : null;
       if (!note) {
-        note = el('p', 'cr-toast', SAVE_ERROR);
+        note = el('p', 'cr-toast', phrase);
         note.setAttribute('role', 'status');
         if (box.insertBefore && box.firstChild) box.insertBefore(note, box.firstChild);
         else box.appendChild(note);
       }
+      note.textContent = phrase;
       note.hidden = false;
+    }
+
+    function canAskSubscribe() {
+      var bell = bellApi();
+      var tg = root.Telegram && root.Telegram.WebApp;
+      return !!(bell && typeof bell.isTelegramPrincipal === 'function' && bell.isTelegramPrincipal(tg));
     }
 
     paintButton();
@@ -546,6 +560,14 @@
     });
 
     input.addEventListener('input', paintList);
+    input.addEventListener('keydown', function (event) {
+      if (!event || event.key !== 'Escape') return;
+      if (!input.value) return;
+      input.value = '';
+      paintList();
+      if (event.preventDefault) event.preventDefault();
+      if (event.stopPropagation) event.stopPropagation();
+    });
     save.addEventListener('click', function () {
       if (busy || !alive || !selected || selected.id == null) return;
       busy = true;
@@ -559,12 +581,12 @@
         if (!response.ok) throw new Error('save');
         return readJson(response);
       }).then(function (data) {
-        if (!alive || sheet.el.getAttribute('data-closing') === '1') return;
         var home = data && data.home_arena;
         if (!home || home.id == null) throw new Error('save');
         if (typeof opts.onSaved === 'function') opts.onSaved(home);
-        if (afterSave(home) === 'done') {
-          hapticSuccess();
+        if (!alive || sheet.el.getAttribute('data-closing') === '1') return;
+        if (afterSave(home) === 'done' || !canAskSubscribe()) {
+          if (afterSave(home) === 'done') hapticSuccess();
           alive = false;
           sheet.close();
           return;
