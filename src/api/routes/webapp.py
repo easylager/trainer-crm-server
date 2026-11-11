@@ -3392,16 +3392,12 @@ async def get_client_hub_bootstrap(
                 if city_id is None:
                     return None
                 city = (
-                    await s.execute(text("SELECT name, region, country FROM cities WHERE id = :id"), {"id": int(city_id)})
+                    await s.execute(text("SELECT name, region FROM cities WHERE id = :id"), {"id": int(city_id)})
                 ).first()
                 if city is None:
                     return None
                 return await home_feed(
-                    s,
-                    city_name=city.name,
-                    city_region=city.region,
-                    city_country=city.country,
-                    now=datetime.now(timezone.utc),
+                    s, city_name=city.name, city_region=city.region, now=datetime.now(timezone.utc)
                 )
         except Exception:
             logger.exception("client hub extraliga feed failed")

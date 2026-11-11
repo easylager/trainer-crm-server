@@ -1,8 +1,8 @@
 """Лента матчей в слоте «сейчас» главной (TASK-340, срез 3; холст — экран 11).
 
-Матчи Экстралиги, которые идут в городе клиента, и матчи Динамо-Минск (дома и на выезде: клуб
-общебелорусский, в городе без своего клуба виден только он) на 14 дней. В окне пусто — один
-ближайший будущий матч. «N матчей на неделе» — по-прежнему матчи Экстралиги города за 7 дней.
+Только домашние матчи: Экстралига, которая идёт в городе клиента, и домашние матчи Динамо-Минск
+(клуб общебелорусский — во всех городах) на 14 дней. Выездов нет: страница матча открывает
+только домашние матчи Динамо и Экстралигу. В окне пусто — один ближайший будущий домашний матч. «N матчей на неделе» — по-прежнему матчи Экстралиги города за 7 дней.
 Игровую карточку Динамо добавляет now_slot. Без города ленты нет.
 """
 from __future__ import annotations
@@ -40,7 +40,7 @@ _WEEK = text("""
     ORDER BY starts_at, id
     """)
 
-# Лента главной: Экстралига с клубами из списка и Динамо-Минск (КХЛ) — дома и на выезде.
+# Лента главной: Экстралига с клубами из списка и домашние матчи Динамо-Минск (КХЛ).
 # ``:until`` NULL — без верхней границы (ближайший будущий матч за окном).
 _FEED = text("""
     SELECT id, league, home_team, away_team, starts_at, status, home_score, away_score, decided_in, arena, city
@@ -49,7 +49,7 @@ _FEED = text("""
       AND starts_at >= :since AND (CAST(:until AS timestamptz) IS NULL OR starts_at < :until)
       AND (CAST(:only_scheduled AS boolean) IS NOT TRUE OR status = 'scheduled')
       AND ((league = :league AND (home_team = ANY(:clubs) OR away_team = ANY(:clubs)))
-           OR (league = :khl AND :dinamo AND (home_team = :dinamo_name OR away_team = :dinamo_name)))
+           OR (league = :khl AND :dinamo AND home_team = :dinamo_name))
     ORDER BY starts_at, id
     """)
 
@@ -92,7 +92,7 @@ async def week_rows(session: AsyncSession, *, now: datetime, settings: Settings 
 
 
 def _feed_card(row: Any, *, now: datetime, sticker: str | None) -> dict[str, Any]:
-    """Та же карточка ``card``; у Динамо места в базе нет — дома Минск-Арена, на выезде пусто."""
+    """Та же карточка ``card``; у Динамо места в базе нет — дома Минск-Арена."""
     out = card(row, now=now, sticker=sticker)
     if row.league == LEAGUE_KHL:
         out["arena"], out["city"] = place_of(row)
@@ -106,26 +106,26 @@ async def home_feed(
     city_region: str | None,
     now: datetime,
     settings: Settings | None = None,
-    city_country: str | None = None,
 ) -> dict[str, Any] | None:
-    """Матчи города клиента (правило A: «где посмотреть живьём») и матчи Динамо-Минск.
+    """Домашние матчи в городе клиента (правило A: «где посмотреть живьём») и домашние матчи Динамо-Минск.
 
-    Выезды местного клуба Экстралиги и «ближайший матч области» сюда не попадают. Динамо — только
-    в белорусском городе (``city_country`` None — считаем BY). ``city_region`` оставлен для совместимости.
+    Выезды клубов (своего города и Динамо) и «ближайший матч области» сюда не попадают.
+    ``city_region`` оставлен для совместимости вызова.
     """
     del city_region
     if not city_name:
         return None
     cfg = settings or Settings()  # type: ignore[call-arg]
     clubs = sorted(enabled_clubs(cfg.extraliga_clubs)) if cfg.extraliga_enabled else []
-    dinamo = dinamo_enabled(cfg) and (city_country or "BY").upper() == "BY"
+    dinamo = dinamo_enabled(cfg)
     if not clubs and not dinamo:
         return None
     city = _norm(city_name)
     base = {"league": LEAGUE_EXTRALIGA, "clubs": clubs, "khl": LEAGUE_KHL, "dinamo": dinamo, "dinamo_name": DINAMO}
 
     def mine(rows: list[Any]) -> list[Any]:
-        return [r for r in rows if r.league == LEAGUE_KHL or _norm(r.city) == city]
+        # Экстралига — матч идёт в этом городе (город строки или клуба-хозяина): выезды клубов города отпадают.
+        return [r for r in rows if r.league == LEAGUE_KHL or _norm(place_of(r)[1]) == city]
 
     window = mine(
         list(
@@ -139,7 +139,7 @@ async def home_feed(
     # Счёт «на неделе» — как раньше: матчи Экстралиги этого города за 7 дней.
     total = sum(1 for r in window if r.league != LEAGUE_KHL and r.starts_at < now + AHEAD)
     if not window:
-        # В окне пусто — один ближайший будущий матч, пусть и дальше двух недель.
+        # В окне пусто — один ближайший будущий домашний матч, пусть и дальше двух недель.
         far = mine(
             list(
                 (await session.execute(_FEED, {**base, "since": now, "until": None, "only_scheduled": True})).all()
