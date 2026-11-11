@@ -7,12 +7,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from src.api.app import app
+from src.application.hockey_cache import aggregates
 from src.application.hockey_game import make_pick, score_finished_matches
 from src.application.hockey_matches import set_manual_result
-from src.application.hockey_screens import favorite_club, rank_without, streaks
+from src.application.hockey_notices import set_fav_club
+from src.application.hockey_screens import fan_profile, favorite_club, rank_without, streaks
 from src.application.hockey_slices import Row
 from tests.api.test_webapp_client_hockey import patch_client_principal
 
@@ -163,3 +165,65 @@ async def test_moved_match_is_marked_until_played(app_use_test_db, db_session) -
             await db_session.execute(text("UPDATE hockey_matches SET status = 'cancelled' WHERE id = :id"), {"id": match})
             await db_session.commit()
             assert (await client.get(f"{API}/matches/{match}")).json()["moved_from"] is None
+
+
+def _sql_during(db, coro):
+    """Считает обращения к БД за время одного корутинного вызова."""
+
+    async def run():
+        statements: list[str] = []
+
+        def before(_conn, _cursor, statement, _params, _context, _executemany) -> None:
+            statements.append(statement)
+
+        bind = db.sync_session.get_bind()
+        event.listen(bind, "before_cursor_execute", before)
+        try:
+            result = await coro
+        finally:
+            event.remove(bind, "before_cursor_execute", before)
+        return result, [
+            sql for sql in statements if sql.lstrip().split(None, 1)[0].upper() in ("SELECT", "WITH")
+        ]
+
+    return run()
+
+
+@pytest.mark.asyncio
+async def test_profile_respects_chosen_club(app_use_test_db, db_session) -> None:
+    """TASK-378: fav_club приоритетнее подсчёта; снятие и клуб вне каталога возвращают подсчёт."""
+    who = 880_378_001
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=2)
+    # Два матча Юности против одного Гомеля: подсчёт сезона — «Юность».
+    await _play(db_session, start, {who: (3, 1)}, home="Юность", away="Лида")
+    await _play(db_session, start - timedelta(days=1), {who: (3, 1)}, home="Юность", away="Брест")
+    await _play(db_session, start - timedelta(days=2), {who: (2, 1)}, home="Гомель", away="Шахтер", result=(2, 1))
+    await db_session.commit()
+
+    async def load():
+        aggregates.clear()
+        return await _sql_during(db_session, fan_profile(db_session, player_key=who, now=now))
+
+    plain, plain_sql = await load()
+    assert plain["club"]["name"] == "Юность" and plain["club_place"]["club"] == "Юность"
+
+    await set_fav_club(db_session, who, "Гомель")
+    chosen, chosen_sql = await load()
+    assert chosen["club"]["name"] == "Гомель" and chosen["club_place"]["club"] == "Гомель"
+    assert chosen["club_place"]["rank"] == 1
+    assert len(chosen_sql) == len(plain_sql) == 7, (len(plain_sql), len(chosen_sql))
+    assert sum("fav_club" in sql for sql in chosen_sql) == 1
+    print(f"fan_profile SQL: without fav_club {len(plain_sql)}, with fav_club {len(chosen_sql)}")
+
+    # «Пока ни за кого» — тот же set_fav_club(None), что clear_fav_club в PUT bot-prefs.
+    await set_fav_club(db_session, who, None)
+    cleared, _sql = await load()
+    assert cleared["club"]["name"] == "Юность" and cleared["club_place"]["club"] == "Юность"
+
+    await db_session.execute(
+        text("UPDATE hockey_player_prefs SET fav_club = :club WHERE player_key = :key"),
+        {"club": "Нет такой", "key": who},
+    )
+    unknown, _sql = await load()
+    assert unknown["club"]["name"] == "Юность" and unknown["club_place"]["club"] == "Юность"
