@@ -1,8 +1,10 @@
 /**
  * «Как тебя зовут?» (TASK-373).
  * ClientNameSheet.open({ current: string, onSaved(name) }).
- * Сравнение «пусто / изменилось» — normalizeDisplayName, как сервер (TASK-367):
- * Cc/Cf убираются, ZWJ остаётся, пробелы схлопываются. Длина — кодовые точки.
+ * Правило имени то же, что у сервера (normalize_display_name, TASK-367/380/382):
+ * Cc/Cf/Cs/Co и заполнители убираются, пробелы схлопываются, ZWJ живёт только между двумя
+ * видимыми знаками, нужна буква, цифра или So, длина 1..40 кодовых точек.
+ * Общая таблица входов: tests/fixtures/display_name_cases.json (её гоняют и pytest, и node --test).
  * Поле: maxlength=40 (браузер считает UTF-16). fitNameField не даёт разрезать
  * ZWJ-кластер и не пускает 41-ю кодовую точку. Имя длиннее 40 единиц UTF-16
  * скриптом ставится как есть: так серверное имя из эмодзи не ломается при открытии.
@@ -12,13 +14,15 @@
 
   var NAME_URL = '/api/webapp/client/me/name';
   var EMPTY_HINT = 'Имя не может быть пустым';
+  var NO_LETTER_HINT = 'Нужна хотя бы одна буква, цифра или эмодзи';
+  var NAME_RE = /\p{L}|\p{N}|\p{So}/u;
   var SERVER_RANGE_RE = /от 1 до 40/;
   var NET_HINT = 'Не сохранилось. Попробуй ещё раз';
   var ZWJ = 0x200D;
   var MAX_POINTS = 40;
   var STYLE_ID = 'cn-style';
 
-  /* Категории Cc и Cf, кроме ZWJ. Снято с unicodedata того же Python, что и сервер. */
+  /* Cc и Cf (кроме ZWJ, снято с unicodedata Python), Cs, Co и заполнители сервера. Cn не режем, как и сервер. */
   var DROPPED = [
     [0x0000, 0x001F],
     [0x007F, 0x009F],
@@ -44,7 +48,16 @@
     [0x1D173, 0x1D17A],
     [0xE0001, 0xE0001],
     [0xE0020, 0xE007F],
+    [0x115F, 0x1160],
+    [0x2800, 0x2800],
+    [0x3164, 0x3164],
+    [0xFFA0, 0xFFA0],
+    [0xD800, 0xDFFF],
+    [0xE000, 0xF8FF],
+    [0xF0000, 0xFFFFD],
+    [0x100000, 0x10FFFD],
   ];
+  DROPPED.sort(function (a, b) { return a[0] - b[0]; });
 
   var CSS = [
     '.cs-body > .cn { flex: none; overflow: visible; display: flex; flex-direction: column; gap: 12px; }',
@@ -102,7 +115,30 @@
     for (var p = 0; p < parts.length; p++) {
       if (parts[p]) words.push(parts[p]);
     }
-    return words.join(' ');
+    var chars = Array.from(words.join(' '));
+    var glued = [];
+    for (var k = 0; k < chars.length; k++) {
+      var ch = chars[k];
+      if (ch === '\u200d') {
+        var after = ' ';
+        for (var m = k + 1; m < chars.length; m++) {
+          if (chars[m] !== '\u200d') { after = chars[m]; break; }
+        }
+        var prev = glued.length ? glued[glued.length - 1] : '';
+        if (!prev || prev === ' ' || prev === '\u200d' || after === ' ') continue;
+      }
+      glued.push(ch);
+    }
+    return glued.join('').split(' ').filter(Boolean).join(' ');
+  }
+
+  /* Решение целиком, как сервер: ok только если имя без «пустоты», с буквой/цифрой/So и 1..40 точек. */
+  function checkDisplayName(raw) {
+    var name = normalizeDisplayName(raw);
+    if (name === '') return { ok: false, name: name, reason: 'empty' };
+    if (!NAME_RE.test(name)) return { ok: false, name: name, reason: 'no-letter' };
+    if (codePointLength(name) > MAX_POINTS) return { ok: false, name: name, reason: 'range' };
+    return { ok: true, name: name, reason: '' };
   }
 
   function fitNameField(value) {
@@ -139,15 +175,16 @@
 
   function draftState(current, draft) {
     var base = normalizeDisplayName(current);
-    var next = normalizeDisplayName(draft);
+    var check = checkDisplayName(draft);
+    var next = check.name;
     var empty = next === '';
     var changed = next !== base;
     return {
       normalized: next,
       empty: empty,
       changed: changed,
-      canSave: !empty && changed,
-      hint: empty ? EMPTY_HINT : '',
+      canSave: check.ok && changed,
+      hint: empty ? EMPTY_HINT : check.reason === 'no-letter' ? NO_LETTER_HINT : '',
     };
   }
 
@@ -231,7 +268,7 @@
 
     function paint() {
       var state = draftState(current, input.value);
-      hint.textContent = state.empty ? state.hint : (serverHint || '');
+      hint.textContent = state.hint || serverHint || '';
       save.disabled = busy || !state.canSave;
       input.classList.toggle('is-filled', !state.empty);
     }
@@ -354,6 +391,7 @@
   var api = {
     open: open,
     normalizeDisplayName: normalizeDisplayName,
+    checkDisplayName: checkDisplayName,
     codePointLength: codePointLength,
     fitNameField: fitNameField,
     draftState: draftState,

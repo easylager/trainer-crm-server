@@ -33,7 +33,7 @@ describe('нормализация как на сервере', () => {
     assert.equal(nameSheet.normalizeDisplayName('а\u2003б'), 'а б');
     assert.equal(nameSheet.normalizeDisplayName('Макс\nК'), 'МаксК');
     assert.equal(nameSheet.normalizeDisplayName('Макс\tК'), 'МаксК');
-    assert.equal(nameSheet.normalizeDisplayName('Макс\u200d'), 'Макс\u200d');
+    assert.equal(nameSheet.normalizeDisplayName('Макс\u200d'), 'Макс');
     assert.equal(nameSheet.normalizeDisplayName(null), '');
     assert.ok(nameSheet.normalizeDisplayName(FAMILY).includes('\u200d'));
   });

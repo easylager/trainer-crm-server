@@ -14,8 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
 _ZWJ = "\u200d"
-# Cc/Cf — управляющие и форматные, Cs — суррогаты, Co — private use, Cn — не назначены.
-_DROPPED_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co", "Cn"})
+# Cc/Cf — управляющие и форматные, Cs — суррогаты, Co — private use. Cn (не назначены) не режем:
+# таблица unicodedata отстаёт от клиентов, и новый эмодзи для неё «неназначенный».
+_DROPPED_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co"})
 # Буквы и знаки, которые рисуются пустыми: Hangul filler, braille blank и родня.
 _BLANK_FILLERS = frozenset("\u115f\u1160\u3164\uffa0\u2800")
 _NAME_ERROR = "Имя — от 1 до 40 знаков"
@@ -56,7 +57,7 @@ _SET_HOME = text("""
 def normalize_display_name(raw: str) -> str:
     """Имя для показа: пробелы схлопнуть, края обрезать, невидимое убрать. Эмодзи и ZWJ-склейки остаются.
 
-    Убираются управляющие и форматные знаки, суррогаты, private use и неназначенные кодпоинты,
+    Убираются управляющие и форматные знаки, суррогаты и private use,
     а также «пустые» заполнители (U+3164, U+2800 и родня). ZWJ живёт только между двумя видимыми
     знаками. В имени должна быть буква, цифра или эмодзи, иначе оно выглядит пустым.
     """

@@ -133,9 +133,11 @@ app.add_exception_handler(StarletteHTTPException, site_http_exception_handler)
 async def _validation_exception_handler(_request, exc: RequestValidationError):
     """Same shape as default FastAPI 422: detail = list of {loc, msg, type, ...} for clients (Mini App maps loc → fields)."""
     errs = exc.errors()
-    logger.warning("Request validation failed: %s", sanitize_validation_errors_for_log(errs))
+    safe = sanitize_validation_errors_for_log(errs)
+    logger.warning("Request validation failed: %s", safe)
+    # ``input`` is not echoed: a lone surrogate in a JSON body made the response un-encodable (500), and no client reads it.
     # ctx may hold Exception instances (e.g. ValueError from Pydantic) — not JSON-serializable raw.
-    return JSONResponse(status_code=422, content=jsonable_encoder({"detail": errs}))
+    return JSONResponse(status_code=422, content=jsonable_encoder({"detail": safe}))
 
 
 def _service_unavailable_response() -> JSONResponse:

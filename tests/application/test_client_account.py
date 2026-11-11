@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import text
@@ -22,6 +24,17 @@ NOW = datetime(2026, 10, 20, 12, 0, tzinfo=MINSK_TZ)
 ACCOUNT = 3670001
 OTHER = 3670002
 FAMILY = "👨‍👩‍👧"
+_CASES = json.loads((Path(__file__).parent.parent / "fixtures" / "display_name_cases.json").read_text("utf-8"))["cases"]
+
+
+@pytest.mark.parametrize("case", _CASES, ids=[c["note"] for c in _CASES])
+def test_display_name_shared_cases(case: dict) -> None:
+    """Та же таблица, что гоняет tests/js/client-name-sheet-cases.test.js: расхождение клиента и сервера = красный тест."""
+    if case["valid"]:
+        assert normalize_display_name(case["input"]) == case["result"]
+    else:
+        with pytest.raises(ValueError):
+            normalize_display_name(case["input"])
 
 
 def test_normalize_display_name_keeps_emoji_and_zwj() -> None:
