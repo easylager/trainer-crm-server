@@ -332,10 +332,12 @@
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.go('leagueNew', { club: a.club }); }, text: few.invite }),
         ]));
       }
-      var rows = S.tableRows(view).map(function (x) {
+      var rows = S.tableRows(view, a.full).map(function (x) {
         return x.type === 'gap' ? h('div', { class: 'kk-gap', 'aria-hidden': 'true', text: '···' }) : rowEl(x.r);
       });
       if (rows.length) main.appendChild(h('div', { class: 'kk-tbl' }, rows));
+      var more = S.tableMore(view, a.full);
+      if (more) main.appendChild(h('button', { type: 'button', class: 'kk-ml-more', onclick: function () { a.full = true; K.render(); }, text: more }));
       if (!view.me) {
         main.appendChild(h('span', { class: 'kk-tx', text: S.noMeLine(a.club, a.period, nowIso()) }));
         main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.reset('hub', {}); }, text: 'Сделать ход' }));

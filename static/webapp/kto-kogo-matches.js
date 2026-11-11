@@ -316,6 +316,10 @@
       out.push(sectionHead('ИДЁТ И ЖДЁМ ИТОГ', String(g.active.length), S.waitNote(state.remind === true)));
       out.push(h('div', { class: 'kk-ml-list' }, g.active.map(function (m) { return rowEl(m, now); })));
     }
+    if (g.recent.length) {
+      out.push(sectionHead('ИТОГ ЕСТЬ', String(g.recent.length)));
+      out.push(h('div', { class: 'kk-ml-list' }, g.recent.map(function (m) { return rowEl(m, now); })));
+    }
     if (g.upcoming.length) {
       out.push(sectionHead('ВПЕРЕДИ', String(total(g.upcoming))));
       out = out.concat(days(g.upcoming, now));
