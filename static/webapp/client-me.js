@@ -351,7 +351,7 @@
       '<h1 class="cm-name">' + esc(h.name) + '</h1>' +
       (h.city ? '<div class="cm-city">' + esc(h.city) + '</div>' : '') +
       '</div>' +
-      '<button type="button" class="cm-edit ga-press" data-act="name">' + ICONS.pencil + 'Изменить</button>' +
+      '<button type="button" class="cm-edit ga-press" data-act="name" aria-label="Изменить">' + ICONS.pencil + '<span class="cm-edit__t">Изменить</span></button>' +
       '</div>' +
       '</section>'
     );

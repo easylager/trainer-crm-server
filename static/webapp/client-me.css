@@ -195,6 +195,32 @@ html body.cm-body.tg-dark {
   inset: -4px 0;
 }
 
+/*
+ * Окно уже 375 px (карточка уже 343): колонку имени съедает кнопка с текстом, «Максим» 24 px
+ * не помещается. Остаётся иконка 36 × 36, зона касания 44 × 44. Условие по ширине окна: карточка
+ * всегда на 32 px уже окна, так что это то же, что ширина карточки, без ResizeObserver.
+ */
+@media (max-width: 374px) {
+  .cm-edit {
+    justify-content: center;
+    width: 36px;
+    padding: 0;
+  }
+
+  .cm-edit__t {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .cm-edit::after {
+    inset: -4px;
+  }
+}
+
 /* ── Цифры сезона ──────────────────────────────────────────────────── */
 
 .cm-stats {
