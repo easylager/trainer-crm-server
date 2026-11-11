@@ -281,6 +281,32 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   transform: none;
 }
 
+/* Отклик на нажатие. Раньше жал сам .client-tab-bar__btn (scale .94 по :active), но ga-press.js на
+   .ga-press-кнопках ставит .ga-pressed с transform:none !important: остаётся 3% и яркость 0.95 на
+   прозрачной кнопке, то есть ничего не видно. Жмём плашку значка: она видна и у активной вкладки. */
+.client-tab-bar--season .client-tab-bar__btn:is(:active, .ga-pressed, .b-press) {
+  scale: 1;
+  filter: none;
+  transform: none !important;
+}
+
+.client-tab-bar--season .client-tab-bar__btn:is(:active, .ga-pressed, .b-press) .client-tab-bar__icon-wrap {
+  transform: scale(0.84);
+  transition-duration: 70ms;
+}
+
+.client-tab-bar--season .client-tab-bar__btn:not(.client-tab-bar__btn--active):is(:active, .ga-pressed, .b-press) .client-tab-bar__icon-wrap {
+  background: var(--g-chip);
+}
+
+.client-tab-bar--season .client-tab-bar__btn:is(:active, .ga-pressed, .b-press) > span:last-child {
+  opacity: 0.6;
+}
+
+.client-tab-bar--season .client-tab-bar__btn > span:last-child {
+  transition: opacity 0.18s ease;
+}
+
 /* Клавиатура: бар прячется, но место в раскладке остаётся — содержимое не сдвигается. */
 .client-tab-bar--season.client-tab-bar--kbd {
   visibility: hidden;

@@ -844,3 +844,24 @@ const LEGACY_OVERLAY_HTML =
     "</ul>" +
     "</div>" +
     "</div>";
+
+describe('отклик бара на нажатие', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/mini-app-client-shell.css'), 'utf8');
+
+  it('жмётся плашка значка по :active, .ga-pressed и .b-press; сама кнопка не двигается', () => {
+    const icon = css.match(/\.client-tab-bar--season \.client-tab-bar__btn:is\(:active, \.ga-pressed, \.b-press\) \.client-tab-bar__icon-wrap \{([^}]*)\}/);
+    assert.ok(icon, 'правило плашки значка');
+    assert.match(icon[1], /transform:\s*scale\(0\.84\)/);
+    const btn = css.match(/\.client-tab-bar--season \.client-tab-bar__btn:is\(:active, \.ga-pressed, \.b-press\) \{([^}]*)\}/);
+    assert.ok(btn, 'правило кнопки');
+    assert.match(btn[1], /transform:\s*none\s*!important/);
+  });
+
+  it('подсветка плашки только у неактивных вкладок: активная не мигает цветом', () => {
+    assert.match(css, /__btn:not\(\.client-tab-bar__btn--active\):is\(:active, \.ga-pressed, \.b-press\) \.client-tab-bar__icon-wrap \{[^}]*background:\s*var\(--g-chip\)/);
+  });
+
+  it('кнопки бара остаются .ga-press: ga-press.js ставит им .ga-pressed', () => {
+    assert.match(shellSrc, /client-tab-bar__btn ga-press/);
+  });
+});
