@@ -49,12 +49,20 @@
 }
 
 .cs-handle {
+  position: relative;
   flex: none;
   align-self: center;
   width: 40px;
   height: 4px;
   border-radius: 2px;
   background: var(--g-line-strong);
+}
+
+/* Зона захвата шире самой полоски: за 4px пальцем не попасть. */
+.cs-handle::before {
+  content: '';
+  position: absolute;
+  inset: -10px -48px -10px;
 }
 
 .cs-body {
@@ -66,6 +74,13 @@
 }
 
 /* Содержимое само решает шапку и низ; список с .cs-scroll забирает оставшуюся высоту. */
+/* touch-action не наследуется через контейнеры с overflow (а у .cs-body и его ребёнка он hidden):
+   без явного none браузер забирает вертикальный жест на шапке, шлёт pointercancel, и свайп не работает. */
+.cs-body,
+.cs-body > * {
+  touch-action: none;
+}
+
 .cs-body > * {
   flex: 1 1 auto;
   min-height: 0;

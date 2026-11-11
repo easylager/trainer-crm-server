@@ -445,6 +445,62 @@ describe('ClientSheet', () => {
     assert.equal(sheet.el.isConnected, true);
   });
 
+  it('pointercancel без координат закрывает по последней точке движения', () => {
+    const h = makeHarness();
+    opener(h);
+    const sheet = h.sandbox.ClientSheet.open({ labelledBy: 'sheetTitle', content: contentOf(h) });
+    const handle = sheet.el.querySelector('.cs-handle');
+    handle.dispatch('pointerdown', { clientY: 10, target: handle });
+    h.document.dispatch('pointermove', { clientY: 140 });
+    h.document.dispatch('pointercancel', {});
+    assert.equal(h.timeouts.length, 1);
+    h.flush();
+    assert.equal(sheet.el.isConnected, false);
+  });
+
+  it('CSS: шапка и тело шторки не отдают вертикальный жест браузеру, список — pan-y', () => {
+    assert.match(sheetCss, /\.cs-body,\s*\.cs-body > \*\s*\{[^}]*touch-action:\s*none/);
+    assert.match(sheetCss, /\.cs-scroll\s*\{[^}]*touch-action:\s*pan-y/);
+    assert.match(sheetCss, /\.cs-handle::before/);
+  });
+
+  it('список, прокрученный к началу: жест вниз через touch тянет и закрывает шторку', () => {
+    const h = makeHarness();
+    opener(h);
+    const sheet = h.sandbox.ClientSheet.open({ labelledBy: 'sheetTitle', content: contentOf(h) });
+    const list = sheet.el.querySelector('.cs-scroll');
+    list.scrollTop = 0;
+    list.dispatch('touchstart', { touches: [{ clientY: 0 }], target: list });
+    const first = h.document.dispatch('touchmove', { touches: [{ clientY: 40 }], cancelable: true });
+    assert.equal(sheet.el.style.transform, 'translateY(40px)');
+    assert.equal(first.defaultPrevented, true);
+    h.document.dispatch('touchmove', { touches: [{ clientY: 120 }], cancelable: true });
+    h.document.dispatch('touchend', {});
+    assert.equal(h.timeouts.length, 1);
+    h.flush();
+    assert.equal(sheet.el.isConnected, false);
+  });
+
+  it('список, прокрученный вниз или жест вверх: шторка не тянется, скролл не перехватывается', () => {
+    const h = makeHarness();
+    opener(h);
+    const sheet = h.sandbox.ClientSheet.open({ labelledBy: 'sheetTitle', content: contentOf(h) });
+    const list = sheet.el.querySelector('.cs-scroll');
+    const moves = [];
+    list.scrollTop = 50;
+    list.dispatch('touchstart', { touches: [{ clientY: 0 }], target: list });
+    moves.push(h.document.dispatch('touchmove', { touches: [{ clientY: 150 }], cancelable: true }));
+    h.document.dispatch('touchend', {});
+    list.scrollTop = 0;
+    list.dispatch('touchstart', { touches: [{ clientY: 200 }], target: list });
+    moves.push(h.document.dispatch('touchmove', { touches: [{ clientY: 100 }], cancelable: true }));
+    moves.push(h.document.dispatch('touchmove', { touches: [{ clientY: 400 }], cancelable: true }));
+    h.document.dispatch('touchend', {});
+    assert.equal(moves.some((m) => m.defaultPrevented), false);
+    assert.equal(h.timeouts.length, 0);
+    assert.equal(sheet.el.isConnected, true);
+  });
+
   it('после закрытия возвращает кнопку «назад» Telegram в прежнее состояние', () => {
     const hidden = makeHarness({ backVisible: false });
     opener(hidden);

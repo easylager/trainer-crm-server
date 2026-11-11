@@ -148,6 +148,9 @@
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerup', onPointerUp);
       document.removeEventListener('pointercancel', onPointerUp);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchCancel);
       if (layer.parentNode) layer.parentNode.removeChild(layer);
       if (current === record) current = null;
       unlockScroll();
@@ -200,12 +203,13 @@
       var target = targetElement(event);
       if (blockedDrag(target)) return;
       if (typeof event.clientY !== 'number') return;
-      drag = { y: event.clientY };
+      drag = { y: event.clientY, last: event.clientY };
       sheet.style.transition = 'none';
     }
 
     function onPointerMove(event) {
       if (!drag || typeof event.clientY !== 'number') return;
+      drag.last = event.clientY;
       var dy = Math.max(0, event.clientY - drag.y);
       sheet.style.transform = 'translateY(' + dy + 'px)';
     }
@@ -216,12 +220,61 @@
 
     function onPointerUp(event) {
       if (!drag) return;
-      var y = typeof event.clientY === 'number' ? event.clientY : drag.y;
+      /* pointercancel приходит без координат: берём последнюю точку движения. */
+      var y = typeof event.clientY === 'number' ? event.clientY : drag.last;
       var dy = Math.max(0, y - drag.y);
       endDrag();
       sheet.style.transition = '';
       sheet.style.transform = '';
       if (dy > 80) dismiss(false);
+    }
+
+    /* Список .cs-scroll на тач-экране забирает вертикальный жест (touch-action: pan-y), и pointer-события
+       до нас не доходят. Когда список прокручен к началу, жест вниз ведём через touch-события. */
+    var touch = null;
+
+    function scrollAncestor(target) {
+      if (!target || typeof target.closest !== 'function') return null;
+      return target.closest('.cs-scroll');
+    }
+
+    function onTouchStart(event) {
+      touch = null;
+      if (state !== 'open') return;
+      var t = event.touches && event.touches[0];
+      var list = scrollAncestor(targetElement(event));
+      if (!t || !list || typeof t.clientY !== 'number') return;
+      touch = { y: t.clientY, last: t.clientY, list: list, active: false };
+    }
+
+    function onTouchMove(event) {
+      if (!touch) return;
+      var t = event.touches && event.touches[0];
+      if (!t || typeof t.clientY !== 'number') return;
+      var dy = t.clientY - touch.y;
+      if (!touch.active) {
+        if (dy < 0 || touch.list.scrollTop > 0) { touch = null; return; }
+        if (dy < 6) return;
+        touch.active = true;
+        sheet.style.transition = 'none';
+      }
+      touch.last = t.clientY;
+      if (event.cancelable !== false && event.preventDefault) event.preventDefault();
+      sheet.style.transform = 'translateY(' + Math.max(0, dy) + 'px)';
+    }
+
+    function onTouchEnd() {
+      var cur = touch;
+      touch = null;
+      if (!cur || !cur.active) return;
+      var dy = Math.max(0, cur.last - cur.y);
+      sheet.style.transition = '';
+      sheet.style.transform = '';
+      if (dy > 80) dismiss(false);
+    }
+
+    function onTouchCancel() {
+      onTouchEnd();
     }
 
     function onKey(event) {
@@ -257,6 +310,10 @@
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('pointerup', onPointerUp);
     document.addEventListener('pointercancel', onPointerUp);
+    sheet.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd);
+    document.addEventListener('touchcancel', onTouchCancel);
     document.addEventListener('keydown', onKey);
     if (root.visualViewport) {
       root.visualViewport.addEventListener('resize', onViewport);
