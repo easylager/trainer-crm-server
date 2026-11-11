@@ -173,37 +173,11 @@ describe('mini-app-client-home.js: флаг включён', () => {
   });
 });
 
-describe('обработчики страниц: прежний код сохранён побайтно, новый — за флагом', () => {
-  const must = (file, snippet) => assert.ok(read(file).includes(snippet), `${file}: нет прежнего фрагмента`);
-  it('client-saved-trainers-main.js', () => {
-    must('client-saved-trainers-main.js', `  } else if (btnBack && window.history.length > 1) {
-    btnBack.hidden = false;
-    btnBack.onclick = function () { window.history.back(); };
-  }`);
-    must('client-saved-trainers-main.js', `document.getElementById('btnHome').onclick = function () { goTo('client-home'); };`);
-  });
-  for (const [file, id, list] of [
-    ['client-passes.html', 'screenDetail', `showScreen('screenList');`],
-    ['client-passes-certificates.html', 'pass-screenDetail', `showPassScreen('pass-screenList');`],
-  ]) {
-    it(file, () => {
-      const s = read(file);
-      must(file, `navBack.hidden = id !== '${id}'`);
-      must(file, `        ${list}\n      };`);
-      assert.ok(s.includes(`seasonBackOn() && !document.getElementById('${id}').classList.contains('active')`));
-      assert.ok(s.includes(`if (seasonBackOn()) document.getElementById('btnBack').hidden = false;`));
-    });
+/* ТОЛЬКО ТЕКСТОВАЯ ПРОВЕРКА (исполнить нельзя: «оболочка не подключена» — отсутствие тега). Поведение
+   страниц при выключенном флаге исполняется в client-season-back-pages.test.js. */
+describe('текстовая проверка: оболочка на страницы не подключена', () => {
+  for (const f of ['client-saved-trainers', 'client-stats', 'client-passes-certificates', 'client-passes',
+    'client-certificates', 'client-family-access', 'client-support']) {
+    it(f, () => assert.ok(!read(f + '.html').includes('mini-app-client-shell'), f));
   }
-  it('client-stats-main.js: новая кнопка только за флагом', () => {
-    const s = read('client-stats-main.js');
-    assert.ok(s.includes('if (!S || !btn || !S.isSeasonUi(window)) return;'));
-  });
-  it('страницы подключают хелпер, оболочку — нет', () => {
-    for (const f of ['client-saved-trainers', 'client-stats', 'client-passes-certificates', 'client-passes',
-      'client-certificates', 'client-family-access', 'client-support']) {
-      const s = read(f + '.html');
-      assert.ok(s.includes('/static/webapp/client-season-back.js'), f);
-      assert.ok(!s.includes('mini-app-client-shell'), f);
-    }
-  });
 });
