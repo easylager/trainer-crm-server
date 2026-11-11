@@ -671,7 +671,7 @@
       if (root.ClientRinkSheet && typeof root.ClientRinkSheet.open === 'function') {
         root.ClientRinkSheet.open({ currentId: isObject(d.home_arena) ? d.home_arena.id : null, onSaved: afterSave });
       } else {
-        /* Шторки катка ещё нет в сборке (TASK-372) — выбор катка там, где он и так есть: «Поиск». */
+        /* Скрипт шторки не загрузился — выбор катка там, где он и так есть: «Поиск». */
         go('ice');
       }
     }
