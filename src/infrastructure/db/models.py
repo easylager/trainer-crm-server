@@ -585,6 +585,16 @@ class HockeyMatch(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeySourceStatus(Base):
+    """Когда источник матчей последний раз ответил и не ответил (TASK-364): заглушка статистики на сайте."""
+
+    __tablename__ = "hockey_source_status"
+
+    source: Mapped[str] = mapped_column(String(16), primary_key=True)
+    ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class HockeyStanding(Base):
     """Место команды в таблице лиги (TASK-340): страница матча показывает «13-е · 9 очков»."""
 

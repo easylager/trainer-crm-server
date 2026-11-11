@@ -145,6 +145,56 @@ async def test_match_page_after_with_and_without_protocol(app_use_test_db, db_se
     assert "m-grid" not in bare_html
 
 
+async def _hockeyby(db, *, down: bool) -> None:
+    """Отметка цикла Экстралиги: hockey.by в последнем проходе ответил или нет (TASK-364)."""
+    from src.application.extraliga import mark_source
+
+    await mark_source(db, down=down, now=NOW)
+
+
+def _stub(html: str) -> str | None:
+    found = re.search(r'<section class="m-panel" data-nosnippet>.*?</section>', html, re.S)
+    return found.group(0) if found else None
+
+
+@pytest.mark.asyncio
+async def test_played_match_without_protocol_while_hockey_by_is_down_shows_a_calm_stub(app_use_test_db, db_session):
+    await _world(db_session)
+    bare = await _match(db_session, "Неман", "Гомель", starts=NOW - timedelta(hours=5), city="Гродно", arena="Гродно-Арена",
+                        status="final", scores=(4, 1))
+    await _hockeyby(db_session, down=True)
+    html = (await _get(await _path(db_session, bare))).text
+    stub = _stub(html)
+    assert stub and "Статистика матча временно недоступна" in stub
+    assert "Счёт и\u00a0расписание обновляются" in stub
+    # Клиенту — без кухни: ни «источника», ни «сервера», ни оправданий; и без ссылки на лежащий сайт.
+    assert not re.search(r"источник|сервер|парсер|hockey\.by|задержк|извин", stub, re.I)
+    assert "Протокол на hockey.by" not in html
+    assert "4:1" in html and 'content="index, follow"' in html
+    ld = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S).group(1).replace("\\u003c", "<"))
+    assert ld["@type"] == "SportsEvent"
+    assert not has_forbidden_words(html)
+
+
+@pytest.mark.asyncio
+async def test_no_stub_when_hockey_by_answers_or_the_protocol_is_there(app_use_test_db, db_session):
+    await _world(db_session)
+    bare = await _match(db_session, "Неман", "Гомель", starts=NOW - timedelta(hours=5), city="Гродно", arena="Гродно-Арена",
+                        status="final", scores=(4, 1))
+    await _hockeyby(db_session, down=False)
+    html = (await _get(await _path(db_session, bare))).text
+    assert _stub(html) is None and "Протокол на hockey.by" in html
+    # Лежит, но протокол уже есть — показываем протокол, а не заглушку.
+    det = {"periods": [[1, 0], [1, 1], [2, 0]], "goals": [{"minute": "08:14", "side": "home", "scorer": "Иванов"}]}
+    full = await _match(db_session, starts=NOW - timedelta(hours=5), status="final", scores=(4, 1), details=det)
+    await _hockeyby(db_session, down=True)
+    html = (await _get(await _path(db_session, full))).text
+    assert _stub(html) is None and "ГОЛЫ" in html
+    # До матча заглушки нет: статистика ещё и не ждётся.
+    soon = await _match(db_session)
+    assert _stub((await _get(await _path(db_session, soon))).text) is None
+
+
 @pytest.mark.asyncio
 async def test_slug_mismatch_redirects_unknown_404_flag_off_404(app_use_test_db, db_session, monkeypatch):
     await _world(db_session)

@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.application.ice_city_day import resolve_city_by_ref
-from src.application.place_links import CATALOG_START_ANY, catalog_start_param, telegram_open_link
+from src.application.place_links import CATALOG_START_ANY, catalog_start_param, public_telegram_entry_link
 from src.shared.config import Settings
 
 router = APIRouter(tags=["catalog-entry"])
@@ -62,12 +62,7 @@ async def _go(request: Request, session: AsyncSession, source: str | None, city_
         city = await resolve_city_by_ref(session, city_ref)
         city_id = int(city["id"]) if city else None
     start = catalog_start_param(city_id) if city_id else CATALOG_START_ANY
-    link = telegram_open_link(
-        client_bot_username=settings.client_bot_username,
-        mini_app_short_name=settings.client_mini_app_short_name,
-        main_mini_app=settings.client_bot_main_mini_app,
-        start_param=start,
-    )
+    link = public_telegram_entry_link(settings, start_param=start)
     if link:
         target = "startapp" if "startapp=" in link else "bot"
     else:

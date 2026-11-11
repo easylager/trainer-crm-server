@@ -3355,25 +3355,52 @@ EXTRALIGA_CALENDAR_EVERY = timedelta(hours=24)
 EXTRALIGA_STANDINGS_EVERY = timedelta(hours=24)
 
 
+# Тик цикла бывает и через 2 минуты (окно итога Динамо): запасной источник спрашиваем не чаще раза в 10.
+EXTRALIGA_FALLBACK_SLACK = timedelta(seconds=30)
+EXTRALIGA_FALLBACK_NOTE = (
+    "Календарь, итоги и живой счёт идут с запасного источника flashscore.com; страниц матчей и таблицы нет, "
+    "пока hockey.by не вернётся. Итог можно ввести вручную: команда /hockey в этом боте"
+)
+
+
 class ExtraligaPace:
-    """Когда последний раз удались календарь и таблица Экстралиги (сбой — повтор на следующем тике)."""
+    """Когда последний раз удались календарь и таблица Экстралиги (сбой — повтор на следующем тике),
+    лежал ли hockey.by в прошлом проходе и когда спрашивали запасной источник (TASK-364)."""
 
     def __init__(self) -> None:
         self.calendar_at: datetime | None = None
         self.standings_at: datetime | None = None
+        self.primary_down = False
+        self.fallback_at: datetime | None = None
+        self.fallback_ok = False
 
 
-async def _extraliga_pass(pace: ExtraligaPace, health, *, alert) -> dict:
-    """Проход Экстралиги внутри цикла матчей: своя сессия с hockey.by и свой коммит (TASK-340)."""
-    from src.application.extraliga import HockeyByClient
+async def _extraliga_pass(pace: ExtraligaPace, health, *, alert, fallback=None) -> dict:
+    """Проход Экстралиги внутри цикла матчей: своя сессия с hockey.by и свой коммит (TASK-340).
+
+    ``fallback`` — чтение flashscore (по умолчанию — из настроек ``extraliga_fallback_enabled``)."""
+    from src.application.extraliga import FALLBACK_EVERY, HockeyByClient, fetch_flashscore
     from src.application.extraliga import run_tick as extraliga_tick
+    from src.shared.config import get_settings
 
+    if fallback is None and get_settings().extraliga_fallback_enabled:
+        fallback = fetch_flashscore
     now = datetime.now(timezone.utc)
     calendar_due = pace.calendar_at is None or now - pace.calendar_at >= EXTRALIGA_CALENDAR_EVERY
     standings_due = pace.standings_at is None or now - pace.standings_at >= EXTRALIGA_STANDINGS_EVERY
+    fallback_due = pace.fallback_at is None or now - pace.fallback_at >= FALLBACK_EVERY - EXTRALIGA_FALLBACK_SLACK
     try:
         async with HockeyByClient() as client, async_session_factory() as session:
-            out = await extraliga_tick(session, client, now=now, calendar_due=calendar_due, standings_due=standings_due)
+            out = await extraliga_tick(
+                session,
+                client,
+                now=now,
+                calendar_due=calendar_due,
+                standings_due=standings_due,
+                probe_first=pace.primary_down,
+                fallback=fallback,
+                fallback_due=fallback_due,
+            )
             await session.commit()
         out["requests"] = client.requests
     except Exception as e:
@@ -3382,6 +3409,20 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert) -> dict:
         if text:
             await alert(text)
         return {}
+    pace.primary_down = bool(out.get("primary_down"))
+    if not pace.primary_down:
+        pace.fallback_ok = False
+    elif fallback is not None and fallback_due:
+        pace.fallback_at = now
+        pace.fallback_ok = not out.get("fallback_failed")
+        if out.get("fallback_failed"):
+            text = health.failed("запасной источник Экстралиги", str(out.get("fallback_error") or ""))
+            if text:
+                await alert(text)
+        else:
+            health.ok("запасной источник Экстралиги")
+    # Пока работает запасной, алерт не пугает «матчи не обновляются» — он говорит, что идёт и чего нет.
+    note = EXTRALIGA_FALLBACK_NOTE if pace.primary_down and pace.fallback_ok else None
     for what, due, failed_key, error_key in (
         ("календарь Экстралиги", calendar_due, "calendar_failed", "calendar_error"),
         ("таблица Экстралиги", standings_due, "standings_failed", "standings_error"),
@@ -3389,7 +3430,7 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert) -> dict:
         if not due:
             continue
         if out.get(failed_key):
-            text = health.failed(what, str(out.get(error_key) or ""))
+            text = health.failed(what, str(out.get(error_key) or ""), note=note)
             if text:
                 await alert(text)
             continue
@@ -3489,7 +3530,16 @@ async def run_hockey_matches_loop() -> None:
                     last_calendar = now
                     health.ok("календарь матчей")
                 elif counts["calendar_failed"]:
-                    text = health.failed("календарь матчей", str(counts.get("calendar_error") or ""))
+                    via = counts.get("calendar_via")
+                    text = health.failed(
+                        "календарь матчей",
+                        str(counts.get("calendar_error") or ""),
+                        note=(
+                            f"Матчи и итоги идут с запасного источника {via}. Итог можно ввести вручную: команда /hockey в этом боте"
+                            if via
+                            else None
+                        ),
+                    )
                     if text:
                         await send_review_alert(text)
                 if counts.get("races_failed"):

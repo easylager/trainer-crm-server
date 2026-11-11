@@ -350,7 +350,7 @@ _AWAITING = text("""
     SELECT COUNT(*)::int FROM hockey_picks AS p
     JOIN game_matches AS m ON m.id = p.match_id
     WHERE p.player_key = :player_key AND m.status IN ('scheduled', 'review')
-      AND m.starts_at <= :now AND m.starts_at >= :active_since
+      AND m.starts_at >= :active_since
     """)
 
 
@@ -721,9 +721,10 @@ async def player_match_list(
 
 
 async def awaiting_count(session: AsyncSession, player_key: int, *, now: datetime) -> int:
-    """Сколько моих ходов ждут итога: матч начался, итога нет, трое суток ещё не прошли (без фильтров списка)."""
+    """Сколько моих ходов ещё без итога: матч идёт, ждёт итога или только впереди; зависший без итога
+    больше трёх суток уже не считается (без фильтров списка)."""
     now = _utc(now)
-    params = {"player_key": player_key, "now": now, "active_since": now - MATCH_STALE_AFTER}
+    params = {"player_key": player_key, "active_since": now - MATCH_STALE_AFTER}
     return int((await session.execute(_AWAITING, params)).scalar_one())
 
 

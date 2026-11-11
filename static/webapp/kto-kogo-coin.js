@@ -270,5 +270,15 @@
     ]);
   }
 
-  K.coin = { button: button, panel: panel, side: side, busy: busy };
+  /** Идёт бросок или барабаны ещё на виду после «ВЫПАЛО»: поверх этого другие шторки не показываем. */
+  function animating() {
+    if (ctl.busy()) return true;
+    var now = Date.now();
+    for (var k in finishAt) {
+      if (Object.prototype.hasOwnProperty.call(finishAt, k) && now - finishAt[k] < HOLD_MS + FOLD_MS + 60) return true;
+    }
+    return false;
+  }
+
+  K.coin = { button: button, panel: panel, side: side, busy: busy, animating: animating };
 })();

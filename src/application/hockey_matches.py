@@ -4,6 +4,10 @@
 hockey.by — вместе с тем, как решён матч (основное время, овертайм, буллиты). Расхождение или
 нет подтверждения через 4 часа после начала — матч уходит на ручную проверку, админу алерт.
 Официальный итог при победе по буллитам — +1 гол победителю, как на обоих сайтах.
+
+Запасной источник — sportmail.ru (TASK-364): когда hcdinamo.by или hockey.by молчат, календарь и итоги
+берутся оттуда. Строки календаря, заведённые запасным источником, имеют ``source_match_id`` вида ``sm<id>``
+и «усыновляются» основным, как только он вернётся (``upsert_calendar_match``).
 """
 
 from __future__ import annotations
@@ -33,10 +37,23 @@ from src.ingestion.hockey_sources import (
     parse_hcdinamo_next_month,
     parse_hockey_by_ticker,
 )
+from src.ingestion.sportmail_sources import (
+    SPORTMAIL_BASE,
+    SPORTMAIL_DINAMO_MATCHES_URL,
+    SportmailMatch,
+    parse_sportmail_match,
+    parse_sportmail_team_matches,
+    sportmail_match_url,
+)
 
 logger = logging.getLogger(__name__)
 
 SOURCE_HCDINAMO = "hcdinamo"
+# Строка календаря, заведённая запасным источником (sportmail.ru): ``sm8129355``.
+FALLBACK_ID_PREFIX = "sm"
+# sportmail.ru отдаёт весь сезон, hcdinamo.by — текущий и следующий месяц; в игру заводим столько же,
+# иначе список матчей внезапно вырастет до марта.
+FALLBACK_HORIZON = timedelta(days=35)
 DINAMO = "Динамо-Минск"
 TICKER_DINAMO = "Динамо Мн"
 TICKER_LEAGUE_KHL = "КХЛ"
@@ -173,6 +190,22 @@ _MOVE = text("""
 
 _TOUCH = text("UPDATE hockey_matches SET checked_at = :now WHERE id = :id")
 
+# Строки, заведённые запасным источником (``sm…``), в тот же минский день, что и матч основного.
+_SELECT_FALLBACK_DAY = text(f"""
+    SELECT {_COLUMNS} FROM hockey_matches
+    WHERE source = :source AND source_match_id LIKE :prefix
+      AND (starts_at AT TIME ZONE 'Europe/Minsk')::date = :day
+    ORDER BY id LIMIT 1
+    """)
+
+_ADOPT = text("UPDATE hockey_matches SET source_match_id = :source_match_id, updated_at = :now WHERE id = :id")
+
+_SELECT_FROM = text(f"""
+    SELECT {_COLUMNS} FROM hockey_matches
+    WHERE source = :source AND starts_at >= :since
+    ORDER BY starts_at, id
+    """)
+
 _FINAL = text("""
     UPDATE hockey_matches
     SET status = 'final', home_score = :home_score, away_score = :away_score, decided_in = :decided_in,
@@ -256,6 +289,8 @@ async def upsert_calendar_match(session: AsyncSession, page: HcdinamoMatch, *, n
     }
     record = (await session.execute(_SELECT_BY_SOURCE, params)).one_or_none()
     if record is None:
+        record = await _adopt_fallback_row(session, params)
+    if record is None:
         # Давно сыгранный матч из окна календаря: ход на него не сделать, а подтвердить итог уже нечем.
         if _utc(page.starts_at) < _utc(now) - AUTO_CONFIRM_WINDOW:
             return "skipped"
@@ -271,6 +306,96 @@ async def upsert_calendar_match(session: AsyncSession, page: HcdinamoMatch, *, n
 
     await on_match_moved(session, match_id=row.id, starts_at=params["starts_at"])
     return "moved"
+
+
+async def _adopt_fallback_row(session: AsyncSession, params: dict):
+    """Основной источник вернулся: матч, который до этого завёл запасной, получает его id — без дубля."""
+    day = _utc(params["starts_at"]).astimezone(MINSK_TZ).date()
+    found = (
+        await session.execute(
+            _SELECT_FALLBACK_DAY,
+            {"source": params["source"], "prefix": f"{FALLBACK_ID_PREFIX}%", "day": day},
+        )
+    ).one_or_none()
+    if found is None:
+        return None
+    await session.execute(_ADOPT, {"id": found.id, "source_match_id": params["source_match_id"], "now": params["now"]})
+    return (await session.execute(_SELECT_BY_SOURCE, params)).one_or_none()
+
+
+def _local_day(value: datetime):
+    return _utc(value).astimezone(MINSK_TZ).date()
+
+
+def _known_club(name: str) -> bool:
+    from src.application.hockey_teams import TEAMS
+
+    return name in TEAMS
+
+
+def _sportmail_for(row: MatchRow, matches: list[SportmailMatch]) -> SportmailMatch | None:
+    """Матч строки в таблице sportmail.ru: Динамо играет не чаще раза в день, так что хватает минской даты
+    (время у сайтов расходится на минуты: 19:00 против 19:10)."""
+    day = _local_day(row.starts_at)
+    for match in matches:
+        if _local_day(match.starts_at) == day and DINAMO in (match.home, match.away):
+            return match
+    return None
+
+
+async def sync_calendar_fallback(session: AsyncSession, fetch: Fetch, *, now: datetime) -> dict[str, int]:
+    """Календарь из sportmail.ru, когда hcdinamo.by не отвечает (TASK-364).
+
+    Не сыгранные матчи Динамо: новый — вставить (``sm<id>``); перенесённый — подвинуть строку с тем же
+    соперником; существующий в тот же день не трогаем (время у сайтов расходится на минуты — основному
+    верим). Клуб вне реестра пропускаем: сайт всё равно его не покажет. Исчезнувший матч сам не отменяем.
+    """
+    counts: dict[str, int] = {"inserted": 0, "moved": 0, "unchanged": 0, "skipped": 0, "failed": 0}
+    matches = parse_sportmail_team_matches(await fetch(SPORTMAIL_DINAMO_MATCHES_URL))
+    if not matches and _utc(now).astimezone(MINSK_TZ).month in SEASON_MONTHS:
+        raise CalendarEmpty("календарь sportmail.ru пуст в сезон — похоже, сменилась вёрстка")
+    since = _utc(now) - timedelta(days=1)
+    rows = [_row(r) for r in (await session.execute(_SELECT_FROM, {"source": SOURCE_HCDINAMO, "since": since})).all()]
+    by_day = {_local_day(r.starts_at): r for r in rows}
+    wanted = [
+        m
+        for m in matches
+        if not m.played and _utc(now) < _utc(m.starts_at) <= _utc(now) + FALLBACK_HORIZON and DINAMO in (m.home, m.away)
+    ]
+    wanted_days = {_local_day(m.starts_at) for m in wanted}
+    # Строки без пары в sportmail по дате — кандидаты на «перенесён» (ищем по сопернику).
+    orphans = [
+        r
+        for r in rows
+        if r.status == STATUS_SCHEDULED and _utc(r.starts_at) > _utc(now) and _local_day(r.starts_at) not in wanted_days
+    ]
+    for match in wanted:
+        if not (_known_club(match.home) and _known_club(match.away)):
+            counts["skipped"] += 1
+            continue
+        if _local_day(match.starts_at) in by_day:
+            counts["unchanged"] += 1
+            continue
+        params = {
+            "source": SOURCE_HCDINAMO,
+            "source_match_id": f"{FALLBACK_ID_PREFIX}{match.source_match_id}",
+            "home_team": match.home,
+            "away_team": match.away,
+            "starts_at": _utc(match.starts_at),
+            "now": _utc(now),
+        }
+        twin = next((r for r in orphans if (r.home_team, r.away_team) == (match.home, match.away)), None)
+        if twin is not None:
+            orphans.remove(twin)
+            await session.execute(_MOVE, {**params, "id": twin.id})
+            from src.application.hockey_game import on_match_moved
+
+            await on_match_moved(session, match_id=twin.id, starts_at=params["starts_at"])
+            counts["moved"] += 1
+            continue
+        await session.execute(_INSERT, params)
+        counts["inserted"] += 1
+    return counts
 
 
 async def apply_decision(session: AsyncSession, row: MatchRow, decision: Decision, *, now: datetime) -> bool:
@@ -446,15 +571,16 @@ class LoopHealth:
         self.fails[what] = 0
         self.alerted.discard(what)
 
-    def failed(self, what: str, reason: str) -> str | None:
-        """Текст алерта, если сбоев подряд стало ``threshold`` и о них ещё не сообщали."""
+    def failed(self, what: str, reason: str, note: str | None = None) -> str | None:
+        """Текст алерта, если сбоев подряд стало ``threshold`` и о них ещё не сообщали.
+
+        ``note`` заменяет строку «Матчи и итоги не обновляются…», когда работает запасной источник."""
         self.fails[what] = self.fails.get(what, 0) + 1
         if self.fails[what] < self.threshold or what in self.alerted:
             return None
         self.alerted.add(what)
-        return (
-            f"Кто кого: {what} не работает {self.fails[what]} раз подряд\n{reason}\n"
-            "Матчи и итоги не обновляются. Итог можно ввести вручную: команда /hockey в этом боте"
+        return f"Кто кого: {what} не работает {self.fails[what]} раз подряд\n{reason}\n" + (
+            note or "Матчи и итоги не обновляются. Итог можно ввести вручную: команда /hockey в этом боте"
         )
 
 
@@ -462,6 +588,118 @@ async def due_for_result(session: AsyncSession, *, now: datetime) -> list[MatchR
     now = _utc(now)
     params = {"check_before": now - RESULT_CHECK_AFTER, "window_start": now - AUTO_CONFIRM_WINDOW}
     return [_row(r) for r in (await session.execute(_DUE, params)).all()]
+
+
+async def _sportmail_decision(
+    row: MatchRow,
+    decision: Decision,
+    page: HcdinamoMatch | None,
+    ticker: list[TickerResult],
+    sportmail: "_SportmailCache",
+    fetch: Fetch,
+    *,
+    now: datetime,
+) -> Decision:
+    """Запасной источник на месте недоступного основного (TASK-364). Нужно, чтобы итог подтверждали два чтения.
+
+    * есть страница hcdinamo.by, нет hockey.by → sportmail.ru подтверждает вместо ленты;
+    * есть лента hockey.by, нет страницы → sportmail.ru даёт счёт вместо страницы;
+    * нет обоих → sportmail.ru читаем дважды: таблица команды и страница самого матча («Матч завершен»).
+    Любое расхождение — на ручную проверку; если sportmail.ru тоже молчит, решение остаётся прежним.
+    """
+    starts_at, now = _utc(row.starts_at), _utc(now)
+    if decision.kind == KIND_FINAL or now < starts_at + RESULT_CHECK_AFTER:
+        return decision
+    candidate = page if page is not None and page.looks_final else None
+    confirm = _find_ticker(ticker, starts_at)
+    if confirm is not None and not confirm.completed:
+        confirm = None
+    if candidate is not None and confirm is not None:
+        return decision  # оба основных есть: их решение (в том числе расхождение) окончательное
+    match = _sportmail_for(row, await sportmail.matches())
+    if match is None or not match.played or (match.home == DINAMO) != (row.home_team == DINAMO):
+        return decision
+    if candidate is None and confirm is None:
+        # Основные источники молчат. В таблице sportmail.ru счёт стоит и у идущего матча (без «(ОТ)»/«(Бул)»), поэтому
+        # «сыгран» решает страница матча («Матч завершен»), а не наличие счёта: иначе ничья 0:0 в игре
+        # уходила бы на ручную проверку, а промежуточный счёт — в итог.
+        try:
+            second = parse_sportmail_match(await fetch(sportmail_match_url(match.source_match_id)))
+        except Exception:
+            logger.warning("sportmail match %s failed", match.source_match_id, exc_info=True)
+            return decision
+        if not second.is_played or (second.home_score, second.away_score) != (match.home_score, match.away_score):
+            return decision
+    ours = (match.home_score, match.away_score, match.decided_in)
+    try:
+        validate_result(match.home_score, match.away_score, match.decided_in)  # type: ignore[arg-type]
+    except ValueError as exc:
+        return Decision(KIND_REVIEW, reason=f"sportmail.ru: {exc}")
+    final = Decision(KIND_FINAL, home_score=match.home_score, away_score=match.away_score, decided_in=match.decided_in)
+    if candidate is not None:
+        if (candidate.home_score, candidate.away_score, candidate.decided_in) == ours:
+            return final
+        return Decision(
+            KIND_REVIEW,
+            reason=(
+                f"счёт не совпал: hcdinamo.by {candidate.home_score}:{candidate.away_score}, "
+                f"sportmail.ru {ours[0]}:{ours[1]}"
+            ),
+        )
+    if confirm is not None:
+        idx = confirm.teams.index(TICKER_DINAMO)
+        dinamo_home = row.home_team == DINAMO
+        theirs = (
+            (confirm.points[idx], confirm.points[1 - idx])
+            if dinamo_home
+            else (confirm.points[1 - idx], confirm.points[idx])
+        )
+        if theirs == (ours[0], ours[1]) and confirm.decided_in == ours[2]:
+            return final
+        return Decision(
+            KIND_REVIEW,
+            reason=f"счёт не совпал: hockey.by {theirs[0]}:{theirs[1]}, sportmail.ru {ours[0]}:{ours[1]}",
+        )
+    return final  # страница матча уже подтвердила «сыгран» и счёт выше
+
+
+class _SportmailCache:
+    """Таблица матчей sportmail.ru — не больше одного запроса за проход; сбой даёт пустой список."""
+
+    def __init__(self, fetch: Fetch) -> None:
+        self._fetch = fetch
+        self._rows: list[SportmailMatch] | None = None
+
+    async def matches(self) -> list[SportmailMatch]:
+        if self._rows is None:
+            try:
+                self._rows = parse_sportmail_team_matches(await self._fetch(SPORTMAIL_DINAMO_MATCHES_URL))
+            except Exception:
+                logger.warning("sportmail.ru results failed", exc_info=True)
+                self._rows = []
+        return self._rows
+
+
+async def _sportmail_live(
+    session: AsyncSession, row: MatchRow, sportmail: _SportmailCache, fetch: Fetch, *, now: datetime
+) -> None:
+    """Живой счёт со страницы матча sportmail.ru, когда ленты hockey.by нет."""
+    match = _sportmail_for(row, await sportmail.matches())
+    if match is None:
+        return
+    try:
+        page = parse_sportmail_match(await fetch(sportmail_match_url(match.source_match_id)))
+    except Exception:
+        logger.warning("sportmail live %s failed", match.source_match_id, exc_info=True)
+        return
+    # Идущий матч: в таблице у него уже есть счёт, поэтому судим по странице матча, а не по таблице.
+    if page.is_played or not page.is_online or page.home_score is None or page.away_score is None:
+        return
+    if (page.home == DINAMO) != (row.home_team == DINAMO):
+        return
+    from src.application.hockey_game import set_live_score
+
+    await set_live_score(session, match_id=row.id, home=page.home_score, away=page.away_score, now=now)
 
 
 async def check_due_results(
@@ -486,6 +724,7 @@ async def check_due_results(
     live_rows = [r for r in (await session.execute(_LIVE, {"now": _utc(now), "window_start": window_start})).all()]
     if not rows and not live_rows:
         return out
+    sportmail = _SportmailCache(fetch)
     try:
         ticker = parse_hockey_by_ticker(await fetch(HOCKEY_BY_URL))
     except Exception:
@@ -495,7 +734,10 @@ async def check_due_results(
     for record in live_rows:
         row = _row(record)
         item = _find_ticker(ticker, row.starts_at)
-        if item is None or item.completed or item.points[0] is None or item.points[1] is None:
+        if item is None:
+            await _sportmail_live(session, row, sportmail, fetch, now=now)
+            continue
+        if item.completed or item.points[0] is None or item.points[1] is None:
             continue
         idx = item.teams.index(TICKER_DINAMO)
         dinamo_pts, other_pts = item.points[idx], item.points[1 - idx]
@@ -512,6 +754,7 @@ async def check_due_results(
             logger.warning("hockey results: match %s failed", row.source_match_id, exc_info=True)
             page = None
         decision = decide_result(page, ticker, starts_at=row.starts_at, now=now)
+        decision = await _sportmail_decision(row, decision, page, ticker, sportmail, fetch, now=now)
         # Матч уже на проверке: причина обновится, второго алерта не будет (review_alerted_at).
         if await apply_decision(session, row, decision, now=now):
             delivered = await alert(format_review_alert(row, decision.reason))
@@ -537,6 +780,7 @@ async def run_tick(
     calendar: dict[str, int] | None = None
     calendar_failed = False
     calendar_error = ""
+    calendar_via: str | None = None
     if calendar_due:
         try:
             async with session.begin_nested():
@@ -545,6 +789,12 @@ async def run_tick(
             logger.warning("hockey calendar sync failed", exc_info=True)
             calendar_failed = True
             calendar_error = str(exc) or type(exc).__name__
+            try:
+                async with session.begin_nested():
+                    calendar = await sync_calendar_fallback(session, fetch, now=now)
+                calendar_via = "sportmail.ru"
+            except Exception:
+                logger.warning("hockey calendar fallback failed", exc_info=True)
     dinamo_stats: dict[str, int] | None = None
     if calendar_due:
         from src.application.dinamo_stats import sync_dinamo_stats
@@ -581,6 +831,7 @@ async def run_tick(
         "calendar": calendar,
         "calendar_failed": calendar_failed,
         "calendar_error": calendar_error,
+        "calendar_via": calendar_via,
         "dinamo_stats": dinamo_stats,
         "scored_picks": scored,
         "closed_races": closed_races,
@@ -598,10 +849,28 @@ async def send_review_alert(text_body: str) -> bool | None:
     return await send_ice_health_to_admins(text_body, event="hockey match review")
 
 
+async def _fetch_sportmail(url: str, headers: dict[str, str]) -> str:
+    """sportmail.ru иногда не отвечает с первого раза (около трети запросов зависает на таймаут) — две попытки."""
+    import aiohttp
+
+    from src.ingestion.source_io import FetchRejectedError, fetch_http_text
+
+    last: Exception | None = None
+    for _ in range(2):
+        try:
+            return await fetch_http_text(url, headers=headers)
+        except (aiohttp.ClientError, TimeoutError, FetchRejectedError) as exc:
+            last = exc
+    assert last is not None
+    raise last
+
+
 async def default_fetch(url: str) -> str:
     from src.ingestion.source_io import fetch_http_text, post_form_text
 
     headers = {"User-Agent": "Mozilla/5.0 (compatible; GlideBot/1.0)"}
+    if url.startswith(SPORTMAIL_BASE):
+        return await _fetch_sportmail(url, headers)
     stamp = hcdinamo_month_stamp(url)
     if stamp is not None:
         form = {"ajax": "Y", "data_calendar": stamp, "type": "cal"}
@@ -631,6 +900,7 @@ __all__ = [
     "send_review_alert",
     "set_manual_result",
     "sync_calendar",
+    "sync_calendar_fallback",
     "upsert_calendar_match",
     "validate_result",
 ]

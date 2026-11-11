@@ -24,15 +24,19 @@
 
   // ---------- напоминания и «спрятать строку» (TASK-335) ----------
 
+  function saveRemind(on) {
+    K.api('PUT', '/client/hockey/remind', { on: on })
+      .then(function (r) {
+        state.remind = !!(r && r.on);
+        K.haptic('success');
+        K.toast(on ? 'Напомним о твоём ходе и пришлём итог' : 'Сообщения в чате выключены');
+      })
+      .catch(K.fail);
+  }
+
   function setRemind(on) {
     function save() {
-      K.api('PUT', '/client/hockey/remind', { on: on })
-        .then(function (r) {
-          state.remind = !!(r && r.on);
-          K.haptic('success');
-          K.toast(on ? 'Напомним о твоём ходе и пришлём итог' : 'Сообщения в чате выключены');
-        })
-        .catch(K.fail);
+      saveRemind(on);
     }
     var tg = K.tg;
     if (!on || !tg || typeof tg.requestWriteAccess !== 'function') return save();
@@ -57,6 +61,70 @@
       h('button', { type: 'button', class: 'kk-toggle' + (state.remind ? ' is-on' : ''), role: 'switch', 'aria-checked': state.remind ? 'true' : 'false', 'aria-label': 'Сообщения в чате', onclick: function () { setRemind(!state.remind); } }, [h('span')]),
     ]);
   }
+
+  // ---------- «Итог — в чат»: после первого хода просим разрешить боту писать первым ----------
+  // Ход уже сохранён; всё ниже — необязательная надстройка: любой сбой молча пропускается.
+
+  var ASK_DELAY_MS = 900; // выбор команды успевает подсветиться
+  var ASK_RETRY_MS = 600; // монета, черновик счёта, ход в пути или тост — ждём, поверх не показываем
+  var ASK_TRIES = 15;
+  var askMemo = S.writeAskMemo((function () {
+    try { return window.localStorage; } catch (e) { return null; }
+  })());
+  var askPlanned = false; // за сессию — не больше одной попытки
+
+  function askCtx() {
+    return { first: true, tg: K.tg, wa: window.GlideWriteAccess || null, asked: askMemo.asked(), remind: state.remind, sheet: state.sheet };
+  }
+
+  function settling() {
+    if (K.coin && typeof K.coin.animating === 'function' && K.coin.animating()) return true;
+    if (state.toast) return true;
+    if (Object.keys(state.drafts || {}).length) return true;
+    return (state.matches || []).some(function (m) { return m && m.pickPending > 0; });
+  }
+
+  /** Сервер принял первый ход игрока на экране owner. */
+  function afterFirstPick(owner) {
+    if (askPlanned || !S.shouldAskWrite(askCtx())) return;
+    askPlanned = true;
+    var tries = 0;
+    function check() {
+      try {
+        // Игрок ушёл с экрана или открыл другую шторку — не перебиваем.
+        if (K.current() !== owner || state.sheet) return;
+        if (!S.shouldAskWrite(askCtx())) return;
+        if (settling()) {
+          if (++tries < ASK_TRIES) setTimeout(check, ASK_RETRY_MS);
+          return;
+        }
+        askMemo.mark();
+        state.sheet = { kind: 'writeAsk' };
+        K.render();
+      } catch (e) { /* */ }
+    }
+    setTimeout(check, ASK_DELAY_MS);
+  }
+
+  function answerWriteAsk(choice) {
+    state.sheet = null;
+    K.render();
+    S.answerWriteAsk(choice, { memo: askMemo, tg: K.tg, wa: window.GlideWriteAccess || null, save: function () { saveRemind(true); } });
+  }
+
+  function writeAskSheet() {
+    var T = S.WRITE_ASK;
+    return K.sheet(T.title, null, [
+      h('span', { class: 'kk-tx', text: T.text }),
+      h('div', { class: 'kk-two' }, [
+        h('button', { type: 'button', class: 'kk-btn kk-btn--alt', text: T.later, onclick: function () { answerWriteAsk('later'); } }),
+        h('button', { type: 'button', class: 'kk-btn kk-btn--gold', text: T.allow, onclick: function () { answerWriteAsk('allow'); } }),
+      ]),
+    ], 'kk-sheet--pts');
+  }
+
+  K.afterFirstPick = afterFirstPick;
+  K.writeAskSheet = writeAskSheet;
 
   function showOnMatches() {
     K.api('PUT', '/client/hockey/prefs', { kk_hidden: false })
