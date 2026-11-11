@@ -16,6 +16,7 @@
   var EMPTY_HINT = 'Имя не может быть пустым';
   var NO_LETTER_HINT = 'Нужна хотя бы одна буква, цифра или эмодзи';
   var NAME_RE = /\p{L}|\p{N}|\p{So}/u;
+  var UNASSIGNED_RE = /\p{Cn}/u;
   var SERVER_RANGE_RE = /от 1 до 40/;
   var NET_HINT = 'Не сохранилось. Попробуй ещё раз';
   var ZWJ = 0x200D;
@@ -132,11 +133,22 @@
     return glued.join('').split(' ').filter(Boolean).join(' ');
   }
 
+  /* Как _counts_as_visible сервера: L/N/So или неназначенный (новый эмодзи), кроме нехарактеров. */
+  function hasVisible(name) {
+    if (NAME_RE.test(name)) return true;
+    var pts = Array.from(name);
+    for (var i = 0; i < pts.length; i++) {
+      var cp = pts[i].codePointAt(0);
+      if (UNASSIGNED_RE.test(pts[i]) && !(cp >= 0xFDD0 && cp <= 0xFDEF) && (cp & 0xFFFE) !== 0xFFFE) return true;
+    }
+    return false;
+  }
+
   /* Решение целиком, как сервер: ok только если имя без «пустоты», с буквой/цифрой/So и 1..40 точек. */
   function checkDisplayName(raw) {
     var name = normalizeDisplayName(raw);
     if (name === '') return { ok: false, name: name, reason: 'empty' };
-    if (!NAME_RE.test(name)) return { ok: false, name: name, reason: 'no-letter' };
+    if (!hasVisible(name)) return { ok: false, name: name, reason: 'no-letter' };
     if (codePointLength(name) > MAX_POINTS) return { ok: false, name: name, reason: 'range' };
     return { ok: true, name: name, reason: '' };
   }

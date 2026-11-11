@@ -54,6 +54,15 @@ _SET_HOME = text("""
     """)
 
 
+def _counts_as_visible(ch: str) -> bool:
+    """Буква, цифра, So — или неназначенный кодпоинт (эмодзи новее таблицы Python), но не нехарактер."""
+    cat = unicodedata.category(ch)
+    if cat[0] in ("L", "N") or cat == "So":
+        return True
+    cp = ord(ch)
+    return cat == "Cn" and not (0xFDD0 <= cp <= 0xFDEF or (cp & 0xFFFE) == 0xFFFE)
+
+
 def normalize_display_name(raw: str) -> str:
     """Имя для показа: пробелы схлопнуть, края обрезать, невидимое убрать. Эмодзи и ZWJ-склейки остаются.
 
@@ -78,7 +87,7 @@ def normalize_display_name(raw: str) -> str:
                 continue
         glued.append(ch)
     name = " ".join("".join(glued).split())
-    if not any(unicodedata.category(ch)[0] in ("L", "N") or unicodedata.category(ch) == "So" for ch in name):
+    if not any(_counts_as_visible(ch) for ch in name):
         raise ValueError(_NAME_ERROR)
     if not 1 <= len(name) <= 40:
         raise ValueError(_NAME_ERROR)
