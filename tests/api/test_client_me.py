@@ -160,7 +160,11 @@ async def test_ac1_ac2_catalog_person(app_use_test_db, db_session, client_me_aut
     assert body["rows"]["passes"] is None
     assert body["rows"]["saved"] is None
     assert body["rows"]["requests"] is None
-    assert body["rows"]["family"] == {"profiles": 1}
+    assert body["rows"]["family"] == {
+        "people": [
+            {"profile_id": None, "name": "Максим В.", "is_you": True, "active": True},
+        ]
+    }
     assert body["profile_name"] is None
 
     again = await _get(headers)
@@ -475,7 +479,69 @@ async def test_ac5_child_profile(app_use_test_db, db_session, client_me_auth) ->
     assert child_body["rows"]["saved"] is None
     assert own["rows"]["requests"] is None
     assert child_body["rows"]["requests"] == {"count": 1}
-    assert own["rows"]["family"] == child_body["rows"]["family"] == {"profiles": 2}
+    assert own["rows"]["family"]["people"] == [
+        {"profile_id": parent, "name": "Максим", "is_you": True, "active": True},
+        {"profile_id": child, "name": "Миша", "is_you": False, "active": False},
+    ]
+    assert child_body["rows"]["family"]["people"] == [
+        {"profile_id": parent, "name": "Максим", "is_you": True, "active": False},
+        {"profile_id": child, "name": "Миша", "is_you": False, "active": True},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_foreign_profile_does_not_add_people(app_use_test_db, db_session, client_me_auth) -> None:
+    user_id = 368_200_001
+    _auth(user_id)
+    parent = await _client_row(db_session, user_id, "Максим")
+    child = await create_guardian_profile(db_session, user_id, first_name="Миша")
+    other_id = 368_200_002
+    await _client_row(db_session, other_id, "Чужой")
+    foreign = await create_guardian_profile(db_session, other_id, first_name="Чужая")
+
+    body = (await _get({"X-Profile-Id": str(foreign)})).json()
+    assert body["rows"]["family"]["people"] == [
+        {"profile_id": parent, "name": "", "is_you": True, "active": True},
+        {"profile_id": child, "name": "Миша", "is_you": False, "active": False},
+    ]
+    assert body["profile_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_child_emoji_name_is_kept(app_use_test_db, db_session, client_me_auth) -> None:
+    user_id = 368_200_003
+    _auth(user_id)
+    parent = await _client_row(db_session, user_id, "Максим")
+    child = await create_guardian_profile(db_session, user_id, first_name="Аня 🌱")
+
+    people = (await _get()).json()["rows"]["family"]["people"]
+    assert people == [
+        {"profile_id": parent, "name": "", "is_you": True, "active": True},
+        {"profile_id": child, "name": "Аня 🌱", "is_you": False, "active": False},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_family_access_child_is_a_person(app_use_test_db, db_session, client_me_auth) -> None:
+    owner_id = 368_200_004
+    child = await _client_row(db_session, owner_id, "Аня")
+    second_id = 368_200_005
+    second = await _client_row(db_session, second_id, "Катя")
+    await db_session.execute(
+        text("""
+            INSERT INTO client_family_access_members (primary_client_id, member_telegram_id)
+            VALUES (:pid, :mtid)
+            """),
+        {"pid": child, "mtid": second_id},
+    )
+    _auth(second_id)
+
+    body = (await _get({"X-Telegram-Init-Data": _raw(second_id, "Екатерина")})).json()
+    assert body["name"] == "Екатерина"
+    assert body["rows"]["family"]["people"] == [
+        {"profile_id": second, "name": "Екатерина", "is_you": True, "active": True},
+        {"profile_id": child, "name": "Аня", "is_you": False, "active": False},
+    ]
 
 
 def _listen(db: AsyncSession) -> tuple[list[str], object]:

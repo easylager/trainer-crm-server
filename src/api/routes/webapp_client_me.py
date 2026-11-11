@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
@@ -83,9 +83,17 @@ class _Count(BaseModel):
     count: int
 
 
+class _Person(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    profile_id: int | None
+    name: str | None
+    is_you: bool
+    active: bool
+
+
 class _Family(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    profiles: int
+    people: list[_Person] = Field(min_length=1)
 
 
 class _Rows(BaseModel):

@@ -19,7 +19,7 @@ from src.application.hockey_hub import HOME_AHEAD
 from src.application.hockey_notices import get_prefs
 from src.application.hockey_screens import fan_profile
 from src.application.hockey_teams import display_name, team_card
-from src.infrastructure.db.models import ICE_WATCH_KIND_SESSIONS
+from src.infrastructure.db.models import CLIENT_PROFILE_ROLE_SELF, ICE_WATCH_KIND_SESSIONS
 from src.ingestion.hockey_sources import MINSK_TZ
 from src.shared.public_display import format_clock
 
@@ -158,6 +158,45 @@ def _iso(value: datetime) -> str:
 
 def _zero_null(value: int) -> int | None:
     return None if int(value) == 0 else int(value)
+
+
+def _given_name(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    name = value.strip()
+    return name or None
+
+
+def _family(profiles: list[dict], *, account_name: str, acting: int | None) -> dict:
+    """Люди «Семьи» из уже прочитанного списка. «Вы» первым, ровно один active."""
+    self_rows = [row for row in profiles if row.get("role") == CLIENT_PROFILE_ROLE_SELF]
+    others = [row for row in profiles if row.get("role") != CLIENT_PROFILE_ROLE_SELF]
+    people: list[dict] = [
+        {
+            "profile_id": int(row["client_id"]),
+            "name": account_name,
+            "is_you": True,
+            "active": False,
+        }
+        for row in self_rows
+    ]
+    if not people:
+        people.append({"profile_id": None, "name": account_name, "is_you": True, "active": False})
+    for row in others:
+        people.append(
+            {
+                "profile_id": int(row["client_id"]),
+                "name": _given_name(row.get("first_name")),
+                "is_you": False,
+                "active": False,
+            }
+        )
+    active_at = next(
+        (i for i, person in enumerate(people) if acting is not None and person["profile_id"] == acting),
+        0,
+    )
+    people[active_at]["active"] = True
+    return {"people": people}
 
 
 def _profile_name(profiles: list[dict], *, acting: int | None, own: int | None) -> str | None:
@@ -337,7 +376,7 @@ async def client_me(
             "bookings": bookings,
             "passes": passes,
             "saved": saved,
-            "family": {"profiles": len(profiles) or 1},
+            "family": _family(profiles, account_name=name, acting=acting),
             "requests": requests,
         },
         "profile_name": _profile_name(profiles, acting=acting, own=own),
