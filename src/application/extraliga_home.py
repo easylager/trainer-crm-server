@@ -1,8 +1,9 @@
 """Лента матчей в слоте «сейчас» главной (TASK-340, срез 3; холст — экран 11).
 
 Только домашние матчи: Экстралига, которая идёт в городе клиента, и домашние матчи Динамо-Минск
-(клуб общебелорусский — во всех городах) на 14 дней. Выездов нет: страница матча открывает
-только домашние матчи Динамо и Экстралигу. В окне пусто — один ближайший будущий домашний матч. «N матчей на неделе» — по-прежнему матчи Экстралиги города за 7 дней.
+(клуб общебелорусский — во всех городах) на 45 дней. Выездов нет: страница матча открывает
+только домашние матчи Динамо и Экстралигу. В окне пусто — один ближайший будущий домашний матч.
+«N матчей на неделе» — по-прежнему матчи Экстралиги города за 7 дней.
 Игровую карточку Динамо добавляет now_slot. Без города ленты нет.
 """
 from __future__ import annotations
@@ -25,7 +26,7 @@ from src.shared.config import Settings
 
 AHEAD = timedelta(days=7)
 # Окно ленты главной; счёт «на неделе» остаётся за AHEAD.
-FEED_AHEAD = timedelta(days=14)
+FEED_AHEAD = timedelta(days=45)
 # Идущий и только что сыгранный матч ещё держится в ленте: счёт виден на главной.
 BEHIND = timedelta(hours=3)
 CITY_LIMIT = 6
@@ -92,10 +93,10 @@ async def week_rows(session: AsyncSession, *, now: datetime, settings: Settings 
 
 
 def _feed_card(row: Any, *, now: datetime, sticker: str | None) -> dict[str, Any]:
-    """Та же карточка ``card``; у Динамо места в базе нет — дома Минск-Арена."""
+    """Та же карточка ``card``; место — как на странице матча (``place_of``): арена из строки, город —
+    из строки или клуба-хозяина (у hockey.by city бывает NULL); у Динамо дома — Минск-Арена."""
     out = card(row, now=now, sticker=sticker)
-    if row.league == LEAGUE_KHL:
-        out["arena"], out["city"] = place_of(row)
+    out["arena"], out["city"] = place_of(row)
     return out
 
 
@@ -139,7 +140,7 @@ async def home_feed(
     # Счёт «на неделе» — как раньше: матчи Экстралиги этого города за 7 дней.
     total = sum(1 for r in window if r.league != LEAGUE_KHL and r.starts_at < now + AHEAD)
     if not window:
-        # В окне пусто — один ближайший будущий домашний матч, пусть и дальше двух недель.
+        # За 45 дней пусто — один ближайший будущий домашний матч, пусть и дальше.
         far = mine(
             list(
                 (await session.execute(_FEED, {**base, "since": now, "until": None, "only_scheduled": True})).all()

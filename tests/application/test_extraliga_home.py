@@ -111,6 +111,28 @@ async def test_minsk_dinamo_away_is_skipped_nearest_home_shown_even_beyond_windo
 
 
 @pytest.mark.asyncio
+async def test_minsk_nothing_in_two_weeks_still_three_cards_within_45_days(db_session, monkeypatch):
+    """Как на стенде: в 14 днях у Минска пусто — три ближайших домашних за 45 дней (Юность, Юность, Динамо) + «все».
+    У Юности city = NULL, но на карточке её арена и город, у Динамо — Минск-Арена; четвёртый матч не встаёт."""
+    await _clean(db_session, monkeypatch)
+    y1 = await _match(db_session, "y1", "Юность", "Локомотив Орша", NOW + timedelta(days=29), None)
+    y2 = await _match(db_session, "y2", "Юность", "Локомотив Орша", NOW + timedelta(days=31), None)
+    d1 = await _dinamo(db_session, "d1", "Динамо-Минск", "Адмирал", NOW + timedelta(days=35))
+    await _match(db_session, "y3", "Юность", "Могилев", NOW + timedelta(days=36), None)
+    await _dinamo(db_session, "d0", "СКА", "Динамо-Минск", NOW + timedelta(days=2))  # выезд — не в ленте
+    await db_session.commit()
+    _feed, out = await _slot(db_session, hockey={"mode": None}, upcoming=ICE_UPCOMING)
+    items = out["items"]
+    assert [i.get("id") or i["kind"] for i in items] == [y1, y2, d1, "more"]
+    assert [(i["arena"], i["city"]) for i in items[:3]] == [
+        ("Чижовка-Арена", "Минск"),
+        ("Чижовка-Арена", "Минск"),
+        ("Минск-Арена", "Минск"),
+    ]
+    assert items[-1]["count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_dinamo_home_matches_shown_in_every_city(db_session, monkeypatch):
     """(а') Динамо — общебелорусский бренд: его домашние матчи видны и в Гродно, рядом с домашними «Немана»."""
     await _clean(db_session, monkeypatch)
@@ -142,11 +164,11 @@ async def test_feed_keeps_three_nearest_home_matches_then_more(db_session, monke
 
 @pytest.mark.asyncio
 async def test_empty_window_shows_one_far_home_match(db_session, monkeypatch):
-    """(в) В 14 днях домашних нет (только выезд) — один ближайший будущий домашний матч, пусть и через месяц."""
+    """(в) За 45 дней домашних нет (только выезд) — один ближайший будущий домашний матч, пусть и через 50 дней."""
     await _clean(db_session, monkeypatch)
     await _dinamo(db_session, "d0", "СКА", "Динамо-Минск", NOW + timedelta(days=6))
-    far = await _dinamo(db_session, "d1", "Динамо-Минск", "Барыс", NOW + timedelta(days=30))
-    await _dinamo(db_session, "d2", "Динамо-Минск", "Сочи", NOW + timedelta(days=33))
+    far = await _dinamo(db_session, "d1", "Динамо-Минск", "Барыс", NOW + timedelta(days=50))
+    await _dinamo(db_session, "d2", "Динамо-Минск", "Сочи", NOW + timedelta(days=53))
     await _dinamo(db_session, "d3", "Динамо-Минск", "Сочи", NOW - timedelta(days=20))  # прошёл, итога в базе нет
     await db_session.commit()
     _feed, out = await _slot(db_session, upcoming=ICE_UPCOMING)
@@ -221,12 +243,12 @@ async def test_every_plain_card_opens_on_the_match_page(db_session, monkeypatch)
 async def test_home_match_with_null_city_counts_for_the_club_city(db_session, monkeypatch, home, away, arena, city):
     """Как на проде: у домашних матчей hockey.by city = NULL. Город — как у страницы матча (place_of: клуб-хозяин)."""
     await _clean(db_session, monkeypatch, clubs=f"{home},{away}")
-    far = await _match(db_session, "n1", home, away, NOW + timedelta(days=20), None, arena)
+    far = await _match(db_session, "n1", home, away, NOW + timedelta(days=50), None, arena)
     await db_session.commit()
-    # Других матчей нет — домашний вне окна встаёт «одним ближайшим».
+    # Других матчей нет — домашний за 45 днями встаёт «одним ближайшим»; место — как на странице матча.
     feed = await extraliga_home.home_feed(db_session, city_name=city, city_region=None, now=NOW, settings=Settings())
     assert [m["id"] for m in feed["matches"]] == [far] and feed["week_count"] == 0
-    assert feed["matches"][0]["arena"] == arena
+    assert (feed["matches"][0]["arena"], feed["matches"][0]["city"]) == (arena, city)
     # В окне и на этой неделе — в ленте и в счётчике «N матчей на неделе».
     near = await _match(db_session, "n2", home, away, NOW + timedelta(days=2), None, arena)
     await db_session.commit()
