@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Glide — вкладка «Я»</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&amp;family=Golos+Text:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0B6E70}a:hover{color:#073C3E}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 960px; box-sizing: border-box; background: {{t.bg}}; color: {{t.ink}}; font-family: 'Golos Text', -apple-system, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.35; overflow: hidden">
+  <div style="display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 0">
+
+    <!-- Шапка: кто я. Обложка — цвет клуба, за который болеешь; нет клуба — просто тёмная. -->
+    <section style="background: {{t.surface}}; border-radius: 20px; box-shadow: {{t.shadow}}; overflow: hidden">
+      <sc-if value="{{hasClub}}" hint-placeholder-val="{{true}}">
+        <div style="position: relative; height: 92px; background: {{cover.bg}}">
+          <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: {{cover.stripe}}"></div>
+          <span style="position: absolute; right: 16px; top: 14px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.78)">{{cover.label}}</span>
+        </div>
+      </sc-if>
+      <div style="display: flex; align-items: flex-end; gap: 12px; padding: {{headPad}}; margin-top: {{headPull}}">
+        <div style="flex: none; width: 76px; height: 76px; border-radius: 50%; background: {{t.avatarBg}}; box-shadow: 0 0 0 4px {{t.surface}}; display: flex; align-items: center; justify-content: center; font-family: 'Dela Gothic One', sans-serif; font-size: 32px; color: {{t.accentInk}}">М</div>
+        <div style="flex: 1; min-width: 0; padding-top: {{nameTop}}; padding-bottom: 2px">
+          <div style="font-family: 'Dela Gothic One', sans-serif; font-size: 24px; line-height: 1.1; letter-spacing: -.01em">Максим</div>
+          <div style="margin-top: 4px; font-size: 13px; color: {{t.muted}}">{{sinceLine}}</div>
+        </div>
+        <button type="button" style="flex: none; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: {{t.chip}}; color: {{t.ink}}; font: 600 14px 'Golos Text', sans-serif; margin-bottom: 4px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>
+          Изменить
+        </button>
+      </div>
+    </section>
+
+    <!-- Сезон: цифры считают только настоящее. -->
+    <sc-if value="{{isSeason}}" hint-placeholder-val="{{true}}">
+      <section style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: {{t.surface}}; border-radius: 20px; box-shadow: {{t.shadow}}; padding: 14px 0">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; border-right: 1px solid {{t.line}}">
+          <span style="font-family: 'Dela Gothic One', sans-serif; font-size: 24px; font-variant-numeric: tabular-nums">14</span>
+          <span style="font-size: 12px; color: {{t.muted}}">тренировок</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; border-right: 1px solid {{t.line}}">
+          <span style="font-family: 'Dela Gothic One', sans-serif; font-size: 24px; font-variant-numeric: tabular-nums">3</span>
+          <span style="font-size: 12px; color: {{t.muted}}">недели подряд</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; border-right: 1px solid {{t.line}}">
+          <span style="font-family: 'Dela Gothic One', sans-serif; font-size: 24px; font-variant-numeric: tabular-nums">340</span>
+          <span style="font-size: 12px; color: {{t.muted}}">очков</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+          <span style="font-family: 'Dela Gothic One', sans-serif; font-size: 24px; font-variant-numeric: tabular-nums">12</span>
+          <span style="font-size: 12px; color: {{t.muted}}">место</span>
+        </div>
+      </section>
+
+    </sc-if>
+
+    <!-- Болею за · Мой каток: два якоря, которые перестраивают главную. -->
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <sc-if value="{{isSeason}}" hint-placeholder-val="{{true}}">
+        <a href="Picker.dc.html" style="display: flex; flex-direction: column; gap: 10px; min-height: 136px; box-sizing: border-box; padding: 14px; background: {{t.surface}}; border-radius: 20px; box-shadow: {{t.shadow}}; color: inherit; text-decoration: none">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: {{t.muted}}">Болею за</span>
+          <span style="width: 40px; height: 40px; border-radius: 50%; background: #0F3A78; box-shadow: inset 0 -5px 0 #C8202F; display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: 700; font-size: 13px">ДМ</span>
+          <span style="font-weight: 600; font-size: 15px; line-height: 1.2">Динамо-Минск</span>
+          <span style="margin-top: auto; font-size: 12px; color: {{t.muted}}">Матч в&nbsp;пятницу, 19:00</span>
+        </a>
+        <div style="position: relative">
+          <a href="#" style="display: flex; flex-direction: column; gap: 10px; min-height: 136px; box-sizing: border-box; padding: 14px; background: {{t.surface}}; border-radius: 20px; box-shadow: {{t.shadow}}; color: inherit; text-decoration: none">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: {{t.muted}}">Мой каток</span>
+          <span style="width: 40px; height: 40px; border-radius: 12px; background: {{t.wash}}; display: flex; align-items: center; justify-content: center; color: {{t.accentInk}}">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15h11.5c1.5 0 2.5-.8 2.5-2V6h-4v4l-3 1.2c-1.2.5-2 1.6-2 2.8"/><path d="M3 19h17"/><path d="M7 15v4M15 15v4"/></svg>
+          </span>
+          <span style="font-weight: 600; font-size: 15px; line-height: 1.2">«Чижовка-арена»</span>
+          <span style="margin-top: auto; font-size: 12px; color: {{t.muted}}">Сегодня ещё 2&nbsp;сеанса</span>
+        </a>
+          <a href="MyRink.dc.html" aria-label="Сменить каток" style="position: absolute; top: 4px; right: 4px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: {{t.muted}}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>
+          </a>
+        </div>
+      </sc-if>
+      <sc-if value="{{isNew}}" hint-placeholder-val="{{false}}">
+        <a href="Picker.dc.html" style="display: flex; flex-direction: column; justify-content: space-between; min-height: 136px; box-sizing: border-box; padding: 14px; border: 1.5px dashed {{t.lineStrong}}; border-radius: 20px; color: inherit; text-decoration: none">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: {{t.muted}}">Болею за</span>
+          <span style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; color: {{t.ink2}}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Выбрать команду
+          </span>
+        </a>
+        <a href="MyRink.dc.html" style="display: flex; flex-direction: column; justify-content: space-between; min-height: 136px; box-sizing: border-box; padding: 14px; border: 1.5px dashed {{t.lineStrong}}; border-radius: 20px; color: inherit; text-decoration: none">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: {{t.muted}}">Мой каток</span>
+          <span style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; color: {{t.ink2}}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Выбрать каток
+          </span>
+        </a>
+      </sc-if>
+    </div>
+
+    <!-- Группа: лёд и занятия -->
+    <h2 style="margin: 12px 4px 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: {{t.muted}}">Лёд и занятия</h2>
+    <nav style="background: {{t.surface}}; border-radius: 20px; box-shadow: {{t.shadow}}; padding: 0 16px">
+      <sc-if value="{{isSeason}}" hint-placeholder-val="{{true}}">
+        <a href="#" style="display: flex; align-items: center; gap: 14px; min-height: 56px; border-bottom: 1px solid {{t.line}}; color: inherit; text-decoration: none">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{t.ink2}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+          <span style="flex: 1; font-weight: 600; font-size: 16px">Мои записи</span>
+          <span style="font-size: 14px; color: {{t.muted}}">завтра, 18:30</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.muted}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+        </a>
+        <a href="#" style="display: flex; align-items: center; gap: 14px; min-height: 56px; border-bottom: 1px solid {{t.line}}; color: inherit; text-decoration: none">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{t.ink2}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7h17v3a2 2 0 0 0 0 4v3h-17v-3a2 2 0 0 0 0-4z"/><path d="M14.5 7v10" stroke-dasharray="1.5 2.5"/></svg>
+          <span style="flex: 1; font-weight: 600; font-size: 16px">Абонементы</span>
+          <span style="font-size: 14px; color: {{t.muted}}">4&nbsp;занятия</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.muted}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+        </a>
+      </sc-if>
+      <sc-if value="{{isSeason}}" hint-placeholder-val="{{true}}">
+        <a href="#" style="display: flex; align-items: center; gap: 14px; min-height: 56px; border-bottom: 1px solid {{t.line}}; color: inherit; text-decoration: none">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{t.ink2}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.5L7 20z"/></svg>
+          <span style="flex: 1; font-weight: 600; font-size: 16px">Сохранённые</span>
+          <span style="font-size: 14px; color: {{t.muted}}">{{savedHint}}</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.muted}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+        </a>
+      </sc-if>
+      <a href="#" style="display: flex; align-items: center; gap: 14px; min-height: 56px; color: inherit; text-decoration: none">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{t.ink2}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9.5" r="2.2"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5M15.5 14.2c2.2.2 3.7 2 4.2 4.8"/></svg>
+        <span style="flex: 1; font-weight: 600; font-size: 16px">Семья</span>
+        <span style="font-size: 14px; color: {{t.muted}}">{{familyHint}}</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.muted}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </a>
+    </nav>
+
+    <!-- Группа: приложение -->
+    <h2 style="margin: 12px 4px 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: {{t.muted}}">Приложение</h2>
+    <nav style="background: {{t.surface}}; border-radius: 20px; box-shadow: {{t.shadow}}; padding: 0 16px">
+      <a href="#" style="display: flex; align-items: center; gap: 14px; min-height: 56px; color: inherit; text-decoration: none">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{t.ink2}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 17h-8l-4.5 3.5V17H5a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 5 5z"/></svg>
+        <span style="flex: 1; font-weight: 600; font-size: 16px">Написать нам</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.muted}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </a>
+    </nav>
+
+  </div>
+
+  <!-- Таб-бар: четыре существительных из мира пользователя, «Ещё» нет. -->
+  <nav aria-label="Навигация" style="position: absolute; left: 12px; right: 12px; bottom: 16px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 6px; background: {{t.surface}}; border-radius: 26px; box-shadow: 0 10px 30px -12px rgba(13, 27, 38, .35), 0 1px 2px rgba(13, 27, 38, .08)">
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0; border-radius: 20px; color: {{t.muted}}; text-decoration: none; font-size: 12px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>
+      Главная
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0; border-radius: 20px; color: {{t.muted}}; text-decoration: none; font-size: 12px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>
+      Поиск
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0; border-radius: 20px; color: {{t.muted}}; text-decoration: none; font-size: 12px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="9.5" rx="8" ry="3.5"/><path d="M4 9.5v4.5c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5V9.5"/></svg>
+      Кто кого
+    </a>
+    <a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0; border-radius: 20px; background: {{t.wash}}; color: {{t.accentInk}}; text-decoration: none; font-size: 12px; font-weight: 700">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6.5 8-6.5s7.2 2.5 8 6.5"/></svg>
+      Я
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"variant":{"editor":"enum","options":["season","new"],"default":"season"},"dark":{"editor":"boolean","default":false},"$preview":{"width":390,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var dark = this.props.dark ?? false;
+    var variant = this.props.variant ?? 'season';
+    var isSeason = variant !== 'new';
+    var t = dark ? {
+      bg: '#17212b', surface: '#1d2733', ink: '#f1f5f7', ink2: '#c3d2dc', muted: '#8aa0b3',
+      line: '#2b3744', lineStrong: '#3a4857', accentInk: '#7FD7D8', wash: '#163638',
+      chip: '#263240', avatarBg: '#263240', dark: '#0d1b26',
+      shadow: '0 1px 2px rgba(0,0,0,.3)'
+    } : {
+      bg: '#f5f7f8', surface: '#ffffff', ink: '#0d1b26', ink2: '#4a5f71', muted: '#5d7285',
+      line: '#e1e8ec', lineStrong: '#c9d5dc', accentInk: '#0B6E70', wash: '#D3EFEF',
+      chip: '#eef2f4', avatarBg: '#EEF9F9', dark: '#0d1b26',
+      shadow: '0 1px 2px rgba(13,27,38,.05), 0 10px 28px -18px rgba(13,27,38,.35)'
+    };
+    return {
+      t: t,
+      isSeason: isSeason,
+      isNew: !isSeason,
+      cover: isSeason
+        ? { bg: '#0F3A78', stripe: '#C8202F', label: 'Динамо-Минск' }
+        : { bg: '#0d1b26', stripe: '#0d1b26', label: '' },
+      sinceLine: 'Минск',
+      hasClub: isSeason,
+      headPad: isSeason ? '0 16px 16px' : '16px',
+      headPull: isSeason ? '-30px' : '0',
+      nameTop: isSeason ? '34px' : '0',
+      savedHint: isSeason ? '5' : '',
+      familyHint: isSeason ? '2 профиля' : 'Добавить близкого'
+    };
+  }
+}
+</script>
+</body>
+</html>

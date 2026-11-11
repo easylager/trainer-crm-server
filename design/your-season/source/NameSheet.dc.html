@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>«Изменить» — имя</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&amp;family=Golos+Text:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0B6E70}a:hover{color:#073C3E}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #f5f7f8; font-family: 'Golos Text', -apple-system, 'Segoe UI', sans-serif; color: #0d1b26">
+  <div style="position: absolute; inset: 0; background: rgba(13, 27, 38, .48)"></div>
+
+  <!-- Шторка стоит над клавиатурой: её низ = верх клавиатуры (visualViewport). Клавиатура в макете — серый блок. -->
+  <section role="dialog" aria-modal="true" aria-labelledby="nameTitle" style="position: absolute; left: 0; right: 0; bottom: 300px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; padding: 10px 16px 16px; background: #ffffff; border-radius: 24px 24px 0 0">
+    <div style="align-self: center; width: 40px; height: 4px; border-radius: 2px; background: #c9d5dc"></div>
+    <h2 id="nameTitle" style="margin: 8px 0 0; font-family: 'Dela Gothic One', sans-serif; font-weight: 400; font-size: 24px; line-height: 1.15">Как тебя зовут?</h2>
+    <p style="margin: 0; font-size: 14px; color: #5d7285">Так тебя увидят в&nbsp;таблицах «Кто кого» и&nbsp;в&nbsp;лигах друзей.</p>
+    <label style="display: flex; flex-direction: column; gap: 6px">
+      <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Имя</span>
+      <input type="text" maxlength="40" value="{{value}}" onInput="{{onInput}}" style="height: 52px; box-sizing: border-box; padding: 0 14px; border: 2px solid {{border}}; border-radius: 14px; background: #ffffff; font: 500 17px 'Golos Text', sans-serif; color: #0d1b26; outline: none">
+      <span style="min-height: 18px; font-size: 13px; color: {{hintInk}}">{{hint}}</span>
+    </label>
+    <button type="button" disabled="{{disabled}}" style="height: 52px; border: 0; border-radius: 14px; background: {{btnBg}}; color: {{btnInk}}; font: 700 16px 'Golos Text', sans-serif">Сохранить</button>
+  </section>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: #d1d5db; display: flex; align-items: center; justify-content: center; color: #6b7280; font-size: 13px">клавиатура</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { value: 'Максим 🌱' };
+  }
+  renderVals() {
+    var self = this;
+    var v = this.state.value;
+    var trimmed = v.replace(/\s+/g, ' ').trim();
+    var empty = trimmed.length === 0;
+    var same = trimmed === 'Максим 🌱';
+    return {
+      value: v,
+      onInput: function (e) { self.setState({ value: e.target.value }); },
+      disabled: empty || same,
+      border: empty ? '#c9d5dc' : '#45B9BB',
+      hint: empty ? 'Имя не может быть пустым' : '',
+      hintInk: '#5d7285',
+      btnBg: empty || same ? '#e1e8ec' : '#45B9BB',
+      btnInk: empty || same ? '#5d7285' : '#04262A'
+    };
+  }
+}
+</script>
+</body>
+</html>
