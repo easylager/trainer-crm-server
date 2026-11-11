@@ -154,7 +154,8 @@ _PLAYER_UPSERT = text("""
     VALUES (:player_key, :display_name, :first_src)
     ON CONFLICT (player_key) DO UPDATE
     SET display_name = EXCLUDED.display_name, updated_at = now()
-    WHERE hockey_players.display_name IS DISTINCT FROM EXCLUDED.display_name
+    WHERE NOT hockey_players.name_set_by_user
+      AND hockey_players.display_name IS DISTINCT FROM EXCLUDED.display_name
     """)
 
 # FOR SHARE: перенос матча (UPDATE) и ход не обгоняют друг друга — срок читается по уже записанному времени.

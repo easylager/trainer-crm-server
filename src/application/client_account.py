@@ -1,0 +1,93 @@
+"""Имя и «мой каток» аккаунта Mini App (TASK-367). Без HTTP.
+
+Ключ — ``client_catalog_telegram_key(principal)``, тот же, что ``hockey_players.player_key``.
+Имя живёт в ``hockey_players.display_name``; каток — в ``client_account_prefs``.
+"""
+
+from __future__ import annotations
+
+import unicodedata
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+
+_ZWJ = "\u200d"
+_NAME_ERROR = "Имя — от 1 до 40 знаков"
+_ARENA_ERROR = "Каток не найден"
+
+_SET_NAME = text("""
+    INSERT INTO hockey_players (player_key, display_name, name_set_by_user)
+    VALUES (:player_key, :display_name, true)
+    ON CONFLICT (player_key) DO UPDATE
+    SET display_name = EXCLUDED.display_name,
+        name_set_by_user = true,
+        updated_at = now()
+    RETURNING display_name
+    """)
+
+_HOME_ARENA = text("SELECT home_arena_id FROM client_account_prefs WHERE account_key = :account_key")
+
+# Тот же предикат, что у списка катков вкладки «Поиск» (``PUBLIC_ARENA_VISIBLE_SQL``).
+_VISIBLE_ARENA = text(f"""
+    SELECT a.id
+    FROM arenas a
+    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+    JOIN cities c ON c.id = a.city_id
+    WHERE a.id = :arena_id
+      AND {PUBLIC_ARENA_VISIBLE_SQL}
+    """)
+
+_SET_HOME = text("""
+    INSERT INTO client_account_prefs (account_key, home_arena_id)
+    VALUES (:account_key, :arena_id)
+    ON CONFLICT (account_key) DO UPDATE
+    SET home_arena_id = EXCLUDED.home_arena_id,
+        updated_at = now()
+    RETURNING home_arena_id
+    """)
+
+
+def normalize_display_name(raw: str) -> str:
+    """Пробелы схлопнуть, края обрезать, управляющие знаки убрать. Эмодзи и ZWJ остаются."""
+    kept: list[str] = []
+    for ch in raw:
+        if ch == _ZWJ:
+            kept.append(ch)
+            continue
+        if unicodedata.category(ch) in ("Cc", "Cf"):
+            continue
+        kept.append(ch)
+    name = " ".join("".join(kept).split())
+    if not 1 <= len(name) <= 40:
+        raise ValueError(_NAME_ERROR)
+    return name
+
+
+async def set_account_name(session: AsyncSession, account_key: int, raw: str) -> str:
+    """Сохранить имя человека. Дальше ход из Telegram его не перезаписывает."""
+    name = normalize_display_name(raw)
+    saved = (
+        await session.execute(_SET_NAME, {"player_key": account_key, "display_name": name})
+    ).scalar_one()
+    return str(saved)
+
+
+async def get_home_arena_id(session: AsyncSession, account_key: int) -> int | None:
+    arena_id = (await session.execute(_HOME_ARENA, {"account_key": account_key})).scalar_one_or_none()
+    return None if arena_id is None else int(arena_id)
+
+
+async def set_home_arena(session: AsyncSession, account_key: int, arena_id: int | None) -> int | None:
+    """Поставить «мой каток» или снять выбор (``None``). Скрытый и чужой id — ошибка."""
+    if arena_id is not None:
+        visible = (
+            await session.execute(_VISIBLE_ARENA, {"arena_id": arena_id, **public_scope_params()})
+        ).scalar_one_or_none()
+        if visible is None:
+            raise ValueError(_ARENA_ERROR)
+    saved = (
+        await session.execute(_SET_HOME, {"account_key": account_key, "arena_id": arena_id})
+    ).scalar_one()
+    return None if saved is None else int(saved)
