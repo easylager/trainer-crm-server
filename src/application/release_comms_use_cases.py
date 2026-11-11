@@ -56,6 +56,9 @@ class ReleaseCommsSpec:
     segment: str | None = None
     # Черновик (draft: true во frontmatter): боевая рассылка отказывается, предпросмотр и dry-run работают.
     draft: bool = False
+    # Только by_clients: города аудитории (как в шапке) и кампании, чьих получателей не трогаем.
+    cities: tuple[str, ...] | None = None
+    exclude_campaigns: tuple[str, ...] | None = None
 
 
 @dataclass
@@ -71,6 +74,8 @@ class BroadcastResult:
     # Только для by_clients: сколько ушло бы в этом запуске и несколько адресатов для проверки.
     would_send: int = 0
     sample_ids: list[int] | None = None
+    # Только когда в шапке есть cities/exclude_campaigns: что сделали фильтры (без telegram_id).
+    filters: dict[str, Any] | None = None
 
 
 def parse_release_comms_file(path: Path) -> ReleaseCommsSpec:
@@ -92,6 +97,12 @@ def parse_release_comms_file(path: Path) -> ReleaseCommsSpec:
         if segment_raw not in CLIENT_SEGMENTS and segment_raw != "":
             raise ValueError(f"Invalid client segment {segment_raw!r} in {path}")
         segment = segment_raw or "all"
+    cities = _parse_list_field(meta, "cities", path)
+    exclude_campaigns = _parse_list_field(meta, "exclude_campaigns", path)
+    if (cities is not None or exclude_campaigns is not None) and not (
+        audience == "clients" and segment == SEGMENT_BY_CLIENTS
+    ):
+        raise ValueError(f"cities/exclude_campaigns work only with segment: {SEGMENT_BY_CLIENTS} in {path}")
     html_body = body.strip()
     if not html_body:
         raise ValueError(f"Empty message body in {path}")
@@ -104,7 +115,24 @@ def parse_release_comms_file(path: Path) -> ReleaseCommsSpec:
         source_path=path,
         segment=segment,
         draft=(meta.get("draft") or "").strip().lower() in ("1", "true", "yes"),
+        cities=cities,
+        exclude_campaigns=exclude_campaigns,
     )
+
+
+def _parse_list_field(meta: dict[str, str], key: str, path: Path) -> tuple[str, ...] | None:
+    """``ключ: a, b, c``. Нет ключа — None (фильтра нет); ключ без значений — ошибка, а не «все»."""
+    if key not in meta:
+        return None
+    items = tuple(dict.fromkeys(" ".join(part.split()) for part in meta[key].split(",") if part.strip()))
+    if not items:
+        raise ValueError(f"Empty {key!r} in {path}")
+    return items
+
+
+def normalize_city_name(name: str) -> str:
+    """Сравнение названий городов: без регистра, «ё» = «е», лишние пробелы не важны."""
+    return " ".join(name.split()).casefold().replace("ё", "е")
 
 
 def _parse_frontmatter(content: str) -> tuple[dict[str, str], str]:
@@ -239,6 +267,84 @@ async def fetch_by_clients_telegram_ids(session: AsyncSession) -> list[int]:
     return [int(tid) for tid in rows]
 
 
+# Город человека — тот же вывод, что в _BY_CLIENTS_SQL: город сессии, а без него — город арены записи
+# (не-sandbox клиент). Из записей берём самую позднюю в выбранных городах — для счёта по городам.
+_CLIENTS_CITY_SQL = text(
+    """
+    SELECT cs.telegram_id, cs.city_id
+    FROM client_sessions cs
+    WHERE cs.city_id = ANY(:city_ids)
+    UNION ALL
+    SELECT telegram_id, city_id FROM (
+        SELECT DISTINCT ON (c.telegram_id) c.telegram_id, a.city_id
+        FROM clients c
+        JOIN bookings b ON b.client_id = c.id
+        JOIN arenas a ON a.id = b.arena_id
+        WHERE c.telegram_id IS NOT NULL
+          AND c.is_sandbox = false
+          AND a.city_id = ANY(:city_ids)
+          AND NOT EXISTS (
+              SELECT 1 FROM client_sessions cs2
+              WHERE cs2.telegram_id = c.telegram_id AND cs2.city_id IS NOT NULL
+          )
+        ORDER BY c.telegram_id, b.id DESC
+    ) by_booking
+    """
+)
+
+
+async def _resolve_by_city_ids(session: AsyncSession, spec: ReleaseCommsSpec) -> dict[int, str]:
+    """Названия из шапки → id белорусских городов. Неизвестное название — ошибка, не тихий пропуск."""
+    rows = (await session.execute(text("SELECT id, name FROM cities WHERE country = 'BY'"))).all()
+    by_name: dict[str, list[tuple[int, str]]] = {}
+    for city_id, name in rows:
+        by_name.setdefault(normalize_city_name(name), []).append((int(city_id), name))
+    resolved: dict[int, str] = {}
+    unknown: list[str] = []
+    for wanted in spec.cities or ():
+        found = by_name.get(normalize_city_name(wanted))
+        if not found:
+            unknown.append(wanted)
+            continue
+        for city_id, _name in found:
+            resolved[city_id] = wanted
+    if unknown:
+        where = spec.source_path or spec.release_id
+        raise ValueError(f"Unknown BY city in cities: {', '.join(unknown)} ({where})")
+    return resolved
+
+
+async def fetch_filtered_by_clients(
+    session: AsyncSession, spec: ReleaseCommsSpec
+) -> tuple[list[int], dict[str, Any] | None]:
+    """Аудитория by_clients с фильтрами шапки. Без cities/exclude_campaigns — ровно прежний список, None."""
+    if spec.cities is None and spec.exclude_campaigns is None:
+        return await fetch_by_clients_telegram_ids(session), None
+    city_names = await _resolve_by_city_ids(session, spec) if spec.cities is not None else None
+    base = await fetch_by_clients_telegram_ids(session)
+    stats: dict[str, Any] = {"by_clients_total": len(base)}
+    audience = base
+    if city_names is not None:
+        rows = (await session.execute(_CLIENTS_CITY_SQL, {"city_ids": list(city_names)})).all()
+        city_of = {int(tid): city_names[int(cid)] for tid, cid in rows}
+        audience = [tid for tid in audience if tid in city_of]
+        per_city = dict.fromkeys(spec.cities or (), 0)
+        for tid in audience:
+            per_city[city_of[tid]] += 1
+        stats["cities"] = per_city
+    if spec.exclude_campaigns is not None:
+        rows = await session.scalars(
+            text("SELECT DISTINCT telegram_id FROM client_broadcast_log WHERE campaign_key = ANY(:keys)"),
+            {"keys": list(spec.exclude_campaigns)},
+        )
+        excluded = {int(tid) for tid in rows}
+        kept = [tid for tid in audience if tid not in excluded]
+        stats["excluded_by_campaigns"] = len(audience) - len(kept)
+        audience = kept
+    stats["after_filters"] = len(audience)
+    return audience, stats
+
+
 async def record_kk_promo_optout(session: AsyncSession, telegram_id: int) -> None:
     await session.execute(
         text(
@@ -332,11 +438,12 @@ async def _broadcast_by_clients(
     markup: InlineKeyboardMarkup | None,
 ) -> BroadcastResult:
     """Рассылка клиентам Беларуси: журнал доставки в client_broadcast_log (campaign_key = release_id)."""
+    filters: dict[str, Any] | None = None
     if chat_id is not None:
         # Предпросмотр одному человеку: журнал не трогаем, аудиторию не считаем.
         audience, already, to_send = [chat_id], set(), [chat_id]
     else:
-        audience = await fetch_by_clients_telegram_ids(session)
+        audience, filters = await fetch_filtered_by_clients(session, spec)
         already = set() if force else await _logged_ids(session, spec.release_id)
         to_send = wave_targets(spec.release_id, audience, already, percent=percent, limit=limit)
     result = BroadcastResult(
@@ -350,6 +457,7 @@ async def _broadcast_by_clients(
         errors=[],
         would_send=len(to_send),
         sample_ids=to_send[:5],
+        filters=filters,
     )
     if dry_run:
         return result

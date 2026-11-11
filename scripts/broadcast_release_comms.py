@@ -25,6 +25,19 @@ Usage:
   python -m scripts.broadcast_release_comms --message docs/release-comms/<файл>.clients.md --percent 10
   python -m scripts.broadcast_release_comms --message docs/release-comms/<файл>.clients.md --percent 50 --limit 500
 
+  # Только часть городов и без тех, кому уже ушла другая кампания (поля шапки, только для by_clients):
+  #   ---
+  #   release_id: 2026-11-12-kto-kogo-regions
+  #   audience: clients
+  #   segment: by_clients
+  #   cities: Орша, Могилёв, Барановичи
+  #   exclude_campaigns: 2026-11-11-kto-kogo-orsha
+  #   ---
+  # Города — названия из cities (BY), регистр и ё/е не важны; неизвестное название — ошибка до отправки.
+  # Город человека — из сессии, а без него — город арены его записи. exclude_campaigns — release_id,
+  # чьи получатели (любой status в client_broadcast_log) выпадают из аудитории. --dry-run печатает
+  # "filters": сколько было, сколько по каждому городу, сколько исключено кампаниями, сколько осталось.
+
 Env: .env with database_url, TELEGRAM_BOT_TOKEN_CLIENT, TELEGRAM_BOT_TOKEN_TRAINER,
      WEBAPP_BASE_URL (https — for WebApp button on message).
 """
@@ -138,6 +151,8 @@ async def main() -> int:
     if result.sample_ids is not None:
         summary["would_send"] = result.would_send
         summary["sample_telegram_ids"] = result.sample_ids
+    if result.filters is not None:
+        summary["filters"] = result.filters
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     if args.dry_run and result.sample_ids is not None:
         # Что именно уйдёт: текст и кнопки так, как их увидит человек.
