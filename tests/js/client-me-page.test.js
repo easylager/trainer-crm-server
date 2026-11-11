@@ -50,7 +50,11 @@ describe('разметка и маршрут', () => {
 
   it('шторки: база раньше шторок, шторки раньше client-me.js, без async/defer', () => {
     const list = scripts();
-    const order = ['ru-text.js', 'client-sheet.js', 'client-club-sheet.js', 'client-name-sheet.js', 'client-me.js'];
+    const order = [
+      'ru-text.js', 'client-sheet.js', 'client-club-sheet.js', 'client-name-sheet.js',
+      'minsk-time.js', 'opening-hours.js', 'glide-copy.js', 'public-display-model.js', 'ice-tab-model.js',
+      'write-access.js', 'bell-follow.js', 'client-rink-sheet.js', 'client-me.js',
+    ];
     const idx = order.map((name) => list.findIndex((s) => s.src === name));
     idx.forEach((i, k) => assert.ok(i >= 0, order[k] + ' подключён'));
     assert.deepEqual(idx.slice().sort((a, b) => a - b), idx);
