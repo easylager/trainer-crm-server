@@ -53,6 +53,15 @@ async def _match(db_session) -> int:
     ).scalar_one()
 
 
+async def _src(db_session, player_key: int) -> str | None:
+    return (
+        await db_session.execute(
+            text("SELECT first_src FROM hockey_players WHERE player_key = :p"),
+            {"p": player_key},
+        )
+    ).scalar_one()
+
+
 async def _name(db_session, player_key: int) -> tuple[str, bool]:
     row = (
         await db_session.execute(
@@ -74,6 +83,52 @@ async def test_pick_updates_name_until_person_sets_it(db_session) -> None:
         db_session, player_key=OTHER, display_name="Александр", match_id=mid, side="away", now=NOW
     )
     assert await _name(db_session, OTHER) == ("Александр", False)
+
+
+NAMED = 3670003
+LABELED = 3670004
+
+
+@pytest.mark.asyncio
+async def test_first_src_written_on_first_pick_after_name(db_session) -> None:
+    mid = await _match(db_session)
+    await set_account_name(db_session, NAMED, "Макс")
+    await make_pick(
+        db_session,
+        player_key=NAMED,
+        display_name="Максим К.",
+        match_id=mid,
+        side="home",
+        src="promo1",
+        now=NOW,
+    )
+    assert await _name(db_session, NAMED) == ("Макс", True)
+    assert await _src(db_session, NAMED) == "promo1"
+
+
+@pytest.mark.asyncio
+async def test_first_src_not_replaced_by_later_pick(db_session) -> None:
+    mid = await _match(db_session)
+    await make_pick(
+        db_session,
+        player_key=LABELED,
+        display_name="Саша",
+        match_id=mid,
+        side="home",
+        src="promo1",
+        now=NOW,
+    )
+    await make_pick(
+        db_session,
+        player_key=LABELED,
+        display_name="Александр",
+        match_id=mid,
+        side="away",
+        src="other2",
+        now=NOW,
+    )
+    assert await _src(db_session, LABELED) == "promo1"
+    assert (await _name(db_session, LABELED))[0] == "Александр"
 
 
 @pytest.mark.asyncio

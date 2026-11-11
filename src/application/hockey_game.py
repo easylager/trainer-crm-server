@@ -149,13 +149,25 @@ def normalize_pick(
     return side, None, None
 
 
+# Имя человека не перетираем. Метку пишем один раз и только на первом ходе:
+# строка из «Я» ещё без ходов получает метку, а ход с пустой меткой потом не дописывается.
 _PLAYER_UPSERT = text("""
     INSERT INTO hockey_players (player_key, display_name, first_src)
     VALUES (:player_key, :display_name, :first_src)
     ON CONFLICT (player_key) DO UPDATE
-    SET display_name = EXCLUDED.display_name, updated_at = now()
-    WHERE NOT hockey_players.name_set_by_user
-      AND hockey_players.display_name IS DISTINCT FROM EXCLUDED.display_name
+    SET display_name = CASE
+            WHEN hockey_players.name_set_by_user THEN hockey_players.display_name
+            ELSE EXCLUDED.display_name
+        END,
+        first_src = CASE
+            WHEN hockey_players.first_src IS NULL
+             AND NOT EXISTS (
+                 SELECT 1 FROM hockey_picks AS hp WHERE hp.player_key = hockey_players.player_key
+             )
+            THEN EXCLUDED.first_src
+            ELSE hockey_players.first_src
+        END,
+        updated_at = now()
     """)
 
 # FOR SHARE: перенос матча (UPDATE) и ход не обгоняют друг друга — срок читается по уже записанному времени.
@@ -375,7 +387,7 @@ async def make_pick(
     if not pick_open(match.status, match.starts_at, now):
         raise PicksClosed(match_id)
     name = (display_name or "").strip()[:40] or DEFAULT_PLAYER_NAME
-    # Рекламная метка пишется только при создании игрока: ON CONFLICT first_src не трогает.
+    # Апсерт игрока раньше хода: проверка «ходов ещё нет» видит состояние до этой вставки.
     await session.execute(
         _PLAYER_UPSERT, {"player_key": player_key, "display_name": name, "first_src": clean_src(src)}
     )
