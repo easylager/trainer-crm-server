@@ -1,12 +1,13 @@
 """
 App settings loaded from env (.env + os.environ). Single entry point for config.
 """
+import json
 import os
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
-from pydantic import BeforeValidator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BeforeValidator, Field
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def _env_bool_benchmark(v: Any) -> bool:
@@ -19,6 +20,21 @@ def _env_bool_benchmark(v: Any) -> bool:
 
 
 BenchmarkLogFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
+
+
+def _env_int_list(v: Any) -> Any:
+    """``1,2`` or ``[1,2]`` → ``[1, 2]``; empty → None."""
+    if not isinstance(v, str):
+        return v
+    raw = v.strip()
+    if not raw:
+        return None
+    if raw.startswith("["):
+        return json.loads(raw)
+    return [int(part) for part in raw.split(",") if part.strip()]
+
+
+EnvIntList = Annotated[list[int] | None, NoDecode, BeforeValidator(_env_int_list)]
 NotificationQuietHoursBypassFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 
 # Trainer «подходит к концу»: уведомление когда до конца слота осталось 2–3 минуты (не зависит от длительности слота).
@@ -338,6 +354,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # TASK-257: comma-separated or JSON list of Telegram user ids that open server /p/… in the
     # client Mini App instead of arena.html. Empty / unset — legacy arena?ref= for everyone.
     catalog_mini_app_server_place_card_telegram_ids: list[int] | None = None
+    # TASK-366: новая навигация your-season — список аккаунтов владельца + процент по хэшу ключа.
+    # CLIENT_SEASON_UI_TELEGRAM_IDS=1,2 (или [1,2]); CLIENT_SEASON_UI_PERCENT=0…100.
+    client_season_ui_telegram_ids: EnvIntList = None
+    client_season_ui_percent: int = Field(default=0, ge=0, le=100)
 
     # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
     # Full log: every update + inner gate/menu DB phase timings.

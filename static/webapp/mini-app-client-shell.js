@@ -97,6 +97,84 @@
     watchesActiveCount: 0,
   };
 
+  /*
+   * TASK-366: флаги новой навигации (your-season). Читаются из кэша синхронно, до первого
+   * кадра; сервер уточняет после монтирования. Бар по ним пересобирает TASK-369.
+   */
+  var UI_FLAGS_KEY = 'cw_ui_flags_v1';
+  var uiFlags = { season_ui: false, bookings_tab: false };
+  var uiFlagsRefreshed = false;
+
+  function normalizeUiFlags(raw) {
+    var season = !!raw && raw.season_ui === true;
+    return { season_ui: season, bookings_tab: season && raw.bookings_tab === true };
+  }
+
+  function initDataUserId() {
+    try {
+      var tg = getTg();
+      var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      if (u && u.id != null) return String(u.id);
+      var initData = getInitData();
+      if (!initData) return '';
+      var raw = new URLSearchParams(initData).get('user');
+      var parsed = raw ? JSON.parse(raw) : null;
+      return parsed && parsed.id != null ? String(parsed.id) : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function readUiFlags() {
+    var uid = initDataUserId();
+    if (!uid) return normalizeUiFlags(null);
+    try {
+      var cached = JSON.parse(global.localStorage.getItem(UI_FLAGS_KEY) || 'null');
+      if (!cached || String(cached.u) !== uid) return normalizeUiFlags(null);
+      return normalizeUiFlags(cached);
+    } catch (e) {
+      return normalizeUiFlags(null);
+    }
+  }
+
+  function writeUiFlagsCache(flags) {
+    var uid = initDataUserId();
+    if (!uid) return;
+    try {
+      global.localStorage.setItem(
+        UI_FLAGS_KEY,
+        JSON.stringify({ u: uid, season_ui: flags.season_ui, bookings_tab: flags.bookings_tab, at: Date.now() })
+      );
+    } catch (e) { /* storage может быть запрещён */ }
+  }
+
+  function refreshUiFlags() {
+    if (uiFlagsRefreshed) return;
+    var initData = getInitData();
+    if (!initData || typeof global.fetch !== 'function') return;
+    uiFlagsRefreshed = true;
+    global
+      .fetch('/api/webapp/client/ui-flags', { headers: { 'X-Telegram-Init-Data': initData }, cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (data) {
+        if (!data) return;
+        var next = normalizeUiFlags(data);
+        writeUiFlagsCache(next);
+        var changed = next.season_ui !== uiFlags.season_ui || next.bookings_tab !== uiFlags.bookings_tab;
+        uiFlags = next;
+        if (changed && typeof global.CustomEvent === 'function') {
+          global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
+        }
+      })
+      .catch(function () {});
+  }
+
+  function getUiFlags() {
+    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab };
+  }
+
   function getTg() {
     return global.Telegram && global.Telegram.WebApp ? global.Telegram.WebApp : null;
   }
@@ -1091,6 +1169,7 @@
     reportCatalogPresence: reportCatalogPresence,
     readStartParam: readStartParam,
     TAB_ICONS: TAB_ICONS,
+    uiFlags: getUiFlags,
   };
 
   function readStartParam() {
@@ -1323,6 +1402,7 @@
   function boot() {
     if (isPublicPlaceRoute() && !getInitData()) return;
     init();
+    if (typeof global.setTimeout === 'function') global.setTimeout(refreshUiFlags, 0);
     if (isPublicPlaceRoute()) {
       if (state.mode === 'tabs') setForcedTab('catalog');
       return;
@@ -1357,6 +1437,7 @@
   try {
     if (getTg() && getInitData()) global.sessionStorage.setItem('glide_mini_app_active_v1', '1');
   } catch (e) { /* storage может быть запрещён */ }
+  uiFlags = readUiFlags();
   mountTabBarEarly();
 
   /*
