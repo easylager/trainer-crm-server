@@ -22,6 +22,8 @@ from src.shared.copy_ru import t
 from src.shared.public_display import format_public_name
 
 UPCOMING_LIMIT = 3
+# Слот «сейчас»: до трёх ближайших матчей (с игровой карточкой Динамо), затем «Все матчи».
+FEED_LIMIT = 3
 _RINK_TYPES = ("ice", "outdoor")
 # Записи, которые уже не про «сегодня иду на лёд».
 _DEAD_BOOKING = frozenset({"cancelled", "canceled", "declined", "rejected", "no_show", "completed", "expired"})
@@ -285,7 +287,11 @@ def now_slot(
     # Экстралига (TASK-340, экран 11): слот становится лентой — матчи города, Динамо, «все матчи».
     matches = list((extraliga or {}).get("matches") or []) if has_city else []
     if matches:
-        items: list[dict[str, Any]] = [dict(m) for m in matches]
+        # Матч, которому уже положена игровая карточка, второй раз обычной не показываем.
+        game_id = (((dinamo or {}).get("hockey") or {}).get("match") or {}).get("id")
+        plain = [dict(m) for m in matches if game_id is None or m.get("id") != game_id]
+        plain.sort(key=_feed_start)
+        items: list[dict[str, Any]] = plain[: FEED_LIMIT - (1 if dinamo is not None else 0)]
         if dinamo is not None:
             items.append(dinamo)
         # Динамо встаёт по времени среди матчей города, а не в хвост; итог месяца без даты — в конец.
