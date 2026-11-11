@@ -1009,7 +1009,8 @@
       out.right = open ? { kind: 'button', text: mine ? 'Изменить' : 'Сделать ход', gold: !mine } : { kind: 'note', text: 'Ходы закрыты' };
     } else if (phase === 'live') {
       out.chip = { kind: 'live', text: 'ИДЁТ' };
-      out.center = m.live && m.live.home_score != null ? { big: m.live.home_score + ':' + m.live.away_score, cap: 'по ходу игры' } : { big: '—:—', cap: 'идёт матч' };
+      // Промежуточный счёт есть не у каждого матча. 0:0 рядом с прочерком читается как известная ничья.
+      out.center = { big: '—:—', cap: 'идёт матч' };
       if (mine) out.right = { kind: 'note', text: AFTER_RESULT };
     } else if (phase === 'waiting') {
       out.chip = { kind: 'wait', text: stale ? 'БЕЗ ИТОГА' : 'ЖДЁМ ИТОГ' };
