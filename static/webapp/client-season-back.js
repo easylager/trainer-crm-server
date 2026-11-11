@@ -54,7 +54,42 @@
     return canGoBack ? 'history' : 'me';
   }
 
+  /** Есть ли куда вернуться: та же проверка, что в mini-app-client-home.js. */
+  function canGoBack(env) {
+    try {
+      if (env.navigation && typeof env.navigation.canGoBack === 'function') return !!env.navigation.canGoBack();
+    } catch (e) { /* старые WebView */ }
+    try {
+      return !!env.history && env.history.length > 1;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Адрес client-me рядом с текущей страницей, init_data как у остальных переходов Mini App. */
+  function meUrl(env) {
+    var p = (env.location && env.location.pathname) || '';
+    var url = (p.replace(/[^/]+$/, '') || '/webapp/') + 'client-me';
+    var tg = env.Telegram && env.Telegram.WebApp;
+    var initData = tg && tg.initData ? tg.initData : '';
+    return initData ? url + '?init_data=' + encodeURIComponent(initData) : url;
+  }
+
+  /**
+   * Выполнить «назад» при включённом флаге. Возвращает 'history' | 'me' | 'legacy';
+   * при 'legacy' ничего не делает (вызывающий оставляет прежнее поведение страницы).
+   */
+  function goBack(env) {
+    var action = backAction(isSeasonUi(env), canGoBack(env));
+    if (action === 'history') env.history.back();
+    else if (action === 'me') env.location.href = meUrl(env);
+    return action;
+  }
+
   var api = {
+    canGoBack: canGoBack,
+    meUrl: meUrl,
+    goBack: goBack,
     UI_FLAGS_KEY: UI_FLAGS_KEY,
     telegramUserId: telegramUserId,
     readCachedSeasonUi: readCachedSeasonUi,

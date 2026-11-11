@@ -930,13 +930,16 @@
 
       // --- Passes (same logic as client-passes.html) ---
       var passState = { items: [], current: null };
+      function seasonBackOn() {
+        return !!window.ClientSeasonBack && window.ClientSeasonBack.isSeasonUi(window);
+      }
       function showPassScreen(id) {
         document.querySelectorAll('[data-pass-screen]').forEach(function(el) { el.classList.remove('active'); });
         var el = document.getElementById(id);
         if (el) el.classList.add('active');
         var navBack = document.getElementById('btnBack');
         if (navBack) {
-          navBack.hidden = id !== 'pass-screenDetail';
+          navBack.hidden = id !== 'pass-screenDetail' && !seasonBackOn();
         }
       }
       function renderPassShopFromCatalog(catalog) {
@@ -1211,8 +1214,14 @@
           });
       }
       document.getElementById('btnBack').onclick = function() {
+        /* TASK-375: season_ui — на корне «назад» уходит со страницы, из детали — к списку как раньше */
+        if (seasonBackOn() && !document.getElementById('pass-screenDetail').classList.contains('active')) {
+          window.ClientSeasonBack.goBack(window);
+          return;
+        }
         showPassScreen('pass-screenList');
       };
+      if (seasonBackOn()) document.getElementById('btnBack').hidden = false;
       loadPassesPanel();
 
       // --- Certificates (same logic as client-certificates.html) ---
@@ -1696,6 +1705,7 @@
       loadCertsPanel();
     })();
   </script>
+  <script src="/static/webapp/client-season-back.js?v=202611112"></script>
   <script src="mini-app-client-home.js?v=202611112"></script>
 </body>
 </html>

@@ -13,6 +13,16 @@
   }
   var initData = tg && tg.initData ? tg.initData : '';
 
+  /* TASK-375: season_ui — «назад» на корне: история есть → history.back(), нет → client-me.
+     Флаг выключен — кнопка остаётся скрытой, как раньше. */
+  (function () {
+    var S = window.ClientSeasonBack;
+    var btn = document.getElementById('btnBack');
+    if (!S || !btn || !S.isSeasonUi(window)) return;
+    btn.hidden = false;
+    btn.onclick = function () { S.goBack(window); };
+  })();
+
   function headersJson() {
     var h = { 'Content-Type': 'application/json' };
     if (initData) h['X-Telegram-Init-Data'] = initData;

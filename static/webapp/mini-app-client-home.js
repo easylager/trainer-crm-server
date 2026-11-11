@@ -34,6 +34,16 @@
   function wireBack() {
     var btn = document.getElementById('btnBack');
     if (!btn || btn.getAttribute('data-skip-history-back') === 'true') return;
+    /* TASK-375: при season_ui «назад» на страницах из «Ещё» (data-season-back) виден всегда:
+       история есть — history.back(), нет — client-me. Флаг выключен — ветка ниже не меняется. */
+    var S = window.ClientSeasonBack;
+    if (S && btn.hasAttribute('data-season-back') && S.isSeasonUi(window)) {
+      btn.hidden = false;
+      btn.onclick = function () {
+        S.goBack(window);
+      };
+      return;
+    }
     function sync() {
       btn.hidden = !canBrowserGoBack();
     }
