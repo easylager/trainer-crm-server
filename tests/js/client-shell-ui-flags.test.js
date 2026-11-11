@@ -214,7 +214,7 @@ describe('TASK-381 кэш флагов: одно правило в трёх ме
 describe('TASK-381 ответ сервера и сессия', () => {
   const stored = { u: '42', season_ui: true, bookings_tab: true, at: Date.now() };
 
-  it('401/ошибка ответа сбрасывает кэш в выключенное, шлёт событие и ставит метку', async () => {
+  it('401 сбрасывает кэш в выключенное, шлёт событие и ставит метку', async () => {
     const session = new Map();
     const s = bootShell({ stored, status: 401, session });
     assert.deepEqual(s.startFlags, ON);
@@ -229,8 +229,32 @@ describe('TASK-381 ответ сервера и сессия', () => {
     assert.equal(session.get('cw_ui_flags_sync_v1'), '42');
   });
 
+  it('матрица ответов: 401/403 и битый JSON сбрасывают, 500/502/сеть — нет; 200 пишет', async () => {
+    for (const status of [401, 403]) {
+      const session = new Map();
+      const s = bootShell({ stored, status, session });
+      await s.runTimers();
+      assert.equal(JSON.parse(s.store.get(KEY)).season_ui, false, String(status));
+      assert.equal(s.events.length, 1, String(status));
+      assert.equal(session.get('cw_ui_flags_sync_v1'), '42');
+    }
+    for (const status of [500, 502]) {
+      const session = new Map();
+      const s = bootShell({ stored, status, session });
+      await s.runTimers();
+      assert.equal(JSON.parse(s.store.get(KEY)).season_ui, true, String(status));
+      assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, ON);
+      assert.equal(s.events.length, 0);
+      assert.equal(session.has('cw_ui_flags_sync_v1'), false);
+    }
+    const ok = bootShell({ stored: { ...stored, season_ui: false, bookings_tab: false }, response: ON, session: new Map() });
+    await ok.runTimers();
+    assert.equal(JSON.parse(ok.store.get(KEY)).season_ui, true);
+    assert.equal(ok.events.length, 1);
+  });
+
   it('следующая загрузка после сброса стартует выключенной', async () => {
-    const first = bootShell({ stored, status: 500 });
+    const first = bootShell({ stored, status: 401 });
     await first.runTimers();
     const next = bootShell({ stored: first.store.get(KEY), response: OFF });
     assert.deepEqual(next.startFlags, OFF);

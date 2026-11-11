@@ -247,10 +247,10 @@ describe('плитка «Мой каток»', () => {
 
   it('sessions_left_today > 0 → «Сегодня ещё N сеанс/сеанса/сеансов»', () => {
     const note = (n) => me.sessionsNote({ sessions_left_today: n, tomorrow_first: null });
-    assert.equal(note(1), 'Сегодня ещё 1' + NB + 'сеанс');
-    assert.equal(note(2), 'Сегодня ещё 2' + NB + 'сеанса');
-    assert.equal(note(5), 'Сегодня ещё 5' + NB + 'сеансов');
-    assert.equal(note(21), 'Сегодня ещё 21' + NB + 'сеанс');
+    assert.equal(note(1), 'Сегодня ещё' + NB + '1' + NB + 'сеанс');
+    assert.equal(note(2), 'Сегодня ещё' + NB + '2' + NB + 'сеанса');
+    assert.equal(note(5), 'Сегодня ещё' + NB + '5' + NB + 'сеансов');
+    assert.equal(note(21), 'Сегодня ещё' + NB + '21' + NB + 'сеанс');
   });
 
   it('0 и tomorrow_first → «Сегодня сеансов нет, завтра — с 9:00»', () => {

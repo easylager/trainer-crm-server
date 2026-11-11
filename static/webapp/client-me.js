@@ -147,7 +147,7 @@
 
   function sessionsNote(home) {
     var left = Number(home.sessions_left_today);
-    if (positive(left)) return 'Сегодня ещё ' + count(left, 'сеанс', 'сеанса', 'сеансов');
+    if (positive(left)) return 'Сегодня ещё' + NBSP + count(left, 'сеанс', 'сеанса', 'сеансов');
     var first = text(home.tomorrow_first);
     if (first) return 'Сегодня сеансов нет, завтра' + NBSP + '— с' + NBSP + first;
     return 'Сегодня сеансов нет';

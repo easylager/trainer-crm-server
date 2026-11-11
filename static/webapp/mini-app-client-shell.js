@@ -201,8 +201,10 @@
     global
       .fetch('/api/webapp/client/ui-flags', { headers: { 'X-Telegram-Init-Data': initData }, cache: 'no-store' })
       .then(function (r) {
-        /* Ошибка/401 — это ответ сервера «не знаю»: кэш сбрасывается в выключенное, метка ставится. */
-        if (!r.ok) return { __failed: true };
+        /* 401/403 — доступа нет, флаг выключен: кэш сбрасывается, метка ставится. 5xx и прочие не-ok — временный сбой:
+           кэш и метку не трогаем (повторим на следующей странице). */
+        if (r.status === 401 || r.status === 403) return { __failed: true };
+        if (!r.ok) return null;
         return r.json().catch(function () { return { __failed: true }; });
       })
       .then(function (data) {
