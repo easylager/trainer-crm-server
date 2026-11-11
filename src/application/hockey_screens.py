@@ -3,8 +3,9 @@
 - ``clubs_catalog`` — клубы для фильтра таблицы и новой лиги;
 - ``match_movement`` — «куда сдвинулась»: место до и после итога матча в каждом срезе и лиге игрока;
 - ``fan_profile`` — карточка болельщика: серия, короны, звания сезона, дуэли.
+  Клуб — выбранный ``fav_club``, если он есть в каталоге команд; иначе самый частый клуб сезона.
 
-Ничего не пишет: только читает ходы, короны и звания.
+Ничего не пишет: только читает ходы, настройки, короны и звания.
 """
 
 from __future__ import annotations
@@ -233,7 +234,12 @@ _DUELS = text("""
     LIMIT :limit
     """)
 
-_NAME = text("SELECT display_name FROM hockey_players WHERE player_key = :player_key")
+# Имя и выбранный клуб — один запрос: отдельное чтение prefs увеличило бы счётчик fan_profile.
+_NAME = text("""
+    SELECT
+        (SELECT display_name FROM hockey_players WHERE player_key = :player_key) AS display_name,
+        (SELECT fav_club FROM hockey_player_prefs WHERE player_key = :player_key) AS fav_club
+    """)
 
 
 def streaks(points: list[int]) -> tuple[int, int]:
@@ -256,13 +262,28 @@ def favorite_club(scored) -> str | None:
     return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
 
 
+def profile_club(scored, fav_club: str | None) -> str | None:
+    """Клуб карточки: ручной выбор из каталога команд, иначе ``favorite_club``.
+
+    Каталог — тот же набор, что принимает ``PUT /client/hockey/bot-prefs`` (``known_clubs``).
+    Пустая строка и клуб вне каталога не затирают подсчёт по ходам.
+    """
+    from src.application.hockey_notices import known_clubs
+
+    chosen = (fav_club or "").strip()
+    if chosen and chosen in known_clubs():
+        return chosen
+    return favorite_club(scored)
+
+
 async def fan_profile(session: AsyncSession, *, player_key: int, now: datetime) -> dict:
-    name = (await session.execute(_NAME, {"player_key": player_key})).scalar_one_or_none()
+    head = (await session.execute(_NAME, {"player_key": player_key})).one()
+    name = head.display_name
     season = season_period(now)
     scored = [r for r in (await session.execute(_SCORED, {"player_key": player_key})).all()]
     in_season = [r for r in scored if season.since <= _utc(r.starts_at) < season.until]
     current, best = streaks([int(r.points) for r in scored])
-    club = favorite_club(in_season)
+    club = profile_club(in_season, head.fav_club)
 
     async def place(for_club: str | None) -> dict | None:
         rows = await slice_rows_cached(session, scope=club_scope(for_club), period=season)
