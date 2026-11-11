@@ -23,7 +23,7 @@ function el() {
   };
 }
 
-function bootShell({ userId = 42, initData = 'user=%7B%22id%22%3A42%7D&hash=x', stored, response, failFetch, storageThrows } = {}) {
+function bootShell({ userId = 42, initData = 'user=%7B%22id%22%3A42%7D&hash=x', stored, response, failFetch, storageThrows, status, session, sessionThrows } = {}) {
   const store = new Map();
   if (stored !== undefined) store.set(KEY, typeof stored === 'string' ? stored : JSON.stringify(stored));
   const events = [];
@@ -48,7 +48,11 @@ function bootShell({ userId = 42, initData = 'user=%7B%22id%22%3A42%7D&hash=x', 
     addEventListener() {},
     dispatchEvent(ev) { events.push(ev); return true; },
     CustomEvent: function (type, init) { this.type = type; this.detail = init && init.detail; },
-    sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+    sessionStorage: sessionThrows
+      ? { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() {} }
+      : session
+        ? { getItem: (k) => (session.has(k) ? session.get(k) : null), setItem: (k, v) => session.set(k, String(v)), removeItem: (k) => session.delete(k) }
+        : { getItem() { return null; }, setItem() {}, removeItem() {} },
     localStorage,
     Telegram: { WebApp: { initData, initDataUnsafe: userId == null ? {} : { user: { id: userId } } } },
     navigation: null,
@@ -57,6 +61,7 @@ function bootShell({ userId = 42, initData = 'user=%7B%22id%22%3A42%7D&hash=x', 
       fetches.push({ url, opts });
       if (url === '/api/webapp/client/ui-flags') {
         if (failFetch) return Promise.reject(new Error('offline'));
+        if (status) return Promise.resolve({ ok: false, status, json: () => Promise.resolve({}) });
         return Promise.resolve({ ok: true, json: () => Promise.resolve(response) });
       }
       return new Promise(() => {});
@@ -77,7 +82,7 @@ function bootShell({ userId = 42, initData = 'user=%7B%22id%22%3A42%7D&hash=x', 
   };
 }
 
-const on = { u: '42', season_ui: true, bookings_tab: true, at: 1 };
+const on = { u: '42', season_ui: true, bookings_tab: true, at: Date.now() };
 
 describe('TASK-366 client shell ui flags', () => {
   it('читает кэш своего пользователя синхронно, до запроса', () => {
@@ -119,7 +124,7 @@ describe('TASK-366 client shell ui flags', () => {
   });
 
   it('без изменений события нет; выключенный флаг не трогает DOM', async () => {
-    const s = bootShell({ stored: { u: '42', season_ui: false, bookings_tab: false, at: 1 }, response: { season_ui: false, bookings_tab: false } });
+    const s = bootShell({ stored: { u: '42', season_ui: false, bookings_tab: false, at: Date.now() }, response: { season_ui: false, bookings_tab: false } });
     await s.runTimers();
     assert.equal(s.flagFetches().length, 1);
     assert.equal(s.events.length, 0);
@@ -140,5 +145,161 @@ describe('TASK-366 client shell ui flags', () => {
     await s.runTimers();
     assert.deepEqual(s.startFlags, { season_ui: false, bookings_tab: false });
     assert.equal(s.flagFetches().length, 0);
+  });
+});
+
+/* ── Кэш флагов: TTL, сброс по ошибке, один запрос на сессию ───────────────────────────── */
+
+const DAY = 24 * 60 * 60 * 1000;
+const OFF = { season_ui: false, bookings_tab: false };
+const ON = { season_ui: true, bookings_tab: true };
+const seasonBack = require('../../static/webapp/client-season-back.js');
+const gateSrc = (() => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/kto-kogo.html'), 'utf8');
+  const m = /<script id="kk-shell-gate">([\s\S]*?)<\/script>/.exec(html);
+  assert.ok(m, 'гейт #kk-shell-gate найден');
+  return m[1];
+})();
+
+/** Три читателя кэша: оболочка, client-season-back, гейт игры. Возвращают, включён ли season_ui. */
+function readers(raw, { throws = false, user = 42 } = {}) {
+  const storage = throws
+    ? { getItem() { throw new Error('denied'); } }
+    : { getItem: (k) => (k === KEY && raw !== undefined ? raw : null) };
+  const shell = bootShell({ stored: raw === undefined ? undefined : raw, storageThrows: throws, userId: user, initData: user == null ? '' : undefined }).startFlags.season_ui;
+  const back = seasonBack.readCachedSeasonUi(storage, user == null ? '' : String(user));
+  const writes = [];
+  const win = {
+    Telegram: { WebApp: { initDataUnsafe: user == null ? {} : { user: { id: user } } } },
+    localStorage: storage,
+  };
+  const doc = { write(s) { writes.push(s); } };
+  vm.runInNewContext(gateSrc, { window: win, document: doc, JSON, Date, String });
+  return { shell, back, gate: writes.length > 0 };
+}
+
+describe('TASK-381 кэш флагов: одно правило в трёх местах', () => {
+  const now = Date.now();
+  const cases = [
+    ['нет кэша', undefined, false],
+    ['season_ui false', JSON.stringify({ u: '42', season_ui: false, bookings_tab: false, at: now }), false],
+    ['"true" строкой', JSON.stringify({ u: '42', season_ui: 'true', at: now }), false],
+    ['чужой u', JSON.stringify({ u: '7', season_ui: true, at: now }), false],
+    ['битый JSON', '{season_ui:true', false],
+    ['свежий (минуту назад)', JSON.stringify({ u: '42', season_ui: true, bookings_tab: true, at: now - 60000 }), true],
+    ['почти сутки', JSON.stringify({ u: '42', season_ui: true, at: now - DAY + 60000 }), true],
+    ['просроченный (сутки и минута)', JSON.stringify({ u: '42', season_ui: true, at: now - DAY - 60000 }), false],
+    ['без at (старый кэш)', JSON.stringify({ u: '42', season_ui: true }), false],
+    ['at строкой', JSON.stringify({ u: '42', season_ui: true, at: String(now) }), false],
+    ['at из будущего', JSON.stringify({ u: '42', season_ui: true, at: now + DAY }), false],
+  ];
+  for (const [name, raw, want] of cases) {
+    it(`${name} → ${want ? 'включено' : 'выключено'} везде`, () => {
+      assert.deepEqual(readers(raw), { shell: want, back: want, gate: want });
+    });
+  }
+  it('storage бросает → выключено везде', () => {
+    assert.deepEqual(readers(undefined, { throws: true }), { shell: false, back: false, gate: false });
+  });
+  it('нет пользователя Telegram → выключено везде', () => {
+    assert.deepEqual(readers(JSON.stringify({ u: '42', season_ui: true, at: now }), { user: null }), { shell: false, back: false, gate: false });
+  });
+  it('TTL в трёх местах один: сутки', () => {
+    assert.equal(seasonBack.UI_FLAGS_TTL_MS, DAY);
+    assert.match(shellSrc, /UI_FLAGS_TTL_MS = 24 \* 60 \* 60 \* 1000/);
+    assert.match(gateSrc, /age < 86400000/);
+  });
+});
+
+describe('TASK-381 ответ сервера и сессия', () => {
+  const stored = { u: '42', season_ui: true, bookings_tab: true, at: Date.now() };
+
+  it('401 сбрасывает кэш в выключенное, шлёт событие и ставит метку', async () => {
+    const session = new Map();
+    const s = bootShell({ stored, status: 401, session });
+    assert.deepEqual(s.startFlags, ON);
+    await s.runTimers();
+    const cached = JSON.parse(s.store.get(KEY));
+    assert.equal(cached.season_ui, false);
+    assert.equal(cached.bookings_tab, false);
+    assert.equal(cached.u, '42');
+    assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, OFF);
+    assert.equal(s.events.length, 1);
+    assert.deepEqual({ ...s.events[0].detail }, OFF);
+    assert.equal(session.get('cw_ui_flags_sync_v1'), '42');
+  });
+
+  it('матрица ответов: 401/403 и битый JSON сбрасывают, 500/502/сеть — нет; 200 пишет', async () => {
+    for (const status of [401, 403]) {
+      const session = new Map();
+      const s = bootShell({ stored, status, session });
+      await s.runTimers();
+      assert.equal(JSON.parse(s.store.get(KEY)).season_ui, false, String(status));
+      assert.equal(s.events.length, 1, String(status));
+      assert.equal(session.get('cw_ui_flags_sync_v1'), '42');
+    }
+    for (const status of [500, 502]) {
+      const session = new Map();
+      const s = bootShell({ stored, status, session });
+      await s.runTimers();
+      assert.equal(JSON.parse(s.store.get(KEY)).season_ui, true, String(status));
+      assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, ON);
+      assert.equal(s.events.length, 0);
+      assert.equal(session.has('cw_ui_flags_sync_v1'), false);
+    }
+    const ok = bootShell({ stored: { ...stored, season_ui: false, bookings_tab: false }, response: ON, session: new Map() });
+    await ok.runTimers();
+    assert.equal(JSON.parse(ok.store.get(KEY)).season_ui, true);
+    assert.equal(ok.events.length, 1);
+  });
+
+  it('следующая загрузка после сброса стартует выключенной', async () => {
+    const first = bootShell({ stored, status: 401 });
+    await first.runTimers();
+    const next = bootShell({ stored: first.store.get(KEY), response: OFF });
+    assert.deepEqual(next.startFlags, OFF);
+  });
+
+  it('ответ без тела (json падает) тоже сбрасывает', async () => {
+    const s = bootShell({ stored, response: undefined });
+    s.window.fetch = (url) => Promise.resolve({ ok: true, json: () => Promise.reject(new Error('bad json')) });
+    await s.runTimers();
+    assert.equal(JSON.parse(s.store.get(KEY)).season_ui, false);
+  });
+
+  it('сеть недоступна — кэш и метка не трогаются', async () => {
+    const session = new Map();
+    const s = bootShell({ stored, failFetch: true, session });
+    await s.runTimers();
+    assert.equal(JSON.parse(s.store.get(KEY)).season_ui, true);
+    assert.equal(session.has('cw_ui_flags_sync_v1'), false);
+  });
+
+  it('один запрос на сессию: вторая страница с меткой флаги не спрашивает', async () => {
+    const session = new Map();
+    const a = bootShell({ stored, response: ON, session });
+    await a.runTimers();
+    assert.equal(a.flagFetches().length, 1);
+    const b = bootShell({ stored: a.store.get(KEY), response: ON, session });
+    await b.runTimers();
+    assert.equal(b.flagFetches().length, 0);
+    assert.deepEqual(b.startFlags, ON);
+  });
+
+  it('метка другого пользователя не мешает; sessionStorage бросает — запрос на каждой странице, как раньше', async () => {
+    const other = bootShell({ stored, response: ON, session: new Map([['cw_ui_flags_sync_v1', '7']]) });
+    await other.runTimers();
+    assert.equal(other.flagFetches().length, 1);
+    const throwing = bootShell({ stored, response: ON, sessionThrows: true });
+    await throwing.runTimers();
+    assert.equal(throwing.flagFetches().length, 1);
+  });
+
+  it('выключенный флаг: запрос, DOM и события те же, что до правки', async () => {
+    const s = bootShell({ stored: { ...stored, season_ui: false, bookings_tab: false }, response: OFF });
+    await s.runTimers();
+    assert.equal(s.flagFetches().length, 1);
+    assert.equal(s.events.length, 0);
+    assert.equal(s.domOps.length, s.domOpsAtBoot);
   });
 });

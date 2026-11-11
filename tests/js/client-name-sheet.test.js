@@ -534,10 +534,23 @@ describe('ClientNameSheet', () => {
     assert.equal(sheet.el.isConnected, false);
   });
 
+  it('422 «Имя — от 1 до 40 знаков» (пустое по счёту сервера) — клиентская фраза «Имя не может быть пустым»', async () => {
+    const h = harness({ save: { ok: false, status: 422, body: { detail: 'Имя — от 1 до 40 знаков' } } });
+    const sheet = h.sandbox.ClientNameSheet.open({ current: 'Макс' });
+    const input = inputOf(sheet);
+    input.value = 'Лена';
+    input.dispatch('input', {});
+    saveOf(sheet).dispatch('click', {});
+    await flush();
+    assert.equal(h.calls.length, 1);
+    assert.equal(sheet.el.querySelector('.cn-hint').textContent, 'Имя не может быть пустым');
+    assert.equal(input.value, 'Лена');
+  });
+
   it('422 оставляет ввод и пишет detail, сеть — свою фразу, без второго запроса', async () => {
     const h = harness({
       hangSave: true,
-      save: { ok: false, status: 422, body: { detail: 'Имя — от 1 до 40 знаков' } },
+      save: { ok: false, status: 422, body: { detail: 'Имя занято' } },
     });
     const sheet = h.sandbox.ClientNameSheet.open({ current: 'Макс' });
     const input = inputOf(sheet);
@@ -553,12 +566,12 @@ describe('ClientNameSheet', () => {
     h.saveGate().resolve({
       ok: false,
       status: 422,
-      json: () => Promise.resolve({ detail: 'Имя — от 1 до 40 знаков' }),
+      json: () => Promise.resolve({ detail: 'Имя занято' }),
     });
     await flush();
     assert.equal(sheet.el.isConnected, true);
     assert.equal(input.value, 'Новое');
-    assert.equal(sheet.el.querySelector('.cn-hint').textContent, 'Имя — от 1 до 40 знаков');
+    assert.equal(sheet.el.querySelector('.cn-hint').textContent, 'Имя занято');
     assert.equal(save.disabled, false);
     assert.deepEqual(h.haptic, []);
 

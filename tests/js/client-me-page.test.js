@@ -138,7 +138,7 @@ function boot(opts) {
         },
       };
     },
-    fonts: null,
+    fonts: o.fonts || null,
   };
 
   const win = {
@@ -174,6 +174,7 @@ function boot(opts) {
       return next.delayMs ? new Promise((r) => setTimeout(() => r(res), next.delayMs)) : Promise.resolve(res);
     },
     Promise,
+    setTimeout,
     Intl,
     Date,
     JSON,
@@ -284,6 +285,56 @@ describe('загрузка', () => {
     await settle();
     await settle();
     assert.match(u.mount.innerHTML, /Мои записи/);
+  });
+});
+
+describe('TASK-381: фокус с клавиатуры', () => {
+  const css = fs.readFileSync(path.join(webapp, 'client-me.css'), 'utf8');
+  const tokens = fs.readFileSync(path.join(ROOT, 'static/shared/glide-tokens.css'), 'utf8');
+  it('кнопки (карандаш катка, «Изменить», плитки) и ссылки-строки в .cm получают видимый контур токеном обеих тем', () => {
+    assert.match(css, /\.cm a:focus-visible,\s*\.cm button:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--g-accent-ink\)/);
+    assert.doesNotMatch(css, /outline:\s*(none|0)/);
+    assert.match(html, /id="meRoot"[^>]*class="cm|class="cm[^"]*"[^>]*id="meRoot"/);
+    assert.match(tokens, /--g-accent-ink:\s*var\(--glide-700\)/);
+    assert.match(tokens, /body\.tg-dark \{[\s\S]*?--g-accent-ink:\s*#7FD7D8/);
+  });
+});
+
+describe('TASK-381: гонка сохранения и порядок отрисовки', () => {
+  async function ready() {
+    const t = boot({ responses: [{ body: data() }] });
+    await settle();
+    await settle();
+    return t;
+  }
+
+  it('сохранение, пока запрос уже летит, перезапрашивает ПОСЛЕ него, а не отдаёт старый ответ', async () => {
+    const t = await ready();
+    assert.equal(t.calls.fetch.length, 1);
+    t.click({ 'data-act': 'name' });
+    t.setResponses([{ body: data({ name: 'Старое' }), delayMs: 40 }, { body: data({ name: 'Новое' }) }]);
+    t.calls.name[0].onSaved('A');
+    await settle();
+    assert.equal(t.calls.fetch.length, 2, 'первый перезапрос летит');
+    t.calls.name[0].onSaved('B');
+    t.calls.name[0].onSaved('C');
+    await settle();
+    assert.equal(t.calls.fetch.length, 2, 'пока летит — новый запрос не стартует');
+    await new Promise((r) => setTimeout(r, 80));
+    await settle();
+    await settle();
+    assert.equal(t.calls.fetch.length, 3, 'ровно один повторный запрос, после ответа первого');
+    assert.match(t.calls.replaced.map((r) => r[1]).join(''), /Новое/);
+  });
+
+  it('тёплый кэш не рисуется поверх «Не загрузилось», если шрифты пришли позже ошибки', async () => {
+    const warm = { ts: Date.now(), data: data({ name: 'Кэш' }) };
+    const fonts = { load: () => new Promise((r) => setTimeout(r, 40)) };
+    const t = boot({ warm, fonts, responses: [{ ok: false, status: 500 }] });
+    await new Promise((r) => setTimeout(r, 100));
+    await settle();
+    assert.match(t.mount.innerHTML, /Не загрузилось/);
+    assert.doesNotMatch(t.mount.innerHTML, /Кэш/);
   });
 });
 

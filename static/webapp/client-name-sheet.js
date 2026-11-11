@@ -12,6 +12,7 @@
 
   var NAME_URL = '/api/webapp/client/me/name';
   var EMPTY_HINT = 'Имя не может быть пустым';
+  var SERVER_RANGE_RE = /от 1 до 40/;
   var NET_HINT = 'Не сохранилось. Попробуй ещё раз';
   var ZWJ = 0x200D;
   var MAX_POINTS = 40;
@@ -273,8 +274,10 @@
       }).then(function (res) {
         if (!alive || sheet.el.getAttribute('data-closing') === '1') return;
         if (res.status === 422) {
+          /* Сервер говорит «Имя — от 1 до 40 знаков» и про пустое, и про длинное. Длину клиент режет сам (40),
+             так что до сервера доходит только пустое по его счёту — для него одна клиентская фраза. */
           var detail = readDetail(res.body);
-          fail(detail || NET_HINT);
+          fail(SERVER_RANGE_RE.test(detail) ? EMPTY_HINT : detail || NET_HINT);
           return;
         }
         if (!res.ok || !res.body || typeof res.body.name !== 'string') {

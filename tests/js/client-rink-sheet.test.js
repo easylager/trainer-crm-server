@@ -26,27 +26,27 @@ describe('подписи и шаг', () => {
     assert.equal(rink.pluralRu(5, 'сеанс', 'сеанса', 'сеансов'), 'сеансов');
     assert.equal(rink.pluralRu(11, 'сеанс', 'сеанса', 'сеансов'), 'сеансов');
     assert.equal(rink.pluralRu(21, 'сеанс', 'сеанса', 'сеансов'), 'сеанс');
-    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 1 }), 'сегодня ещё 1 сеанс');
-    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 2 }), 'сегодня ещё 2 сеанса');
-    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 5 }), 'сегодня ещё 5 сеансов');
-    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 11 }), 'сегодня ещё 11 сеансов');
-    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 21 }), 'сегодня ещё 21 сеанс');
+    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 1 }), 'сегодня ещё\u00a01\u00a0сеанс');
+    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 2 }), 'сегодня ещё\u00a02\u00a0сеанса');
+    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 5 }), 'сегодня ещё\u00a05\u00a0сеансов');
+    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 11 }), 'сегодня ещё\u00a011\u00a0сеансов');
+    assert.equal(rink.sessionsCaption({ sessionsLeftToday: 21 }), 'сегодня ещё\u00a021\u00a0сеанс');
   });
 
   it('три подписи строки и час без ведущего нуля', () => {
     assert.equal(
       rink.sessionsCaption({ sessionsLeftToday: 0, tomorrowFirst: '09:00' }),
-      'сегодня сеансов нет, завтра — с 9:00',
+      'сегодня сеансов нет, завтра\u00a0— с\u00a09:00',
     );
     assert.equal(
       rink.sessionsCaption({ sessionsLeftToday: 0, tomorrowFirst: '12:15' }),
-      'сегодня сеансов нет, завтра — с 12:15',
+      'сегодня сеансов нет, завтра\u00a0— с\u00a012:15',
     );
     assert.equal(rink.sessionsCaption({ sessionsLeftToday: 0, tomorrowFirst: null }), 'сегодня сеансов нет');
     assert.equal(rink.sessionsCaption({ sessionsLeftToday: 0, tomorrowFirst: '' }), 'сегодня сеансов нет');
     assert.equal(
       rink.rinkCaption({ sessions_left_today: 3, tomorrow_first: '09:00' }, TODAY),
-      'сегодня ещё 3 сеанса',
+      'сегодня ещё\u00a03\u00a0сеанса',
     );
   });
 
@@ -57,12 +57,12 @@ describe('подписи и шаг', () => {
     assert.equal(rink.rinkCaption(todayMany, TODAY), '');
     assert.equal(
       rink.rinkCaption(Object.assign({ sessions_left_today: 2 }, todayMany), TODAY),
-      'сегодня ещё 2 сеанса',
+      'сегодня ещё\u00a02\u00a0сеанса',
     );
     assert.deepEqual(rink.countsFromLive(todayMany, TODAY), { sessionsLeftToday: null, tomorrowFirst: null });
     assert.equal(
       rink.rinkCaption({ live: { kind: 'session', local_date: '2026-11-12', more_count: 4, starts_at_local: '09:00' } }, TODAY),
-      'сегодня сеансов нет, завтра — с 9:00',
+      'сегодня сеансов нет, завтра\u00a0— с\u00a09:00',
     );
     assert.equal(
       rink.rinkCaption({ live: { kind: 'session', local_date: '2026-11-13', starts_at_local: '10:00' } }, TODAY),
@@ -128,9 +128,9 @@ describe('подписи и шаг', () => {
   });
 
   it('заголовок шага 2 берёт имя в ёлочки', () => {
-    assert.equal(rink.stepTitle('Чижовка-арена'), '«Чижовка-арена» — твой каток');
-    assert.equal(rink.stepTitle('Ледовый дворец'), '«Ледовый дворец» — твой каток');
-    assert.equal(rink.stepTitle('«Чижовка-арена»'), '«Чижовка-арена» — твой каток');
+    assert.equal(rink.stepTitle('Чижовка-арена'), '«Чижовка-арена»\u00a0— твой каток');
+    assert.equal(rink.stepTitle('Ледовый дворец'), '«Ледовый дворец»\u00a0— твой каток');
+    assert.equal(rink.stepTitle('«Чижовка-арена»'), '«Чижовка-арена»\u00a0— твой каток');
   });
 
   it('не звучит как букмекерка и не красит хексами', () => {
@@ -481,9 +481,9 @@ describe('ClientRinkSheet', () => {
     assert.equal(sheet.el.querySelector('.cs-sr').textContent, 'Найти каток');
     assert.equal(sheet.el.querySelector('h3').textContent, 'Минск');
     assert.deepEqual(lines(sheet), [
-      'сегодня ещё 2 сеанса',
-      'сегодня ещё 1 сеанс',
-      'сегодня сеансов нет, завтра — с 9:00',
+      'сегодня ещё\u00a02\u00a0сеанса',
+      'сегодня ещё\u00a01\u00a0сеанс',
+      'сегодня сеансов нет, завтра\u00a0— с\u00a09:00',
       'сегодня сеансов нет',
     ]);
     const boxes = radios(sheet);
@@ -548,7 +548,7 @@ describe('ClientRinkSheet', () => {
     assert.equal(put.opts.method, 'PUT');
     assert.equal(put.opts.body, '{"arena_id":10}');
     assert.equal(sheet.el.getAttribute('aria-labelledby'), 'cr-bell-title');
-    assert.equal(sheet.el.querySelector('.cr-bell-title').textContent, '«Чижовка-арена» — твой каток');
+    assert.equal(sheet.el.querySelector('.cr-bell-title').textContent, '«Чижовка-арена»\u00a0— твой каток');
     assert.equal(sheet.el.querySelector('.cr-ask').textContent, 'Писать в\u00a0Telegram, когда каток выложит новое расписание?');
     assert.equal(sheet.el.querySelector('.cr-yes').textContent, 'Да, писать');
     assert.equal(sheet.el.querySelector('.cr-no').textContent, 'Не надо');

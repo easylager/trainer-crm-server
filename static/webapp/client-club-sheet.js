@@ -46,7 +46,7 @@
   function buttonState(selectedName, busy) {
     var name = typeof selectedName === 'string' ? selectedName : '';
     if (!name.trim()) return { label: 'Выбери команду', disabled: true };
-    return { label: 'Болею за ' + name, disabled: !!busy };
+    return { label: 'Болею за\u00a0' + name, disabled: !!busy };
   }
 
   // Что показывать вместо списка: loading | error | no-match | list.

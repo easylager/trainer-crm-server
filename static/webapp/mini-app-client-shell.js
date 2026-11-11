@@ -13,8 +13,9 @@
     return m ? m[1] : '';
   })();
 
-  function assetUrl(base, file) {
-    return base + file + (ASSET_V ? '?v=' + ASSET_V : '');
+  function assetUrl(base, file, ver) {
+    var v = ver || ASSET_V;
+    return base + file + (v ? '?v=' + v : '');
   }
 
   var CATALOG_WARM_KEY = 'tcb_catalog_warm_v1';
@@ -109,6 +110,14 @@
    * кадра; сервер уточняет после монтирования. Бар по ним пересобирает TASK-369.
    */
   var UI_FLAGS_KEY = 'cw_ui_flags_v1';
+  /*
+   * Кэш живёт сутки по полю at: просроченный (и с at из будущего) = «выключено». То же правило и тот же
+   * TTL — в client-season-back.js и в гейте #kk-shell-gate (kto-kogo.html); tests/js/client-shell-ui-flags-ttl.test.js
+   * держит три копии одинаковыми.
+   */
+  var UI_FLAGS_TTL_MS = 24 * 60 * 60 * 1000;
+  /* Метка «флаги уже спрошены в этой сессии» (sessionStorage): один запрос на сессию, а не на страницу. */
+  var UI_FLAGS_SYNC_KEY = 'cw_ui_flags_sync_v1';
   var uiFlags = { season_ui: false, bookings_tab: false };
   var uiFlagsRefreshed = false;
 
@@ -138,6 +147,8 @@
     try {
       var cached = JSON.parse(global.localStorage.getItem(UI_FLAGS_KEY) || 'null');
       if (!cached || String(cached.u) !== uid) return normalizeUiFlags(null);
+      var age = Date.now() - cached.at;
+      if (typeof cached.at !== 'number' || !(age >= 0 && age < UI_FLAGS_TTL_MS)) return normalizeUiFlags(null);
       return normalizeUiFlags(cached);
     } catch (e) {
       return normalizeUiFlags(null);
@@ -155,25 +166,53 @@
     } catch (e) { /* storage может быть запрещён */ }
   }
 
+  function uiFlagsSyncedThisSession(uid) {
+    try {
+      return !!uid && global.sessionStorage.getItem(UI_FLAGS_SYNC_KEY) === uid;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markUiFlagsSynced(uid) {
+    try {
+      if (uid) global.sessionStorage.setItem(UI_FLAGS_SYNC_KEY, uid);
+    } catch (e) { /* без метки — запрос на каждой странице, как раньше */ }
+  }
+
+  function applyUiFlags(next) {
+    var changed = next.season_ui !== uiFlags.season_ui || next.bookings_tab !== uiFlags.bookings_tab;
+    uiFlags = next;
+    if (changed && typeof global.CustomEvent === 'function') {
+      global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
+    }
+  }
+
   function refreshUiFlags() {
     if (uiFlagsRefreshed) return;
     var initData = getInitData();
     if (!initData || typeof global.fetch !== 'function') return;
+    var uid = initDataUserId();
+    if (uiFlagsSyncedThisSession(uid)) {
+      uiFlagsRefreshed = true;
+      return;
+    }
     uiFlagsRefreshed = true;
     global
       .fetch('/api/webapp/client/ui-flags', { headers: { 'X-Telegram-Init-Data': initData }, cache: 'no-store' })
       .then(function (r) {
-        return r.ok ? r.json() : null;
+        /* 401/403 — доступа нет, флаг выключен: кэш сбрасывается, метка ставится. 5xx и прочие не-ok — временный сбой:
+           кэш и метку не трогаем (повторим на следующей странице). */
+        if (r.status === 401 || r.status === 403) return { __failed: true };
+        if (!r.ok) return null;
+        return r.json().catch(function () { return { __failed: true }; });
       })
       .then(function (data) {
         if (!data) return;
-        var next = normalizeUiFlags(data);
+        var next = data.__failed ? normalizeUiFlags(null) : normalizeUiFlags(data);
         writeUiFlagsCache(next);
-        var changed = next.season_ui !== uiFlags.season_ui || next.bookings_tab !== uiFlags.bookings_tab;
-        uiFlags = next;
-        if (changed && typeof global.CustomEvent === 'function') {
-          global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
-        }
+        markUiFlagsSynced(uid);
+        applyUiFlags(next);
       })
       .catch(function () {});
   }
@@ -358,7 +397,8 @@
       prefetchKkAssets();
     } else if (tabId === 'me') {
       prefetchMeAssets();
-      prefetchMeWarmCache();
+      /* Повторный тап по «Я» на самой «Я»: страницу перезапросит client-shell:retap, второй GET не нужен. */
+      if (!/(^|\/)client-me\/?$/.test(global.location.pathname || '')) prefetchMeWarmCache();
     }
   }
 
@@ -1262,8 +1302,11 @@
   /* TASK-369: ассеты соседних вкладок режима season_ui — на pointerdown, как у «Поиска». */
   function prefetchFiles(files) {
     var base = webappBasePath();
-    files.forEach(function (file) {
-      var href = assetUrl(base, file);
+    files.forEach(function (entry) {
+      /* Строка — файл рядом со страницей (/webapp/ или /static/webapp/) с версией оболочки;
+         {file, base, v} — файл с другой базой/версией (игра грузится из /static/webapp/ со своими ?v=). */
+      var file = typeof entry === 'string' ? entry : entry.file;
+      var href = typeof entry === 'string' ? assetUrl(base, file) : assetUrl(entry.base, file, entry.v);
       if (document.querySelector('link[rel="prefetch"][href="' + href + '"]')) return;
       var link = document.createElement('link');
       link.rel = 'prefetch';
@@ -1273,22 +1316,30 @@
     });
   }
 
-  // Список — из kto-kogo.html: css и все kto-kogo*.js. write-access.js общий, он не kto-kogo*.
-  var KK_ASSETS = [
-    'kto-kogo.css',
-    'kto-kogo-model.js',
-    'kto-kogo-screens-model.js',
-    'kto-kogo.js',
-    'kto-kogo-views.js',
-    'kto-kogo-hub-cards.js',
-    'kto-kogo-board.js',
-    'kto-kogo-leagues.js',
-    'kto-kogo-coin-model.js',
-    'kto-kogo-coin.js',
-    'kto-kogo-matches.js',
-    'kto-kogo-league-identity.js',
-    'kto-kogo-boot.js',
+  /*
+   * Список — из kto-kogo.html: адрес и ?v= те же, что у <link>/<script> страницы игры, иначе предзагрузка
+   * не попадёт в кэш (а /webapp/kto-kogo*.js вовсе 404: маршрутов нет). write-access.js общий, он не kto-kogo*.
+   * При бампе версий в kto-kogo.html правится и этот список; tests/js/client-shell-season-bar.test.js сверяет.
+   */
+  var KK_BASE = '/static/webapp/';
+  var KK_ASSET_VERSIONS = [
+    ['kto-kogo.css', '202611112'],
+    ['kto-kogo-model.js', '202611112'],
+    ['kto-kogo-screens-model.js', '202611113'],
+    ['kto-kogo.js', '202611112'],
+    ['kto-kogo-views.js', '202611112'],
+    ['kto-kogo-hub-cards.js', '202611112'],
+    ['kto-kogo-board.js', '202611113'],
+    ['kto-kogo-leagues.js', '202611112'],
+    ['kto-kogo-coin-model.js', '202611112'],
+    ['kto-kogo-coin.js', '202611112'],
+    ['kto-kogo-matches.js', '202611113'],
+    ['kto-kogo-league-identity.js', '202611112'],
+    ['kto-kogo-boot.js', '202611112'],
   ];
+  var KK_ASSETS = KK_ASSET_VERSIONS.map(function (pair) {
+    return { file: pair[0], base: KK_BASE, v: pair[1] };
+  });
 
   function prefetchKkAssets() {
     prefetchFiles(KK_ASSETS);

@@ -54,10 +54,10 @@
     if (!isFinite(left) || left < 0) left = 0;
     left = Math.floor(left);
     if (left > 0) {
-      return 'сегодня ещё ' + left + ' ' + pluralRu(left, 'сеанс', 'сеанса', 'сеансов');
+      return 'сегодня ещё\u00a0' + left + '\u00a0' + pluralRu(left, 'сеанс', 'сеанса', 'сеансов');
     }
     var clock = formatClock(input.tomorrowFirst);
-    if (clock) return 'сегодня сеансов нет, завтра — с ' + clock;
+    if (clock) return 'сегодня сеансов нет, завтра\u00a0— с\u00a0' + clock;
     return 'сегодня сеансов нет';
   }
 
@@ -154,9 +154,9 @@
   function stepTitle(name) {
     var raw = String(name || '').trim();
     if (raw.charAt(0) === '\u00ab' && raw.charAt(raw.length - 1) === '\u00bb') {
-      return raw + ' \u2014 твой каток';
+      return raw + '\u00a0\u2014 твой каток';
     }
-    return '\u00ab' + raw + '\u00bb \u2014 твой каток';
+    return '\u00ab' + raw + '\u00bb\u00a0\u2014 твой каток';
   }
 
   function searchQuery(input) {

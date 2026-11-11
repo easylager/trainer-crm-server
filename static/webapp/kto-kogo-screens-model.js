@@ -608,12 +608,17 @@
     return out;
   }
 
+  /** После «всех/первых N»: родительный — 21 игрока, 37 игроков. */
+  function playersGen(n) {
+    return n % 10 === 1 && n % 100 !== 11 ? 'игрока' : 'игроков';
+  }
+
   /** Кнопка под сокращённой таблицей; null — прятать нечего. Сервер шлёт не больше 50 строк, поэтому «всех» не всегда. */
   function tableMore(view, expanded) {
     var items = (view && view.items) || [];
     if (expanded || items.length <= TABLE_FULL_MAX) return null;
     var n = (view && view.players) || 0;
-    return n > items.length ? 'Показать первых' + NBSP + items.length : 'Показать всех' + NBSP + spaced(n);
+    return n > items.length ? 'Показать первых' + NBSP + items.length + NBSP + playersGen(items.length) : 'Показать всех' + NBSP + spaced(n) + NBSP + playersGen(n);
   }
 
   function tableCaption(view, club) {

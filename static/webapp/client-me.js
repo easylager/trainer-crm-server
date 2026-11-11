@@ -147,7 +147,7 @@
 
   function sessionsNote(home) {
     var left = Number(home.sessions_left_today);
-    if (positive(left)) return 'Сегодня ещё ' + count(left, 'сеанс', 'сеанса', 'сеансов');
+    if (positive(left)) return 'Сегодня ещё' + NBSP + count(left, 'сеанс', 'сеанса', 'сеансов');
     var first = text(home.tomorrow_first);
     if (first) return 'Сегодня сеансов нет, завтра' + NBSP + '— с' + NBSP + first;
     return 'Сегодня сеансов нет';
@@ -456,7 +456,7 @@
   }
 
   var mount = doc.getElementById('meRoot');
-  var state = { data: null, keys: null, loading: null };
+  var state = { data: null, keys: null, loading: null, again: false, failed: false };
 
   function tg() {
     return root.Telegram && root.Telegram.WebApp ? root.Telegram.WebApp : null;
@@ -514,6 +514,7 @@
   /** Рисует ответ. Первый раз — целиком; дальше — только блоки, у которых поменялась модель. */
   function paint(data) {
     state.data = data;
+    state.failed = false;
     var m = screenModel(data, { bookingsTab: bookingsTab(), now: new Date() });
     var parts = blockParts(m);
     if (!state.keys) {
@@ -583,6 +584,7 @@
 
   function showError() {
     state.keys = null;
+    state.failed = true;
     mount.removeAttribute('aria-busy');
     mount.innerHTML =
       '<div class="state-panel error cm-state" role="alert">' +
@@ -615,8 +617,12 @@
    * Свежий ответ. Есть догадка о профиле — сразу с ней; нет или сервер её не принял — после
    * загрузки профилей (тот же порядок, что «Мои записи»: без X-Profile-Id сервер возьмёт «вас»).
    */
-  function load() {
-    if (state.loading) return state.loading;
+  function load(afterCurrent) {
+    if (state.loading) {
+      /* После сохранения ответ, который уже летит, мог уйти до него: перезапрашиваем ПОСЛЕ него. */
+      if (afterCurrent === true) state.again = true;
+      return state.loading;
+    }
     var guess = profileGuess();
     var first = guess != null ? request(guess) : profilesReady().then(function () { return request(null); });
     state.loading = first
@@ -636,6 +642,10 @@
       })
       .then(function () {
         state.loading = null;
+        if (state.again) {
+          state.again = false;
+          return load();
+        }
       });
     return state.loading;
   }
@@ -652,7 +662,7 @@
   }
 
   function afterSave() {
-    load();
+    load(true);
   }
 
   function openSheet(act) {
@@ -684,6 +694,7 @@
     if (act === 'retry') {
       mount.innerHTML = SKELETON;
       mount.setAttribute('aria-busy', 'true');
+      state.failed = false;
       load();
       return;
     }
@@ -731,7 +742,8 @@
   }
   if (warm) {
     fontsReady.then(function () {
-      if (!state.data) paint(warm);
+      /* Свежий ответ или «Не загрузилось» уже на экране — тёплый кэш поверх них не рисуем. */
+      if (!state.data && !state.failed) paint(warm);
     });
   }
   load();

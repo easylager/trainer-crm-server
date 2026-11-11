@@ -44,8 +44,8 @@ describe('модель клубов', () => {
   it('подписывает кнопку и гасит её, пока запрос идёт', () => {
     assert.deepEqual(club.buttonState(null, false), { label: 'Выбери команду', disabled: true });
     assert.deepEqual(club.buttonState('  ', false), { label: 'Выбери команду', disabled: true });
-    assert.deepEqual(club.buttonState('Динамо-Минск', false), { label: 'Болею за Динамо-Минск', disabled: false });
-    assert.deepEqual(club.buttonState('Динамо-Минск', true), { label: 'Болею за Динамо-Минск', disabled: true });
+    assert.deepEqual(club.buttonState('Динамо-Минск', false), { label: 'Болею за\u00a0Динамо-Минск', disabled: false });
+    assert.deepEqual(club.buttonState('Динамо-Минск', true), { label: 'Болею за\u00a0Динамо-Минск', disabled: true });
   });
 
   it('не звучит как букмекерка', () => {
@@ -392,7 +392,7 @@ describe('ClientClubSheet', () => {
     const letter = sheet.el.querySelector('.cc-mark--letter');
     assert.equal(letter.textContent, 'ЮН');
     assert.equal(letter.style.backgroundColor, '#004593');
-    assert.equal(saveButton(sheet).textContent, 'Болею за Динамо-Минск');
+    assert.equal(saveButton(sheet).textContent, 'Болею за\u00a0Динамо-Минск');
     assert.equal(saveButton(sheet).disabled, false);
     assert.equal(saveButton(sheet).classList.contains('is-ready'), true);
     assert.equal(h.calls[0].url, '/api/webapp/client/hockey/clubs');
@@ -476,7 +476,7 @@ describe('ClientClubSheet', () => {
     save.dispatch('click', {});
     assert.equal(h.calls.filter((call) => call.url.includes('bot-prefs')).length, 1);
     assert.equal(save.disabled, true);
-    assert.equal(save.textContent, 'Болею за Динамо-Минск');
+    assert.equal(save.textContent, 'Болею за\u00a0Динамо-Минск');
     h.prefsGate().resolve({ ok: false, json: () => Promise.resolve({}) });
     await flush();
     assert.equal(sheet.el.isConnected, true);
