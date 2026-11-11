@@ -294,6 +294,7 @@ describe('«Лёд и занятия»', () => {
     assert.equal(row(m, 'passes').value, '4' + NB + 'занятия');
     assert.equal(row(m, 'saved').value, '5');
     assert.equal(row(m, 'requests').value, '1');
+    assert.equal(row(m, 'requests').label, 'Заявки');
   });
 
   it('строки только при не-null', () => {

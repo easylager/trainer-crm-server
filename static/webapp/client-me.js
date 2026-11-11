@@ -214,7 +214,7 @@
       out.push({ key: 'saved', label: 'Сохранённые', value: String(r.saved.count), href: 'client-saved-trainers' });
     }
     if (isObject(r.requests) && positive(r.requests.count)) {
-      out.push({ key: 'requests', label: 'Заявки на\u00a0тренера', value: String(r.requests.count), href: 'client-requests' });
+      out.push({ key: 'requests', label: 'Заявки', value: String(r.requests.count), href: 'client-requests' });
     }
     var people = isObject(r.family) ? r.family.people : null;
     out.push({ key: 'family', label: 'Семья', value: familyValue(people), href: 'client-family-access' });
