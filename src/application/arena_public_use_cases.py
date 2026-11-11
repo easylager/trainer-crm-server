@@ -36,6 +36,7 @@ from src.application.ice_time_windows import TimeWindow, resolve_list_window, re
 from src.application.place_links import place_path
 from src.application.ice_session_use_cases import (
     CLIENT_ICE_SESSION_KINDS,
+    DEFAULT_ARENA_TZ,
     STATUS_ACTIVE,
     serialize_ice_session,
 )
@@ -138,6 +139,12 @@ _OHM_SESSION_SQL = f"""
     AND (s.valid_until IS NULL OR s.valid_until >= :now)
     AND {_NOT_SEASON_CLOSED_SQL}
 """
+
+
+def _arena_local_today_expr(tz_sql: str) -> str:
+    """Календарный день :now в поясе арены. Пустой пояс — Europe/Minsk, как у сеансов."""
+    tz = f"COALESCE(NULLIF(BTRIM({tz_sql}), ''), '{DEFAULT_ARENA_TZ}')"
+    return f"(CAST(:now AS timestamptz) AT TIME ZONE {tz})::date"
 
 # Хоккейный центр по записи — не сеанс ОХМ и не массовое катание.
 _NOT_HOCKEY_CENTER_SQL = "COALESCE(p.amenities->>'hockey_center', '') <> 'true'"
@@ -596,6 +603,10 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
         # только если телефон действительно есть (он и так публичный в карточке места).
         "phone": sanitize_public_phone(item.get("phone")),
         **schedule_mode_public_fields(item),
+        # TASK-379: сколько сеансов этого намерения ещё не началось сегодня
+        # (пояс арены). Прошедшие уже отсекает session_sql. Поле в конце, чтобы
+        # порядок прежних ключей не сдвинулся.
+        "sessions_left_today": max(0, int(item.get("sessions_left_today") or 0)),
     }
     if venue_type == VENUE_TYPE_SHOP:
         payload["shop_services"] = [k for k in SHOP_SERVICE_KEYS if amenities.get(k) is True]
@@ -612,6 +623,7 @@ def _public_list_item(item: dict[str, Any], *, intent: str, today: date) -> dict
 
 def _arena_list_sql(session_sql: str) -> str:
     """Список арен: session_sql = МК (_CURRENT) или ОХМ (_OHM)."""
+    today_local = _arena_local_today_expr("ap.timezone")
     return f"""
 SELECT
     a.id, a.city_id, a.name, a.address, a.latitude, a.longitude, a.venue_type,
@@ -643,6 +655,7 @@ SELECT
     nxw.currency_code AS win_currency_code,
     nxw.schedule_basis AS win_schedule_basis,
     COALESCE(sa.future_count, 0) AS future_session_count,
+    COALESCE(sa.sessions_left_today, 0) AS sessions_left_today,
     COALESCE(sa.sessions_48h, 0) AS sessions_48h,
     sa.max_observed_at AS sessions_observed_at,
     COALESCE(ipj.is_enabled, false) AS ice_job_enabled,
@@ -683,11 +696,13 @@ LEFT JOIN LATERAL (
 LEFT JOIN (
     SELECT s.arena_id,
            COUNT(*)::int AS future_count,
+           COUNT(*) FILTER (WHERE s.local_date = {today_local})::int AS sessions_left_today,
            COUNT(*) FILTER (WHERE s.starts_at_utc <= :now48)::int AS sessions_48h,
            MAX(s.observed_at) AS max_observed_at
     FROM ice_sessions s
+    LEFT JOIN arena_profiles ap ON ap.arena_id = s.arena_id
     WHERE {session_sql}
-    GROUP BY s.arena_id
+    GROUP BY s.arena_id, ap.timezone
 ) sa ON sa.arena_id = a.id
 -- TASK-146: источник расписания арены (одно задание на арену) — для честного
 -- флага schedule_stale: парсер есть, но давно не читал сайт успешно.
@@ -750,6 +765,13 @@ SELECT
         SELECT COUNT(*)::int FROM ice_sessions s
         WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
     ), 0) AS future_session_count,
+    COALESCE((
+        SELECT COUNT(*) FILTER (
+            WHERE s.local_date = {_arena_local_today_expr("p.timezone")}
+        )::int
+        FROM ice_sessions s
+        WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+    ), 0) AS sessions_left_today,
     (
         SELECT MAX(s.observed_at) FROM ice_sessions s
         WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
@@ -816,6 +838,7 @@ def _row_to_arena_dict(row: Mapping[str, Any]) -> dict[str, Any]:
     data["completeness"] = _completeness_score(data)
     data["sessions_48h"] = int(row.get("sessions_48h") or 0)
     data["future_session_count"] = int(row.get("future_session_count") or 0)
+    data["sessions_left_today"] = max(0, int(row.get("sessions_left_today") or 0))
     data["trainer_count"] = int(row.get("trainer_count") or 0)
     data["visit"] = visit_view(data, has_trainers=data["trainer_count"] > 0)
     data["free_slots"] = int(row.get("free_slots") or 0)
