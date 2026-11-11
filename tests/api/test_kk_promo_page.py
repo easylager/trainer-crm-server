@@ -35,7 +35,7 @@ async def test_page_has_og_tags_and_telegram_button_with_label() -> None:
     assert 'property="og:description"' in page
     # Первый шаг игры — один тап за команду: превью не обещает «угадай счёт».
     assert 'content="Кто кого — угадай, кто победит в матче Динамо-Минск"' in page
-    assert 'content="Тапни за команду, набирай очки и сравнивайся с друзьями. Бесплатно, в Telegram."' in page
+    assert 'content="Тапни за команду, набирай очки и соревнуйся с друзьями. Бесплатно, в Telegram."' in page
     assert "точный счёт" not in page and "угадай счёт" not in page
     assert 'href="https://t.me/glide_test_bot?startapp=kks_push1"' in page
     assert "Открыть в Telegram" in page
@@ -167,7 +167,7 @@ async def test_hero_keeps_texts_and_an_accessible_button() -> None:
     page = await _page()
     assert '<span class="tag" aria-hidden="true">КТО КОГО?</span><span class="vh">Кто кого</span></h1>' in page
     # Тот же текст, только «в Telegram» и короткие слова не отрываются от следующего.
-    assert "<p>Тапни за команду, набирай очки и сравнивайся с друзьями. Бесплатно, в Telegram.</p>" in page
+    assert "<p>Тапни за команду, набирай очки и соревнуйся с друзьями. Бесплатно, в Telegram.</p>" in page
     assert ">Открыть в Telegram</a>" in page
     assert "min-height:56px" in page and ".go:focus{outline:3px solid #fff" in page
 
