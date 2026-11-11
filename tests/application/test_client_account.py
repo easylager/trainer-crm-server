@@ -221,3 +221,18 @@ async def test_home_arena_visible_only_and_clears_on_delete(db_session) -> None:
     assert await set_home_arena(db_session, ACCOUNT, visible) == visible
     await db_session.execute(text("DELETE FROM arenas WHERE id = :id"), {"id": visible})
     assert await get_home_arena_id(db_session, ACCOUNT) is None
+
+
+@pytest.mark.parametrize("raw", ["\u3164", "\u2800\u2800", "\u200d\u200d", "\ue000", "\u200d\u3164\u200d", "\ud800"])
+def test_t380_invisible_names_rejected(raw: str) -> None:
+    with pytest.raises(ValueError) as caught:
+        normalize_display_name(raw)
+    assert str(caught.value) == "Имя — от 1 до 40 знаков"
+
+
+def test_t380_zwj_only_between_symbols() -> None:
+    assert normalize_display_name("\u200dМакс\u200d") == "Макс"
+    assert normalize_display_name("Макс\u200d\u200dК") == "Макс\u200dК"
+    assert normalize_display_name("Макс \u200d К") == "Макс К"
+    assert normalize_display_name("🌱") == "🌱"
+    assert normalize_display_name("12") == "12"

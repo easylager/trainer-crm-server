@@ -27,20 +27,25 @@ _NEW_ONLY = "'me_open', 'me_name_set', 'me_home_arena_set'"
 _KINDS = f"{_OLD_KINDS}, {_NEW_ONLY}"
 
 
+_TABLE = "catalog_consumer_events"
+_CK = "ck_catalog_consumer_events_kind"
+
+
+def _replace_check(kinds: str) -> None:
+    """Пересоздать CHECK без долгого ACCESS EXCLUSIVE: NOT VALID (без скана), затем отдельный VALIDATE."""
+    op.drop_constraint(_CK, _TABLE, type_="check")
+    op.execute(f"ALTER TABLE {_TABLE} ADD CONSTRAINT {_CK} CHECK (kind IN ({kinds})) NOT VALID")
+    op.execute(f"ALTER TABLE {_TABLE} VALIDATE CONSTRAINT {_CK}")
+
+
 def upgrade() -> None:
-    op.drop_constraint("ck_catalog_consumer_events_kind", "catalog_consumer_events", type_="check")
-    op.create_check_constraint(
-        "ck_catalog_consumer_events_kind",
-        "catalog_consumer_events",
-        f"kind IN ({_KINDS})",
-    )
+    _replace_check(_KINDS)
 
 
 def downgrade() -> None:
-    op.execute(f"DELETE FROM catalog_consumer_events WHERE kind IN ({_NEW_ONLY})")
-    op.drop_constraint("ck_catalog_consumer_events_kind", "catalog_consumer_events", type_="check")
-    op.create_check_constraint(
-        "ck_catalog_consumer_events_kind",
-        "catalog_consumer_events",
-        f"kind IN ({_OLD_KINDS})",
-    )
+    """ВНИМАНИЕ: строки новых kind (me_open, me_name_set, me_home_arena_set) удаляются безвозвратно.
+
+    Без этого старый CHECK не пересоздать: существующие строки его нарушают.
+    """
+    op.execute(f"DELETE FROM {_TABLE} WHERE kind IN ({_NEW_ONLY})")
+    _replace_check(_OLD_KINDS)

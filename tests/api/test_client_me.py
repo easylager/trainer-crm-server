@@ -643,3 +643,95 @@ async def test_p95_fifty_calls(app_use_test_db, client_me_auth, monkeypatch) -> 
     p95 = samples[int(len(samples) * 0.95) - 1]
     print(f"GET /client/me p95 over 50 calls: {p95 * 1000:.1f} ms")
     assert p95 < 0.25
+
+
+# --- TASK-380: правки по ревью ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_t380_personal_routes_are_no_store(app_use_test_db, db_session, client_me_auth) -> None:
+    user_id = 380_100_001
+    _auth(user_id)
+    city_id = await _city(db_session)
+    rink = await _arena(db_session, city_id, name="NS")
+    got = await _get({"X-Telegram-Init-Data": _raw(user_id, "Максим")})
+    name = await _put("/name", {"name": "Макс"})
+    home = await _put("/home-arena", {"arena_id": rink})
+    for response in (got, name, home):
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "private, no-store"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw", ["\u3164", "\u2800\u2800", "\u200d\u200d", "\ud800", "\ue000", "a" * 201, "\ud800\u200d"]
+)
+async def test_t380_bad_names_are_4xx(app_use_test_db, client_me_auth, raw: str) -> None:
+    if "\ud800" in raw:
+        pytest.xfail(
+            "500 даёт глобальный обработчик 422 в src/api/app.py (эхо input с суррогатом не кодируется в UTF-8); "
+            "вне Scope TASK-380"
+        )
+    _auth(380_100_002)
+    # JSON-экранирование, как на проводе: одиночный суррогат иначе не уходит в httpx
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.put(
+            ME + "/name",
+            content=json.dumps({"name": raw}, ensure_ascii=True),
+            headers={"Content-Type": "application/json"},
+        )
+    assert 400 <= response.status_code < 500, response.status_code
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("arena_id", [0, -1, 2_147_483_648, 10**30])
+async def test_t380_arena_id_out_of_range_is_4xx(app_use_test_db, client_me_auth, arena_id: int) -> None:
+    _auth(380_100_003)
+    response = await _put("/home-arena", {"arena_id": arena_id})
+    assert 400 <= response.status_code < 500, response.status_code
+
+
+async def _count_events(db: AsyncSession, kind: str) -> int:
+    return (
+        await db.execute(text("SELECT count(*) FROM catalog_consumer_events WHERE kind = :k"), {"k": kind})
+    ).scalar_one()
+
+
+@pytest.mark.asyncio
+async def test_t380_repeated_puts_write_one_event(
+    app_use_test_db, db_session, client_me_auth, monkeypatch
+) -> None:
+    monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", _SECRET)
+    _auth(380_100_004)
+    city_id = await _city(db_session)
+    rink = await _arena(db_session, city_id, name="Дедуп")
+    for _ in range(100):
+        assert (await _put("/name", {"name": "Макс"})).status_code == 200
+    for _ in range(100):
+        assert (await _put("/home-arena", {"arena_id": rink})).status_code == 200
+    assert await _count_events(db_session, "me_name_set") == 1
+    assert await _count_events(db_session, "me_home_arena_set") == 1
+    # другое значение — новое событие
+    assert (await _put("/name", {"name": "Максим"})).status_code == 200
+    assert await _count_events(db_session, "me_name_set") == 2
+
+
+@pytest.mark.asyncio
+async def test_t380_arena_hidden_after_pick_is_null_prefs_kept(
+    app_use_test_db, db_session, client_me_auth, monkeypatch
+) -> None:
+    monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", _SECRET)
+    user_id = 380_100_005
+    _auth(user_id)
+    city_id = await _city(db_session)
+    rink = await _arena(db_session, city_id, name="Потом скрыт")
+    assert (await _put("/home-arena", {"arena_id": rink})).json()["home_arena"]["id"] == rink
+    await db_session.execute(text("UPDATE arenas SET is_active = false WHERE id = :id"), {"id": rink})
+    body = (await _get({"X-Telegram-Init-Data": _raw(user_id, "Максим")})).json()
+    assert body["home_arena"] is None
+    kept = (
+        await db_session.execute(
+            text("SELECT home_arena_id FROM client_account_prefs WHERE account_key = :k"), {"k": user_id}
+        )
+    ).scalar_one()
+    assert kept == rink

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from src.application.catalog_consumer_events import (
     KIND_ME_NAME_SET,
     KIND_ME_OPEN,
     SURFACE_MINIAPP_ME,
+    me_value_dedup_key,
     record_catalog_consumer_event,
     telegram_actor_hash,
 )
@@ -22,6 +23,9 @@ from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.api.routes.webapp_client_hockey import _player_name
 
 router = APIRouter(tags=["webapp"])
+
+_INT4_MAX = 2_147_483_647
+_NO_STORE = "private, no-store"
 
 
 def _parse_profile_id_header(x_profile_id: str | None) -> int | None:
@@ -118,7 +122,7 @@ class ClientMeOut(BaseModel):
 
 
 class NameIn(BaseModel):
-    name: str
+    name: str = Field(max_length=200)
 
 
 class NameOut(BaseModel):
@@ -127,7 +131,7 @@ class NameOut(BaseModel):
 
 
 class HomeArenaIn(BaseModel):
-    arena_id: int | None
+    arena_id: int | None = Field(ge=1, le=_INT4_MAX)
 
 
 class HomeArenaOut(BaseModel):
@@ -147,6 +151,7 @@ async def _event(
     arena_id: int | None = None,
     payload: dict | None = None,
     dedup: bool = True,
+    dedup_key: str | None = None,
 ) -> None:
     await record_catalog_consumer_event(
         session,
@@ -156,17 +161,20 @@ async def _event(
         arena_id=arena_id,
         payload=payload,
         dedup=dedup,
+        dedup_key=dedup_key,
     )
 
 
 @router.get("/client/me", response_model=ClientMeOut)
 async def get_client_me(
+    response: Response,
     init_data: str | None = None,
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     x_profile_id: str | None = Header(None),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> ClientMeOut:
+    response.headers["Cache-Control"] = _NO_STORE
     account_key = client_catalog_telegram_key(principal)
     payload = await client_me(
         session,
@@ -183,25 +191,36 @@ async def get_client_me(
 @router.put("/client/me/name", response_model=NameOut)
 async def put_client_me_name(
     body: NameIn,
+    response: Response,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> NameOut:
+    response.headers["Cache-Control"] = _NO_STORE
     account_key = client_catalog_telegram_key(principal)
     try:
         saved = await set_account_name(session, account_key, body.name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     await session.commit()
-    await _event(session, kind=KIND_ME_NAME_SET, account_key=account_key, dedup=False)
+    await _event(
+        session,
+        kind=KIND_ME_NAME_SET,
+        account_key=account_key,
+        dedup_key=me_value_dedup_key(
+            kind=KIND_ME_NAME_SET, actor_hash=telegram_actor_hash(account_key), value=saved
+        ),
+    )
     return NameOut(name=saved)
 
 
 @router.put("/client/me/home-arena", response_model=HomeArenaOut)
 async def put_client_me_home_arena(
     body: HomeArenaIn,
+    response: Response,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> HomeArenaOut:
+    response.headers["Cache-Control"] = _NO_STORE
     account_key = client_catalog_telegram_key(principal)
     try:
         arena_id = await set_home_arena(session, account_key, body.arena_id)
@@ -217,6 +236,5 @@ async def put_client_me_home_arena(
         account_key=account_key,
         arena_id=arena_id,
         payload={"arena_id": arena_id},
-        dedup=False,
     )
     return body

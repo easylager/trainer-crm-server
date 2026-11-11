@@ -290,6 +290,18 @@ def event_dedup_hash(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def me_value_dedup_key(*, kind: str, actor_hash: str | None, value: str, day: date | None = None) -> str | None:
+    """Дедуп события «человек сохранил значение»: один актёр, одно значение, одни сутки — одна строка.
+
+    Цикл PUT с тем же значением не раздувает таблицу; другое значение — новое событие.
+    """
+    if not actor_hash:
+        return None
+    when = day or catalog_event_day_minsk()
+    raw = f"{kind}|{actor_hash}|{when.isoformat()}|{value}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def is_share_deeplink_start_param(start_param: str | None) -> bool:
     return is_catalog_deep_link((start_param or "").strip() or None)
 

@@ -21,6 +21,7 @@ from src.application.hockey_screens import fan_profile
 from src.application.hockey_teams import display_name, team_card
 from src.infrastructure.db.models import CLIENT_PROFILE_ROLE_SELF, ICE_WATCH_KIND_SESSIONS
 from src.ingestion.hockey_sources import MINSK_TZ
+from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.public_display import format_clock
 
 _KK_HREF = "/webapp/kto-kogo"
@@ -48,11 +49,13 @@ _NEXT_MATCH = text("""
     LIMIT 1
     """)
 
-_ARENA = text("""
+_ARENA = text(f"""
     SELECT a.name, COALESCE(p.timezone, 'Europe/Minsk') AS tz
     FROM arenas a
     LEFT JOIN arena_profiles p ON p.arena_id = a.id
+    JOIN cities c ON c.id = a.city_id
     WHERE a.id = :arena_id
+      AND {PUBLIC_ARENA_VISIBLE_SQL}
     """)
 
 _SUBSCRIBED = text("""
@@ -245,10 +248,12 @@ async def home_arena_payload(
     client_id: int | None,
     now: datetime | None = None,
 ) -> dict | None:
-    """Блок «мой каток» в форме GET. ``None`` — каток не выбран или строки арены уже нет."""
+    """Блок «мой каток» в форме GET. ``None`` — каток не выбран, арены нет или она стала скрытой (выбор в prefs не трогаем)."""
     if arena_id is None:
         return None
-    arena = (await session.execute(_ARENA, {"arena_id": arena_id})).one_or_none()
+    arena = (
+        await session.execute(_ARENA, {"arena_id": arena_id, **public_scope_params()})
+    ).one_or_none()
     if arena is None:
         return None
     try:
