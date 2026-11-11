@@ -396,9 +396,36 @@
     if (enter([{ name: name, args: args || {} }])) window.scrollTo(0, 0);
   }
 
+  /** TASK-374: игра во вкладке таб-бара (флаг season_ui из оболочки). Оболочки на странице нет — вкладки нет. */
+  function inTab() {
+    var shell = window.ClientShell;
+    try {
+      return !!(shell && typeof shell.uiFlags === 'function' && shell.uiFlags().season_ui);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Нативная «назад» Telegram: во вкладке на корне её нет, на вложенных экранах снимает экран. */
+  function syncBack() {
+    if (!window.MiniAppBack) return;
+    if (M.nativeBackShown(state.stack.length, inTab())) window.MiniAppBack.set(back);
+    else window.MiniAppBack.clear();
+  }
+
+  /** Повторный тап по вкладке «Кто кого»: шторку закрыть, на `hub`, наверх; на корне игра не перерисовывается. */
+  function retap() {
+    var act = M.retapAction(state.stack, !!state.sheet);
+    if (act.reset) return reset('hub');
+    if (act.closeSheet) closeSheet();
+    window.scrollTo(0, 0);
+  }
+
   function back() {
-    if (state.sheet) return closeSheet();
-    if (state.stack.length > 1) return enter(state.stack.slice(0, -1));
+    var act = M.backAction(state.stack.length, !!state.sheet, inTab());
+    if (act === 'sheet') return closeSheet();
+    if (act === 'pop') return enter(state.stack.slice(0, -1));
+    if (act === 'stay') return;
     location.href = '/webapp/client-home' + (initData && !(tg && tg.initData) ? '?init_data=' + encodeURIComponent(initData) : '');
   }
 
@@ -749,7 +776,7 @@
         }
       }
     }
-    if (window.MiniAppBack) window.MiniAppBack.set(back);
+    syncBack();
   }
 
   function startParam() {
@@ -772,10 +799,15 @@
       } catch (e) { /* */ }
       if (tg.onEvent) tg.onEvent('themeChanged', function () { applyTheme(); render(); });
       // Одна нативная «назад» на страницу: помощник сам не вешает обработчик дважды.
-      if (window.MiniAppBack) window.MiniAppBack.set(back);
+      syncBack();
       // Нативная стрелка есть — своя круглая «назад» на экранах рядом с ней лишняя (см. .kk-native-back в css).
       if (window.MiniAppBack && window.MiniAppBack.isNative()) document.body.classList.add('kk-native-back');
     }
+    // Вкладка «Кто кого» в таб-баре: повторный тап и смена флагов приходят от оболочки (TASK-369 / TASK-366).
+    window.addEventListener('client-shell:retap', function (e) {
+      if (e && e.detail && e.detail.tab === 'kk' && inTab()) retap();
+    });
+    window.addEventListener('client-shell:ui-flags', syncBack);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && state.sheet) return closeSheet();
       if (e.key !== 'Tab' || !state.sheet) return;
@@ -849,9 +881,9 @@
           // Хаб сам грузит матчи при входе; свежий список с загрузки страницы второй раз не запрашиваем.
           state.matchesFresh = !loadError;
           enter();
-          if (code) go('join', { code: code });
-          else if (openId) go('match', { id: openId });
-          else if (params.get('tab') === 'table') go('table', {});
+          // Экран из ссылки ложится поверх `hub`: «назад» возвращает в игру, а не закрывает приложение.
+          var entry = M.entryScreen(code, openId, params.get('tab'));
+          if (entry) go(entry.name, entry.args);
           if (month) {
             var owner = current();
             api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {
