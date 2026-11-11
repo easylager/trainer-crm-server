@@ -667,11 +667,6 @@ async def test_t380_personal_routes_are_no_store(app_use_test_db, db_session, cl
     "raw", ["\u3164", "\u2800\u2800", "\u200d\u200d", "\ud800", "\ue000", "a" * 201, "\ud800\u200d"]
 )
 async def test_t380_bad_names_are_4xx(app_use_test_db, client_me_auth, raw: str) -> None:
-    if "\ud800" in raw:
-        pytest.xfail(
-            "500 даёт глобальный обработчик 422 в src/api/app.py (эхо input с суррогатом не кодируется в UTF-8); "
-            "вне Scope TASK-380"
-        )
     _auth(380_100_002)
     # JSON-экранирование, как на проводе: одиночный суррогат иначе не уходит в httpx
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -681,6 +676,34 @@ async def test_t380_bad_names_are_4xx(app_use_test_db, client_me_auth, raw: str)
             headers={"Content-Type": "application/json"},
         )
     assert 400 <= response.status_code < 500, response.status_code
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", [{"name": ["\ud800"]}, {"name": {"k\ud800": 1}}, {"\ud800": "x"}])
+async def test_t382_surrogate_in_json_body_is_422_without_input_echo(app_use_test_db, client_me_auth, body) -> None:
+    _auth(382_100_001)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.put(
+            ME + "/name",
+            content=json.dumps(body, ensure_ascii=True),
+            headers={"Content-Type": "application/json"},
+        )
+    assert response.status_code == 422, response.status_code
+    detail = response.json()["detail"]
+    assert detail and all({"loc", "msg", "type"} <= set(item) for item in detail)
+    assert all("input" not in item for item in detail)
+
+
+@pytest.mark.asyncio
+async def test_t382_name_in_max_length_200(app_use_test_db, client_me_auth) -> None:
+    """Имя из «я» и 250 пробелов после нормализации — одна буква: режет его только NameIn.max_length."""
+    _auth(382_100_002)
+    too_long = await _put("/name", {"name": "я" + " " * 250})
+    assert too_long.status_code == 422
+    edge = await _put("/name", {"name": "я" + " " * 199})
+    assert edge.status_code == 200 and edge.json() == {"name": "я"}
+    over = await _put("/name", {"name": "я" + " " * 200})
+    assert over.status_code == 422
 
 
 @pytest.mark.asyncio
