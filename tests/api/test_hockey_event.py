@@ -649,6 +649,22 @@ async def test_hub_slot_marks_home_match_only(db_session, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_hub_endpoint_feeds_three_nearest_with_away_in_four_days(app_use_test_db, db_session) -> None:
+    """Владелец 2026-11-11: Минск без Экстралиги — выездной через 4 дня в ленте, до трёх матчей по времени."""
+    now = datetime.now(timezone.utc)
+    away = await _match(db_session, starts_at=now + timedelta(days=4), home="СКА", away="Динамо-Минск")
+    home = await _match(db_session, starts_at=now + timedelta(days=6))
+    away2 = await _match(db_session, starts_at=now + timedelta(days=8), home="Барыс", away="Динамо-Минск")
+    await _match(db_session, starts_at=now + timedelta(days=10))
+    await db_session.commit()
+    async with _client() as client, as_client(ME):
+        card = (await client.get(f"{BASE}/hub")).json()
+    assert card["mode"] == "before" and card["beyond_window"] is False
+    assert [card["match"]["id"], *[n["match"]["id"] for n in card["next"]]] == [away, home, away2]
+    assert card["next"][0]["event_href"] == f"client-match?id={home}"
+
+
+@pytest.mark.asyncio
 async def test_edit_dirty_uses_match_picture_for_match(db_session, arena) -> None:
     match_id = await _match(db_session)
     view = await create_match_company(

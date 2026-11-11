@@ -64,26 +64,46 @@ async def test_newcomer_sees_upcoming_inside_48h(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_away_match_in_49h_is_not_on_the_home_row(db_session) -> None:
-    await _match(db_session, "hub-49", NOW + timedelta(hours=49), home="Барыс", away="Динамо-Минск")
-    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
-
-
-@pytest.mark.asyncio
-async def test_home_match_takes_the_slot_two_weeks_ahead_over_a_closer_away(db_session, monkeypatch) -> None:
-    """На домашний договариваются заранее: он в слоте за 14 дней, даже если выездной ближе."""
-    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
-    await _match(db_session, "hub-away", NOW + timedelta(hours=20), home="Барыс", away="Динамо-Минск")
-    home = await _match(db_session, "hub-home-13d", NOW + timedelta(days=13))
+async def test_away_match_in_four_days_is_on_the_home_row(db_session) -> None:
+    """Владелец 2026-11-11: единое окно 14 дней — выездной матч через 4 дня зовёт так же, как домашний."""
+    away = await _match(db_session, "hub-away-4d", NOW + timedelta(days=4), home="Барыс", away="Динамо-Минск")
     card = await hub_card(db_session, SASHA, now=NOW)
-    assert card["mode"] == "before" and card["match"]["id"] == home and card["event_href"]
+    assert card["mode"] == "before" and card["match"]["id"] == away
+    assert card["next"] == [] and card["beyond_window"] is False
 
 
 @pytest.mark.asyncio
-async def test_home_match_past_two_weeks_waits(db_session, monkeypatch) -> None:
+async def test_up_to_three_nearest_matches_by_time(db_session, monkeypatch) -> None:
+    """Ближайший — в карточке, ещё до двух — в ``next``; домашний не перепрыгивает более близкий выездной."""
     monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
-    await _match(db_session, "hub-home-15d", NOW + timedelta(days=15))
-    assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
+    home = await _match(db_session, "hub-home-13d", NOW + timedelta(days=13))
+    away = await _match(db_session, "hub-away-20h", NOW + timedelta(hours=20), home="Барыс", away="Динамо-Минск")
+    mid = await _match(db_session, "hub-away-5d", NOW + timedelta(days=5), home="СКА", away="Динамо-Минск")
+    await _match(db_session, "hub-home-14d+", NOW + timedelta(days=14, hours=1))
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["mode"] == "before" and card["match"]["id"] == away
+    assert [n["match"]["id"] for n in card["next"]] == [mid, home]
+    assert all(n["mode"] == "before" for n in card["next"])
+    assert card["next"][1]["event_href"] == f"client-match?id={home}"
+
+
+@pytest.mark.asyncio
+async def test_nothing_in_two_weeks_takes_one_nearest_future_match(db_session, monkeypatch) -> None:
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    far = await _match(db_session, "hub-home-15d", NOW + timedelta(days=15))
+    await _match(db_session, "hub-home-20d", NOW + timedelta(days=20))
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["mode"] == "before" and card["match"]["id"] == far
+    assert card["next"] == [] and card["beyond_window"] is True
+
+
+@pytest.mark.asyncio
+async def test_far_match_must_still_be_open(db_session) -> None:
+    """Дальний — только тот, на который можно ходить: начавшийся и отменённый не берём."""
+    started = await _match(db_session, "hub-started", NOW - timedelta(hours=30), home="Барыс", away="Динамо-Минск")
+    off = await _match(db_session, "hub-cancelled", NOW + timedelta(days=16))
+    await db_session.execute(text("UPDATE hockey_matches SET status = 'cancelled' WHERE id = :i"), {"i": off})
+    assert started and (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
 
 
 @pytest.mark.asyncio
@@ -154,6 +174,8 @@ async def test_three_misses_hide_the_upcoming_row(db_session) -> None:
         await _final(db_session, missed, at=NOW - timedelta(hours=hours))
     # Выездной: пропуски прячут игру. Домашний — событие, его не прячут (тест ниже).
     await _match(db_session, "hub-still-soon", NOW + timedelta(hours=8), home="Барыс", away="Динамо-Минск")
+    # И за окном 14 дней выездной без хода тоже не зовут.
+    await _match(db_session, "hub-still-far", NOW + timedelta(days=20), home="СКА", away="Динамо-Минск")
     await score_finished_matches(db_session, now=NOW)
     assert (await hub_card(db_session, SASHA, now=NOW))["mode"] is None
 
@@ -256,6 +278,18 @@ async def test_misses_do_not_hide_a_home_match_event(db_session, monkeypatch) ->
 
 
 @pytest.mark.asyncio
+async def test_misses_keep_home_events_in_the_feed_and_drop_away_without_pick(db_session, monkeypatch) -> None:
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    await _three_misses(db_session)
+    await _match(db_session, "ev-away-1d", NOW + timedelta(days=1), home="Барыс", away="Динамо-Минск")
+    picked = await _match(db_session, "ev-away-2d", NOW + timedelta(days=2), home="СКА", away="Динамо-Минск")
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=picked, side="away", now=NOW)
+    home = await _match(db_session, "ev-home-6d", NOW + timedelta(days=6))
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert [card["match"]["id"], *[n["match"]["id"] for n in card["next"]]] == [picked, home]
+
+
+@pytest.mark.asyncio
 async def test_live_home_match_stays_in_the_slot_three_hours(db_session, monkeypatch) -> None:
     monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
     live = await _match(db_session, "ev-live", NOW - timedelta(hours=1))
@@ -291,6 +325,22 @@ async def test_hidden_game_keeps_home_event_and_drops_away_and_results(db_sessio
     )
     card = await hub_card(db_session, SASHA, now=NOW)
     assert card["mode"] == "before" and card["is_home"] is True
+
+
+@pytest.mark.asyncio
+async def test_hidden_game_feed_and_far_match_are_home_only(db_session, monkeypatch) -> None:
+    from src.application.hockey_event import set_kk_hidden
+
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    await set_kk_hidden(db_session, SASHA, True)
+    await _match(db_session, "hid-away-1d", NOW + timedelta(days=1), home="Барыс", away="Динамо-Минск")
+    home = await _match(db_session, "hid-home-3d", NOW + timedelta(days=3))
+    card = await hub_card(db_session, SASHA, now=NOW)
+    assert card["match"]["id"] == home and card["next"] == []
+    await db_session.execute(text("UPDATE hockey_matches SET starts_at = :at WHERE id = :i"), {"at": NOW + timedelta(days=30), "i": home})
+    await _match(db_session, "hid-away-20d", NOW + timedelta(days=20), home="СКА", away="Динамо-Минск")
+    far = await hub_card(db_session, SASHA, now=NOW)
+    assert far["match"]["id"] == home and far["beyond_window"] is True
 
 
 @pytest.mark.asyncio

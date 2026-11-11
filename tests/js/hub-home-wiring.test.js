@@ -105,6 +105,14 @@ describe('скорость (AC-P2…P5)', () => {
     assert.match(more, /Все матчи →/);
   });
 
+  it('«Ближайший лёд» пропускает первый сеанс, только когда он уже в слоте (лента матчей — нет)', () => {
+    const apply = hubJs.slice(hubJs.indexOf('function apply('), hubJs.indexOf('function paintCached('));
+    assert.match(apply, /nearest\(city, kind === 'ice'\);/);
+    const nearest = hubJs.slice(hubJs.indexOf('function nearest('), hubJs.indexOf('function needs('));
+    assert.match(nearest, /if \(skipFirst\) items = items\.slice\(1\);/);
+    assert.equal((nearest.match(/slice\(1\)/g) || []).length, 1, 'другого пропуска первого сеанса нет');
+  });
+
   it('префетч других вкладок — после load, а не вместе с первым экраном', () => {
     const finish = fnBody('finishHubInitialLoading');
     assert.match(finish, /window\.HubHome\.ready\(\)/);

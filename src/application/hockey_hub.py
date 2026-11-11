@@ -1,7 +1,8 @@
 """Строка «Кто кого» на главной: итог, пока его не открыли, или ближайший матч (TASK-299).
 
 Итог важнее приглашения. Итог живёт сутки после ``finalized_at`` и гаснет, когда игрок его открыл.
-Приглашение — ближайший ещё не начавшийся матч, до него не больше 48 часов.
+Приглашение — ближайшие ещё не начавшиеся матчи за 14 дней (до трёх, остальные в ``next``); если в
+окне пусто — один ближайший будущий матч за его пределами (``beyond_window``), лента главной не пустеет.
 Три последних сыгранных матча без хода прячут приглашение. Новичок без единого хода его видит.
 
 Домашний матч — событие, а не только игра (TASK-304): пропуски его не прячут, а идущий домашний
@@ -28,10 +29,10 @@ from src.application.hockey_races import current_race, fresh_race_result, race_f
 from src.application.hockey_teams import team_card
 
 RESULT_WINDOW = timedelta(hours=24)
-# Выездной матч — строка игры за двое суток. Домашний — событие, на него договариваются заранее:
-# он занимает слот главной за 14 дней (владелец 2026-10-20) и важнее выездного в это время.
-BEFORE_WINDOW = timedelta(hours=48)
-HOME_AHEAD = timedelta(days=14)
+# Единое окно приглашения для домашних и выездных (владелец 2026-11-11; было 48 ч выезд / 14 дней дом).
+UPCOMING_AHEAD = timedelta(days=14)
+# Лента слота «сейчас»: до трёх ближайших матчей.
+UPCOMING_LIMIT = 3
 MISSED_STREAK = 3
 LIVE_WINDOW = timedelta(hours=3)
 # «Ждём итог» держится, пока автоподтверждение возможно: через трое суток итог решает только админ.
@@ -121,10 +122,11 @@ _UPCOMING = text("""
            p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled
     FROM kk_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
-    WHERE m.status = 'scheduled' AND m.starts_at > :now AND m.starts_at <= :until
-      AND (CAST(:home AS text) IS NULL OR m.home_team = :home)
+    WHERE m.status = 'scheduled' AND m.starts_at > :now
+      AND (CAST(:until AS timestamptz) IS NULL OR m.starts_at <= :until)
+      AND (NOT :restrict OR (:events AND m.home_team = :home) OR (:picked_ok AND p.side IS NOT NULL))
     ORDER BY m.starts_at, m.id
-    LIMIT 1
+    LIMIT :limit
     """)
 
 _LIVE_HOME = text("""
@@ -194,16 +196,18 @@ def _event_fields(row) -> dict:
     return fields
 
 
-def _suppressed(upcoming, *, hidden: bool, had_pick: bool, finals: list[bool]) -> bool:
-    if upcoming is None:
-        return False
-    row = upcoming._mapping
-    if is_home(row["home_team"]) and hockey_enabled():
-        return False  # событие: зовут и тех, кто не играет
+def _upcoming_filter(*, hidden: bool, had_pick: bool, finals: list[bool]) -> dict:
+    """Какие будущие матчи можно звать. Домашний при включённой игре — событие, его зовут всех.
+
+    Скрывший игру видит только домашние; после трёх пропусков подряд — домашние и те, где уже есть ход
+    (сходил из Telegram — это не пропуск).
+    """
+    events = hockey_enabled()
     if hidden:
-        return True
-    # Уже сходил на ближайший матч (например, из Telegram) — это не пропуск, строку показываем.
-    return suppress_upcoming(had_pick=had_pick, last_finals_picked=finals) and row["pick_side"] is None
+        return {"restrict": True, "events": events, "picked_ok": False}
+    if suppress_upcoming(had_pick=had_pick, last_finals_picked=finals):
+        return {"restrict": True, "events": events, "picked_ok": True}
+    return {"restrict": False, "events": events, "picked_ok": True}
 
 
 async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> dict:
@@ -247,25 +251,24 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
         bool(row.picked)
         for row in (await session.execute(_LAST_FINALS, {"player_key": player_key, "limit": MISSED_STREAK})).all()
     ]
-    upcoming = None
-    if hockey_enabled():
-        upcoming = (
-            await session.execute(
-                _UPCOMING, {"player_key": player_key, "now": now, "until": now + HOME_AHEAD, "home": DINAMO}
-            )
-        ).one_or_none()
-    if upcoming is None:
-        upcoming = (
-            await session.execute(
-                _UPCOMING, {"player_key": player_key, "now": now, "until": now + BEFORE_WINDOW, "home": None}
-            )
-        ).one_or_none()
+    params = {
+        "player_key": player_key,
+        "now": now,
+        "home": DINAMO,
+        **_upcoming_filter(hidden=hidden, had_pick=had_pick, finals=finals),
+    }
+    rows = (await session.execute(_UPCOMING, {**params, "until": now + UPCOMING_AHEAD, "limit": UPCOMING_LIMIT})).all()
+    beyond_window = False
+    if not rows:
+        # В окне пусто — один ближайший будущий матч, хоть и дальше двух недель.
+        rows = (await session.execute(_UPCOMING, {**params, "until": None, "limit": 1})).all()
+        beyond_window = bool(rows)
+    upcoming = rows[0] if rows else None
     mode = choose_mode(
         unseen_result=result is not None,
         waiting=waiting is not None,
         upcoming=upcoming is not None,
-        # Уже сходил на ближайший матч (например, из Telegram) — это не пропуск, строку показываем.
-        suppress=_suppressed(upcoming, hidden=hidden, had_pick=had_pick, finals=finals),
+        suppress=False,  # пропуски и скрытая игра уже отсеяны в запросе
     )
     if mode == "result" and result is not None:
         pick = _pick(result._mapping)
@@ -286,12 +289,16 @@ async def hub_card(session: AsyncSession, player_key: int, *, now: datetime) -> 
             **_event_fields(waiting._mapping),
         }
     if mode == "before" and upcoming is not None:
-        return {
-            "mode": "before",
-            "match": {**_match(upcoming._mapping, now=now), "race_final": upcoming._mapping["id"] == final_id},
-            "my_pick": _pick(upcoming._mapping),
-            **_event_fields(upcoming._mapping),
-        }
+
+        def before(row) -> dict:
+            return {
+                "mode": "before",
+                "match": {**_match(row._mapping, now=now), "race_final": row._mapping["id"] == final_id},
+                "my_pick": _pick(row._mapping),
+                **_event_fields(row._mapping),
+            }
+
+        return {**before(upcoming), "next": [before(r) for r in rows[1:]], "beyond_window": beyond_window}
     return {"mode": None}
 
 
@@ -301,11 +308,11 @@ async def mark_result_seen(session: AsyncSession, *, player_key: int, match_id: 
 
 
 __all__ = [
-    "BEFORE_WINDOW",
-    "HOME_AHEAD",
     "LIVE_WINDOW",
     "MISSED_STREAK",
     "RESULT_WINDOW",
+    "UPCOMING_AHEAD",
+    "UPCOMING_LIMIT",
     "WAITING_WINDOW",
     "choose_mode",
     "hub_card",
