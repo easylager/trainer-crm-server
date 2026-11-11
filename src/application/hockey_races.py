@@ -5,14 +5,14 @@
 
 - корона — (период, клуб или «все», лига или нет, игрок): первое место среза «месяц × все» и
   «месяц × клуб» после последнего матча среза; у лиги — по месяцам сезонной лиги и в конце срока.
-  Порог: в срезе хотя бы 3 игрока с очками; ничья по очкам, точным и ходам — корона каждому лидеру;
-  с нулём очков короны нет;
+  Порог: в срезе «все» или «клуб» хотя бы 3 игрока с очками, в лиге — хотя бы 2; ничья по очкам, точным и
+  ходам — корона каждому лидеру; с нулём очков короны нет;
 - звание сезона — «Знаток сезона 2026/27» (все) и «Знаток <клуба> 2026/27» первому месту после финала сезона.
 
 Срез закрывается один раз (``hockey_closures``): повтор ничего не пишет. Закрытие ждёт:
 1. все матчи среза сыграны или отменены (матч на ручной проверке держит срез не дольше 72 часов
    после конца периода — потом срез закрывается без него);
-2. окно исправления итога: 7 суток после итога последнего матча среза (или ручное подтверждение);
+2. окно исправления итога: 2 суток после итога последнего матча среза (или ручное подтверждение);
 3. календарь прочитан в последние три недели периода — иначе последние матчи могли быть не видны.
 После закрытия поправка итога меняет очки в таблицах, но не корону.
 """
@@ -31,6 +31,8 @@ from src.application.hockey_matches import DINAMO
 from src.application.hockey_slices import (
     SCOPE_SQL,
     KIND_MONTH as PERIOD_MONTH,
+    CROWN_MIN_PLAYERS,
+    LEAGUE_CROWN_MIN_MEMBERS,
     Period,
     Scope,
     club_scope,
@@ -50,8 +52,8 @@ KIND_MONTH = "month"
 POINTS_RULE = "fifa_v1"
 # Итог месяца висит на главной сутки после закрытия гонки, пока его не открыли.
 RESULT_WINDOW = timedelta(hours=24)
-# Окно исправления итога: корона пишется, когда он прошёл (решение 2026-11-01, Q4).
-CORRECTION_WINDOW = timedelta(days=7)
+# Окно исправления итога: корона пишется, когда он прошёл (решение 2026-11-01, Q4; с 2026-11-11 — 2 суток вместо 7).
+CORRECTION_WINDOW = timedelta(days=2)
 # Матч на ручной проверке не держит срез вечно: через 72 часа после конца периода срез закрывается без него.
 GIVE_UP_AFTER = timedelta(hours=72)
 # Сайт клуба показывает календарь примерно на 4 недели вперёд: прочитанный за 3 недели до конца
@@ -59,8 +61,6 @@ GIVE_UP_AFTER = timedelta(hours=72)
 CALENDAR_COVERS_END = timedelta(days=21)
 # Звания сезона — только с первого сезона игры, прошлые сезоны задним числом не выдаём.
 FIRST_TITLE_SEASON = 2026
-# Старый порог лиги из двух участников заменён общим порогом из трёх игроков с очками (PDEC-031).
-LEAGUE_CROWN_MIN_MEMBERS = 3
 
 
 @dataclass(frozen=True)
@@ -245,7 +245,9 @@ async def _award(
     ).scalar_one_or_none()
     if closure is None:
         return None
-    leaders = crown_leaders(rows)
+    # Лига — круг друзей: корону разыгрывают двое с очками; срезы «все» и «клуб» — трое.
+    min_players = CROWN_MIN_PLAYERS if league_id is None else LEAGUE_CROWN_MIN_MEMBERS
+    leaders = crown_leaders(rows, min_players=min_players)
     for r in leaders:
         await session.execute(
             _INSERT_CROWN,
@@ -499,7 +501,7 @@ async def confirm_close_month(
 async def pending_month_closures(session: AsyncSession, *, now: datetime, limit: int = 8) -> list[dict]:
     """Срезы месяца, где всё сыграно и корона возможна, но окно исправления итога ещё не вышло.
 
-    Это то, что админ может закрыть сразу кнопкой (``confirm_close_month``), не дожидаясь 7 суток. Срез без
+    Это то, что админ может закрыть сразу кнопкой (``confirm_close_month``), не дожидаясь 2 суток. Срез без
     трёх игроков с очками сюда не попадает: короны в нём не будет, подтверждать нечего.
     """
     first, _ = month_bounds(FIRST_RACE_MONTH)
@@ -754,8 +756,9 @@ async def leader_line(session: AsyncSession, *, player_key: int, now: datetime) 
     others = [r for r in rows if r.player_key != player_key]
     if not others or not any(r.points for r in rows):
         return None
-    top = max(others, key=lambda r: (r.points, r.exact))
-    if me.points > top.points or (me.points == top.points and me.exact > top.exact):
+    # Тот же тай-брейк, что в таблице (очки → точные → меньше ходов): строки уже по местам.
+    top = others[0]
+    if me.rank < top.rank:
         return {"league_name": best.name, "leader": None, "gap": me.points - top.points, "me_leading": True}
     return {
         "league_name": best.name,

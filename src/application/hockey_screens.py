@@ -19,6 +19,7 @@ from src.application.hockey_game import POINTS_EXACT, POINTS_WINNER
 from src.application.hockey_slices import (
     DINAMO,
     KIND_MONTH,
+    LEAGUE_CROWN_MIN_MEMBERS,
     Row,
     club_scope,
     crown_eligible,
@@ -161,7 +162,7 @@ async def match_movement(session: AsyncSession, *, player_key: int, match_id: in
                 "rank_before": _league_rank_before(rows, taken, player_key),
                 "rank_after": after.rank,
                 "players": len(rows),
-                "crown": after.rank == 1 and crown_eligible(rows),
+                "crown": after.rank == 1 and crown_eligible(rows, min_players=LEAGUE_CROWN_MIN_MEMBERS),
             }
         )
     # Сначала то, что сдвинулось сильнее; при равенстве — порядок срезов выше.

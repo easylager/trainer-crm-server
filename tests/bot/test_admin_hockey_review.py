@@ -246,13 +246,14 @@ async def _full_month(db_session) -> None:
         )
     await set_manual_result(db_session, m1, home_score=3, away_score=1, decided_in="regulation", now=at(20, 22))
     await score_finished_matches(db_session, now=at(20, 22))
-    await mark_calendar_synced(db_session, now=at(25))
+    await mark_calendar_synced(db_session, now=at(21))
 
 
 @pytest.mark.asyncio
 async def test_close_month_button_writes_crowns_once(db_session) -> None:
     await _full_month(db_session)
-    pending = await pending_month_closures(db_session, now=at(26))
+    # Итог 20-го в 22:00: окно исправления (2 суток) ещё идёт 22-го в 19:00 — срез ждёт кнопки.
+    pending = await pending_month_closures(db_session, now=at(22))
     assert {p["club"] for p in pending} >= {None, "Юность"}
     assert pending[0]["leaders"][0][1] == 50
     race_id = pending[0]["race_id"]
