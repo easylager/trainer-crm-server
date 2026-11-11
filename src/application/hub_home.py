@@ -3,8 +3,8 @@
 Два куска для `/client/hub/bootstrap`:
 - `city_block` — шапка, «Ближайший лёд» и «Что нужно» из того же вида, что рисует glideclub.by/c/{город},
   но со ссылками на экраны Mini App;
-- `now_slot` — слот «сейчас» по приоритету: моя запись сегодня → итог «Кто кого» → лента до трёх
-  ближайших матчей → ближайший лёд (только когда будущих матчей нет).
+- `now_slot` — одна карточка «сейчас» по приоритету: моя запись сегодня → итог «Кто кого» →
+  матч скоро → ближайший лёд.
 """
 
 from __future__ import annotations
@@ -22,8 +22,6 @@ from src.shared.copy_ru import t
 from src.shared.public_display import format_public_name
 
 UPCOMING_LIMIT = 3
-# Матчей в ленте слота «сейчас» — не больше трёх, последней карточкой «Все матчи».
-FEED_LIMIT = 3
 _RINK_TYPES = ("ice", "outdoor")
 # Записи, которые уже не про «сегодня иду на лёд».
 _DEAD_BOOKING = frozenset({"cancelled", "canceled", "declined", "rejected", "no_show", "completed", "expired"})
@@ -284,37 +282,20 @@ def now_slot(
             "minutes_until": _minutes_until(str(booking.get("start_time") or ""), local_now=local_now),
         }
     dinamo = _dinamo_card(hockey if has_city else None)
-    xl = (extraliga or {}) if has_city else {}
-    # Слот — лента (TASK-340, экран 11; владелец 2026-11-11): до трёх ближайших матчей — Динамо и
-    # Экстралига города — по времени, последней «Все матчи». Итог, «ждём итог», идущий матч и итог
-    # месяца сохраняют приоритет: встают в ленту сверх трёх, Динамо-приглашений при них нет.
-    matches: list[dict[str, Any]] = [dict(m) for m in xl.get("matches") or []]
-    priority = None
-    if dinamo is not None and (hockey or {}).get("mode") == "before":
-        own = [dinamo] + [{"kind": "kk_before", "hockey": dict(n)} for n in (hockey or {}).get("next") or []]
-        if not (hockey or {}).get("beyond_window"):
-            matches += own
-        elif not matches:
-            # В 14 днях пусто: один ближайший будущий матч — Динамо или города, что раньше.
-            far = xl.get("far")
-            matches = [min([own[0], *([dict(far)] if far else [])], key=_feed_start)]
-    else:
-        priority = dinamo
-    if not matches and priority is None and xl.get("far"):
-        matches = [dict(xl["far"])]
-    matches.sort(key=_feed_start)
-    items = matches[:FEED_LIMIT]
-    if priority is not None and items:
-        # Итог встаёт по времени среди матчей города, а не в хвост; итог месяца без даты — в конец.
-        items = sorted([*items, priority], key=_feed_start)
-    if items:
+    # Экстралига (TASK-340, экран 11): слот становится лентой — матчи города, Динамо, «все матчи».
+    matches = list((extraliga or {}).get("matches") or []) if has_city else []
+    if matches:
+        items: list[dict[str, Any]] = [dict(m) for m in matches]
+        if dinamo is not None:
+            items.append(dinamo)
+        # Динамо встаёт по времени среди матчей города, а не в хвост; итог месяца без даты — в конец.
+        items.sort(key=_feed_start)
         # Вход на расписание есть всегда: ближайший матч может быть на следующей неделе (count = 0).
-        count = int(xl.get("week_count") or 0)
-        items.append({"kind": "more", "count": count, "href": xl.get("all_href") or "client-matches"})
+        count = int((extraliga or {}).get("week_count") or 0)
+        items.append({"kind": "more", "count": count, "href": (extraliga or {}).get("all_href") or "client-matches"})
         return {"kind": "feed", "items": items}
-    if priority is not None:
-        return priority
-    # Лёд — только когда будущих матчей нет совсем (межсезонье, пустой календарь).
+    if dinamo is not None:
+        return dinamo
     if upcoming:
         return {"kind": "ice", "session": dict(upcoming[0])}
     return None

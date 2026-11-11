@@ -33,8 +33,7 @@ def test_finished_or_cancelled_booking_gives_way_to_the_game() -> None:
     assert slot is not None and slot["kind"] == "kk_result"
     tomorrow = _bookings(_booking(), day="2026-10-20")
     slot = now_slot(bookings=tomorrow, hockey=KK_BEFORE, upcoming=ICE, now=NOW)
-    assert slot is not None and slot["kind"] == "feed"
-    assert [i["kind"] for i in slot["items"]] == ["kk_before", "more"]
+    assert slot is not None and slot["kind"] == "kk_before"
 
 
 def test_without_city_the_game_waits_for_the_city() -> None:
