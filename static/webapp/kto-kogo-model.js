@@ -433,9 +433,9 @@
     return inTab ? 'stay' : 'home';
   }
 
-  /** Нужна ли нативная «назад» Telegram: во вкладке на корне её нет, на вложенных экранах есть. */
-  function nativeBackShown(stackLen, inTab) {
-    return !inTab || stackLen > 1;
+  /** Нужна ли нативная «назад» Telegram: во вкладке на корне её нет, на вложенных экранах и при открытой шторке есть. */
+  function nativeBackShown(stackLen, inTab, hasSheet) {
+    return hasSheet === true || !inTab || stackLen > 1;
   }
 
   /**

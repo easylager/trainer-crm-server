@@ -95,7 +95,7 @@ function run(src, { flag, history = 3, withHelper = true, attrs = {}, cache, nav
     Telegram: { WebApp: { initData: 'a=1', initDataUnsafe: { user: { id: 42 } } } },
     addEventListener: (n, f) => listeners.push([n, f]),
   };
-  const raw = cache !== undefined ? cache : flag ? JSON.stringify({ u: '42', season_ui: true }) : null;
+  const raw = cache !== undefined ? cache : flag ? JSON.stringify({ u: '42', season_ui: true, at: Date.now() }) : null;
   window.localStorage = storageThrows
     ? { getItem() { throw new Error('denied'); } }
     : { getItem: (k) => (k === KEY ? raw : null) };
@@ -121,9 +121,9 @@ function run(src, { flag, history = 3, withHelper = true, attrs = {}, cache, nav
 describe('mini-app-client-home.js: флаг выключен = прежнее поведение (6 страниц)', () => {
   const states = [
     ['нет кэша', { flag: false }],
-    ['кэш season_ui false', { flag: false, cache: JSON.stringify({ u: '42', season_ui: false }) }],
-    ['"true" строкой', { cache: JSON.stringify({ u: '42', season_ui: 'true' }) }],
-    ['чужой u', { cache: JSON.stringify({ u: '7', season_ui: true }) }],
+    ['кэш season_ui false', { flag: false, cache: JSON.stringify({ u: '42', season_ui: false, at: Date.now() }) }],
+    ['"true" строкой', { cache: JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }) }],
+    ['чужой u', { cache: JSON.stringify({ u: '7', season_ui: true, at: Date.now() }) }],
     ['битый JSON', { cache: '{oops' }],
     ['storage бросает', { storageThrows: true }],
     ['хелпер не загрузился', { flag: true, withHelper: false }],

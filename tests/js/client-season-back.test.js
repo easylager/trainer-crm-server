@@ -13,22 +13,22 @@ const store = (v) => ({ getItem: (k) => (k === KEY ? v : null) });
 const throwing = { getItem() { throw new Error('denied'); } };
 const tg = (id) => ({ initDataUnsafe: { user: { id } } });
 const env = (value, uid = 42) => ({ localStorage: store(value), Telegram: { WebApp: tg(uid) } });
-const on = JSON.stringify({ u: '42', season_ui: true });
+const on = JSON.stringify({ u: '42', season_ui: true, at: Date.now() });
 
 describe('readCachedSeasonUi / isSeasonUi: состояния кэша', () => {
   it('флаг включён у того же пользователя', () => assert.equal(B.isSeasonUi(env(on)), true));
   it('u числом тоже совпадает', () =>
-    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: 42, season_ui: true }))), true));
+    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: 42, season_ui: true, at: Date.now() }))), true));
   it('кэша нет', () => assert.equal(B.isSeasonUi(env(null)), false));
   it('битый JSON', () => assert.equal(B.isSeasonUi(env('{oops')), false));
-  it('чужой u', () => assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '7', season_ui: true }))), false));
+  it('чужой u', () => assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '7', season_ui: true, at: Date.now() }))), false));
   it('нет u в кэше', () => assert.equal(B.isSeasonUi(env(JSON.stringify({ season_ui: true }))), false));
   it('"true" строкой', () =>
-    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: 'true' }))), false));
+    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }))), false));
   it('1 вместо true', () =>
-    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: 1 }))), false));
+    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: 1, at: Date.now() }))), false));
   it('season_ui false', () =>
-    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: false }))), false));
+    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: false, at: Date.now() }))), false));
   it('JSON не объект', () => {
     assert.equal(B.isSeasonUi(env('null')), false);
     assert.equal(B.isSeasonUi(env('true')), false);

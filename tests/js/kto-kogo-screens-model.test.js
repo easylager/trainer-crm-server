@@ -252,12 +252,13 @@ describe('таблица', () => {
   it('кнопка раскрывает присланное: «всех», если прислано всё, иначе «первых 50»; я ниже — разрыв и соседи', () => {
     const items = Array.from({ length: 20 }, (_, i) => r(i + 1));
     const view = { items, me: r(3, { is_me: true }), neighbors: [], players: 20 };
-    assert.equal(S.tableMore(view), 'Показать всех' + NBSP + '20');
+    assert.equal(S.tableMore(view), 'Показать всех' + NBSP + '20' + NBSP + 'игроков');
     assert.equal(S.tableRows(view, true).length, 20);
     assert.equal(S.tableMore(view, true), null);
     const top = Array.from({ length: 50 }, (_, i) => r(i + 1));
     const big = { items: top, me: r(214, { is_me: true }), neighbors: [r(213), r(214, { is_me: true }), r(215)], players: 1380 };
-    assert.equal(S.tableMore(big), 'Показать первых' + NBSP + '50');
+    assert.equal(S.tableMore(big), 'Показать первых' + NBSP + '50' + NBSP + 'игроков')
+    assert.equal(S.tableMore({ items: top.slice(0, 21), players: 1000 }), 'Показать первых' + NBSP + '21' + NBSP + 'игрока');
     const rows = S.tableRows(big, true);
     assert.equal(rows.length, 54);
     assert.deepEqual(rows.slice(49).map((x) => (x.type === 'gap' ? 'gap' : x.r.rank)), [50, 'gap', 213, 214, 215]);

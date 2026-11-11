@@ -50,6 +50,13 @@ html body.cm-body.tg-dark {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Фокус с клавиатуры: чернила акцента — 6:1 на светлой, светлый акцент на тёмной (токены сами переключаются с body.tg-dark). */
+.cm a:focus-visible,
+.cm button:focus-visible {
+  outline: 2px solid var(--g-accent-ink);
+  outline-offset: 2px;
+}
+
 /* ── Шапка ─────────────────────────────────────────────────────────── */
 
 .cm-head {

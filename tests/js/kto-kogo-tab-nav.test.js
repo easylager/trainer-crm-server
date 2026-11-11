@@ -35,6 +35,16 @@ describe('во вкладке: корень', () => {
   it('стрелки Telegram нет', () => {
     assert.equal(M.nativeBackShown(1, true), false);
   });
+  it('открытая шторка на корне — стрелка есть и закрывает шторку', () => {
+    assert.equal(M.nativeBackShown(1, true, true), true);
+    assert.equal(M.backAction(1, true, true), 'sheet');
+    assert.equal(M.nativeBackShown(1, true, false), false);
+    assert.equal(M.nativeBackShown(1, true, undefined), false);
+  });
+  it('флаг выключен: шторка ничего не меняет, стрелка и так видна', () => {
+    assert.equal(M.nativeBackShown(1, false, true), true);
+    assert.equal(M.nativeBackShown(1, false, false), true);
+  });
   it('«назад» на корне ничего не делает', () => {
     assert.equal(M.backAction(1, false, true), 'stay');
   });
@@ -117,7 +127,7 @@ describe('проводка в kto-kogo.js', () => {
     assert.match(js, /shell\.uiFlags\(\)\.season_ui/);
   });
   it('стрелка Telegram ставится через MiniAppBack по nativeBackShown, на корне вкладки — clear()', () => {
-    assert.match(js, /if \(M\.nativeBackShown\(state\.stack\.length, inTab\(\)\)\) window\.MiniAppBack\.set\(back\);\s*else window\.MiniAppBack\.clear\(\);/);
+    assert.match(js, /if \(M\.nativeBackShown\(state\.stack\.length, inTab\(\), !!state\.sheet\)\) window\.MiniAppBack\.set\(back\);\s*else window\.MiniAppBack\.clear\(\);/);
   });
   it('«назад» решает backAction; без вкладки корень по-прежнему уходит на client-home', () => {
     assert.match(js, /M\.backAction\(state\.stack\.length, !!state\.sheet, inTab\(\)\)/);
@@ -160,11 +170,11 @@ describe('S2: бар оболочки на странице игры', () => {
     }
     const off = {
       'нет кэша': {},
-      'season_ui false': { stored: JSON.stringify({ u: '42', season_ui: false, bookings_tab: false }) },
+      'season_ui false': { stored: JSON.stringify({ u: '42', season_ui: false, bookings_tab: false, at: Date.now() }) },
       'битый JSON': { stored: '{season_ui:true' },
-      'чужой u': { stored: JSON.stringify({ u: '7', season_ui: true }) },
-      'season_ui не true, а строка': { stored: JSON.stringify({ u: '42', season_ui: 'true' }) },
-      'нет пользователя Telegram': { user: null, stored: JSON.stringify({ u: '42', season_ui: true }) },
+      'чужой u': { stored: JSON.stringify({ u: '7', season_ui: true, at: Date.now() }) },
+      'season_ui не true, а строка': { stored: JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }) },
+      'нет пользователя Telegram': { user: null, stored: JSON.stringify({ u: '42', season_ui: true, at: Date.now() }) },
       'storage недоступен': { storageThrows: true },
     };
     for (const [name, opts] of Object.entries(off)) {
@@ -175,7 +185,7 @@ describe('S2: бар оболочки на странице игры', () => {
       });
     }
     it('season_ui true со своим u → оболочка и её css пишутся синхронно (document.write), без запросов из гейта', () => {
-      const r = run({ stored: JSON.stringify({ u: '42', season_ui: true, bookings_tab: false }) });
+      const r = run({ stored: JSON.stringify({ u: '42', season_ui: true, bookings_tab: false, at: Date.now() }) });
       assert.equal(r.writes.length, 1);
       assert.match(r.writes[0], /<script src="\/static\/webapp\/mini-app-client-shell\.js\?v=[^"]+"><\/script>$/);
       assert.match(r.writes[0], /^<link rel="stylesheet" href="\/static\/webapp\/mini-app-client-shell\.css\?v=[^"]+">/);

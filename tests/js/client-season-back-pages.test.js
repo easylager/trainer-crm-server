@@ -16,7 +16,7 @@ const WEBAPP = path.join(__dirname, '../../static/webapp');
 const PAGES = ['client-saved-trainers', 'client-stats', 'client-passes-certificates', 'client-passes',
   'client-certificates', 'client-family-access', 'client-support'];
 const KEY = 'cw_ui_flags_v1';
-const ON = JSON.stringify({ u: '42', season_ui: true });
+const ON = JSON.stringify({ u: '42', season_ui: true, at: Date.now() });
 
 function scriptsOf(html) {
   const out = [];
@@ -174,9 +174,9 @@ describe('исполнение страниц: флаг включён (кэш s
 describe('исполнение страниц: флаг выключен — как раньше', () => {
   const offStates = [
     ['нет кэша', { cache: null }],
-    ['season_ui false', { cache: JSON.stringify({ u: '42', season_ui: false }) }],
-    ['"true" строкой', { cache: JSON.stringify({ u: '42', season_ui: 'true' }) }],
-    ['чужой u', { cache: JSON.stringify({ u: '7', season_ui: true }) }],
+    ['season_ui false', { cache: JSON.stringify({ u: '42', season_ui: false, at: Date.now() }) }],
+    ['"true" строкой', { cache: JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }) }],
+    ['чужой u', { cache: JSON.stringify({ u: '7', season_ui: true, at: Date.now() }) }],
     ['битый JSON', { cache: '{oops' }],
     ['storage бросает', { storageThrows: true }],
   ];

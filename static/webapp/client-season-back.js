@@ -8,6 +8,8 @@
   'use strict';
 
   var UI_FLAGS_KEY = 'cw_ui_flags_v1';
+  /* Тот же TTL и то же правило, что в оболочке (UI_FLAGS_TTL_MS) и в гейте kto-kogo.html. */
+  var UI_FLAGS_TTL_MS = 24 * 60 * 60 * 1000;
 
   /** id пользователя Telegram из initDataUnsafe.user.id; пусто, если нет. */
   function telegramUserId(tg) {
@@ -19,12 +21,14 @@
     }
   }
 
-  /** season_ui из кэша: только если кэш чей-то этого пользователя и season_ui === true. */
+  /** season_ui из кэша: только если кэш этого пользователя, свежий (at моложе суток) и season_ui === true. */
   function readCachedSeasonUi(storage, uid) {
     try {
       if (!uid || !storage) return false;
       var c = JSON.parse(storage.getItem(UI_FLAGS_KEY) || 'null');
-      return !!c && String(c.u) === String(uid) && c.season_ui === true;
+      if (!c || String(c.u) !== String(uid) || c.season_ui !== true) return false;
+      var age = Date.now() - c.at;
+      return typeof c.at === 'number' && age >= 0 && age < UI_FLAGS_TTL_MS;
     } catch (e) {
       return false;
     }
@@ -91,6 +95,7 @@
     meUrl: meUrl,
     goBack: goBack,
     UI_FLAGS_KEY: UI_FLAGS_KEY,
+    UI_FLAGS_TTL_MS: UI_FLAGS_TTL_MS,
     telegramUserId: telegramUserId,
     readCachedSeasonUi: readCachedSeasonUi,
     isSeasonUi: isSeasonUi,

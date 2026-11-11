@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&amp;family=Golos+Text:wght@400;500;600;700&amp;display=swap">
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611112">
   <!-- TASK-374: оболочка (бар вкладок) грузится ТОЛЬКО при season_ui из кэша флагов оболочки (cw_ui_flags_v1, привязан к id
-       пользователя Telegram). Флаг выключен, кэша нет, кэш битый или чужой — оболочки на странице нет вовсе: ни запросов
+       пользователя Telegram). Флаг выключен, кэша нет, кэш битый, чужой или старше суток — оболочки на странице нет вовсе: ни запросов
        client/session и ui-flags, ни событий, ни переадресаций, игра как раньше. При флаге — синхронно (document.write),
        чтобы бар был до первого кадра. Пробел: при пустом кэше бар появится после захода на другую вкладку приложения. -->
   <script id="kk-shell-gate">
@@ -22,7 +22,9 @@
       var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
       var uid = u && u.id != null ? String(u.id) : '';
       var c = uid ? JSON.parse(window.localStorage.getItem('cw_ui_flags_v1') || 'null') : null;
-      on = !!c && String(c.u) === uid && c.season_ui === true;
+      var age = c ? Date.now() - c.at : -1;
+      /* Правило и TTL (сутки) те же, что в mini-app-client-shell.js и client-season-back.js. */
+      on = !!c && String(c.u) === uid && c.season_ui === true && typeof c.at === 'number' && age >= 0 && age < 86400000;
     } catch (e) { on = false; }
     if (!on) return;
     document.write('<link rel="stylesheet" href="/static/webapp/mini-app-client-shell.css?v=202611112">'

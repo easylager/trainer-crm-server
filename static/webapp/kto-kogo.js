@@ -421,7 +421,7 @@
   /** Нативная «назад» Telegram: во вкладке на корне её нет, на вложенных экранах снимает экран. */
   function syncBack() {
     if (!window.MiniAppBack) return;
-    if (M.nativeBackShown(state.stack.length, inTab())) window.MiniAppBack.set(back);
+    if (M.nativeBackShown(state.stack.length, inTab(), !!state.sheet)) window.MiniAppBack.set(back);
     else window.MiniAppBack.clear();
   }
 

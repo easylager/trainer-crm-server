@@ -129,7 +129,7 @@ class Node {
 
 function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {} } = {}) {
   const store = new Map();
-  if (flags) store.set(FLAGS_KEY, JSON.stringify(Object.assign({ u: String(userId), at: 1 }, flags)));
+  if (flags) store.set(FLAGS_KEY, JSON.stringify(Object.assign({ u: String(userId), at: Date.now() }, flags)));
   const session = new Map();
   const docListeners = {};
   const winListeners = {};
@@ -538,6 +538,17 @@ describe('п. 5: предзагрузка на pointerdown', () => {
     assert.equal(prefetched(t).length, got.length, 'повторный pointerdown не дублирует ссылки');
   });
 
+  it('kk — адрес и ?v= предзагрузки те же, что у ссылок на странице игры, и это /static/webapp/', () => {
+    const html = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/kto-kogo.html'), 'utf8');
+    const page = [...html.matchAll(/(?:href|src)="(\/static\/webapp\/kto-kogo[\w-]*\.(?:js|css)\?v=\d+)"/g)].map((m) => m[1]).sort();
+    assert.ok(page.length >= 10);
+    const t = bootShell({ flags: SEASON });
+    t.btn('kk').fire('pointerdown');
+    const hrefs = t.doc.head.descendants().filter((n) => n.rel === 'prefetch').map((n) => n.href.replace(/^https?:\/\/[^/]+/, '')).sort();
+    assert.deepEqual(hrefs, page);
+    assert.ok(hrefs.every((h) => h.startsWith('/static/webapp/')), 'ни одного /webapp/kto-kogo*');
+  });
+
   it('me — client-me.css, client-me.js и тёплый кэш', async () => {
     const payload = { name: 'Максим', tiles: [1, 2] };
     const t = bootShell({ flags: SEASON, responses: { '/api/webapp/client/me': payload } });
@@ -558,6 +569,17 @@ describe('п. 5: предзагрузка на pointerdown', () => {
     t.btn('me').fire('pointerdown');
     await t.flush();
     assert.equal(t.fetches.filter((u) => u === '/api/webapp/client/me').length, 1);
+  });
+
+  it('me — на самой странице «Я» тёплый кэш не запрашивается (retap спросит страница), с другой — да', async () => {
+    const onMe = bootShell({ flags: SEASON, pathname: '/webapp/client-me', responses: { '/api/webapp/client/me': { a: 1 } } });
+    onMe.btn('me').fire('pointerdown');
+    await onMe.flush();
+    assert.equal(onMe.fetches.filter((u) => u === '/api/webapp/client/me').length, 0);
+    const other = bootShell({ flags: SEASON, pathname: '/webapp/client-home', responses: { '/api/webapp/client/me': { a: 1 } } });
+    other.btn('me').fire('pointerdown');
+    await other.flush();
+    assert.equal(other.fetches.filter((u) => u === '/api/webapp/client/me').length, 1);
   });
 
   it('me — ответ с ошибкой кэш не пишет', async () => {
