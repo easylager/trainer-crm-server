@@ -304,6 +304,55 @@ describe('«Лёд и занятия»', () => {
     assert.deepEqual(rowKeys(model(d)), ['bookings', 'family']);
   });
 
+  describe('«Мой тренер» (TASK-385)', () => {
+    const withTrainer = (t) => {
+      const d = full();
+      d.rows.trainer = t;
+      return d;
+    };
+    const T = { name: 'Анна Соколова', href: 'client-trainer?id=7' };
+
+    it('есть тренер — первая строка с именем и своим href', () => {
+      const m = model(withTrainer(T));
+      assert.equal(rowKeys(m)[0], 'trainer');
+      assert.deepEqual(row(m, 'trainer'), { key: 'trainer', label: 'Мой тренер', value: 'Анна Соколова', href: 'client-trainer?id=7' });
+    });
+
+    it('порядок: тренер, записи, абонементы, сохранённые, заявки, семья; вкладка «Записи» убирает только записи', () => {
+      assert.deepEqual(rowKeys(model(withTrainer(T))), ['trainer', 'bookings', 'passes', 'saved', 'requests', 'family']);
+      assert.deepEqual(rowKeys(model(withTrainer(T), { bookingsTab: true })), ['trainer', 'passes', 'saved', 'requests', 'family']);
+    });
+
+    it('null — строки нет, остальные на месте', () => {
+      assert.deepEqual(rowKeys(model(withTrainer(null))), ['bookings', 'passes', 'saved', 'requests', 'family']);
+    });
+
+    it('кэш старой схемы без поля — как null, не падает', () => {
+      const d = full();
+      assert.equal('trainer' in d.rows, false);
+      assert.deepEqual(rowKeys(model(d)), ['bookings', 'passes', 'saved', 'requests', 'family']);
+      const bare = newcomer();
+      delete bare.rows;
+      assert.deepEqual(rowKeys(model(bare)), ['family']);
+    });
+
+    it('пустое, пробельное и нестроковое имя — строки нет', () => {
+      for (const name of ['', '   ', null, undefined, 42]) {
+        assert.equal(row(model(withTrainer({ name, href: T.href })), 'trainer'), undefined, String(name));
+      }
+      assert.equal(row(model(withTrainer({ name: 'Анна', href: '' })), 'trainer'), undefined);
+      assert.equal(row(model(withTrainer('Анна')), 'trainer'), undefined);
+    });
+
+    it('эмодзи и длинное имя доходят как есть, без обрезки и склейки слов', () => {
+      assert.equal(row(model(withTrainer({ name: 'Аня 🌱', href: T.href })), 'trainer').value, 'Аня 🌱');
+      const long = 'Константин Константинович Рогозин-Ли';
+      const v = row(model(withTrainer({ name: ' ' + long + ' ', href: T.href })), 'trainer').value;
+      assert.equal(v, long);
+      assert.ok(!v.includes('\u00a0'), 'между словами обычный пробел, чтобы имя могло переноситься');
+    });
+  });
+
   it('«Мои записи» скрыта, если в баре вкладка «Записи»', () => {
     assert.deepEqual(rowKeys(model(full(), { bookingsTab: true })), ['passes', 'saved', 'requests', 'family']);
   });

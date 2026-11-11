@@ -196,11 +196,11 @@ html body.cm-body.tg-dark {
 }
 
 /*
- * Окно уже 375 px (карточка уже 343): колонку имени съедает кнопка с текстом, «Максим» 24 px
+ * Окно уже 390 px (карточка уже 358): колонку имени съедает кнопка с текстом, «Максим» 24 px
  * не помещается. Остаётся иконка 36 × 36, зона касания 44 × 44. Условие по ширине окна: карточка
  * всегда на 32 px уже окна, так что это то же, что ширина карточки, без ResizeObserver.
  */
-@media (max-width: 374px) {
+@media (max-width: 389px) {
   .cm-edit {
     justify-content: center;
     width: 36px;
@@ -445,6 +445,20 @@ html body.cm-body.tg-dark {
   color: var(--g-muted);
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+.cm-row--trainer .cm-row__label {
+  flex: none;
+}
+
+/* Имя тренера: переносится по границам слов, без многоточия, не обрезается. */
+.cm-row--trainer .cm-row__value {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .cm-row__chev {
