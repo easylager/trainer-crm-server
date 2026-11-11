@@ -1,0 +1,483 @@
+/*
+ * Вкладка «Я» (TASK-370). Размеры, отступы, кегли и радиусы — design/your-season/me-season-*.html
+ * и me-new-*.html; цвета — только токены glide-tokens.css (таблица в design/your-season/README.md).
+ * Тёмная тема приходит с body.tg-dark (client-mini-app-theme.js).
+ */
+
+/* Тема клиента (mini-app-client-theme.css) красит body через !important — фон из токенов, как на главной. */
+html body.cm-body,
+html.trainer-theme-dark body.cm-body,
+html.trainer-theme-light body.cm-body {
+  background: var(--g-bg) !important;
+  font-family: var(--g-font);
+  font-size: 15px;
+  line-height: 1.35;
+  margin: 0;
+  /* mini-app-components.css даёт body поля 12 px; низ оставляем оболочке (отступ под бар). */
+  padding-top: 0;
+  padding-left: 0;
+  padding-right: 0;
+  /* Аватар: светлее «wash» — #EEF9F9 в макете; в тёмной — подложка чипа. */
+  --cm-avatar: var(--glide-50);
+  /* Затухание под баром оболочки — цветом этого холста, а не холста Mini App. */
+  --app-canvas-bg: var(--g-bg);
+}
+
+html body.cm-body.tg-dark {
+  --cm-avatar: var(--g-chip);
+}
+
+.cm {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px 16px calc(104px + env(safe-area-inset-bottom, 0px));
+  /* У body цвет текста — !important из mini-app-components.css; здесь — чернила макета. */
+  color: var(--g-ink);
+}
+
+.cm-card {
+  background: var(--g-surface);
+  border-radius: 20px;
+  box-shadow: var(--glide-shadow-card);
+}
+
+.cm a,
+.cm button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Шапка ─────────────────────────────────────────────────────────── */
+
+.cm-head {
+  overflow: hidden;
+}
+
+.cm-cover {
+  position: relative;
+  height: 92px;
+  background: var(--g-muted);
+}
+
+.cm-cover__label {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  max-width: calc(100% - 32px);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  text-align: right;
+  overflow-wrap: anywhere;
+  color: var(--g-on-photo);
+}
+
+.cm-id {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px;
+}
+
+.cm-head--cover .cm-id {
+  padding: 0 16px 16px;
+  margin-top: -30px;
+}
+
+/* Над обложкой: в макете обложка (position: relative) перекрывала аватар. */
+.cm-avatar {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--cm-avatar);
+  box-shadow: 0 0 0 4px var(--g-surface);
+  font-family: var(--g-font-display);
+  font-size: 32px;
+  line-height: 1;
+  color: var(--g-accent-ink);
+}
+
+.cm-id__text {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+/* Имя и подпись — всегда ниже кромки обложки: 34 − 30 = 4 px. */
+.cm-head--cover .cm-id__text {
+  padding-top: 34px;
+}
+
+.cm-name {
+  margin: 0;
+  font-family: var(--g-font-display);
+  font-weight: 400;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: -.01em;
+  color: var(--g-ink);
+}
+
+.cm-name--long {
+  font-size: 20px;
+}
+
+/* Одно слово шире всей карточки — переносим внутри слова, но не вылетаем. */
+.cm-name--break {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Колонка имени рядом с аватаром и «Изменить» — ~108 px на 390 и ~78 px на 360: «Александр»
+ * не влезает и в 20 px. Тогда имя и подпись уходят под аватар на всю ширину карточки
+ * (client-me.js fitName), а не рвутся посреди слова.
+ */
+.cm-head--stack .cm-id {
+  flex-wrap: wrap;
+}
+
+.cm-head--stack .cm-id__text {
+  order: 3;
+  flex: 1 0 100%;
+  padding-top: 0;
+}
+
+.cm-head--stack .cm-edit {
+  margin-left: auto;
+}
+
+.cm-city {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--g-muted);
+  overflow-wrap: anywhere;
+}
+
+.cm-edit {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  margin: 0 0 4px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--g-chip);
+  color: var(--g-ink);
+  font: 600 14px var(--g-font);
+  cursor: pointer;
+}
+
+/* Зона касания 44 px при кнопке 36 по макету. */
+.cm-edit::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+/* ── Цифры сезона ──────────────────────────────────────────────────── */
+
+.cm-stats {
+  display: grid;
+  grid-template-columns: repeat(var(--cm-cols, 4), minmax(0, 1fr));
+  padding: 14px 0;
+}
+
+/* stretch, а не center: рамка числа не зависит от ширины глифов — подмена шрифта не даёт сдвига. */
+.cm-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 4px;
+  border-right: 1px solid var(--g-line);
+  color: inherit;
+  text-align: center;
+  text-decoration: none;
+}
+
+.cm-stat:last-child {
+  border-right: 0;
+}
+
+.cm-stat__n {
+  font-family: var(--g-font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cm-stat__l {
+  font-size: 12px;
+  color: var(--g-muted);
+}
+
+/* ── Плитки ────────────────────────────────────────────────────────── */
+
+.cm-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cm-tile-wrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.cm-tile {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 136px;
+  margin: 0;
+  padding: 14px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--g-surface);
+  box-shadow: var(--glide-shadow-card);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cm-tile--empty {
+  justify-content: space-between;
+  border: 1.5px dashed var(--g-line-strong);
+  background: none;
+  box-shadow: none;
+}
+
+.cm-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--g-muted);
+}
+
+.cm-tile__add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--g-ink-2);
+}
+
+.cm-tile__logo {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--g-muted);
+  color: var(--g-on-photo);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.cm-tile__logo--img {
+  background: none;
+}
+
+.cm-tile__logo img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.cm-tile__icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--g-accent-wash);
+  color: var(--g-accent-ink);
+}
+
+.cm-tile__name {
+  max-width: 100%;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.cm-tile__note {
+  margin-top: auto;
+  font-size: 12px;
+  color: var(--g-muted);
+}
+
+/* Соседний элемент поверх плитки, не вложен в ссылку. */
+.cm-rink-edit {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--g-muted);
+  cursor: pointer;
+}
+
+/* ── Списки ────────────────────────────────────────────────────────── */
+
+.cm-group-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cm-group {
+  margin: 12px 4px 0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--g-muted);
+}
+
+.cm-list {
+  padding: 0 16px;
+}
+
+/* content-box, как в макете: 56 px строки + 1 px разделителя. */
+.cm-row {
+  box-sizing: content-box;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  border-bottom: 1px solid var(--g-line);
+  color: inherit;
+  text-decoration: none;
+}
+
+.cm-row:last-child {
+  border-bottom: 0;
+}
+
+.cm-row__icon {
+  flex: none;
+  color: var(--g-ink-2);
+}
+
+.cm-row__label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.cm-row__value {
+  max-width: 55%;
+  padding: 6px 0;
+  font-size: 14px;
+  color: var(--g-muted);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.cm-row__chev {
+  flex: none;
+  color: var(--g-muted);
+}
+
+/* ── Загрузка и ошибка ─────────────────────────────────────────────── */
+
+.cm-skel {
+  border-radius: 20px;
+  background: var(--g-surface);
+  box-shadow: var(--glide-shadow-card);
+  animation: cm-skel 1.4s ease-in-out infinite;
+}
+
+.cm-skel--head { height: 140px; }
+.cm-skel--stats { height: 76px; }
+.cm-skel--tile { height: 136px; }
+.cm-skel--rows { height: 168px; }
+
+.cm-skel--group {
+  width: 120px;
+  height: 15px;
+  margin: 12px 4px 0;
+  border-radius: 6px;
+  background: var(--g-line);
+  box-shadow: none;
+}
+
+@keyframes cm-skel {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-skel { animation: none; }
+}
+
+.cm-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--g-surface);
+  box-shadow: var(--glide-shadow-card);
+  color: var(--g-ink);
+}
+
+.cm-state__text {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cm-state__retry {
+  height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--g-accent);
+  color: var(--g-on-accent);
+  font: 700 15px var(--g-font);
+  cursor: pointer;
+}
