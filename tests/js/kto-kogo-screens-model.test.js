@@ -234,14 +234,33 @@ describe('итог и движение', () => {
 
 describe('таблица', () => {
   const r = (rank, over) => Object.assign({ rank, display_name: 'И' + rank, points: 100 - rank, exact: 0, played: rank, correct_percent: 60, crowns: 0, is_me: false }, over || {});
-  it('выше шестого места — шесть строк; ниже — пять, разрыв и соседи', () => {
-    const items = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => r(n));
+  it('большая таблица: выше шестого места — шесть строк; ниже — пять, разрыв и соседи', () => {
+    const items = Array.from({ length: 20 }, (_, i) => r(i + 1));
     assert.equal(S.tableRows({ items, me: r(3, { is_me: true }), neighbors: [] }).length, 6);
     assert.equal(S.tableRows({ items, me: null, neighbors: [] }).length, 6);
     const rows = S.tableRows({ items, me: r(214, { is_me: true }), neighbors: [r(213), r(214, { is_me: true }), r(215)] });
     assert.deepEqual(rows.map((x) => (x.type === 'gap' ? 'gap' : x.r.rank)), [1, 2, 3, 4, 5, 'gap', 213, 214, 215]);
     const near = S.tableRows({ items, me: r(7, { is_me: true }), neighbors: [r(6), r(7, { is_me: true }), r(8)] });
     assert.deepEqual(near.map((x) => (x.type === 'gap' ? 'gap' : x.r.rank)), [1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+  it('до пятнадцати игроков таблица целиком, без кнопки', () => {
+    const items = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => r(n));
+    const view = { items, me: r(2, { is_me: true }), neighbors: [], players: 9 };
+    assert.equal(S.tableRows(view).length, 9);
+    assert.equal(S.tableMore(view), null);
+  });
+  it('кнопка раскрывает присланное: «всех», если прислано всё, иначе «первых 50»; я ниже — разрыв и соседи', () => {
+    const items = Array.from({ length: 20 }, (_, i) => r(i + 1));
+    const view = { items, me: r(3, { is_me: true }), neighbors: [], players: 20 };
+    assert.equal(S.tableMore(view), 'Показать всех' + NBSP + '20');
+    assert.equal(S.tableRows(view, true).length, 20);
+    assert.equal(S.tableMore(view, true), null);
+    const top = Array.from({ length: 50 }, (_, i) => r(i + 1));
+    const big = { items: top, me: r(214, { is_me: true }), neighbors: [r(213), r(214, { is_me: true }), r(215)], players: 1380 };
+    assert.equal(S.tableMore(big), 'Показать первых' + NBSP + '50');
+    const rows = S.tableRows(big, true);
+    assert.equal(rows.length, 54);
+    assert.deepEqual(rows.slice(49).map((x) => (x.type === 'gap' ? 'gap' : x.r.rank)), [50, 'gap', 213, 214, 215]);
   });
   it('подпись строки, шапка, периоды', () => {
     assert.equal(S.rowSub(r(1, { played: 34, exact: 2, correct_percent: 64 })), '34' + NBSP + 'хода · 2' + NBSP + 'в' + NBSP + 'точку');

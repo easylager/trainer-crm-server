@@ -244,6 +244,7 @@ describe('секции списка', () => {
     mk({ id: 10, starts_at: at(-4 * 86400000), phase: 'waiting', open: false, my_pick: PICK }),
     mk({ id: 11, status: 'cancelled', phase: 'cancelled', open: false, starts_at: at(26 * H), my_pick: SIDE_ONLY }),
     mk({ id: 12, status: 'cancelled', phase: 'cancelled', open: false, starts_at: at(-60 * H), my_pick: SIDE_ONLY }),
+    done({ id: 13, starts_at: at(-49 * H) }),
   ];
   const g = S.groupMatches(list, NOW);
 
@@ -257,9 +258,12 @@ describe('секции списка', () => {
     assert.deepEqual(g.upcoming[1].items.map((m) => m.id), [6]);
   });
 
+  it('«Итог есть»: с итогом за двое суток, от новых к старым — над «Впереди», а не под ним', () => {
+    assert.deepEqual(g.recent.map((m) => m.id), [7, 8]);
+  });
+
   it('«Сыграли»: от новых к старым; без итога старше трёх суток и прошедшие отменённые тоже здесь', () => {
-    assert.deepEqual(g.done.map((d) => d.head), ['ВЧЕРА, ВС 8 НОЯБРЯ', 'СБ 7 НОЯБРЯ', 'ПТ 6 НОЯБРЯ', 'ЧТ 5 НОЯБРЯ']);
-    assert.deepEqual(g.done.flatMap((d) => d.items.map((m) => m.id)), [7, 8, 12, 9, 10]);
+    assert.deepEqual(g.done.flatMap((d) => d.items.map((m) => m.id)), [13, 12, 9, 10]);
   });
 
   it('заголовки дней: сегодня, завтра, вчера, дальше — просто дата', () => {

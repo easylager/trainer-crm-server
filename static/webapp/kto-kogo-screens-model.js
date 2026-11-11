@@ -589,16 +589,31 @@
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
   }
 
-  /** Что показать: верх таблицы; если игрок ниже шестого — пять первых, разрыв и он с соседями. */
-  function tableRows(view) {
+  /** Таблица до стольких игроков видна целиком: обрезать девять строк до шести — прятать людей ради трёх строк. */
+  var TABLE_FULL_MAX = 15;
+
+  /**
+   * Что показать. Маленькая таблица или раскрытая кнопкой — все строки, что прислал сервер.
+   * Иначе верх: шесть первых; если игрок ниже шестого — пять первых, разрыв и он с соседями.
+   */
+  function tableRows(view, expanded) {
     var items = (view && view.items) || [];
     var me = view && view.me;
-    if (!me || me.rank <= 6) return items.slice(0, 6).map(function (r) { return { type: 'row', r: r }; });
-    var out = items.slice(0, 5).map(function (r) { return { type: 'row', r: r }; });
-    var neighbors = ((view && view.neighbors) || []).filter(function (r) { return r.rank > 5; });
-    if (neighbors.length && neighbors[0].rank > 6) out.push({ type: 'gap' });
+    var top = expanded || items.length <= TABLE_FULL_MAX ? items.length : me && me.rank > 6 ? 5 : 6;
+    var out = items.slice(0, top).map(function (r) { return { type: 'row', r: r }; });
+    if (!me || me.rank <= top) return out;
+    var neighbors = ((view && view.neighbors) || []).filter(function (r) { return r.rank > top; });
+    if (neighbors.length && neighbors[0].rank > top + 1) out.push({ type: 'gap' });
     neighbors.forEach(function (r) { out.push({ type: 'row', r: r }); });
     return out;
+  }
+
+  /** Кнопка под сокращённой таблицей; null — прятать нечего. Сервер шлёт не больше 50 строк, поэтому «всех» не всегда. */
+  function tableMore(view, expanded) {
+    var items = (view && view.items) || [];
+    if (expanded || items.length <= TABLE_FULL_MAX) return null;
+    var n = (view && view.players) || 0;
+    return n > items.length ? 'Показать первых' + NBSP + items.length : 'Показать всех' + NBSP + spaced(n);
   }
 
   function tableCaption(view, club) {
@@ -1030,14 +1045,19 @@
     return days;
   }
 
+  /** Сколько матч с итогом держится над «Впереди»: иначе только что сыгранный уходит под сорок будущих. */
+  var RECENT_MS = 48 * 3600 * 1000;
+
   /**
-   * Список по секциям: active — идёт и ждём итог (идущие, затем ждущие), upcoming — впереди по дням,
-   * done — сыграли по дням от новых к старым (сюда же матчи без итога старше трёх суток и прошедшие отменённые).
+   * Список по секциям: active — идёт и ждём итог (идущие, затем ждущие), recent — итог есть, начались за двое суток,
+   * от новых к старым; upcoming — впереди по дням; done — сыграли по дням от новых к старым
+   * (сюда же матчи без итога старше трёх суток и прошедшие отменённые).
    */
   function groupMatches(items, now) {
     now = now || new Date();
     var live = [];
     var waiting = [];
+    var recent = [];
     var upcoming = [];
     var done = [];
     (items || []).forEach(function (m) {
@@ -1045,10 +1065,12 @@
       if (ph === 'live') live.push(m);
       else if (ph === 'waiting' && !isStale(m, now)) waiting.push(m);
       else if (ph === 'upcoming' || (ph === 'cancelled' && startMs(m) > now.getTime())) upcoming.push(m);
+      else if (ph === 'done' && now.getTime() - startMs(m) < RECENT_MS) recent.push(m);
       else done.push(m);
     });
     return {
       active: live.sort(byStart).concat(waiting.sort(byStart)),
+      recent: recent.sort(function (a, b) { return byStart(b, a); }),
       upcoming: byDay(upcoming.sort(byStart), now),
       done: byDay(done.sort(function (a, b) { return byStart(b, a); }), now),
     };
@@ -1299,6 +1321,7 @@
     rowSub: rowSub,
     spaced: spaced,
     tableRows: tableRows,
+    tableMore: tableMore,
     tableCaption: tableCaption,
     tableCrownLine: tableCrownLine,
     tableCrownMuted: tableCrownMuted,
