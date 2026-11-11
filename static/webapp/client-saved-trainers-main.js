@@ -133,7 +133,12 @@
 
   document.getElementById('btnHome').onclick = function () { goTo('client-home'); };
   var btnBack = document.getElementById('btnBack');
-  if (btnBack && window.history.length > 1) {
+  var seasonBack = window.ClientSeasonBack;
+  if (btnBack && seasonBack && seasonBack.isSeasonUi(window)) {
+    /* TASK-375: season_ui — история есть → history.back(), нет → client-me */
+    btnBack.hidden = false;
+    btnBack.onclick = function () { seasonBack.goBack(window); };
+  } else if (btnBack && window.history.length > 1) {
     btnBack.hidden = false;
     btnBack.onclick = function () { window.history.back(); };
   }

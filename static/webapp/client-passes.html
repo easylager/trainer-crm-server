@@ -6,6 +6,7 @@
   <title>Мои абонементы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="client-mini-app-theme.js?v=202611112"></script>
+  <script src="/static/webapp/client-season-back.js?v=202611112"></script>
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611112" />
   <link rel="stylesheet" href="theme.css?v=202611112" />
   <link rel="stylesheet" href="mini-app-client-theme.css?v=202611112" />
@@ -315,13 +316,16 @@
         return h;
       }
       var state = { items: [], current: null };
+      function seasonBackOn() {
+        return !!window.ClientSeasonBack && window.ClientSeasonBack.isSeasonUi(window);
+      }
       function showScreen(id) {
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         var el = document.getElementById(id);
         if (el) el.classList.add('active');
         var navBack = document.getElementById('btnBack');
         if (navBack) {
-          navBack.hidden = id !== 'screenDetail';
+          navBack.hidden = id !== 'screenDetail' && !seasonBackOn();
         }
       }
       function escapeHtml(s) {
@@ -493,8 +497,14 @@
           });
       }
       document.getElementById('btnBack').onclick = function() {
+        /* TASK-375: season_ui — на корне «назад» уходит со страницы, из детали — к списку как раньше */
+        if (seasonBackOn() && !document.getElementById('screenDetail').classList.contains('active')) {
+          window.ClientSeasonBack.goBack(window);
+          return;
+        }
         showScreen('screenList');
       };
+      if (seasonBackOn()) document.getElementById('btnBack').hidden = false;
       loadList();
     })();
   </script>
