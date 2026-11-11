@@ -297,7 +297,7 @@ function harness(options) {
       if (options.clubsReject) return Promise.reject(new Error('offline'));
       return Promise.resolve({
         ok: options.clubsOk !== false,
-        json: () => Promise.resolve(options.clubsBody || { items: ITEMS }),
+        json: () => options.clubsBadJson ? Promise.reject(new SyntaxError('bad')) : Promise.resolve(options.clubsBody || { items: ITEMS }),
       });
     },
     Telegram: options.telegram === false ? undefined : {
@@ -322,7 +322,55 @@ function saveButton(sheet) {
   return sheet.el.querySelector('.cc-save');
 }
 
+describe('listState', () => {
+  const items = [{ name: 'Шахтёр', league: 'khl' }];
+  it('разводит загрузку, список, ошибку и поиск без результата', () => {
+    assert.equal(club.listState('loading', [], '').kind, 'loading');
+    assert.equal(club.listState('loaded', items, '').kind, 'list');
+    assert.equal(club.listState('loaded', [], '').kind, 'list');
+    assert.equal(club.listState('loaded', items, 'шахтер').kind, 'list');
+    const none = club.listState('loaded', items, 'нет такой');
+    assert.equal(none.kind, 'no-match');
+    assert.equal(none.text, 'Такой команды нет');
+    const err = club.listState('error', [], '');
+    assert.equal(err.kind, 'error');
+    assert.equal(err.text, 'Не загрузилось. Попробуй ещё раз');
+    assert.equal(club.listState('error', [], 'шахтер').kind, 'error');
+  });
+});
+
 describe('ClientClubSheet', () => {
+  for (const [name, opt] of [
+    ['сеть', { clubsReject: true }],
+    ['не-ok', { clubsOk: false }],
+    ['битый JSON', { clubsBadJson: true }],
+  ]) {
+    it('ошибка загрузки (' + name + '): сообщение, кнопка неактивна, поиск не врёт', async () => {
+      const h = harness(opt);
+      const sheet = h.sandbox.ClientClubSheet.open({ current: 'Юность' });
+      await flush();
+      assert.equal(sheet.el.querySelector('.cc-empty').textContent, 'Не загрузилось. Попробуй ещё раз');
+      assert.equal(radios(sheet).length, 0);
+      assert.equal(saveButton(sheet).textContent, 'Выбери команду');
+      assert.equal(saveButton(sheet).disabled, true);
+      const input = sheet.el.querySelector('input');
+      input.value = 'шахтер';
+      input.dispatch('input', {});
+      assert.equal(sheet.el.querySelector('.cc-empty').textContent, 'Не загрузилось. Попробуй ещё раз');
+      assert.equal(sheet.el.querySelector('.cc-clear').disabled, false);
+    });
+  }
+
+  it('при ошибке загрузки «Пока ни за кого» работает', async () => {
+    const saved = [];
+    const h = harness({ clubsReject: true });
+    const sheet = h.sandbox.ClientClubSheet.open({ current: 'Юность', onSaved(c) { saved.push(c); } });
+    await flush();
+    sheet.el.querySelector('.cc-clear').dispatch('click', {});
+    await flush();
+    assert.deepEqual(saved, [null]);
+  });
+
   it('отмечает текущий клуб и рисует группы, логотип и букву', async () => {
     const h = harness();
     const sheet = h.sandbox.ClientClubSheet.open({ current: 'Динамо-Минск' });

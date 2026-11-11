@@ -9,6 +9,7 @@
   var CLUBS_URL = '/api/webapp/client/hockey/clubs';
   var PREFS_URL = '/api/webapp/client/hockey/bot-prefs';
   var SAVE_ERROR = 'Не сохранилось. Попробуй ещё раз';
+  var LOAD_ERROR = 'Не загрузилось. Попробуй ещё раз';
   var LEAGUES = [
     { id: 'khl', title: 'КХЛ' },
     { id: 'extraliga', title: 'Экстралига' },
@@ -46,6 +47,16 @@
     var name = typeof selectedName === 'string' ? selectedName : '';
     if (!name.trim()) return { label: 'Выбери команду', disabled: true };
     return { label: 'Болею за ' + name, disabled: !!busy };
+  }
+
+  // Что показывать вместо списка: loading | error | no-match | list.
+  // «Такой команды нет» — только при поиске по загруженному списку.
+  function listState(loadState, items, query) {
+    if (loadState === 'error') return { kind: 'error', text: LOAD_ERROR };
+    if (loadState !== 'loaded') return { kind: 'loading', text: '' };
+    var groups = groupClubs(filterClubs(items, query));
+    if (norm(query) && !groups.length) return { kind: 'no-match', text: 'Такой команды нет' };
+    return { kind: 'list', text: '' };
   }
 
   function named(current) {
@@ -125,6 +136,7 @@
     var busy = false;
     var catalog = [];
     var alive = true;
+    var loadState = 'loading';
 
     var content = el('div', 'cc');
     var title = el('h2', 'cc-title', 'За\u00a0кого болеешь?');
@@ -201,8 +213,9 @@
       var query = input.value;
       var groups = groupClubs(filterClubs(catalog, query));
       while (list.firstChild) list.removeChild(list.firstChild);
-      if (norm(query) && !groups.length) {
-        list.appendChild(el('p', 'cc-empty', 'Такой команды нет'));
+      var view = listState(loadState, catalog, query);
+      if (view.kind === 'error' || view.kind === 'no-match') {
+        list.appendChild(el('p', 'cc-empty', view.text));
         return;
       }
       for (var g = 0; g < groups.length; g++) {
@@ -263,6 +276,7 @@
     }).then(function (data) {
       if (!alive) return;
       catalog = data && Array.isArray(data.items) ? data.items : [];
+      loadState = 'loaded';
       if (!picked) selected = findByName(catalog, wanted);
       else if (selected) {
         var match = findByName(catalog, selected.name);
@@ -272,6 +286,11 @@
       paintButton();
     }).catch(function () {
       if (!alive) return;
+      loadState = 'error';
+      catalog = [];
+      if (!picked) selected = null;
+      paintList();
+      paintButton();
     });
 
     return { close: sheet.close, el: sheet.el };
@@ -282,6 +301,7 @@
     filterClubs: filterClubs,
     groupClubs: groupClubs,
     buttonState: buttonState,
+    listState: listState,
   };
   root.ClientClubSheet = api;
   if (typeof module === 'object' && module.exports) module.exports = api;
