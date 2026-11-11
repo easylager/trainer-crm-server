@@ -24,7 +24,7 @@ function matchesOne(el, sel) {
   if (m) return el.getAttribute(m[1]) === m[2];
   if (sel[0] === '.') return el.classList.contains(sel.slice(1));
   if (sel[0] === '#') return el.id === sel.slice(1);
-  if (/^[a-z]+$/i.test(sel)) return el.tagName === sel.toUpperCase();
+  if (/^[a-z][a-z0-9]*$/i.test(sel)) return el.tagName === sel.toUpperCase();
   return false;
 }
 
