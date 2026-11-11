@@ -201,6 +201,96 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   transition: transform 0.18s ease;
 }
 
+/* ─── Bar in season_ui mode (TASK-369) ──────────────────────────────────────
+ * Всё ниже висит на .client-tab-bar--season: без флага класса нет, и правила выше
+ * работают как раньше. Размеры и цвета — design/your-season/tab-bar.html, цвета через
+ * токены --g-* (светлая :root, тёмная body.tg-dark). Плашка плотная, без стекла и тени:
+ * на странице игры у фона свой цвет, и полупрозрачный бар там не читается.
+ * 28px — радиус макета (между --app-radius-xl 24 и пилюлей), токена под него нет.
+ */
+:root {
+  --client-tab-bar-season-radius: 28px;
+}
+
+.client-tab-bar--season {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  min-height: 0;
+  padding: 8px;
+  background: var(--g-surface);
+  border-color: var(--g-line);
+  border-radius: var(--client-tab-bar-season-radius);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  font-family: var(--g-font);
+  font-size: var(--app-text-caption);
+  line-height: 1.35;
+}
+
+.client-tab-bar--season.client-tab-bar--n5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 8px 4px;
+}
+
+.client-tab-bar--season .client-tab-bar__btn {
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0;
+  border-radius: 0;
+  color: var(--g-muted);
+  font-size: var(--app-text-caption);
+  font-weight: var(--app-weight-semibold);
+  line-height: 1.35;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.client-tab-bar--season .client-tab-bar__btn--active {
+  color: var(--g-ink);
+  font-weight: var(--app-weight-bold);
+}
+
+.client-tab-bar--season .client-tab-bar__icon-wrap {
+  width: auto;
+  height: 34px;
+  border-radius: var(--app-radius-md);
+}
+
+.client-tab-bar--season.client-tab-bar--n4 .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
+  width: 52px;
+}
+
+.client-tab-bar--season.client-tab-bar--n5 .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
+  width: 48px;
+}
+
+.client-tab-bar--season .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
+  background: var(--g-accent) !important;
+  color: var(--g-on-accent) !important;
+  box-shadow: none !important;
+}
+
+.client-tab-bar--season .client-tab-bar__btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.client-tab-bar--season .client-tab-bar__btn--active .client-tab-bar__icon-wrap svg {
+  transform: none;
+}
+
+/* Клавиатура: бар прячется, но место в раскладке остаётся — содержимое не сдвигается. */
+.client-tab-bar--season.client-tab-bar--kbd {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.client-shell-body.client-shell-kbd::after {
+  display: none;
+}
+
 /* ─── More sheet ─────────────────────────────────────────────────────────── */
 
 .client-more-sheet-overlay {

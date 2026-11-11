@@ -28,6 +28,9 @@
        и тренеров, и группы. Снежинка обещала только лёд. */
     catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>',
     bookings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+    /* TASK-369: вкладки режима season_ui. Шайба — «Кто кого», человек — «Я». */
+    kk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="9.5" rx="8" ry="3.5"/><path d="M4 9.5v4.5c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5V9.5"/></svg>',
+    me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6.5 8-6.5s7.2 2.5 8 6.5"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
   };
 
@@ -95,7 +98,89 @@
     moreOpen: false,
     forcedTab: null,
     watchesActiveCount: 0,
+    inited: false,
+    baseMode: 'hidden',
+    kbdHidden: false,
+    kbdWired: false,
   };
+
+  /*
+   * TASK-366: флаги новой навигации (your-season). Читаются из кэша синхронно, до первого
+   * кадра; сервер уточняет после монтирования. Бар по ним пересобирает TASK-369.
+   */
+  var UI_FLAGS_KEY = 'cw_ui_flags_v1';
+  var uiFlags = { season_ui: false, bookings_tab: false };
+  var uiFlagsRefreshed = false;
+
+  function normalizeUiFlags(raw) {
+    var season = !!raw && raw.season_ui === true;
+    return { season_ui: season, bookings_tab: season && raw.bookings_tab === true };
+  }
+
+  function initDataUserId() {
+    try {
+      var tg = getTg();
+      var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      if (u && u.id != null) return String(u.id);
+      var initData = getInitData();
+      if (!initData) return '';
+      var raw = new URLSearchParams(initData).get('user');
+      var parsed = raw ? JSON.parse(raw) : null;
+      return parsed && parsed.id != null ? String(parsed.id) : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function readUiFlags() {
+    var uid = initDataUserId();
+    if (!uid) return normalizeUiFlags(null);
+    try {
+      var cached = JSON.parse(global.localStorage.getItem(UI_FLAGS_KEY) || 'null');
+      if (!cached || String(cached.u) !== uid) return normalizeUiFlags(null);
+      return normalizeUiFlags(cached);
+    } catch (e) {
+      return normalizeUiFlags(null);
+    }
+  }
+
+  function writeUiFlagsCache(flags) {
+    var uid = initDataUserId();
+    if (!uid) return;
+    try {
+      global.localStorage.setItem(
+        UI_FLAGS_KEY,
+        JSON.stringify({ u: uid, season_ui: flags.season_ui, bookings_tab: flags.bookings_tab, at: Date.now() })
+      );
+    } catch (e) { /* storage может быть запрещён */ }
+  }
+
+  function refreshUiFlags() {
+    if (uiFlagsRefreshed) return;
+    var initData = getInitData();
+    if (!initData || typeof global.fetch !== 'function') return;
+    uiFlagsRefreshed = true;
+    global
+      .fetch('/api/webapp/client/ui-flags', { headers: { 'X-Telegram-Init-Data': initData }, cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (data) {
+        if (!data) return;
+        var next = normalizeUiFlags(data);
+        writeUiFlagsCache(next);
+        var changed = next.season_ui !== uiFlags.season_ui || next.bookings_tab !== uiFlags.bookings_tab;
+        uiFlags = next;
+        if (changed && typeof global.CustomEvent === 'function') {
+          global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
+        }
+      })
+      .catch(function () {});
+  }
+
+  function getUiFlags() {
+    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab };
+  }
 
   function getTg() {
     return global.Telegram && global.Telegram.WebApp ? global.Telegram.WebApp : null;
@@ -172,9 +257,46 @@
     return /^\/p\/[^/]+\/[^/]+/.test(p);
   }
 
+  /*
+   * TASK-369: активная вкладка в режиме season_ui. Отдельная функция, чтобы старый разбор
+   * ниже остался как был. «Ещё» здесь нет: его страницы уехали в «Я».
+   */
+  var SEASON_ME_ROUTES = {
+    'client-me': 1,
+    'client-requests': 1,
+    'client-saved-trainers': 1,
+    'client-stats': 1,
+    'client-passes-certificates': 1,
+    'client-passes': 1,
+    'client-certificates': 1,
+    'client-family-access': 1,
+    'client-support': 1,
+  };
+
+  function seasonTabForKey(key, search) {
+    if (key === 'client-home') return 'home';
+    if (key === 'arena' || key === 'ice' || key === 'trainers') return 'catalog';
+    if (key === 'catalog') {
+      var q = search || '';
+      if (q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0) return 'catalog';
+      return null;
+    }
+    if (key === 'client-bookings') return uiFlags.bookings_tab ? 'bookings' : 'me';
+    if (key === 'kto-kogo') return 'kk';
+    if (SEASON_ME_ROUTES[key] === 1) return 'me';
+    return null;
+  }
+
+  function seasonForcedTab(id) {
+    if (id === 'more') return 'me';
+    if (id === 'bookings' && !uiFlags.bookings_tab) return 'me';
+    return id;
+  }
+
   function resolveActiveTab() {
-    if (state.forcedTab) return state.forcedTab;
+    if (state.forcedTab) return uiFlags.season_ui ? seasonForcedTab(state.forcedTab) : state.forcedTab;
     var key = pathnameKey();
+    if (uiFlags.season_ui) return seasonTabForKey(key, global.location.search);
     if (key === 'client-home') return 'home';
     // Витрина тренеров — раздел «Поиска» (этап 1 входов): подсвечена вкладка «Поиск».
     if (key === 'arena' || key === 'ice' || key === 'trainers') return 'catalog';
@@ -202,7 +324,90 @@
     return resolveActiveTab() === 'more';
   }
 
+  /*
+   * TASK-369: бар режима season_ui — «Главная · Поиск · [Записи] · Кто кого · Я», без «Ещё».
+   * Живёт отдельно от buildTabBar ниже: тот остаётся как был, ветвление по флагу — одно.
+   */
+  function seasonTabs() {
+    var tabs = [
+      { id: 'home', label: 'Главная', path: 'client-home', icon: TAB_ICONS.home },
+      { id: 'catalog', label: 'Поиск', path: 'ice', icon: TAB_ICONS.catalog },
+    ];
+    if (uiFlags.bookings_tab) {
+      tabs.push({ id: 'bookings', label: 'Записи', path: 'client-bookings', icon: TAB_ICONS.bookings });
+    }
+    tabs.push({ id: 'kk', label: 'Кто кого', path: 'kto-kogo', icon: TAB_ICONS.kk });
+    tabs.push({ id: 'me', label: 'Я', path: 'client-me', icon: TAB_ICONS.me });
+    return tabs;
+  }
+
+  function dispatchRetap(tabId) {
+    if (typeof global.CustomEvent !== 'function') return;
+    global.dispatchEvent(new global.CustomEvent('client-shell:retap', { detail: { tab: tabId } }));
+  }
+
+  function onSeasonTabPointerDown(tabId) {
+    if (tabId === 'catalog') {
+      prefetchIceAssets();
+      prefetchCatalogAssets();
+      prefetchCatalogWarmCache();
+    } else if (tabId === 'bookings') {
+      prefetchBookingsAssets();
+      prefetchBookingsWarmCache();
+    } else if (tabId === 'kk') {
+      prefetchKkAssets();
+    } else if (tabId === 'me') {
+      prefetchMeAssets();
+      prefetchMeWarmCache();
+    }
+  }
+
+  function buildSeasonTabBar() {
+    var tabs = seasonTabs();
+    var nav = document.createElement('nav');
+    nav.id = 'clientTabBar';
+    nav.className = 'client-tab-bar client-tab-bar--season client-tab-bar--n' + tabs.length;
+    nav.setAttribute('role', 'tablist');
+    nav.setAttribute('aria-label', 'Навигация');
+
+    tabs.forEach(function (tab) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'client-tab-bar__btn ga-press';
+      btn.setAttribute('role', 'tab');
+      btn.dataset.tabId = tab.id;
+      btn.innerHTML =
+        '<span class="client-tab-bar__icon-wrap">' +
+        tab.icon +
+        '</span><span>' +
+        tab.label +
+        '</span>';
+      btn.addEventListener(
+        'pointerdown',
+        function () {
+          onSeasonTabPointerDown(tab.id);
+        },
+        { passive: true }
+      );
+      btn.addEventListener('click', function () {
+        hapticSelection();
+        if (isSameTabRoute(tab.path)) {
+          // Повторный тап: как раньше (наверх / выход с карты «Поиска») плюс сигнал странице.
+          if (!(tab.id === 'catalog' && handleCatalogTabRetap())) scrollPageTop();
+          syncTabBarActive();
+          dispatchRetap(tab.id);
+          return;
+        }
+        navigate(tab.path);
+      });
+      nav.appendChild(btn);
+    });
+
+    return nav;
+  }
+
   function buildTabBar() {
+    if (uiFlags.season_ui) return buildSeasonTabBar();
     var nav = document.createElement('nav');
     nav.id = 'clientTabBar';
     nav.className = 'client-tab-bar';
@@ -495,15 +700,19 @@
    */
   var NAV_DIR_KEY = 'tcb_nav_dir_v1';
   var TAB_ORDER = { home: 0, catalog: 1, bookings: 2, more: 3 };
+  var TAB_ORDER_SEASON = { home: 0, catalog: 1, bookings: 2, kk: 3, me: 4 };
 
   function rememberNavDirection(path) {
-    var from = TAB_ORDER[resolveActiveTab()];
+    var season = uiFlags.season_ui;
+    var order = season ? TAB_ORDER_SEASON : TAB_ORDER;
+    var from = order[resolveActiveTab()];
     var toTab = null;
     var key = normalizeRoutePath(path).split('?')[0];
-    if (key === 'client-home') toTab = 'home';
+    if (season) toTab = seasonTabForKey(key, '');
+    else if (key === 'client-home') toTab = 'home';
     else if (key === 'ice' || key === 'catalog' || key === 'arena' || key === 'trainers') toTab = 'catalog';
     else if (key === 'client-bookings') toTab = 'bookings';
-    var to = TAB_ORDER[toTab];
+    var to = order[toTab];
     // Уход вглубь (карточка арены, «Ещё») — всегда «вперёд»: назад оттуда
     // вернёт системная кнопка, и её направление посчитает Navigation API.
     var dir = from != null && to != null && to < from ? 'back' : 'forward';
@@ -591,6 +800,7 @@
   });
 
   function openMoreSheet() {
+    if (uiFlags.season_ui) return; // «Ещё» в режиме season_ui нет
     refreshWatchesSummary();
     state.moreOpen = true;
     var overlay = document.getElementById('clientMoreOverlay');
@@ -640,7 +850,9 @@
     if (!body) return;
 
     var attr = body.getAttribute('data-client-shell');
-    state.mode = opts.mode || attr || 'hidden';
+    state.baseMode = opts.mode || attr || 'hidden';
+    state.mode = computeMode(state.baseMode);
+    state.inited = true;
     if (state.mode !== 'tabs') return;
 
     body.classList.add('client-shell-body');
@@ -652,14 +864,101 @@
       // Поставленная до разбора body панель — в конец, как раньше: порядок фокуса не меняется.
       body.appendChild(earlyBar);
     }
-    if (!document.getElementById('clientMoreOverlay')) {
+    // В режиме season_ui шторки «Ещё» нет вовсе — DOM не создаём.
+    if (!uiFlags.season_ui && !document.getElementById('clientMoreOverlay')) {
       document.body.appendChild(buildMoreSheet());
     }
 
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape' && state.moreOpen) closeMoreSheet();
     });
+    wireKeyboardHide();
 
+    applyTabBarVisibility();
+    syncTabBarActive();
+    observeTabBarMetrics();
+  }
+
+  /*
+   * TASK-369: страница игры (kto-kogo) — вкладка «Кто кого»; бар там только в режиме season_ui,
+   * без флага она остаётся без оболочки, как была.
+   */
+  function computeMode(base) {
+    if (base === 'tabs') return 'tabs';
+    if (uiFlags.season_ui && pathnameKey() === 'kto-kogo') return 'tabs';
+    return base;
+  }
+
+  /*
+   * TASK-369: клавиатура. Пока в фокусе поле ввода, бар прячется (visibility, не display и не
+   * класс client-shell-tabs-hidden): место бара в раскладке остаётся, и содержимое не прыгает
+   * ни при появлении клавиатуры, ни при возврате бара.
+   */
+  var NON_TEXT_INPUT = /^(checkbox|radio|button|submit|reset|range|file|color|image|hidden)$/i;
+
+  function isTextEntry(el) {
+    if (!el || !el.tagName) return false;
+    var tag = String(el.tagName).toUpperCase();
+    if (tag === 'TEXTAREA') return true;
+    if (tag !== 'INPUT') return false;
+    return !NON_TEXT_INPUT.test(el.type || (el.getAttribute && el.getAttribute('type')) || 'text');
+  }
+
+  function setKeyboardHidden(hidden) {
+    state.kbdHidden = !!hidden;
+    var bar = document.getElementById('clientTabBar');
+    if (bar) bar.classList.toggle('client-tab-bar--kbd', state.kbdHidden);
+    if (document.body) document.body.classList.toggle('client-shell-kbd', state.kbdHidden);
+  }
+
+  function wireKeyboardHide() {
+    if (state.kbdWired) return;
+    state.kbdWired = true;
+    document.addEventListener('focusin', function (ev) {
+      if (!uiFlags.season_ui || state.mode !== 'tabs') return;
+      if (isTextEntry(ev.target)) setKeyboardHidden(true);
+    });
+    document.addEventListener('focusout', function (ev) {
+      if (!uiFlags.season_ui || state.mode !== 'tabs' || !state.kbdHidden) return;
+      // Фокус переезжает в соседнее поле — бар не мигает.
+      if (isTextEntry(ev.relatedTarget)) return;
+      setKeyboardHidden(false);
+    });
+  }
+
+  /*
+   * TASK-369: флаг сменился на лету (client-shell:ui-flags, TASK-366) — бар пересобирается на
+   * месте. Без перезагрузки, без анимации: новый узел встаёт на место старого целиком.
+   */
+  function onUiFlagsChanged() {
+    var body = document.body;
+    if (!state.inited || !body) return;
+    state.mode = computeMode(state.baseMode);
+    var old = document.getElementById('clientTabBar');
+    var overlay = document.getElementById('clientMoreOverlay');
+
+    if (state.mode !== 'tabs') {
+      if (state.moreOpen) closeMoreSheet();
+      if (old) old.remove();
+      if (overlay) overlay.remove();
+      setKeyboardHidden(false);
+      body.classList.remove('client-shell-body', 'client-shell-tabs-hidden');
+      return;
+    }
+
+    body.classList.add('client-shell-body');
+    if (state.moreOpen) closeMoreSheet();
+    setKeyboardHidden(false);
+    var next = buildTabBar();
+    if (old) old.replaceWith(next);
+    else body.appendChild(next);
+
+    if (uiFlags.season_ui) {
+      if (overlay) overlay.remove();
+    } else if (!overlay) {
+      body.appendChild(buildMoreSheet());
+    }
+    wireKeyboardHide();
     applyTabBarVisibility();
     syncTabBarActive();
     observeTabBarMetrics();
@@ -960,6 +1259,79 @@
     document.head.appendChild(link);
   }
 
+  /* TASK-369: ассеты соседних вкладок режима season_ui — на pointerdown, как у «Поиска». */
+  function prefetchFiles(files) {
+    var base = webappBasePath();
+    files.forEach(function (file) {
+      var href = assetUrl(base, file);
+      if (document.querySelector('link[rel="prefetch"][href="' + href + '"]')) return;
+      var link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.href = href;
+      link.as = /\.css$/.test(file) ? 'style' : 'script';
+      document.head.appendChild(link);
+    });
+  }
+
+  // Список — из kto-kogo.html: css и все kto-kogo*.js. write-access.js общий, он не kto-kogo*.
+  var KK_ASSETS = [
+    'kto-kogo.css',
+    'kto-kogo-model.js',
+    'kto-kogo-screens-model.js',
+    'kto-kogo.js',
+    'kto-kogo-views.js',
+    'kto-kogo-hub-cards.js',
+    'kto-kogo-board.js',
+    'kto-kogo-leagues.js',
+    'kto-kogo-coin-model.js',
+    'kto-kogo-coin.js',
+    'kto-kogo-matches.js',
+    'kto-kogo-league-identity.js',
+    'kto-kogo-boot.js',
+  ];
+
+  function prefetchKkAssets() {
+    prefetchFiles(KK_ASSETS);
+  }
+
+  function prefetchMeAssets() {
+    prefetchFiles(['client-me.css', 'client-me.js']);
+  }
+
+  /*
+   * Тёплый кэш «Я»: {ts, data} в sessionStorage['cw_me_warm_v1'] — TASK-370 читает его на первом
+   * кадре (свежее 60 с). Свежий кэш не перезапрашиваем; параллельные тапы — один запрос.
+   */
+  var ME_WARM_KEY = 'cw_me_warm_v1';
+  var ME_WARM_FRESH_MS = 30000;
+  var meWarmInFlight = null;
+
+  function prefetchMeWarmCache() {
+    var initData = getInitData();
+    if (!initData || typeof global.fetch !== 'function') return Promise.resolve();
+    try {
+      var cur = JSON.parse(global.sessionStorage.getItem(ME_WARM_KEY) || 'null');
+      if (cur && cur.ts && Date.now() - cur.ts < ME_WARM_FRESH_MS) return Promise.resolve();
+    } catch (e) { /* битый кэш — перезапросим */ }
+    if (meWarmInFlight) return meWarmInFlight;
+    meWarmInFlight = global
+      .fetch('/api/webapp/client/me', { headers: { 'X-Telegram-Init-Data': initData }, cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (data) {
+        if (!data) return;
+        try {
+          global.sessionStorage.setItem(ME_WARM_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+        } catch (e) { /* quota */ }
+      })
+      .catch(function () {})
+      .then(function () {
+        meWarmInFlight = null;
+      });
+    return meWarmInFlight;
+  }
+
   /** Prefetch book page shell — hub slot taps open book?slot_id= directly. */
   function prefetchBookAssets() {
     var base = webappBasePath();
@@ -1091,6 +1463,7 @@
     reportCatalogPresence: reportCatalogPresence,
     readStartParam: readStartParam,
     TAB_ICONS: TAB_ICONS,
+    uiFlags: getUiFlags,
   };
 
   function readStartParam() {
@@ -1323,6 +1696,7 @@
   function boot() {
     if (isPublicPlaceRoute() && !getInitData()) return;
     init();
+    if (typeof global.setTimeout === 'function') global.setTimeout(refreshUiFlags, 0);
     if (isPublicPlaceRoute()) {
       if (state.mode === 'tabs') setForcedTab('catalog');
       return;
@@ -1337,7 +1711,9 @@
    */
   function mountTabBarEarly() {
     var mount = function (body) {
-      if (body.getAttribute('data-client-shell') !== 'tabs' || document.getElementById('clientTabBar')) return;
+      if (document.getElementById('clientTabBar')) return;
+      var tabsPage = body.getAttribute('data-client-shell') === 'tabs';
+      if (!tabsPage && !(uiFlags.season_ui && pathnameKey() === 'kto-kogo')) return;
       body.appendChild(buildTabBar());
       syncTabBarActive();
     };
@@ -1357,7 +1733,9 @@
   try {
     if (getTg() && getInitData()) global.sessionStorage.setItem('glide_mini_app_active_v1', '1');
   } catch (e) { /* storage может быть запрещён */ }
+  uiFlags = readUiFlags();
   mountTabBarEarly();
+  global.addEventListener('client-shell:ui-flags', onUiFlagsChanged);
 
   /*
    * Подписка на pagereveal — на уровне модуля, а не в boot(): событие
