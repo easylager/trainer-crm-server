@@ -329,7 +329,8 @@ async def _my_trainer(session: AsyncSession, *, account_key: int, acting: int) -
     """«Мой тренер» для строки в «Я»: только чтение, упрощённое зеркало «Главной».
 
     Порядок как в хабе (hub_booking_primary_ids + resolve_primary_trainer_strict):
-    ближайшая предстоящая запись, иначе последняя запись, иначе явный primary edge.
+    предстоящая запись (кандидат сортируется DESC: берётся самая дальняя из предстоящих,
+    как и в хабе), иначе последняя запись, иначе явный primary edge.
     Осознанное расхождение с «Главной»: НЕ учитываются session_tid (временный выбор
     тренера по приглашению из bot-session), ever_booked-пол и «сохранённые».
     Имя — из trainer_display_hints_by_ids, как у хаба; тренера нет в выдаче → None.
@@ -344,7 +345,9 @@ async def _my_trainer(session: AsyncSession, *, account_key: int, acting: int) -
         return None
     hint = (await trainer_display_hints_by_ids(session, [int(tid)])).get(int(tid))
     name = ((hint or {}).get("trainer_display_name") or "").strip()
-    if not name:
+    # Пустой профиль хинты подменяют заглушкой «Тренер»; строки «Мой тренер — Тренер» не нужно.
+    # Цена: тренер, буквально назвавшийся «Тренер», строку не получит.
+    if not name or name == "Тренер":
         return None
     return {"name": name, "href": f"/webapp/catalog?trainer_id={int(tid)}"}
 
