@@ -249,7 +249,7 @@
       '<span class="cf-title cf-title--flex">Семейный доступ</span>' +
       (value ? '<span class="cf-value">' + esc(value) + '</span>' : '') + CHEV + '</a>' +
       '</nav>' +
-      '<p class="cf-note">Муж или жена входят со своего Telegram и' + NBSP + 'видят ваши записи и' + NBSP + 'абонементы. Своё «Я» у них отдельное.</p>';
+      '<p class="cf-note">Пригласите близкого, чтобы он видел ваши записи и' + NBSP + 'абонементы.</p>';
     mount.removeAttribute('aria-busy');
   }
 
