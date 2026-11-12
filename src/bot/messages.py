@@ -1036,6 +1036,26 @@ def format_client_recurring_set_by_trainer_notification_html(
     return "".join(parts)
 
 
+def format_client_recurring_removed_by_trainer_notification_html(
+    *,
+    trainer_name: str,
+    weekday_short: str,
+    time_range: str,
+    booked_for_name: str | None = None,
+) -> str:
+    """One client-bot message when the trainer removes the weekly time (not one per cancelled booking)."""
+    tn = html.escape((trainer_name or "").strip() or "Тренер")
+    ws = html.escape((weekday_short or "").strip() or "—")
+    tr = html.escape((time_range or "").strip() or "—")
+    return (
+        "🗓 <b>Постоянное время снято</b>\n\n"
+        + format_client_booked_for_html(booked_for_name)
+        + f"👤 <b>Тренер:</b> {tn}\n"
+        + f"📆 <b>Было каждую неделю:</b> {ws} · {tr}\n\n"
+        + "Будущие записи на это время отменены."
+    )
+
+
 def build_client_recurring_set_inline_keyboard(
     *,
     trainer_telegram_id: int | None,
