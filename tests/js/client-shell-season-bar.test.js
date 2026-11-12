@@ -17,13 +17,13 @@ const FLAGS_KEY = 'cw_ui_flags_v1';
 
 function parseSelector(sel) {
   const out = { tag: null, id: null, classes: [], attrs: [] };
-  const re = /^([a-z0-9]+)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:="([^"]*)")?\]/gi;
+  const re = /^([a-z0-9]+)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:(\*?)="([^"]*)")?\]/gi;
   let m;
   while ((m = re.exec(sel))) {
     if (m[1]) out.tag = m[1].toLowerCase();
     else if (m[2]) out.id = m[2];
     else if (m[3]) out.classes.push(m[3]);
-    else out.attrs.push([m[4], m[5]]);
+    else out.attrs.push([m[4], m[6], m[5] === '*']);
   }
   return out;
 }
@@ -105,7 +105,7 @@ class Node {
     if (s.tag && this.tagName.toLowerCase() !== s.tag) return false;
     if (s.id && this.id !== s.id) return false;
     if (s.classes.some((c) => !this._classes.includes(c))) return false;
-    return s.attrs.every(([k, v]) => this.attrs.has(k) && (v === undefined || this.attrs.get(k) === v));
+    return s.attrs.every(([k, v, sub]) => this.attrs.has(k) && (v === undefined || (sub ? this.attrs.get(k).includes(v) : this.attrs.get(k) === v)));
   }
   descendants() {
     const out = [];
@@ -127,7 +127,7 @@ class Node {
   }
 }
 
-function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {} } = {}) {
+function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {}, connection = null, readyState = 'complete', fetchAll = false, fetchFail = null } = {}) {
   const store = new Map();
   if (flags) store.set(FLAGS_KEY, JSON.stringify(Object.assign({ u: String(userId), at: Date.now() }, flags)));
   const session = new Map();
@@ -135,11 +135,12 @@ function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyS
   const winListeners = {};
   const events = [];
   const fetches = [];
+  const fetchOpts = [];
   const scrolls = [];
   const navigations = [];
   const timers = [];
 
-  const doc = { readyState: 'complete' };
+  const doc = { readyState };
   doc.createElement = (tag) => new Node(tag, doc);
   doc.documentElement = new Node('html', doc);
   doc.documentElement.style = { setProperty() {} };
@@ -153,6 +154,7 @@ function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyS
   doc.activeElement = null;
 
   const win = {
+    navigator: connection ? { connection } : {},
     document: doc,
     location: {
       pathname, search, href: 'https://test' + pathname + search, replace(u) { navigations.push(u); },
@@ -178,10 +180,28 @@ function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyS
     matchMedia: () => ({ matches: false }),
     navigation: null,
     setTimeout(fn) { timers.push(fn); return timers.length; },
-    fetch(url) {
+    fetch(url, opts) {
       fetches.push(url);
+      fetchOpts.push(opts);
+      if (fetchFail && fetchFail(url)) return Promise.reject(new Error('network'));
+      if (fetchAll && url === '/api/webapp/client/ui-flags' && !Object.prototype.hasOwnProperty.call(responses, url)) return new Promise(() => {});
+      if (fetchAll && !Object.prototype.hasOwnProperty.call(responses, url)) {
+        const text = typeof fetchAll === 'object' && fetchAll[url] ? fetchAll[url] : '';
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+          text: () => Promise.resolve(text),
+          arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+        });
+      }
       if (Object.prototype.hasOwnProperty.call(responses, url)) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(responses[url]) });
+        const body = responses[url];
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(body),
+          text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
+          arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+        });
       }
       return new Promise(() => {});
     },
@@ -195,7 +215,7 @@ function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyS
   });
   vm.runInContext(shellSrc, ctx);
   return {
-    win, doc, store, session, events, fetches, scrolls, navigations,
+    win, doc, store, session, events, fetches, fetchOpts, scrolls, navigations,
     bar: () => doc.getElementById('clientTabBar'),
     overlay: () => doc.getElementById('clientMoreOverlay'),
     tabIds: () => (doc.getElementById('clientTabBar') ? doc.getElementById('clientTabBar').querySelectorAll('.client-tab-bar__btn').map((b) => b.dataset.tabId) : []),
@@ -524,7 +544,8 @@ describe('п. 7: бар на kto-kogo — только в режиме season', 
 /* ── п. 5: предзагрузка ─────────────────────────────────────────────────────────────────── */
 
 describe('п. 5: предзагрузка на pointerdown', () => {
-  const prefetched = (t) => t.doc.head.descendants().filter((n) => n.rel === 'prefetch').map((n) => n.href.replace(/^.*\//, '').replace(/\?.*$/, ''));
+  /* TASK-395: подгрузка идёт через fetch (а не <link rel=prefetch>), ассеты — всё, что не /api/. */
+  const prefetched = (t) => t.fetches.filter((u) => !u.startsWith('/api/')).map((n) => n.replace(/^.*\//, '').replace(/\?.*$/, ''));
 
   it('kk — css и все kto-kogo*.js из kto-kogo.html', () => {
     const html = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/kto-kogo.html'), 'utf8');
@@ -535,7 +556,7 @@ describe('п. 5: предзагрузка на pointerdown', () => {
     const got = prefetched(t);
     for (const f of expected) assert.ok(got.includes(f), 'не предзагружен ' + f);
     t.btn('kk').fire('pointerdown');
-    assert.equal(prefetched(t).length, got.length, 'повторный pointerdown не дублирует ссылки');
+    assert.equal(prefetched(t).length, got.length, 'повторный pointerdown не дублирует запросы');
   });
 
   it('kk — адрес и ?v= предзагрузки те же, что у ссылок на странице игры, и это /static/webapp/', () => {
@@ -544,7 +565,7 @@ describe('п. 5: предзагрузка на pointerdown', () => {
     assert.ok(page.length >= 10);
     const t = bootShell({ flags: SEASON });
     t.btn('kk').fire('pointerdown');
-    const hrefs = t.doc.head.descendants().filter((n) => n.rel === 'prefetch').map((n) => n.href.replace(/^https?:\/\/[^/]+/, '')).sort();
+    const hrefs = t.fetches.filter((u) => !u.startsWith('/api/')).sort();
     assert.deepEqual(hrefs, page);
     assert.ok(hrefs.every((h) => h.startsWith('/static/webapp/')), 'ни одного /webapp/kto-kogo*');
   });
@@ -606,6 +627,164 @@ describe('п. 5: предзагрузка на pointerdown', () => {
     assert.equal(prefetched(t).length, 0);
     t.btn('bookings').fire('pointerdown');
     assert.deepEqual(prefetched(t), ['mini-app-client-bookings.css']);
+  });
+});
+
+/* ── TASK-395: фоновая подгрузка соседних вкладок через fetch (iPhone/WebKit не знает rel=prefetch) ── */
+
+describe('TASK-395: фоновая подгрузка вкладок', () => {
+  const assets = (t) => t.fetches.filter((u) => !u.startsWith('/api/')).map((u) => u.replace(/^.*\//, '').replace(/\?.*$/, ''));
+  const drain = async (t) => { for (let i = 0; i < 40; i++) await t.flush(); };
+  const links = (t) => t.doc.head.descendants().filter((n) => n.rel === 'prefetch' || n.rel === 'preload');
+
+  it('с Главной подгружаются Поиск, Кто кого и Я; ни одного <link rel=prefetch>', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    const got = assets(t);
+    for (const f of ['ice-tab.js', 'ice-tab.css', 'catalog-main.js', 'kto-kogo.js', 'kto-kogo.css', 'client-me.js', 'client-me.css']) {
+      assert.ok(got.includes(f), 'не подгружен ' + f);
+    }
+    assert.ok(!got.includes('mini-app-client-bookings.css'), 'вкладки «Записи» нет — её ассеты не нужны');
+    assert.equal(links(t).length, 0);
+  });
+
+  it('вкладка «Записи» есть — её ассеты подгружаются тоже', async () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, fetchAll: true });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    assert.ok(assets(t).includes('mini-app-client-bookings.css'));
+  });
+
+  it('по одной вкладке подряд: пока простой не наступил, следующая не стартует', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    assert.equal(assets(t).length, 0, 'до простоя ничего не качается');
+    await t.flush();
+    const first = assets(t);
+    assert.ok(first.includes('ice-tab.js'));
+    assert.ok(!first.includes('kto-kogo.js') && !first.includes('client-me.js'), 'за один шаг — одна вкладка');
+    await drain(t);
+    assert.ok(assets(t).includes('client-me.js'));
+  });
+
+  it('текущая вкладка не подгружается', async () => {
+    const t = bootShell({ flags: SEASON, pathname: '/webapp/kto-kogo', bodyShell: null, fetchAll: true });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    const got = assets(t);
+    assert.ok(!got.some((f) => /^kto-kogo/.test(f)), 'kto-kogo*: ' + got.join());
+    assert.ok(got.includes('ice-tab.js') && got.includes('client-me.js'));
+  });
+
+  it('используется fetch с same-origin и низким приоритетом; повтор — без второго запроса', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    const n = t.fetches.filter((u) => /client-me\.js/.test(u)).length;
+    assert.equal(n, 1);
+    t.btn('me').fire('pointerdown');
+    t.btn('kk').fire('pointerdown');
+    await t.flush();
+    assert.equal(t.fetches.filter((u) => /client-me\.js/.test(u)).length, 1, 'после фона pointerdown не качает заново');
+    const idx = t.fetches.findIndex((u) => /ice-tab\.js/.test(u));
+    assert.equal(JSON.stringify(t.fetchOpts[idx]), JSON.stringify({ credentials: 'same-origin', priority: 'low' }));
+    assert.equal(links(t).length, 0);
+  });
+
+  it('pointerdown раньше фона: фон не качает то же второй раз', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true });
+    t.btn('me').fire('pointerdown');
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    assert.equal(t.fetches.filter((u) => /client-me\.js/.test(u)).length, 1);
+  });
+
+  it('saveData — фон молчит, касание вкладки по-прежнему подгружает её', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true, connection: { saveData: true, effectiveType: '4g' } });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    assert.equal(assets(t).length, 0);
+    t.btn('me').fire('pointerdown');
+    assert.ok(assets(t).includes('client-me.js'));
+  });
+
+  for (const type of ['2g', 'slow-2g']) {
+    it('effectiveType ' + type + ' — фон молчит', async () => {
+      const t = bootShell({ flags: SEASON, fetchAll: true, connection: { saveData: false, effectiveType: type } });
+      t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+      await drain(t);
+      assert.equal(assets(t).length, 0);
+    });
+  }
+
+  it('3g и 4g — подгрузка идёт', async () => {
+    for (const type of ['3g', '4g']) {
+      const t = bootShell({ flags: SEASON, fetchAll: true, connection: { saveData: false, effectiveType: type } });
+      t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+      await drain(t);
+      assert.ok(assets(t).includes('client-me.js'), type);
+    }
+  });
+
+  it('страница ещё грузится — фон ждёт load', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true, readyState: 'loading' });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    assert.equal(assets(t).length, 0);
+    t.win.dispatchEvent({ type: 'load' });
+    await drain(t);
+    assert.ok(assets(t).includes('client-me.js'));
+  });
+
+  it('ошибка сети глотается и не рвёт цепочку; неудачный адрес можно запросить снова', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true, fetchFail: (u) => /ice-tab\.js/.test(u) });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    assert.ok(assets(t).includes('client-me.js'), 'следующие вкладки подгрузились');
+    t.win.ClientShell.prefetchIceAssets();
+    await t.flush();
+    assert.equal(t.fetches.filter((u) => /ice-tab\.js/.test(u)).length, 2, 'после сбоя адрес не помечен как загруженный');
+  });
+
+  it('флаг выключен: прежний набор (каталог, записи, книга) через fetch, без «Кто кого» и «Я»', async () => {
+    const t = bootShell({ fetchAll: true });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    const got = assets(t);
+    for (const f of ['ice-tab.js', 'catalog-main.js', 'mini-app-client-bookings.css', 'book', 'mini-app-client-nav.css']) {
+      assert.ok(got.includes(f), 'нет ' + f);
+    }
+    assert.ok(!got.some((f) => /^kto-kogo|^client-me/.test(f)));
+    assert.equal(links(t).length, 0);
+  });
+
+  it('шрифты «Кто кого»: на странице без preload берутся из glide-public-fonts.css', async () => {
+    const css = "@font-face{src:url('/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=777') format('woff2')}" +
+      "@font-face{src:url('/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=777') format('woff2')}" +
+      "@font-face{src:url('/static/fonts/glide-public/golos-text-lat.woff2?v=777') format('woff2')}";
+    const t = bootShell({ flags: SEASON, pathname: '/webapp/ice', fetchAll: { '/static/shared/glide-public-fonts.css?v=1': css } });
+    const sheet = t.doc.createElement('link');
+    sheet.rel = 'stylesheet';
+    sheet.href = '/static/shared/glide-public-fonts.css?v=1';
+    t.doc.head.appendChild(sheet);
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    assert.ok(t.fetches.includes('/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=777'));
+    assert.ok(t.fetches.includes('/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=777'));
+    assert.ok(!t.fetches.some((u) => /golos-text-lat/.test(u)), 'лишние начертания не тянем');
+  });
+
+  it('шрифты «Кто кого»: если страница уже держит preload шрифтов — не качаем', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true });
+    const pre = t.doc.createElement('link');
+    pre.setAttribute('rel', 'preload');
+    pre.setAttribute('as', 'font');
+    pre.rel = 'preload';
+    t.doc.head.appendChild(pre);
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    assert.ok(!t.fetches.some((u) => /woff2|glide-public-fonts/.test(u)));
   });
 });
 
