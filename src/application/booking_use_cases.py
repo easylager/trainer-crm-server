@@ -263,6 +263,7 @@ async def sync_slot_status_for_occupancy(session: AsyncSession, slot_id: int) ->
     """
     Set slot to 'booked' when pending+confirmed count >= capacity, else 'available'.
     Call after booking create/cancel/decline within the same transaction.
+    A 'cancelled' slot (hidden recurring window, cancelled group occurrence) is never revived.
     """
     r = await session.execute(
         text("SELECT capacity FROM slots WHERE id = :sid"),
@@ -273,10 +274,11 @@ async def sync_slot_status_for_occupancy(session: AsyncSession, slot_id: int) ->
         return
     cap = max(1, int(row[0]))
     cnt = await _count_occupying_bookings(session, slot_id)
-    if cnt >= cap:
-        await session.execute(text("UPDATE slots SET status = 'booked' WHERE id = :id"), {"id": slot_id})
-    else:
-        await session.execute(text("UPDATE slots SET status = 'available' WHERE id = :id"), {"id": slot_id})
+    new_status = "booked" if cnt >= cap else "available"
+    await session.execute(
+        text("UPDATE slots SET status = :st WHERE id = :id AND status <> 'cancelled'"),
+        {"st": new_status, "id": slot_id},
+    )
 
 
 def is_slot_end_in_past_local(slot_date: date | None, end_time: time | None) -> bool:
@@ -4803,6 +4805,19 @@ async def mark_booking_notified(session: AsyncSession, booking_id: int) -> None:
     await session.commit()
 
 
+async def _hide_emptied_recurring_window(
+    session: AsyncSession, trainer_id: int, slot_id: int
+) -> None:
+    """One-off cancel/decline: a window the recurring cycle created must not linger as free time.
+
+    Soft-hide (``status='cancelled'``), never DELETE — the cancelled booking keeps its notifications,
+    history and stats. No-op for trainer-made windows and occupied/group slots.
+    """
+    from src.application.trainer_schedule_use_cases import hide_emptied_recurring_created_slot
+
+    await hide_emptied_recurring_created_slot(session, int(trainer_id), int(slot_id))
+
+
 async def cancel_booking(
     session: AsyncSession,
     booking_id: int,
@@ -4849,6 +4864,9 @@ async def cancel_booking(
             session, int(recurring_for_skip), slot_date_for_skip
         )
     await sync_slot_status_for_occupancy(session, slot_id)
+    if cancellation_source != BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH:
+        # Rule detach / prune delete the window themselves; a one-off cancel only hides it.
+        await _hide_emptied_recurring_window(session, trainer_id, slot_id)
     if client_id_cancel is not None and slot_date_for_skip is not None:
         await resync_pending_reminders_for_client_day(
             session, client_id_cancel, slot_date_for_skip, do_commit=False
@@ -5174,6 +5192,7 @@ async def cancel_booking_by_client(
             session, int(recurring_for_skip), slot_date
         )
     await sync_slot_status_for_occupancy(session, slot_id_cancel)
+    await _hide_emptied_recurring_window(session, int(trainer_id_cache), slot_id_cancel)
     if client_id is not None and slot_date is not None:
         await resync_pending_reminders_for_client_day(session, client_id, slot_date, do_commit=False)
     payload = _payload_from_row(row[:9], slot_id=slot_id_cancel, already_cancelled=False)
@@ -5440,6 +5459,7 @@ async def decline_booking(
         {"bid": booking_id},
     )
     await sync_slot_status_for_occupancy(session, slot_id_decl)
+    await _hide_emptied_recurring_window(session, trainer_id, slot_id_decl)
     if client_row_decl is not None and slot_date_decl is not None:
         await resync_pending_reminders_for_client_day(
             session, client_row_decl, slot_date_decl, do_commit=False

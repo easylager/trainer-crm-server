@@ -786,6 +786,7 @@ async def replace_slots_for_day(
             FROM slots
             WHERE trainer_id = :tid AND slot_date = :d
               AND training_group_id IS NULL
+              AND status != 'cancelled'
         """),
         {"tid": trainer_id, "d": slot_date},
     )
@@ -932,6 +933,41 @@ async def delete_emptied_recurring_created_slot(
                 SELECT 1 FROM bookings b
                 JOIN certificate_booking_credits cc ON cc.booking_id = b.id
                 WHERE b.slot_id = s.id
+              )
+            RETURNING s.id
+            """
+        ),
+        {"sid": int(slot_id), "tid": int(trainer_id)},
+    )
+    return r.fetchone() is not None
+
+
+async def hide_emptied_recurring_created_slot(
+    session: AsyncSession,
+    trainer_id: int,
+    slot_id: int,
+) -> bool:
+    """Soft-hide a cycle-made window after ONE of its auto-bookings was cancelled (week skip path).
+
+    Unlike rule detach, the slot is not deleted: the cancelled booking must survive with its
+    cancel notifications, client history and trainer stats (DELETE would cascade them away).
+    ``status = 'cancelled'`` keeps the row out of the trainer schedule (``list_slots``), client
+    slot lists, template/overlap checks and the live-identical unique index. Same eligibility as
+    ``delete_emptied_recurring_created_slot``: stamped, individual, no active booking. Caller owns
+    the transaction. Returns True when the slot was hidden.
+    """
+    r = await session.execute(
+        text(
+            """
+            UPDATE slots s SET status = 'cancelled'
+            WHERE s.id = :sid AND s.trainer_id = :tid
+              AND s.created_for_recurring_client_slot_id IS NOT NULL
+              AND s.capacity = 1
+              AND s.training_group_id IS NULL
+              AND s.status <> 'cancelled'
+              AND NOT EXISTS (
+                SELECT 1 FROM bookings b
+                WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')
               )
             RETURNING s.id
             """
@@ -1139,6 +1175,9 @@ async def list_slots(
     """List slots in date range (inclusive). Ordered by slot_date, start_time.
 
     Slots tied to an archived training group are omitted (materialized rows may outlive the group).
+    Cancelled individual slots are omitted too: the only producer is the soft-hide of a recurring
+    window after a one-off cancel (``hide_emptied_recurring_created_slot``) — it must vanish from
+    the schedule. Cancelled group occurrences stay listed as before («отменён»).
     """
     r = await session.execute(
         text("""
@@ -1160,7 +1199,7 @@ async def list_slots(
             LEFT JOIN cities ac ON ac.id = ar.city_id
             WHERE s.trainer_id = :tid AND s.slot_date >= :from_d AND s.slot_date <= :to_d
               AND (
-                s.training_group_id IS NULL
+                (s.training_group_id IS NULL AND s.status != 'cancelled')
                 OR (tg.id IS NOT NULL AND tg.status != 'archived')
               )
             ORDER BY s.slot_date, s.start_time
