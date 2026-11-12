@@ -2,7 +2,9 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Как на остальных вкладках бара: с viewport-fit=cover iOS отдаёт ненулевой env(safe-area-inset-bottom),
+       и бар оболочки здесь вставал на ~34 px выше, чем на соседних вкладках (прыгал при переключении). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Кто кого</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="/static/webapp/mini-app-telegram-chrome.js?v=202611122"></script>
