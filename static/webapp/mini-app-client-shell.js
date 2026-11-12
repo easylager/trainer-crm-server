@@ -1050,7 +1050,25 @@
     }
   }
 
+  /*
+   * TASK-391: «Кто кого» и витрина тренеров не подключают mini-app-client-theme.css, то есть не
+   * включают переходы. Уходящая страница их включила — Chrome начинал переход и обрывал его на новой
+   * странице (InvalidStateError «ViewTransition opt-in disabled» в консоли). Переход туда не
+   * начинаем вовсе: на экране то же самое, что было (обрыв), без ошибки.
+   */
+  var NO_VIEW_TRANSITION_PAGE = /\/(kto-kogo|trainers)(\.html)?$/;
+
+  function skipTransitionToPagesWithoutOptIn(ev) {
+    var vt = ev && ev.viewTransition;
+    var entry = ev && ev.activation && ev.activation.entry;
+    if (!vt || !entry || !entry.url) return;
+    try {
+      if (NO_VIEW_TRANSITION_PAGE.test(new URL(entry.url).pathname)) vt.skipTransition();
+    } catch (e) { /* */ }
+  }
+
   function bindViewTransitions() {
+    if ('onpageswap' in global) global.addEventListener('pageswap', skipTransitionToPagesWithoutOptIn);
     // Нет поддержки — ничего не подписываем, навигация остаётся как была.
     if (!('onpagereveal' in global)) return;
     global.addEventListener('pagereveal', function (ev) {

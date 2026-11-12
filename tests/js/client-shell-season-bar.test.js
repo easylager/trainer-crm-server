@@ -127,7 +127,7 @@ class Node {
   }
 }
 
-function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {}, connection = null, readyState = 'complete', fetchAll = false, fetchFail = null, scriptSrc = null } = {}) {
+function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {}, connection = null, readyState = 'complete', fetchAll = false, fetchFail = null, scriptSrc = null, winExtra = null } = {}) {
   const store = new Map();
   if (flags) store.set(FLAGS_KEY, JSON.stringify(Object.assign({ u: String(userId), at: Date.now() }, flags)));
   const session = new Map();
@@ -208,6 +208,7 @@ function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyS
     },
   };
   win.window = win;
+  if (winExtra) Object.assign(win, winExtra);
   const ctx = vm.createContext({
     URL, URLSearchParams, JSON, Date, Promise, Number, String, Object, Array, Math, console,
     window: win, document: doc, location: win.location, history: win.history, Telegram: win.Telegram,
@@ -901,6 +902,19 @@ describe('направление view transition в season', () => {
     t = bootShell({ flags: SEASON, pathname: '/webapp/client-me' });
     t.btn('kk').fire('click');
     assert.equal(dir(t), 'back');
+  });
+  it('TASK-391: переход на страницу без opt-in (Кто кого, тренеры) не начинается — без InvalidStateError', () => {
+    const t = bootShell({ flags: SEASON, winExtra: { onpageswap: null } });
+    const swap = (url) => {
+      let skipped = 0;
+      const ev = { type: 'pageswap', viewTransition: { skipTransition() { skipped++; } }, activation: { entry: { url } } };
+      t.win.dispatchEvent(ev);
+      return skipped;
+    };
+    assert.equal(swap('https://test/webapp/kto-kogo?init_data=x'), 1);
+    assert.equal(swap('https://test/webapp/trainers?trainer_id=3'), 1);
+    assert.equal(swap('https://test/webapp/client-me?init_data=x'), 0);
+    assert.equal(swap('https://test/webapp/ice'), 0);
   });
   it('флаг выключен: порядок прежний (kto-kogo не вкладка — всегда forward)', () => {
     const t = bootShell({ pathname: '/webapp/client-bookings' });
