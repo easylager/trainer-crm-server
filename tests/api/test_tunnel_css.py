@@ -80,3 +80,17 @@ def test_deferred_script_own_domcontentloaded_still_runs(tmp_path) -> None:
     )
     res = subprocess.run([node, str(harness)], capture_output=True, text=True, timeout=20)
     assert res.stdout.strip() == "a-run,b-run,a-dcl", res.stderr
+
+
+def test_tags_inside_inline_script_strings_stay_untouched() -> None:
+    html = (
+        "<head><script id=\"gate\">if (on) document.write('<link rel=\"stylesheet\" "
+        "href=\"/static/webapp/mini-app-client-shell.css?v=1\">' + '<script src=\"/static/webapp/"
+        "mini-app-client-shell.js?v=1\"><\\/script>');</script>"
+        "<link rel=\"stylesheet\" href=\"/static/webapp/mini-app-client-shell.css?v=1\"></head>"
+    )
+    out = inline_tunnel_styles(html)
+    gate = out.split("</script>", 1)[0]
+    assert "document.write('<link rel=\"stylesheet\" href=\"/static/webapp/mini-app-client-shell.css?v=1\">'" in gate
+    assert "<style>" not in gate
+    assert out.count("<style>") == 1

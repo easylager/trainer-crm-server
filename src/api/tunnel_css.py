@@ -27,6 +27,9 @@ _SCRIPT_RE = re.compile(
     re.IGNORECASE,
 )
 _SCRIPT_CLOSE_RE = re.compile(r"</script", re.IGNORECASE)
+# Встроенные скрипты не трогаем: теги внутри них — строки JS (document.write у «Кто кого»
+# подключает оболочку), вшитый туда файл ломает разметку строки и весь скрипт.
+_INLINE_SCRIPT_RE = re.compile(r"<script(?![^>]*\ssrc=)[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL)
 
 
 # Встроенный скрипт не умеет defer, поэтому его код выполняется в DOMContentLoaded. Но defer-скрипты
@@ -110,8 +113,15 @@ def inline_tunnel_styles(html: str) -> str:
             js = _DEFER_OPEN + js + _DEFER_CLOSE
         return f"<script>{js}</script>"
 
+    kept: list[str] = []
+
+    def keep(match: re.Match[str]) -> str:
+        kept.append(match.group(0))
+        return f"\x00tunnel-inline-{len(kept) - 1}\x00"
+
     deferred = [0]
-    out = _SCRIPT_RE.sub(repl_js, _LINK_RE.sub(repl_css, html))
+    out = _SCRIPT_RE.sub(repl_js, _LINK_RE.sub(repl_css, _INLINE_SCRIPT_RE.sub(keep, html)))
+    out = re.sub(r"\x00tunnel-inline-(\d+)\x00", lambda m: kept[int(m.group(1))], out)
     if not deferred[0]:
         return out
     # Сбор подписок — последним обработчиком DOMContentLoaded, как браузер после всех defer-скриптов.
