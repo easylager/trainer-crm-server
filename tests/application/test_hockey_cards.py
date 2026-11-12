@@ -118,6 +118,22 @@ def test_match_card_long_team_names_stay_inside_the_card(away: str, story: bool)
         assert min(ink) >= 24 and max(ink) <= image.width - 24, "название вылезло за край"
 
 
+def test_match_company_card_names_the_arena() -> None:
+    start = datetime(2026, 11, 28, 10, 0, tzinfo=timezone.utc)
+    minsk = cards.render_match_company_card(
+        home="Динамо-Минск", away="СКА", starts_at=start, going=[("Аня", None)], watching=[]
+    )
+    chizh = cards.render_match_company_card(
+        home="Юность",
+        away="Локомотив Орша",
+        starts_at=start,
+        going=[("Аня", None)],
+        watching=[],
+        venue="Чижовка-Арена",
+    )
+    assert minsk != chizh
+
+
 def test_match_card_version_follows_the_data() -> None:
     start = datetime(2026, 10, 21, 16, 30, tzinfo=timezone.utc)
     base = cards.match_card_version("Динамо-Минск", "СКА", start)

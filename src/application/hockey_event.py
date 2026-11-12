@@ -220,6 +220,21 @@ async def _home_match(session: AsyncSession, match_id: int) -> Any:
     return row
 
 
+async def company_target(session: AsyncSession, match_id: int) -> dict[str, Any] | None:
+    """Матч для карточки «собрать компанию»: команды, арена и подпись площадки. Нет такого — ``None``."""
+    try:
+        row = await _home_match(session, match_id)
+    except MatchNotFound:
+        return None
+    return {
+        "home_team": str(row.home_team),
+        "away_team": str(row.away_team),
+        "starts_at": row.starts_at,
+        "venue": _venue_label(row),
+        "arena": await _match_arena(session, row),
+    }
+
+
 def _extraliga_on() -> bool:
     from src.application.extraliga import enabled_clubs
 
@@ -627,6 +642,7 @@ __all__ = [
     "ICE_AFTER_LIMIT",
     "STATUSES",
     "MatchNotFound",
+    "company_target",
     "enabled",
     "event_href",
     "event_view",

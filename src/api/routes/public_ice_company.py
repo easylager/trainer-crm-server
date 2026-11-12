@@ -15,7 +15,6 @@ from fastapi import Depends
 
 from src.api.deps import get_session
 from src.application import hockey_event
-from src.application.hockey_matches import DINAMO
 from src.application.ice_company.avatars import cache_telegram_avatar_with_token, going_avatar_bytes, read_avatar_bytes
 from src.application.ice_company.codes import tg_participant_key, web_participant_key
 from src.application.hockey_cards import render_match_company_card
@@ -38,7 +37,6 @@ from src.application.ice_company.service import (
     resolve_participant,
     respond,
     snap_from,
-    _home_match_row,
     _load,
     _match_id,
     _responses,
@@ -158,13 +156,18 @@ async def post_company(
         raise HTTPException(status_code=422, detail="Не удалось подставить имя из Telegram.")
     try:
         if body.match_id is not None:
+            found = await hockey_event.company_target(session, body.match_id)
+            if found is None:
+                raise HTTPException(status_code=404, detail="Матч не найден.")
             view = await create_match_company(
                 session,
                 telegram_user_id=user_id,
                 match_id=body.match_id,
-                home_team=DINAMO,
+                home_team=str(found["home_team"]),
                 display_name=organizer_name,
                 name=body.name,
+                arena=found["arena"],
+                venue_label=str(found["venue"]),
             )
         else:
             assert body.session_id is not None
@@ -205,6 +208,7 @@ async def company_preview_png(
             raise HTTPException(status_code=404, detail="Матч не найден.")
         who = strip_emoji_for_poster((you or "").strip()[:24]) or "Ты"
         title = strip_emoji_for_poster((name or "").strip()[:40])
+        venue = str(match["venue"])
         png = await cached_png(
             (
                 "preview-match",
@@ -214,6 +218,7 @@ async def company_preview_png(
                 match["starts_at"].isoformat(),
                 who,
                 title,
+                venue,
             ),
             lambda: render_match_company_card(
                 home=str(match["home_team"]),
@@ -222,6 +227,7 @@ async def company_preview_png(
                 going=[(who, None)],
                 watching=[],
                 name=title,
+                venue=venue,
             ),
         )
         return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
@@ -362,7 +368,8 @@ async def company_ics(code: str, session: AsyncSession = Depends(get_session)) -
 
 
 async def _home_match(session: AsyncSession, match_id: int | None) -> dict | None:
-    return await _home_match_row(session, match_id, DINAMO) if match_id else None
+    """Домашний Динамо или матч Экстралиги — тот же набор, что страница матча."""
+    return await hockey_event.company_target(session, match_id) if match_id else None
 
 
 def _people(responses: list[dict], status: str) -> list[tuple[str, bytes | None]]:
@@ -402,7 +409,9 @@ async def _card_png(session: AsyncSession, code: str) -> bytes:
         bytes_key(*(face for _, face in going + watching)),
         closed,
         title,
+        snap.venue,
     )
+    venue = snap.venue or "Минск-Арена"
     return await cached_png(
         key,
         lambda: render_match_company_card(
@@ -413,6 +422,7 @@ async def _card_png(session: AsyncSession, code: str) -> bytes:
             watching=watching,
             closed=closed,
             name=title,
+            venue=venue,
         ),
     )
 
