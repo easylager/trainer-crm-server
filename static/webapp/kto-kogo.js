@@ -893,6 +893,7 @@
           // Хаб сам грузит матчи при входе; свежий список с загрузки страницы второй раз не запрашиваем.
           state.matchesFresh = !loadError;
           enter();
+          if (window.ClientShell && window.ClientShell.contentShown) window.ClientShell.contentShown();
           // Экран из ссылки ложится поверх `hub`: «назад» возвращает в игру, а не закрывает приложение.
           var entry = M.entryScreen(code, openId, params.get('tab'));
           if (entry) go(entry.name, entry.args);
