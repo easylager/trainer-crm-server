@@ -234,7 +234,9 @@ function boot({ initial = 'me', fragments = {}, failFragment = false, profile = 
     localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null) },
     scrollY: 0,
     scrollTo(_x, y) { scrolls.push(y); win.scrollY = y; },
-    setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 5)),
+    /* 8 с таймаут загрузки нельзя сжимать до нескольких мс: на CI цепочка
+       onload не успевает, таймаут срывает mount и история пустая. */
+    setTimeout: (fn, ms) => setTimeout(fn, ms >= 1000 ? 60_000 : ms),
     clearTimeout,
     CustomEvent: function (type, init) { this.type = type; this.detail = init && init.detail; },
     addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); },
