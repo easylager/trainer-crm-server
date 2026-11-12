@@ -395,6 +395,8 @@ function bridgeLegacyBackButton() {
   var btn = document.getElementById('btnBack');
   if (!Back || !btn || !Back.isNative()) return;
   if (!btn.closest('.client-mini-nav') && !btn.classList.contains('cb-detail-back')) return;
+  if (btn.__miniAppBackBridged) return;
+  btn.__miniAppBackBridged = true;
   var style = document.createElement('style');
   // #backFromEdit — второй «назад» внутри «Заявок»: тот же переход делает #btnBack.
   style.textContent = '#btnBack, #backFromEdit { display: none !important; }';
@@ -408,6 +410,9 @@ function bridgeLegacyBackButton() {
     new MutationObserver(sync).observe(btn, { attributes: true, attributeFilter: ['hidden'] });
   }
 }
+
+/* TASK-391: оболочка вкладок вставляет «Записи» после загрузки — мост ставится и тогда. */
+if (window.MiniAppBack) window.MiniAppBack.bridgeLegacy = bridgeLegacyBackButton;
 
 (function () {
   if (window.MiniAppRuntime) window.MiniAppRuntime.ready();

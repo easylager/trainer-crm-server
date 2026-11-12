@@ -31,7 +31,8 @@ class TabTimingBody(BaseModel):
     to: Tab
     ms: int = Field(..., ge=0, le=120_000)
     page_ms: int = Field(..., ge=0, le=120_000)
-    nav: Literal["navigate", "reload", "back_forward", "prerender"] = "navigate"
+    # shell — переход внутри оболочки вкладок без загрузки страницы (TASK-391).
+    nav: Literal["navigate", "reload", "back_forward", "prerender", "shell"] = "navigate"
     platform: str = Field("unknown", pattern=r"^[a-z0-9_]{1,16}$")
     season_ui: bool = False
 

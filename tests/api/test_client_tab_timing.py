@@ -66,6 +66,15 @@ async def test_logs_one_line_without_personal_data(auth, caplog) -> None:
 
 
 @pytest.mark.asyncio
+async def test_shell_nav_is_accepted(auth, caplog) -> None:
+    """TASK-391: переход внутри оболочки вкладок помечен nav=shell."""
+    with caplog.at_level(logging.INFO):
+        resp = await _post(_body(**{"from": "bookings"}, to="me", ms=14, nav="shell"))
+    assert resp.status_code == 204
+    assert any("from=bookings to=me ms=14" in r.getMessage() and r.getMessage().endswith("nav=shell") for r in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_cold_start_has_no_from(auth, caplog) -> None:
     with caplog.at_level(logging.INFO):
         resp = await _post(_body(kind="cold", **{"from": None}, to="home", ms=2240, page_ms=2240))

@@ -385,7 +385,28 @@
     global.dispatchEvent(new global.CustomEvent('client-shell:retap', { detail: { tab: tabId } }));
   }
 
+  /* TASK-391: вкладка, которую держит оболочка (client-tabs.js): уже живая — качать нечего. */
+  function shellTabs() {
+    var t = global.ClientTabs;
+    return t && t.hosted ? t : null;
+  }
+
+  function inFastTabsShell() {
+    var el = document.documentElement;
+    return !!(el && typeof el.hasAttribute === 'function' && el.hasAttribute('data-ft-shell'));
+  }
+
+  function prefetchShellTab(tabId) {
+    var t = shellTabs();
+    if (t.isMounted(tabId)) return Promise.resolve();
+    return Promise.all([t.prefetch(tabId), tabId === 'me' ? prefetchMeWarmCache() : prefetchBookingsWarmCache()]);
+  }
+
   function onSeasonTabPointerDown(tabId) {
+    if (shellTabs() && shellTabs().hosts(tabId)) {
+      prefetchShellTab(tabId);
+      return;
+    }
     if (tabId === 'catalog') {
       prefetchIceAssets();
       prefetchCatalogAssets();
@@ -883,6 +904,7 @@
   var TT_SEEN_KEY = 'tcb_tt_seen_v1';
   var tabTimingFirstPage = false;
   var tabTimingDone = false;
+  var tabTimingNav = null;
 
   try {
     tabTimingFirstPage = !global.sessionStorage.getItem(TT_SEEN_KEY);
@@ -956,7 +978,7 @@
           nowMs: nowMs,
           sinceOriginMs: sinceOriginMs,
           tab: resolveActiveTab(),
-          nav: readNavType(),
+          nav: tabTimingNav || readNavType(),
           platform: tg && tg.platform,
           seasonUi: uiFlags.season_ui,
         };
@@ -968,6 +990,22 @@
       if (typeof global.requestAnimationFrame === 'function') global.requestAnimationFrame(measure);
       else global.setTimeout(measure, 0);
     } catch (e) { /* замер не должен ломать страницу */ }
+  }
+
+  /* TASK-391: переход внутри оболочки — новый замер без перезагрузки (nav=shell). */
+  function armTabTiming(nav) {
+    tabTimingDone = false;
+    tabTimingFirstPage = false;
+    tabTimingNav = nav || null;
+  }
+
+  /* TASK-391: оболочка показала вкладку — подсветка нажатия больше не нужна, анимация бара доигрывает. */
+  function tabSwitchDone() {
+    clearTabPressTimer('revertTimer');
+    tabPress.tab = null;
+    tabPress.pointer = null;
+    tabPress.committed = false;
+    syncTabBarActive();
   }
 
   /* ── TASK-094: направление перехода ───────────────────────────────────────
@@ -1053,6 +1091,7 @@
       syncTabBarActive();
       return;
     }
+    if (!(opts && opts.replace) && shellTabs() && shellTabs().go(path)) return;
     rememberNavDirection(path);
     /* /p/… — публичная страница места, не файл внутри /static/webapp/. */
     var raw = String(path || '');
@@ -1742,7 +1781,8 @@
       var active = resolveActiveTab();
       seasonTabs().forEach(function (tab) {
         if (tab.id === active) return;
-        if (tab.id === 'catalog') step(catalogStep);
+        if (shellTabs() && shellTabs().hosts(tab.id)) step(function () { return [prefetchShellTab(tab.id)]; });
+        else if (tab.id === 'catalog') step(catalogStep);
         else if (tab.id === 'bookings') step(bookingsStep);
         else if (tab.id === 'kk') step(function () { return [prefetchKkAssets(), prefetchKkExtras()]; });
         else if (tab.id === 'me') step(function () { return [prefetchMeAssets(), prefetchMeExtras()]; });
@@ -1889,6 +1929,9 @@
     deepLinkTarget: deepLinkTarget,
     reportCatalogPresence: reportCatalogPresence,
     contentShown: contentShown,
+    armTabTiming: armTabTiming,
+    tabSwitchDone: tabSwitchDone,
+    fetchAsset: fetchAsset,
     readStartParam: readStartParam,
     TAB_ICONS: TAB_ICONS,
     uiFlags: getUiFlags,
@@ -2110,7 +2153,7 @@
       if (
         state.mode === 'tabs' &&
         pathnameKey() !== 'catalog' &&
-        pathnameKey() !== 'client-bookings' &&
+        (pathnameKey() !== 'client-bookings' || inFastTabsShell()) &&
         pathnameKey() !== 'client-home'
       ) {
         scheduleCatalogNavigationPrefetch();

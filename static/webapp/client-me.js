@@ -730,8 +730,13 @@
   root.addEventListener('client-shell:retap', function (ev) {
     if (ev && ev.detail && ev.detail.tab === 'me') load();
   });
+  /* TASK-391: в оболочке вкладок (data-ft-shell) обновление по показу и из bfcache шлёт роутер. */
+  var inTabsShell = !!(doc.documentElement && doc.documentElement.hasAttribute && doc.documentElement.hasAttribute('data-ft-shell'));
   root.addEventListener('pageshow', function (ev) {
-    if (ev && ev.persisted) load();
+    if (ev && ev.persisted && !inTabsShell) load();
+  });
+  root.addEventListener('client-tabs:refresh', function (ev) {
+    if (ev && ev.detail && ev.detail.tab === 'me') load();
   });
   if (doc.fonts && doc.fonts.ready && typeof doc.fonts.ready.then === 'function') {
     doc.fonts.ready.then(fitName);
