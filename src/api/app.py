@@ -399,6 +399,44 @@ def webapp_client_me_css(request: Request):
     )
 
 
+@app.get("/webapp/client-family")
+def webapp_client_family_page():
+    """Страница «Семья» (TASK-387): люди аккаунта и общий доступ. `__FONT_V__` — как у client-me."""
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
+    path = _WEBAPP_DIR / "client-family.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
+
+
+@app.get("/webapp/client-family.js")
+def webapp_client_family_js(request: Request):
+    """Страница «Семья»: модель и отрисовка. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-family.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/client-family.css")
+def webapp_client_family_css(request: Request):
+    """Страница «Семья»: стили по макету design/your-season/family*.html. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-family.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/client-family-access")
 def webapp_client_family_access_page():
     """Client: invite extra Telegram accounts to share one client card (bookings, passes)."""

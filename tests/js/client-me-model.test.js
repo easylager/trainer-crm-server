@@ -280,7 +280,7 @@ describe('«Лёд и занятия»', () => {
   it('каталожный человек: одна строка «Семья — Добавить близкого»', () => {
     const m = model(newcomer());
     assert.equal(m.ice.title, 'Лёд и занятия');
-    assert.deepEqual(m.ice.rows, [{ key: 'family', label: 'Семья', value: 'Добавить близкого', href: 'client-family-access' }]);
+    assert.deepEqual(m.ice.rows, [{ key: 'family', label: 'Семья', value: 'Добавить близкого', href: 'client-family' }]);
   });
 
   it('полный ответ: все строки по порядку, со своими страницами', () => {
@@ -288,7 +288,7 @@ describe('«Лёд и занятия»', () => {
     assert.deepEqual(rowKeys(m), ['bookings', 'passes', 'saved', 'requests', 'family']);
     assert.deepEqual(
       m.ice.rows.map((r) => r.href),
-      ['client-bookings', 'client-passes-certificates', 'client-saved-trainers', 'client-requests', 'client-family-access']
+      ['client-bookings', 'client-passes-certificates', 'client-saved-trainers', 'client-requests', 'client-family']
     );
     assert.equal(row(m, 'bookings').value, 'завтра, 18:30');
     assert.equal(row(m, 'passes').value, '4' + NB + 'занятия');
