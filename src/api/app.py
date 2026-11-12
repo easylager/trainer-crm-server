@@ -3085,11 +3085,17 @@ app.include_router(webapp_router)
 @app.get("/webapp/kto-kogo")
 @app.get("/webapp/kto-kogo.html")
 def webapp_kto_kogo_page():
-    """Игра «Кто кого»: угадай матч Динамо-Минск с друзьями (TASK-299)."""
+    """Игра «Кто кого»: угадай матч Динамо-Минск с друзьями (TASK-299).
+
+    TASK-388: свои шрифты — `__FONT_V__`, как на главной: preload совпадает с адресом из glide-public-fonts.css.
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
     path = _WEBAPP_DIR / "kto-kogo.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
+    return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 @app.middleware("http")

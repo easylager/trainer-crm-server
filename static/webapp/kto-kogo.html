@@ -6,9 +6,11 @@
   <title>Кто кого</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="/static/webapp/mini-app-telegram-chrome.js?v=202611121"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&amp;family=Golos+Text:wght@400;500;600;700&amp;display=swap">
+  <!-- TASK-388: свои шрифты, как на главной (те же Dela Gothic One и Golos Text 400–700), вместо Google Fonts:
+       внешний CSS (30 КБ) и шрифты с gstatic держали load на ~0,9 с; теперь общий кэш с другими вкладками. -->
+  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611121">
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611121">
   <!-- TASK-374: оболочка (бар вкладок) грузится ТОЛЬКО при season_ui из кэша флагов оболочки (cw_ui_flags_v1, привязан к id
        пользователя Telegram). Флаг выключен, кэша нет, кэш битый, чужой или старше суток — оболочки на странице нет вовсе: ни запросов
