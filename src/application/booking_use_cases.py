@@ -5228,6 +5228,17 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     )
     row2 = r2.fetchone()
     await session.commit()
+    # TASK-397: время до подтверждения. После commit, чтобы сбой учёта не откатил статус.
+    try:
+        from src.application.trainer_card_measure import record_booking_confirmed
+
+        await record_booking_confirmed(session, trainer_id=int(trainer_id), booking_id=int(booking_id))
+    except Exception:
+        logger.warning(
+            "trainer card booking_confirmed measure failed booking_id=%s",
+            booking_id,
+            exc_info=True,
+        )
     if not row2:
         return None
     ms, st_tip = await try_claim_first_booking_milestones(session, trainer_id)

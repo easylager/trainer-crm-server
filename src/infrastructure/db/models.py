@@ -2302,11 +2302,26 @@ DEMAND_EVENT_CONTACT_CLICK = "contact_click"
 DEMAND_EVENT_BOOKING_ATTEMPT_BLOCKED = "booking_attempt_blocked"
 DEMAND_EVENT_CATALOG_FAVORITE = "catalog_favorite"
 
+# TASK-397: базовая линия карточки. Те же строки, без новой таблицы: kind в БД — строка,
+# не CHECK. В пересчёт Lead Mode (profile_view / contact_click / …) эти kind не входят.
+DEMAND_EVENT_TRAINER_CARD_VIEW = "trainer_card_view"
+DEMAND_EVENT_CARD_CTA_TAP = "card_cta_tap"
+DEMAND_EVENT_BOOKING_FORM_OPEN = "booking_form_open"
+DEMAND_EVENT_BOOKING_SUBMIT = "booking_submit"
+DEMAND_EVENT_BOOKING_CONFIRMED = "booking_confirmed"
+DEMAND_EVENT_LINK_REG_FIRST_TAP = "link_reg_first_tap"
+
 DEMAND_EVENT_KINDS = (
     DEMAND_EVENT_PROFILE_VIEW,
     DEMAND_EVENT_CONTACT_CLICK,
     DEMAND_EVENT_BOOKING_ATTEMPT_BLOCKED,
     DEMAND_EVENT_CATALOG_FAVORITE,
+    DEMAND_EVENT_TRAINER_CARD_VIEW,
+    DEMAND_EVENT_CARD_CTA_TAP,
+    DEMAND_EVENT_BOOKING_FORM_OPEN,
+    DEMAND_EVENT_BOOKING_SUBMIT,
+    DEMAND_EVENT_BOOKING_CONFIRMED,
+    DEMAND_EVENT_LINK_REG_FIRST_TAP,
 )
 
 DEMAND_SOURCE_CATALOG = "catalog"
