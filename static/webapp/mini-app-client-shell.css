@@ -253,21 +253,52 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
 }
 
 .client-tab-bar--season .client-tab-bar__icon-wrap {
+  position: relative;
+  isolation: isolate;
   width: auto;
   height: 34px;
   border-radius: var(--app-radius-md);
 }
 
-.client-tab-bar--season.client-tab-bar--n4 .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
+/*
+ * TASK-390: плашка активной вкладки — отдельный слой (::before) того же размера и места, что
+ * раньше была заливка самой обёртки (52×34 при четырёх вкладках, 48×34 при пяти). Так смену
+ * вкладки можно показать через opacity/transform без пересчёта раскладки: старая плашка
+ * сжимается и гаснет, новая раскрывается из центра. Анимация — только под --switching
+ * (класс живёт на время переключения), поэтому новая страница рисует бар сразу готовым.
+ */
+.client-tab-bar--season .client-tab-bar__icon-wrap::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: 50%;
   width: 52px;
+  margin-left: -26px;
+  border-radius: var(--app-radius-md);
+  background: var(--g-accent);
+  opacity: 0;
+  transform: scaleX(0.6);
+  pointer-events: none;
 }
 
-.client-tab-bar--season.client-tab-bar--n5 .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
+.client-tab-bar--season.client-tab-bar--n5 .client-tab-bar__icon-wrap::before {
   width: 48px;
+  margin-left: -24px;
+}
+
+.client-tab-bar--season .client-tab-bar__btn--active .client-tab-bar__icon-wrap::before {
+  opacity: 1;
+  transform: none;
+}
+
+.client-tab-bar--season.client-tab-bar--switching .client-tab-bar__icon-wrap::before {
+  transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1), transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .client-tab-bar--season .client-tab-bar__btn--active .client-tab-bar__icon-wrap {
-  background: var(--g-accent) !important;
+  background: transparent !important;
   color: var(--g-on-accent) !important;
   box-shadow: none !important;
 }
@@ -561,4 +592,10 @@ body.client-shell-body.client-shell-tabs-hidden .app-toast {
   .client-tab-bar,
   .client-more-sheet,
   .client-more-sheet-overlay { transition: none; }
+  /* TASK-390: смена активной вкладки — сразу, без растворения и раскрытия плашки. */
+  .client-tab-bar__btn,
+  .client-tab-bar__btn > span:last-child,
+  .client-tab-bar__icon-wrap svg,
+  .client-tab-bar--season.client-tab-bar--switching .client-tab-bar__icon-wrap::before { transition: none; }
+  .client-tab-bar__icon-wrap { transition-property: transform; }
 }
