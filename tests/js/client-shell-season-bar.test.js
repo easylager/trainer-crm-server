@@ -756,15 +756,16 @@ describe('TASK-395: фоновая подгрузка вкладок', () => {
     assert.equal(t.fetches.filter((u) => /ice-tab\.js/.test(u)).length, 2, 'после сбоя адрес не помечен как загруженный');
   });
 
-  it('флаг выключен: прежний набор (каталог, записи, книга) через fetch, без «Кто кого» и «Я»', async () => {
+  it('флаг выключен: прежний набор (каталог, записи, страница записи) через fetch, без «Кто кого» и «Я»', async () => {
     const t = bootShell({ fetchAll: true });
     t.win.ClientShell.scheduleCatalogNavigationPrefetch();
     await drain(t);
     const got = assets(t);
-    for (const f of ['ice-tab.js', 'catalog-main.js', 'mini-app-client-bookings.css', 'book', 'mini-app-client-nav.css']) {
+    for (const f of ['ice-tab.js', 'catalog-main.js', 'mini-app-client-bookings.css', 'mini-app-phone-field.js']) {
       assert.ok(got.includes(f), 'нет ' + f);
     }
     assert.ok(!got.some((f) => /^kto-kogo|^client-me/.test(f)));
+    assert.ok(!got.includes('book') && !t.fetches.some((u) => /nav\.css/.test(u)), 'no-store страницы в фон не качаем');
     assert.equal(links(t).length, 0);
   });
 

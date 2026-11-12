@@ -1463,10 +1463,14 @@
     return meWarmInFlight;
   }
 
-  /** Prefetch book page shell — hub slot taps open book?slot_id= directly. */
+  /*
+   * Страница записи: раньше сюда же входили сама страница `book` и mini-app-client-nav.css без ?v=.
+   * Обе отдаются no-cache/no-store: через fetch в кэш они не ложатся (это ~100 КБ впустую на каждую
+   * загрузку страницы, теперь и на iPhone), а страница берёт nav.css с версией — адрес не совпадал.
+   * Остался только кэшируемый файл с ?v=.
+   */
   function prefetchBookAssets() {
-    var base = webappBasePath();
-    return fetchAssets([base + 'book', base + 'mini-app-client-nav.css', assetUrl(base, 'mini-app-phone-field.js')]);
+    return fetchAssets([assetUrl(webappBasePath(), 'mini-app-phone-field.js')]);
   }
 
   /* Экономия трафика и медленная сеть: фоном ничего не качаем (касание вкладки по-прежнему подгружает её). */
