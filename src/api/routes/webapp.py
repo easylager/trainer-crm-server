@@ -11551,6 +11551,7 @@ from src.api.routes.webapp_client_trainer_edges import router as _webapp_client_
 from src.api.routes.webapp_client_watches import router as _webapp_client_watches_router
 from src.api.routes.webapp_client_ui_flags import router as _webapp_client_ui_flags_router
 from src.api.routes.webapp_client_me import router as _webapp_client_me_router
+from src.api.routes.webapp_client_tab_timing import router as _webapp_client_tab_timing_router
 from src.api.routes.webapp_training_groups import router as _webapp_training_groups_router
 from src.api.routes.admin_ice_sessions import router as _admin_ice_sessions_router
 from src.api.routes.admin_ice_sources import router as _admin_ice_sources_router
@@ -11566,6 +11567,7 @@ router.include_router(_webapp_client_trainer_edges_router)
 router.include_router(_webapp_client_watches_router)
 router.include_router(_webapp_client_ui_flags_router)
 router.include_router(_webapp_client_me_router)
+router.include_router(_webapp_client_tab_timing_router)
 router.include_router(_webapp_client_hockey_router)
 router.include_router(_webapp_client_hockey_event_router)
 router.include_router(_webapp_client_hockey_leagues_router)

@@ -538,6 +538,7 @@
         state.keys[b] = parts[b].key;
       });
       fitName();
+      if (window.ClientShell && window.ClientShell.contentShown) window.ClientShell.contentShown();
       return;
     }
     BLOCKS.forEach(function (b, i) {

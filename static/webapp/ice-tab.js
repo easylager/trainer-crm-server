@@ -2615,6 +2615,7 @@
   function onListLoaded() {
     listFetchedAt = Date.now();
     renderList();
+    if (window.ClientShell && window.ClientShell.contentShown) window.ClientShell.contentShown();
     queuePendingScroll();
     if (!mapCtl) return;
     if (state.intent === 'coach') {

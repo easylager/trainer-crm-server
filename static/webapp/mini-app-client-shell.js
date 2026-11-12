@@ -439,6 +439,7 @@
           dispatchRetap(tab.id);
           return;
         }
+        rememberTabTap(tab.id);
         commitTabPress(tab.id);
         navigate(tab.path);
       });
@@ -516,6 +517,7 @@
           resetTabPress();
           return;
         }
+        rememberTabTap(tab.id);
         commitTabPress(tab.id);
         navigate(tab.path);
       });
@@ -868,6 +870,104 @@
       return queryHasTabCatalog(targetQuery) && queryHasTabCatalog(curQ);
     }
     return true;
+  }
+
+  /* ── TASK-389: замер «нажатие на вкладку → содержимое показано» ─────────────
+   *
+   * Нажатие ставит метку в sessionStorage (откуда|куда|время), страница вкладки, когда её
+   * содержимое показано, зовёт ClientShell.contentShown(); событие собирает tab-timing-model.js
+   * (грузится только тогда, когда событие будет) и уходит на сервер уже после показа.
+   * Ошибки глотаются: замер не должен ничего менять для клиента. Без персональных данных.
+   */
+  var TAP_KEY = 'tcb_tab_tap_v1';
+  var TT_SEEN_KEY = 'tcb_tt_seen_v1';
+  var tabTimingFirstPage = false;
+  var tabTimingDone = false;
+
+  try {
+    tabTimingFirstPage = !global.sessionStorage.getItem(TT_SEEN_KEY);
+    global.sessionStorage.setItem(TT_SEEN_KEY, '1');
+  } catch (e) { /* без storage первая страница неизвестна — холодный старт не считаем */ }
+
+  function rememberTabTap(toTab) {
+    try {
+      var from = resolveActiveTab();
+      var tab = from === null ? '' : String(from);
+      global.sessionStorage.setItem(TAP_KEY, tab + '|' + toTab + '|' + Date.now());
+    } catch (e) { /* замер не мешает навигации */ }
+  }
+
+  function readNavType() {
+    try {
+      var e = global.performance.getEntriesByType('navigation')[0];
+      return e && e.type ? String(e.type) : 'navigate';
+    } catch (err) {
+      return 'navigate';
+    }
+  }
+
+  function sendTabTiming(ev) {
+    var initData = getInitData();
+    if (!ev || !initData || typeof global.fetch !== 'function') return;
+    try {
+      global.fetch('/api/webapp/client/tab-timing', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+        body: JSON.stringify(ev),
+      }).catch(function () {});
+    } catch (e) { /* учёт не мешает показу */ }
+  }
+
+  function loadTabTimingModel(done) {
+    if (global.TabTimingModel) return done(global.TabTimingModel);
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = assetUrl('/static/webapp/', 'tab-timing-model.js');
+    s.onload = function () {
+      done(global.TabTimingModel || null);
+    };
+    s.onerror = function () {};
+    document.head.appendChild(s);
+  }
+
+  /**
+   * Страница вкладки зовёт, когда на экране первое осмысленное содержимое (данные или тёплый
+   * кэш, не скелетон). Один раз за загрузку страницы; время берётся в кадре после показа.
+   */
+  function contentShown() {
+    if (tabTimingDone) return;
+    tabTimingDone = true;
+    try {
+      var tapRaw = null;
+      try {
+        tapRaw = global.sessionStorage.getItem(TAP_KEY);
+        global.sessionStorage.removeItem(TAP_KEY);
+      } catch (e) { /* */ }
+      if (!tapRaw && !tabTimingFirstPage) return;
+      var measure = function () {
+        if (document.visibilityState === 'hidden') return;
+        var nowMs = Date.now();
+        var sinceOriginMs = global.performance.now();
+        var tg = getTg();
+        var input = {
+          tapRaw: tapRaw,
+          firstPage: tabTimingFirstPage,
+          nowMs: nowMs,
+          sinceOriginMs: sinceOriginMs,
+          tab: resolveActiveTab(),
+          nav: readNavType(),
+          platform: tg && tg.platform,
+          seasonUi: uiFlags.season_ui,
+        };
+        loadTabTimingModel(function (model) {
+          if (!model) return;
+          sendTabTiming(model.buildEvent(input));
+        });
+      };
+      if (typeof global.requestAnimationFrame === 'function') global.requestAnimationFrame(measure);
+      else global.setTimeout(measure, 0);
+    } catch (e) { /* замер не должен ломать страницу */ }
   }
 
   /* ── TASK-094: направление перехода ───────────────────────────────────────
@@ -1651,6 +1751,7 @@
     maybeOpenArenaDeepLink: maybeOpenArenaDeepLinkWithSession,
     deepLinkTarget: deepLinkTarget,
     reportCatalogPresence: reportCatalogPresence,
+    contentShown: contentShown,
     readStartParam: readStartParam,
     TAB_ICONS: TAB_ICONS,
     uiFlags: getUiFlags,

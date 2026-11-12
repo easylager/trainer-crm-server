@@ -1129,6 +1129,7 @@
           skel.removeAttribute('aria-busy');
         }
         if (window.HubHome) window.HubHome.ready();
+        if (window.ClientShell && window.ClientShell.contentShown) window.ClientShell.contentShown();
         // Другие вкладки — после фото шапки: на медленной сети префетч иначе
         // делит канал с первым экраном (TASK-303, AC-P2).
         var prefetch = function () {

@@ -909,6 +909,7 @@
           secondaryPath: 'ice',
         });
         document.body.classList.add('bookings-body--revealed');
+        if (window.ClientShell && window.ClientShell.contentShown) window.ClientShell.contentShown();
       }
 
       function renderBookingsListSkeleton(count) {
@@ -954,6 +955,7 @@
             if (!deeplinkOpen && state.mode === 'upcoming') {
               renderAllBookings();
               document.body.classList.add('bookings-body--revealed');
+              if (window.ClientShell && window.ClientShell.contentShown) window.ClientShell.contentShown();
             }
             tryOpenBookingFromQuery();
           })
@@ -1301,6 +1303,7 @@
           if (ctx.openBookingId == null) {
             renderAllBookings();
             document.body.classList.add('bookings-body--revealed');
+            if (window.ClientShell && window.ClientShell.contentShown) window.ClientShell.contentShown();
           }
           tryOpenBookingFromQuery();
         } else {
