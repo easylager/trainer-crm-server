@@ -338,6 +338,7 @@ def render_match_company_card(
     watching: Sequence[tuple[str, bytes | None]],
     closed: str | None = None,
     name: str = "",
+    venue: str = "Минск-Арена",
 ) -> bytes:
     """Карточка компании на матч, 1200×630: «Трибуна против дивана» (владелец 2026-10-20).
 
@@ -362,7 +363,9 @@ def render_match_company_card(
         draw.text((pad, 46), head, font=head_font, fill=_SOFT if closed else _YELLOW)
     when = match_when(starts_at)
     draw.text((width - pad, 54), when, font=_text(30, 700), fill=_WHITE, anchor="ra")
-    draw.text((width - pad, 96), "Минск-Арена", font=_text(24, 700), fill=_SOFT, anchor="ra")
+    place_font = _text(24, 700)
+    place = _ellipsize(draw, (venue or "Минск-Арена").strip() or "Минск-Арена", place_font, 340)
+    draw.text((width - pad, 96), place, font=place_font, fill=_SOFT, anchor="ra")
 
     # Команды строкой: два маленьких логотипа и названия.
     y_teams = 156

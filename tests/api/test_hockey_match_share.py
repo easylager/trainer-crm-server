@@ -13,6 +13,7 @@ from src.api.routes.public_ice_company import reset_company_rate_limits
 from tests.api.test_hockey_event import _client, _companies, _env, _match, arena  # noqa: F401
 from tests.api.test_ice_company_api import _init
 from tests.api.test_ice_invites import _headers
+from tests.api.test_public_arenas import _insert_arena, _insert_city
 
 START = datetime(2026, 12, 2, 16, 30, tzinfo=timezone.utc)  # ср, 2 декабря, 19:30 по Минску
 SHARE = "/api/public/hockey/matches/{}/share"
@@ -251,6 +252,42 @@ async def test_company_needs_exactly_one_of_session_and_match(app_use_test_db, d
         none = await _post_company(client, 880_304_502)
     assert both.status_code == 422 and none.status_code == 422
     assert await _companies(db_session, match_id) == 0
+
+
+@pytest.mark.asyncio
+async def test_extraliga_company_preview_renders(app_use_test_db, db_session, monkeypatch) -> None:
+    """Лист «Компания» на матче Экстралиги: превью — та же картинка, не пустой блок."""
+    monkeypatch.setenv("EXTRALIGA_ENABLED", "1")
+    monkeypatch.setenv("EXTRALIGA_CLUBS", "Юность,Локомотив Орша")
+    city_id = await _insert_city(db_session, name="Минск")
+    await _insert_arena(db_session, city_id, name="Чижовка-Арена", address="ул. Ташкентская, 19")
+    match_id = int(
+        (
+            await db_session.execute(
+                text("""
+                    INSERT INTO hockey_matches (
+                        source, source_match_id, home_team, away_team, starts_at, status, league, city, arena
+                    )
+                    VALUES ('hockeyby', 'yunost-lok', 'Юность', 'Локомотив Орша', :starts, 'scheduled',
+                            'extraliga', 'Минск', 'Чижовка-Арена')
+                    RETURNING id
+                    """),
+                {"starts": START},
+            )
+        ).scalar_one()
+    )
+    await db_session.commit()
+    async with _client() as client:
+        preview = await client.get(
+            "/api/public/ice-companies/preview.png",
+            params={"match_id": match_id, "you": "Аня"},
+        )
+        created = await _post_company(client, 880_304_520, match_id=match_id, name="Сектор Б")
+    assert preview.status_code == 200, preview.text
+    assert Image.open(io.BytesIO(preview.content)).size == (1200, 630)
+    assert created.status_code == 201, created.text
+    assert "Чижовка-Арена" in created.json()["card_text"]
+    assert created.json()["name"] == "Сектор Б"
 
 
 @pytest.mark.asyncio
