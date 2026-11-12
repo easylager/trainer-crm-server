@@ -768,32 +768,50 @@ describe('TASK-395: фоновая подгрузка вкладок', () => {
     assert.equal(links(t).length, 0);
   });
 
-  it('шрифты «Кто кого»: на странице без preload берутся из glide-public-fonts.css', async () => {
+  it('шрифты: адреса берутся из glide-public-fonts.css (с версией шрифтов от сервера), все начертания', async () => {
     const css = "@font-face{src:url('/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=777') format('woff2')}" +
-      "@font-face{src:url('/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=777') format('woff2')}" +
-      "@font-face{src:url('/static/fonts/glide-public/golos-text-lat.woff2?v=777') format('woff2')}";
-    const t = bootShell({ flags: SEASON, pathname: '/webapp/ice', fetchAll: { '/static/shared/glide-public-fonts.css?v=1': css } });
+      "@font-face{src:url('/static/fonts/glide-public/golos-text-cyr-lat-500.woff2?v=777') format('woff2')}" +
+      "@font-face{src:url('/static/fonts/glide-public/golos-text-lat-500.woff2?v=777') format('woff2')}";
+    const t = bootShell({ flags: SEASON, fetchAll: { '/static/shared/glide-public-fonts.css?v=1': css } });
     const sheet = t.doc.createElement('link');
     sheet.rel = 'stylesheet';
     sheet.href = '/static/shared/glide-public-fonts.css?v=1';
     t.doc.head.appendChild(sheet);
     t.win.ClientShell.scheduleCatalogNavigationPrefetch();
     await drain(t);
-    assert.ok(t.fetches.includes('/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=777'));
-    assert.ok(t.fetches.includes('/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=777'));
-    assert.ok(!t.fetches.some((u) => /golos-text-lat/.test(u)), 'лишние начертания не тянем');
+    for (const f of ['dela-gothic-one-cyr-lat', 'golos-text-cyr-lat-500', 'golos-text-lat-500']) {
+      assert.ok(t.fetches.includes('/static/fonts/glide-public/' + f + '.woff2?v=777'), f);
+    }
+    assert.equal(t.fetches.filter((u) => /glide-public-fonts\.css/.test(u)).length, 1, 'css запрошен один раз');
   });
 
-  it('шрифты «Кто кого»: если страница уже держит preload шрифтов — не качаем', async () => {
-    const t = bootShell({ flags: SEASON, fetchAll: true });
-    const pre = t.doc.createElement('link');
-    pre.setAttribute('rel', 'preload');
-    pre.setAttribute('as', 'font');
-    pre.rel = 'preload';
-    t.doc.head.appendChild(pre);
+  it('общие файлы страниц «Кто кого» и «Я», у которых адрес не как на Главной, подгружаются в фоне, но не на касании', async () => {
+    const t = bootShell({ flags: SEASON, fetchAll: true, scriptSrc: 'https://test/webapp/mini-app-client-shell.js?v=555' });
+    t.btn('kk').fire('pointerdown');
+    t.btn('me').fire('pointerdown');
+    const tap = t.fetches.filter((u) => !u.startsWith('/api/'));
+    assert.ok(!tap.some((u) => /write-access|client-sheet|minsk-time/.test(u)), 'на касании только основные ассеты');
     t.win.ClientShell.scheduleCatalogNavigationPrefetch();
     await drain(t);
-    assert.ok(!t.fetches.some((u) => /woff2|glide-public-fonts/.test(u)));
+    for (const u of ['/static/webapp/mini-app-client-shell.js?v=555', '/static/webapp/mini-app-client-shell.css?v=555', '/static/webapp/write-access.js?v=555',
+      '/static/webapp/client-sheet.js?v=555', '/static/webapp/client-rink-sheet.js?v=555', '/webapp/minsk-time.js?v=555', '/webapp/glide-copy.js?v=555']) {
+      assert.ok(t.fetches.includes(u), 'не подгружен ' + u);
+    }
+  });
+
+  it('списки файлов «Я» сверены со страницей client-me.html: всё подгружаемое там есть', async () => {
+    const html = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/client-me.html'), 'utf8');
+    const page = [...html.matchAll(/(?:href|src)="([^"?]+\.(?:js|css))\?v=\d+"/g)].map((m) => m[1].replace(/^.*\//, ''));
+    const t = bootShell({ flags: SEASON, fetchAll: true });
+    t.btn('me').fire('pointerdown');
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await drain(t);
+    const fetched = t.fetches.filter((u) => /\/(client-me|client-sheet|client-club-sheet|client-name-sheet|client-rink-sheet|minsk-time|opening-hours|glide-copy|public-display-model)[\w.-]*\.(js|css)/.test(u));
+    assert.ok(fetched.length >= 9, fetched.join());
+    for (const u of fetched) {
+      const f = u.replace(/^.*\//, '').replace(/\?.*$/, '');
+      assert.ok(page.includes(f), f + ' нет на странице client-me.html — список в шелле устарел');
+    }
   });
 });
 

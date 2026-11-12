@@ -1359,19 +1359,20 @@
   });
 
   /*
-   * Шрифты «Кто кого» (Dela Gothic, Golos) те же, что у Главной и «Я»: там они в preload и уже в кэше.
-   * Нужны только со страницы без этого preload (Поиск): тогда берём адреса из glide-public-fonts.css,
-   * который сервер отдаёт с подставленной версией шрифтов (см. app.py), — адрес и ?v= совпадут со страницей игры.
+   * Шрифты (Dela Gothic, Golos) берём из glide-public-fonts.css, который сервер отдаёт с подставленной
+   * версией шрифтов (app.py): адрес и ?v= совпадут с теми, что запросит страница. Часть начертаний уже
+   * в кэше с Главной (там preload), остальные — 500 и т. п. — страница игры иначе качает в момент открытия.
+   * CSS уже лежит в кэше страницы, повторный запрос дешёвый; один раз за жизнь страницы.
    */
-  var KK_FONT_RE = /url\(\s*['"]?([^'")\s]*(?:dela-gothic-one-cyr-lat|golos-text-cyr-lat)\.woff2\?v=[^'")\s]*)/g;
+  var FONT_URL_RE = /url\(\s*['"]?([^'")\s]*\.woff2\?v=[^'")\s]*)/g;
+  var fontsPrefetch = null;
 
-  function prefetchKkFonts() {
-    if (!document.querySelector) return Promise.resolve();
-    if (document.querySelector('link[rel="preload"][as="font"]')) return Promise.resolve();
-    var sheet = document.querySelector('link[href*="glide-public-fonts.css"]');
+  function prefetchFonts() {
+    if (fontsPrefetch) return fontsPrefetch;
+    var sheet = document.querySelector && document.querySelector('link[href*="glide-public-fonts.css"]');
     var href = sheet && (sheet.getAttribute ? sheet.getAttribute('href') : sheet.href);
     if (!href || typeof global.fetch !== 'function') return Promise.resolve();
-    return global
+    fontsPrefetch = global
       .fetch(href, { credentials: 'same-origin', priority: 'low' })
       .then(function (r) {
         return r && r.ok ? r.text() : '';
@@ -1379,15 +1380,49 @@
       .then(function (css) {
         var urls = [];
         var m;
-        KK_FONT_RE.lastIndex = 0;
-        while ((m = KK_FONT_RE.exec(css || ''))) urls.push(m[1]);
+        FONT_URL_RE.lastIndex = 0;
+        while ((m = FONT_URL_RE.exec(css || ''))) urls.push(m[1]);
         return fetchAssets(urls);
       })
       .catch(function () {});
+    return fontsPrefetch;
+  }
+
+  /*
+   * Файлы, которые страница вкладки берёт с адресами, отличными от Главной (/static/webapp/ против /webapp/)
+   * или которых на Главной нет. Только в фоне: на касании вкладки они конкурировали бы с самой страницей.
+   * Файлы с no-cache (темы, telegram-chrome) не перечислены: кэш их всё равно не хранит.
+   */
+  var KK_EXTRA_FILES = ['mini-app-client-shell.css', 'mini-app-client-shell.js', 'write-access.js'].map(function (f) {
+    return { file: f, base: KK_BASE, v: ASSET_V || KK_ASSET_VERSIONS[0][1] };
+  });
+  var ME_EXTRA_FILES = [
+    { file: 'client-sheet.css', base: KK_BASE },
+    { file: 'client-sheet.js', base: KK_BASE },
+    { file: 'client-club-sheet.js', base: KK_BASE },
+    { file: 'client-name-sheet.js', base: KK_BASE },
+    { file: 'client-rink-sheet.js', base: KK_BASE },
+    { file: 'minsk-time.js' },
+    { file: 'opening-hours.js' },
+    { file: 'glide-copy.js' },
+    { file: 'public-display-model.js' },
+  ];
+
+  function prefetchKkExtras() {
+    return Promise.all([prefetchFiles(KK_EXTRA_FILES), prefetchFonts()]).then(function () {});
+  }
+
+  function prefetchMeExtras() {
+    var base = webappBasePath();
+    return fetchAssets(
+      ME_EXTRA_FILES.map(function (e) {
+        return assetUrl(e.base || base, e.file);
+      })
+    );
   }
 
   function prefetchKkAssets() {
-    return Promise.all([prefetchFiles(KK_ASSETS), prefetchKkFonts()]).then(function () {});
+    return prefetchFiles(KK_ASSETS);
   }
 
   function prefetchMeAssets() {
@@ -1466,8 +1501,8 @@
         if (tab.id === active) return;
         if (tab.id === 'catalog') step(catalogStep);
         else if (tab.id === 'bookings') step(bookingsStep);
-        else if (tab.id === 'kk') step(function () { return [prefetchKkAssets()]; });
-        else if (tab.id === 'me') step(function () { return [prefetchMeAssets()]; });
+        else if (tab.id === 'kk') step(function () { return [prefetchKkAssets(), prefetchKkExtras()]; });
+        else if (tab.id === 'me') step(function () { return [prefetchMeAssets(), prefetchMeExtras()]; });
       });
     } else {
       step(catalogStep);
