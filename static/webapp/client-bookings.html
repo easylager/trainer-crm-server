@@ -6,24 +6,24 @@
   <title>Записи</title>
   <!-- TASK-306: вкладка «Записи» на языке хаба. Свои шрифты, без Google. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611123" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611123" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611124" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611124" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202611123"></script>
-  <script src="mini-app-phone-field.js?v=202611123"></script>
-  <link rel="stylesheet" href="theme.css?v=202611123" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611123" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202611123" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611123" />
-  <script src="mini-app-telegram-chrome.js?v=202611123"></script>
-  <script src="client-profile-switcher.js?v=202611123"></script>
-  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202611123" />
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611123" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611123" />
-  <script src="mini-app-empty-state.js?v=202611123"></script>
-  <script src="mini-app-more-icons.js?v=202611123"></script>
-  <script src="mini-app-client-shell.js?v=202611123"></script>
-  <script src="learn-block.js?v=202611123"></script>
+  <script src="client-mini-app-theme.js?v=202611124"></script>
+  <script src="mini-app-phone-field.js?v=202611124"></script>
+  <link rel="stylesheet" href="theme.css?v=202611124" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611124" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202611124" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611124" />
+  <script src="mini-app-telegram-chrome.js?v=202611124"></script>
+  <script src="client-profile-switcher.js?v=202611124"></script>
+  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202611124" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611124" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611124" />
+  <script src="mini-app-empty-state.js?v=202611124"></script>
+  <script src="mini-app-more-icons.js?v=202611124"></script>
+  <script src="mini-app-client-shell.js?v=202611124"></script>
+  <script src="learn-block.js?v=202611124"></script>
   <script>
     (function () {
       try {
@@ -39,7 +39,7 @@
   </style>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#screenList" blocking="render" />
-  <script defer src="/static/webapp/ga-press.js?v=202611123"></script>
+  <script defer src="/static/webapp/ga-press.js?v=202611124"></script>
 </head>
 <body class="client-bookings-body ga-body" data-client-shell="tabs">
   <script>
@@ -930,7 +930,9 @@
         listEl.innerHTML = html;
       }
 
-      function loadBookings() {
+      /* silent — тихое обновление из оболочки вкладок (TASK-391): тот же список не перерисовывается,
+         сбой не стирает показанное. Страница сама зовёт без аргумента — как раньше. */
+      function loadBookings(silent) {
         var deeplinkOpen = getOpenBookingIdFromUrl() != null;
         return startBookingsFetch()
           .then(function(data) {
@@ -941,7 +943,7 @@
             if (window.ClientShell && window.ClientShell.writeBookingsWarmCache) {
               window.ClientShell.writeBookingsWarmCache({ days: days });
             }
-            if (bookingsHydratedFromWarm && freshFp === bookingsWarmFingerprint) {
+            if ((bookingsHydratedFromWarm || silent === true) && freshFp === bookingsWarmFingerprint) {
               state.days = days;
               tryOpenBookingFromQuery();
               return;
@@ -960,7 +962,7 @@
             tryOpenBookingFromQuery();
           })
           .catch(function() {
-            if (bookingsHydratedFromWarm) return;
+            if (bookingsHydratedFromWarm || silent === true) return;
             if (state.mode === 'upcoming') {
               document.getElementById('listContent').innerHTML =
                 '<div class="error">Не удалось загрузить записи. Попробуйте обновить страницу.</div>';
@@ -1279,6 +1281,11 @@
         });
       });
       window.addEventListener('popstate', syncClientBookingsHeaderBack);
+      window.addEventListener('client-tabs:refresh', function(ev) {
+        if (!ev || !ev.detail || ev.detail.tab !== 'bookings') return;
+        bookingsFetchPromise = null;
+        loadBookings(true);
+      });
 
       document.getElementById('cbTabUpcoming').onclick = function() { switchMode('upcoming'); };
       document.getElementById('cbTabHistory').onclick = function() { switchMode('history'); };
@@ -1314,7 +1321,7 @@
       loadBookings();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202611123"></script>
+  <script src="mini-app-client-home.js?v=202611124"></script>
   <script>
     /* TASK-303: серия недель — тихой строкой над записями, тап ведёт в «Вашу активность». */
     (function () {
@@ -1346,6 +1353,6 @@
         .catch(function () { /* без серии — просто без строки */ });
     })();
   </script>
-  <script src="/static/webapp/ga-touch.js?v=202611123"></script>
+  <script src="/static/webapp/ga-touch.js?v=202611124"></script>
 </body>
 </html>

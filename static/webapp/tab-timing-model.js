@@ -21,7 +21,8 @@
   /* Дольше минуты — не переход, а брошенная вкладка или уснувший телефон: в выборку не берём. */
   var MAX_TAP_AGE_MS = 60000;
   var MAX_MS = 120000;
-  var NAV_TYPES = ['navigate', 'reload', 'back_forward', 'prerender'];
+  /* shell — переход внутри оболочки вкладок без загрузки страницы (TASK-391). */
+  var NAV_TYPES = ['navigate', 'reload', 'back_forward', 'prerender', 'shell'];
 
   function isTab(id) {
     return TABS.indexOf(id) >= 0;
@@ -79,7 +80,7 @@
     };
     var tap = decodeTap(i.tapRaw, i.nowMs);
     if (tap) {
-      if (tap.to !== tab || nav !== 'navigate') return null;
+      if (tap.to !== tab || (nav !== 'navigate' && nav !== 'shell')) return null;
       var ms = clampMs(i.nowMs - tap.at);
       if (ms === null) return null;
       return Object.assign({ kind: 'tab', from: tap.from, to: tab, ms: ms, page_ms: pageMs }, base);

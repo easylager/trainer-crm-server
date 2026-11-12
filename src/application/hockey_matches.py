@@ -555,6 +555,18 @@ async def result_window_open(session: AsyncSession, *, now: datetime) -> bool:
     return (await session.execute(_HOT, params)).first() is not None
 
 
+def fallback_ok_text(parts: list[tuple[str, str]]) -> str | None:
+    """Одна короткая строка: источник молчит, запасной отвечает и с ним всё в порядке."""
+    if not parts:
+        return None
+    if len(parts) == 1:
+        down, via = parts[0]
+        return f"Кто кого: {down} не отвечает. Сейчас на запасном — {via}, с ним всё в порядке."
+    downs = " и ".join(down for down, _ in parts)
+    vias = " и ".join(via for _, via in parts)
+    return f"Кто кого: {downs} не отвечают. Сейчас на запасных — {vias}, с ними всё в порядке."
+
+
 class LoopHealth:
     """Сбои цикла подряд → одно сообщение админам; после успеха снова взводится.
 
@@ -571,10 +583,31 @@ class LoopHealth:
         self.fails[what] = 0
         self.alerted.discard(what)
 
+    def covered(self, key: str) -> bool:
+        """Запасной тянет этот сбой. True один раз — когда провалов подряд стало ``threshold``."""
+        self.fails[key] = self.fails.get(key, 0) + 1
+        if self.fails[key] < self.threshold or key in self.alerted:
+            return False
+        self.alerted.add(key)
+        return True
+
+    def take_fallback_notice(self, *, extraliga: str | None, dinamo: str | None) -> str | None:
+        """Одно сообщение на тик, если запасные уже тянут Экстралигу и/или календарь Динамо.
+
+        ``None`` счётчик не трогает: календарь Динамо спрашивают раз в 6 часов, и пустое значение
+        бывает просто потому, что этот тик источник не проверял. Сброс — ``ok``, когда источник ответил.
+        """
+        parts: list[tuple[str, str]] = []
+        if extraliga and self.covered("extraliga-fallback"):
+            parts.append(("hockey.by", extraliga))
+        if dinamo and self.covered("dinamo-fallback"):
+            parts.append(("календарь Динамо", dinamo))
+        return fallback_ok_text(parts)
+
     def failed(self, what: str, reason: str, note: str | None = None) -> str | None:
         """Текст алерта, если сбоев подряд стало ``threshold`` и о них ещё не сообщали.
 
-        ``note`` заменяет строку «Матчи и итоги не обновляются…», когда работает запасной источник."""
+        ``note`` заменяет строку «Матчи и итоги не обновляются…», когда запасной тоже не справился."""
         self.fails[what] = self.fails.get(what, 0) + 1
         if self.fails[what] < self.threshold or what in self.alerted:
             return None

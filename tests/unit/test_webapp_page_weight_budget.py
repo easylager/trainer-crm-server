@@ -73,6 +73,36 @@ def test_ice_and_catalog_page_weight_stay_within_five_percent() -> None:
         assert size * 20 <= baseline * 21, f"{name} gzip {size} bytes is more than 5% over the budget {baseline}"
 
 
+# TASK-391: оболочка «Я» + «Записи» (флаг fast_tabs) — первый заход по адресу вкладки. Это та же страница,
+# что без флага, плюс client-tabs.js (defer, ~7 КБ gzip) и две строки CSS; вторая вкладка приходит фрагментом
+# потом, в простое или по нажатию. Замер 2026-11-12. Рост больше 5% — падение.
+_SHELL_BASELINE_GZIP = {
+    "me": 173_336,
+    "bookings": 124_529,
+}
+
+
+def _html_gzip_bytes(html: str) -> int:
+    total = _gzip_len(html.encode())
+    for rel in _local_assets(html):
+        asset = (_REPO / rel) if rel.startswith("static/") else (_WEBAPP / rel)
+        assert asset.is_file(), f"shell references missing {rel}"
+        total += _gzip_len(asset.read_bytes())
+    return total
+
+
+def test_fast_tabs_shell_first_open_weight() -> None:
+    from src.api.client_tabs_shell import page_html, shell_html
+
+    router = _gzip_len((_WEBAPP / "client-tabs.js").read_bytes())
+    for tab, baseline in _SHELL_BASELINE_GZIP.items():
+        shell = _html_gzip_bytes(shell_html(tab))
+        page = _html_gzip_bytes(page_html(tab))
+        assert shell * 20 <= baseline * 21, f"{tab} shell gzip {shell} bytes is more than 5% over the budget {baseline}"
+        # Кроме роутера оболочка на первом заходе ничего не качает: те же файлы, что страница без флага.
+        assert shell - page <= router + 256, f"{tab} shell adds {shell - page} bytes over the page, router is {router}"
+
+
 # TASK-232: открытка /zovi/{code} открывается из Threads и Instagram по мобильной сети.
 # Шаблон с CSS внутри + свои JS (без токенов и шрифтов) — не больше 40 КБ gzip.
 _ZOVI_CARD_BUDGET_GZIP = 40 * 1024

@@ -385,7 +385,28 @@
     global.dispatchEvent(new global.CustomEvent('client-shell:retap', { detail: { tab: tabId } }));
   }
 
+  /* TASK-391: вкладка, которую держит оболочка (client-tabs.js): уже живая — качать нечего. */
+  function shellTabs() {
+    var t = global.ClientTabs;
+    return t && t.hosted ? t : null;
+  }
+
+  function inFastTabsShell() {
+    var el = document.documentElement;
+    return !!(el && typeof el.hasAttribute === 'function' && el.hasAttribute('data-ft-shell'));
+  }
+
+  function prefetchShellTab(tabId) {
+    var t = shellTabs();
+    if (t.isMounted(tabId)) return Promise.resolve();
+    return Promise.all([t.prefetch(tabId), tabId === 'me' ? prefetchMeWarmCache() : prefetchBookingsWarmCache()]);
+  }
+
   function onSeasonTabPointerDown(tabId) {
+    if (shellTabs() && shellTabs().hosts(tabId)) {
+      prefetchShellTab(tabId);
+      return;
+    }
     if (tabId === 'catalog') {
       prefetchIceAssets();
       prefetchCatalogAssets();
@@ -883,6 +904,7 @@
   var TT_SEEN_KEY = 'tcb_tt_seen_v1';
   var tabTimingFirstPage = false;
   var tabTimingDone = false;
+  var tabTimingNav = null;
 
   try {
     tabTimingFirstPage = !global.sessionStorage.getItem(TT_SEEN_KEY);
@@ -956,7 +978,7 @@
           nowMs: nowMs,
           sinceOriginMs: sinceOriginMs,
           tab: resolveActiveTab(),
-          nav: readNavType(),
+          nav: tabTimingNav || readNavType(),
           platform: tg && tg.platform,
           seasonUi: uiFlags.season_ui,
         };
@@ -968,6 +990,22 @@
       if (typeof global.requestAnimationFrame === 'function') global.requestAnimationFrame(measure);
       else global.setTimeout(measure, 0);
     } catch (e) { /* замер не должен ломать страницу */ }
+  }
+
+  /* TASK-391: переход внутри оболочки — новый замер без перезагрузки (nav=shell). */
+  function armTabTiming(nav) {
+    tabTimingDone = false;
+    tabTimingFirstPage = false;
+    tabTimingNav = nav || null;
+  }
+
+  /* TASK-391: оболочка показала вкладку — подсветка нажатия больше не нужна, анимация бара доигрывает. */
+  function tabSwitchDone() {
+    clearTabPressTimer('revertTimer');
+    tabPress.tab = null;
+    tabPress.pointer = null;
+    tabPress.committed = false;
+    syncTabBarActive();
   }
 
   /* ── TASK-094: направление перехода ───────────────────────────────────────
@@ -1012,7 +1050,25 @@
     }
   }
 
+  /*
+   * TASK-391: «Кто кого» и витрина тренеров не подключают mini-app-client-theme.css, то есть не
+   * включают переходы. Уходящая страница их включила — Chrome начинал переход и обрывал его на новой
+   * странице (InvalidStateError «ViewTransition opt-in disabled» в консоли). Переход туда не
+   * начинаем вовсе: на экране то же самое, что было (обрыв), без ошибки.
+   */
+  var NO_VIEW_TRANSITION_PAGE = /\/(kto-kogo|trainers)(\.html)?$/;
+
+  function skipTransitionToPagesWithoutOptIn(ev) {
+    var vt = ev && ev.viewTransition;
+    var entry = ev && ev.activation && ev.activation.entry;
+    if (!vt || !entry || !entry.url) return;
+    try {
+      if (NO_VIEW_TRANSITION_PAGE.test(new URL(entry.url).pathname)) vt.skipTransition();
+    } catch (e) { /* */ }
+  }
+
   function bindViewTransitions() {
+    if ('onpageswap' in global) global.addEventListener('pageswap', skipTransitionToPagesWithoutOptIn);
     // Нет поддержки — ничего не подписываем, навигация остаётся как была.
     if (!('onpagereveal' in global)) return;
     global.addEventListener('pagereveal', function (ev) {
@@ -1053,6 +1109,7 @@
       syncTabBarActive();
       return;
     }
+    if (!(opts && opts.replace) && shellTabs() && shellTabs().go(path)) return;
     rememberNavDirection(path);
     /* /p/… — публичная страница места, не файл внутри /static/webapp/. */
     var raw = String(path || '');
@@ -1576,19 +1633,19 @@
    */
   var KK_BASE = '/static/webapp/';
   var KK_ASSET_VERSIONS = [
-    ['kto-kogo.css', '202611123'],
-    ['kto-kogo-model.js', '202611123'],
-    ['kto-kogo-screens-model.js', '202611123'],
-    ['kto-kogo.js', '202611123'],
-    ['kto-kogo-views.js', '202611123'],
-    ['kto-kogo-hub-cards.js', '202611123'],
-    ['kto-kogo-board.js', '202611123'],
-    ['kto-kogo-leagues.js', '202611123'],
-    ['kto-kogo-coin-model.js', '202611123'],
-    ['kto-kogo-coin.js', '202611123'],
-    ['kto-kogo-matches.js', '202611123'],
-    ['kto-kogo-league-identity.js', '202611123'],
-    ['kto-kogo-boot.js', '202611123'],
+    ['kto-kogo.css', '202611124'],
+    ['kto-kogo-model.js', '202611124'],
+    ['kto-kogo-screens-model.js', '202611124'],
+    ['kto-kogo.js', '202611124'],
+    ['kto-kogo-views.js', '202611124'],
+    ['kto-kogo-hub-cards.js', '202611124'],
+    ['kto-kogo-board.js', '202611124'],
+    ['kto-kogo-leagues.js', '202611124'],
+    ['kto-kogo-coin-model.js', '202611124'],
+    ['kto-kogo-coin.js', '202611124'],
+    ['kto-kogo-matches.js', '202611124'],
+    ['kto-kogo-league-identity.js', '202611124'],
+    ['kto-kogo-boot.js', '202611124'],
   ];
   /* Сервер подставляет в html всех страниц одну метку ?v= (asset_stamp.py), а не литерал из kto-kogo.html.
      Поэтому берём метку самой оболочки (ASSET_V — из её же <script src>); литерал из списка — запасной,
@@ -1740,9 +1797,22 @@
     };
     if (uiFlags.season_ui) {
       var active = resolveActiveTab();
-      seasonTabs().forEach(function (tab) {
+      var tabs = seasonTabs();
+      /* В оболочке соседняя живая вкладка — первая: иначе каталог (сотни КБ) занимает канал,
+         и первый заход в «Записи»/«Я» не успевает прогреться. */
+      var shell = shellTabs();
+      if (shell) {
+        var hosted = [];
+        var rest = [];
+        tabs.forEach(function (tab) {
+          (shell.hosts(tab.id) ? hosted : rest).push(tab);
+        });
+        tabs = hosted.concat(rest);
+      }
+      tabs.forEach(function (tab) {
         if (tab.id === active) return;
-        if (tab.id === 'catalog') step(catalogStep);
+        if (shell && shell.hosts(tab.id)) step(function () { return [prefetchShellTab(tab.id)]; });
+        else if (tab.id === 'catalog') step(catalogStep);
         else if (tab.id === 'bookings') step(bookingsStep);
         else if (tab.id === 'kk') step(function () { return [prefetchKkAssets(), prefetchKkExtras()]; });
         else if (tab.id === 'me') step(function () { return [prefetchMeAssets(), prefetchMeExtras()]; });
@@ -1889,6 +1959,9 @@
     deepLinkTarget: deepLinkTarget,
     reportCatalogPresence: reportCatalogPresence,
     contentShown: contentShown,
+    armTabTiming: armTabTiming,
+    tabSwitchDone: tabSwitchDone,
+    fetchAsset: fetchAsset,
     readStartParam: readStartParam,
     TAB_ICONS: TAB_ICONS,
     uiFlags: getUiFlags,
@@ -2110,7 +2183,7 @@
       if (
         state.mode === 'tabs' &&
         pathnameKey() !== 'catalog' &&
-        pathnameKey() !== 'client-bookings' &&
+        (pathnameKey() !== 'client-bookings' || inFastTabsShell()) &&
         pathnameKey() !== 'client-home'
       ) {
         scheduleCatalogNavigationPrefetch();

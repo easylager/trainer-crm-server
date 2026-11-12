@@ -3357,10 +3357,6 @@ EXTRALIGA_STANDINGS_EVERY = timedelta(hours=24)
 
 # Тик цикла бывает и через 2 минуты (окно итога Динамо): запасной источник спрашиваем не чаще раза в 10.
 EXTRALIGA_FALLBACK_SLACK = timedelta(seconds=30)
-EXTRALIGA_FALLBACK_NOTE = (
-    "Календарь, итоги и живой счёт идут с запасного источника flashscore.com; страниц матчей и таблицы нет, "
-    "пока hockey.by не вернётся. Итог можно ввести вручную: команда /hockey в этом боте"
-)
 
 
 class ExtraligaPace:
@@ -3421,8 +3417,8 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert, fallback=None) 
                 await alert(text)
         else:
             health.ok("запасной источник Экстралиги")
-    # Пока работает запасной, алерт не пугает «матчи не обновляются» — он говорит, что идёт и чего нет.
-    note = EXTRALIGA_FALLBACK_NOTE if pace.primary_down and pace.fallback_ok else None
+    # Пока запасной тянет календарь и таблицу, отдельные «не работает» не шлём: цикл скажет одной строкой.
+    covering = bool(pace.primary_down and pace.fallback_ok)
     for what, due, failed_key, error_key in (
         ("календарь Экстралиги", calendar_due, "calendar_failed", "calendar_error"),
         ("таблица Экстралиги", standings_due, "standings_failed", "standings_error"),
@@ -3430,7 +3426,9 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert, fallback=None) 
         if not due:
             continue
         if out.get(failed_key):
-            text = health.failed(what, str(out.get(error_key) or ""), note=note)
+            if covering:
+                continue
+            text = health.failed(what, str(out.get(error_key) or ""))
             if text:
                 await alert(text)
             continue
@@ -3440,8 +3438,9 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert, fallback=None) 
         else:
             pace.standings_at = now
     # Страницы матчей: разовый сбой одной страницы нормален, массовый — признак сломанного парсера hockey.by.
+    # Когда hockey.by лежит и тянет flashscore, страниц нет у всех матчей — это не отдельная поломка.
     det = out.get("details") or {}
-    if det.get("checked") and det.get("failed", 0) >= det["checked"]:
+    if det.get("checked") and det.get("failed", 0) >= det["checked"] and not covering:
         text = health.failed(
             "детали Экстралиги",
             f"все {det['failed']} страниц матчей не распарсились — похоже, поменялась разметка hockey.by",
@@ -3450,6 +3449,10 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert, fallback=None) 
             await alert(text)
     else:
         health.ok("детали Экстралиги")
+    if covering:
+        out["covered_via"] = "flashscore.com"
+    elif not pace.primary_down:
+        health.ok("extraliga-fallback")
     health.ok("Экстралига")
     logger.info("[hockey_matches_loop] extraliga %s", out)
     return out
@@ -3458,8 +3461,9 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert, fallback=None) 
 async def run_hockey_matches_loop() -> None:
     """Каждые 10 минут, в окно итога — каждые 2. Молчит, пока HOCKEY_MATCHES_ENABLED выключен.
 
-    Календарь — не чаще раза в 6 часов (после сбоя — на следующем тике). Три сбоя подряд
-    календаря или всего прохода — одно сообщение админам.
+    Календарь — не чаще раза в 6 часов (после сбоя — на следующем тике). Три сбоя подряд —
+    одно сообщение админам. Если запасной источник уже тянет данные, это одна короткая строка
+    на оба источника, а не отдельный абзац на календарь, таблицу и Динамо.
     """
     from src.application.hockey_matches import (
         LoopHealth,
@@ -3475,11 +3479,14 @@ async def run_hockey_matches_loop() -> None:
     extraliga = ExtraligaPace()
     health = LoopHealth()
     while True:
+        extraliga_via: str | None = None
+        dinamo_via: str | None = None
         delay = HOCKEY_MATCHES_INTERVAL_SEC
         try:
             settings = get_settings()
             if settings.extraliga_enabled:
-                await _extraliga_pass(extraliga, health, alert=send_review_alert)
+                extraliga_out = await _extraliga_pass(extraliga, health, alert=send_review_alert)
+                extraliga_via = extraliga_out.get("covered_via") or None
                 # Итог Экстралиги ушёл на ручную проверку — карточка с кнопками в админ-бот (один раз на матч).
                 from src.application.hockey_review import notify_new_reviews, send_card_to_admins
 
@@ -3529,17 +3536,11 @@ async def run_hockey_matches_loop() -> None:
                 if calendar_due and not counts["calendar_failed"]:
                     last_calendar = now
                     health.ok("календарь матчей")
+                    health.ok("dinamo-fallback")
+                elif counts["calendar_failed"] and counts.get("calendar_via"):
+                    dinamo_via = str(counts["calendar_via"])
                 elif counts["calendar_failed"]:
-                    via = counts.get("calendar_via")
-                    text = health.failed(
-                        "календарь матчей",
-                        str(counts.get("calendar_error") or ""),
-                        note=(
-                            f"Матчи и итоги идут с запасного источника {via}. Итог можно ввести вручную: команда /hockey в этом боте"
-                            if via
-                            else None
-                        ),
-                    )
+                    text = health.failed("календарь матчей", str(counts.get("calendar_error") or ""))
                     if text:
                         await send_review_alert(text)
                 if counts.get("races_failed"):
@@ -3550,6 +3551,9 @@ async def run_hockey_matches_loop() -> None:
                     health.ok("гонки и короны месяца")
                 health.ok("цикл матчей")
                 logger.info("[hockey_matches_loop] %s", counts)
+            notice = health.take_fallback_notice(extraliga=extraliga_via, dinamo=dinamo_via)
+            if notice:
+                await send_review_alert(notice)
             if settings.site_matches_enabled:
                 # Колокольчики на матчи с сайта (TASK-347): напоминание за 3 часа, перенос, итог.
                 from src.application.match_bells import deliver as deliver_bells, send_bell

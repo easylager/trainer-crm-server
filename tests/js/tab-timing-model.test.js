@@ -70,6 +70,15 @@ describe('buildEvent: переход по вкладке', () => {
     assert.equal(M.buildEvent(input({ nav: 'back_forward', tapRaw: M.encodeTap('home', 'kk', NOW - 100) })), null);
   });
 
+  it('TASK-391: переход внутри оболочки вкладок — событие tab с nav=shell; без нажатия — нет', () => {
+    const ev = M.buildEvent(input({ nav: 'shell', tab: 'me', sinceOriginMs: 9000, tapRaw: M.encodeTap('bookings', 'me', NOW - 12) }));
+    assert.equal(ev.kind, 'tab');
+    assert.equal(ev.nav, 'shell');
+    assert.equal(ev.ms, 12);
+    assert.equal(ev.from, 'bookings');
+    assert.equal(M.buildEvent(input({ nav: 'shell', tab: 'me', firstPage: true })), null);
+  });
+
   it('метка нажатия сильнее холодного старта: первая страница после нажатия — переход', () => {
     const ev = M.buildEvent(input({ firstPage: true, tapRaw: M.encodeTap('home', 'kk', NOW - 90) }));
     assert.equal(ev.kind, 'tab');

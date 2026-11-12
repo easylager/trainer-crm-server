@@ -492,11 +492,19 @@ async def test_loop_pass_alerts_honestly_while_the_fallback_works(db_session, mo
         return True
 
     pace, health, fetch = loops.ExtraligaPace(), LoopHealth(), _flashscore()
+    outs = []
     for _ in range(3):
-        await loops._extraliga_pass(pace, health, alert=alert, fallback=fetch)  # noqa: SLF001
+        outs.append(await loops._extraliga_pass(pace, health, alert=alert, fallback=fetch))  # noqa: SLF001
     assert pace.primary_down and pace.fallback_ok
-    calendar = [t for t in sent if "календарь Экстралиги" in t]
-    assert calendar and "flashscore.com" in calendar[0] and "не обновляются" not in calendar[0]
+    assert all("календарь Экстралиги" not in t and "таблица Экстралиги" not in t for t in sent)
+    assert outs[-1]["covered_via"] == "flashscore.com"
+    notices = [health.take_fallback_notice(extraliga="flashscore.com", dinamo="sportmail.ru") for _ in range(3)]
+    assert notices[:2] == [None, None]
+    assert notices[2] == (
+        "Кто кого: hockey.by и календарь Динамо не отвечают. "
+        "Сейчас на запасных — flashscore.com и sportmail.ru, с ними всё в порядке."
+    )
+    assert "не обновляются" not in (notices[2] or "") and "/hockey" not in (notices[2] or "")
     # Запасной спрошен один раз: тики шли подряд, а не через 10 минут.
     assert len(fetch.asked) == 1 and pace.fallback_at is not None
 
