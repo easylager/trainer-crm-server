@@ -435,3 +435,14 @@ def test_loop_health_alerts_once_after_three_failures_and_rearms() -> None:
     assert health.failed("календарь матчей", "timeout") is None
     health.ok("календарь матчей")
     assert health.failed("календарь матчей", "timeout") is None
+
+
+def test_fallback_notice_is_one_short_line_and_rearms() -> None:
+    health = LoopHealth()
+    assert health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru") is None
+    assert health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru") is None
+    text_ = health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru")
+    assert text_ == "Кто кого: календарь Динамо не отвечает. Сейчас на запасном — sportmail.ru, с ним всё в порядке."
+    assert health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru") is None
+    health.ok("dinamo-fallback")
+    assert health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru") is None
