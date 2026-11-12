@@ -244,13 +244,27 @@ def webapp_catalog_page(request: Request):
     return _webapp_file_response(path)
 
 
+# Тот же приём, что ключ карт на /webapp/ice: сервер дописывает настройку в HTML страницы.
+# Скрипт стоит перед </head>, модель читает флаг в момент вызова, не при загрузке файла.
+_UNIFIED_TRAINER_CARD_BOOT = "<script>window.__UNIFIED_TRAINER_CARD__=true;</script>\n"
+
+
 @app.get("/webapp/trainers")
 def webapp_trainers_page():
     """TASK-357: витрина тренеров, карточка тренера и запись (``?tab=&arena_id=&trainer_id=&slot_id=``)."""
     path = _WEBAPP_DIR / "trainers.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    if not Settings().unified_trainer_card_enabled:
+        return _webapp_file_response(path)
+    html = stamp_html(path.read_text(encoding="utf-8"))
+    marker = "</head>"
+    if marker not in html:
+        raise HTTPException(status_code=500, detail="Invalid trainers template")
+    return HTMLResponse(
+        content=html.replace(marker, _UNIFIED_TRAINER_CARD_BOOT + marker, 1),
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
 
 
 @app.get("/webapp/arena")

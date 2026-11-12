@@ -6,6 +6,7 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const M = require(path.resolve(__dirname, '../../static/webapp/trainer-showcase-model.js'));
@@ -290,5 +291,34 @@ describe('карточка каталога → тренер витрины (л�
     assert.equal(t.services[1].group_price_cents, null);
     assert.equal(t.services[1].direction_service_id, 2);
     assert.deepEqual([...t.arenas.map((a) => a.id)], [3]);
+  });
+});
+
+describe('TASK-399 плашка фактов', () => {
+  const cases = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../fixtures/trainer_card_facts.json'), 'utf8')).cases;
+
+  it('та же таблица, что у Python', () => {
+    for (const c of cases) assert.deepEqual(M.factStrip(c), c.facts, c.id);
+  });
+
+  it('без флага whoTeaches как раньше; с флагом — подпись плашки', () => {
+    const adult = [{ price_tiers: [{ tier_kind: 'adult' }] }];
+    const kids = [{ price_tiers: [{ tier_kind: 'child' }] }];
+    const both = [{ price_tiers: [{ tier_kind: 'child' }, { tier_kind: 'adult' }] }];
+    assert.equal(M.whoTeaches(adult), 'взрослых');
+    assert.equal(M.whoTeaches(kids), 'детей');
+    assert.equal(M.whoTeaches(both), 'детей и взрослых');
+    assert.equal(M.whoTeaches([]), '');
+    globalThis.__UNIFIED_TRAINER_CARD__ = true;
+    try {
+      assert.equal(M.whoTeaches(adult), 'Любой возраст');
+      assert.equal(M.whoTeaches(kids), 'Дети');
+      assert.equal(M.whoTeaches(both), 'Любой возраст');
+      assert.equal(M.whoTeaches([]), 'Любой возраст');
+      assert.equal(M.whoTeaches([{ price_tiers: [{ tier_kind: 'adult_and_child' }] }]), 'Любой возраст');
+    } finally {
+      delete globalThis.__UNIFIED_TRAINER_CARD__;
+    }
+    assert.equal(M.whoTeaches(adult), 'взрослых');
   });
 });

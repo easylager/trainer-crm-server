@@ -1,0 +1,236 @@
+{
+  "cases": [
+    {
+      "id": "etalon-a",
+      "experience_years": 7,
+      "tier_kinds": ["child", "adult"],
+      "rink_name": "Замок",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "7 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«Замок»", "label": "основной каток"}
+      ]
+    },
+    {
+      "id": "etalon-b",
+      "experience_years": 12,
+      "tier_kinds": ["child"],
+      "rink_name": "Дворец спорта",
+      "price_cents": 5000,
+      "currency": "BYN",
+      "facts": [
+        {"value": "12 лет", "label": "тренерского опыта"},
+        {"value": "Дети", "label": "учеников"},
+        {"value": "от 50 BYN", "label": "за занятие"}
+      ]
+    },
+    {
+      "id": "etalon-c",
+      "experience_years": 9,
+      "tier_kinds": ["adult"],
+      "rink_name": null,
+      "price_cents": 5500,
+      "currency": "BYN",
+      "facts": [
+        {"value": "9 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "от 55 BYN", "label": "за занятие"}
+      ]
+    },
+    {
+      "id": "years-0-falls-through-to-price",
+      "experience_years": 0,
+      "tier_kinds": ["adult"],
+      "rink_name": "Замок",
+      "price_cents": 5000,
+      "currency": "BYN",
+      "facts": [
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«Замок»", "label": "основной каток"},
+        {"value": "от 50 BYN", "label": "за занятие"}
+      ]
+    },
+    {
+      "id": "years-1",
+      "experience_years": 1,
+      "tier_kinds": ["child"],
+      "rink_name": null,
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "1 год", "label": "тренерского опыта"},
+        {"value": "Дети", "label": "учеников"}
+      ]
+    },
+    {
+      "id": "years-2",
+      "experience_years": 2,
+      "tier_kinds": ["adult"],
+      "rink_name": null,
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "2 года", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"}
+      ]
+    },
+    {
+      "id": "years-5-rink-too-long",
+      "experience_years": 5,
+      "tier_kinds": ["two_children"],
+      "rink_name": "12345678901",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "5 лет", "label": "тренерского опыта"},
+        {"value": "Дети", "label": "учеников"}
+      ]
+    },
+    {
+      "id": "years-11-rink-exactly-10-price-dropped",
+      "experience_years": 11,
+      "tier_kinds": [],
+      "rink_name": "1234567890",
+      "price_cents": 100,
+      "currency": "BYN",
+      "facts": [
+        {"value": "11 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«1234567890»", "label": "основной каток"}
+      ]
+    },
+    {
+      "id": "years-21-rub",
+      "experience_years": 21,
+      "tier_kinds": ["child", "two_children"],
+      "rink_name": null,
+      "price_cents": 5000,
+      "currency": "RUB",
+      "facts": [
+        {"value": "21 год", "label": "тренерского опыта"},
+        {"value": "Дети", "label": "учеников"},
+        {"value": "от 50 руб.", "label": "за занятие"}
+      ]
+    },
+    {
+      "id": "tiers-both",
+      "experience_years": 4,
+      "tier_kinds": ["child", "adult"],
+      "rink_name": null,
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "4 года", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"}
+      ]
+    },
+    {
+      "id": "tiers-adult-and-child",
+      "experience_years": 3,
+      "tier_kinds": ["adult_and_child"],
+      "rink_name": null,
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "3 года", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"}
+      ]
+    },
+    {
+      "id": "tiers-adults-only",
+      "experience_years": 6,
+      "tier_kinds": ["adult", "two_adults"],
+      "rink_name": null,
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "6 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"}
+      ]
+    },
+    {
+      "id": "rink-missing-price-instead",
+      "experience_years": 8,
+      "tier_kinds": ["adult"],
+      "rink_name": null,
+      "price_cents": 4000,
+      "currency": "BYN",
+      "facts": [
+        {"value": "8 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "от 40 BYN", "label": "за занятие"}
+      ]
+    },
+    {
+      "id": "rink-11-falls-through-to-price",
+      "experience_years": 6,
+      "tier_kinds": ["adult"],
+      "rink_name": "12345678901",
+      "price_cents": 4200,
+      "currency": "BYN",
+      "facts": [
+        {"value": "6 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "от 42 BYN", "label": "за занятие"}
+      ]
+    },
+    {
+      "id": "price-kopecks",
+      "experience_years": 6,
+      "tier_kinds": ["adult"],
+      "rink_name": null,
+      "price_cents": 5050,
+      "currency": "BYN",
+      "facts": [
+        {"value": "6 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "от 50,50 BYN", "label": "за занятие"}
+      ]
+    },
+    {
+      "id": "rink-already-quoted",
+      "experience_years": 7,
+      "tier_kinds": ["adult"],
+      "rink_name": "«Замок»",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "7 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«Замок»", "label": "основной каток"}
+      ]
+    },
+    {
+      "id": "price-zero-skipped",
+      "experience_years": 4,
+      "tier_kinds": ["adult"],
+      "rink_name": null,
+      "price_cents": 0,
+      "currency": "BYN",
+      "facts": [
+        {"value": "4 года", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"}
+      ]
+    },
+    {
+      "id": "shown-1",
+      "experience_years": null,
+      "tier_kinds": ["child"],
+      "rink_name": null,
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": []
+    },
+    {
+      "id": "shown-0",
+      "experience_years": null,
+      "tier_kinds": [],
+      "rink_name": "",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": []
+    }
+  ]
+}

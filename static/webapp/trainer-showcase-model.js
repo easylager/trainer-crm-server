@@ -242,8 +242,66 @@
     return String(text || '').replace(/[ \t]+([,.;:!?])/g, '$1').replace(/[ \t]{2,}/g, ' ').trim();
   }
 
-  /** «Кого учит»: из тарифов; тарифов нет — строки нет. */
+  var KID_ONLY_KINDS = { child: true, two_children: true };
+
+  /** Флаг приходит со страницы /webapp/trainers, только когда он включён. Иначе — прежние строки. */
+  function unifiedTrainerCardEnabled() {
+    return typeof globalThis !== 'undefined' && globalThis.__UNIFIED_TRAINER_CARD__ === true;
+  }
+
+  function tierKinds(services) {
+    var kinds = [];
+    var seen = {};
+    (services || []).forEach(function (s) {
+      (s.price_tiers || []).forEach(function (t) {
+        var k = t && t.tier_kind;
+        if (k && !seen[k]) {
+          seen[k] = true;
+          kinds.push(k);
+        }
+      });
+    });
+    return kinds;
+  }
+
+  /** «Дети» — только детские тарифы. Иначе, включая «только взрослые» и пусто, — «Любой возраст». */
+  function audienceLabel(kinds) {
+    var list = kinds || [];
+    if (list.length && list.every(function (k) { return KID_ONLY_KINDS[k]; })) return 'Дети';
+    return 'Любой возраст';
+  }
+
+  function rinkFactValue(name) {
+    var text = String(name || '').trim();
+    if (!text || text.length > 10) return '';
+    if (text.charAt(0) === '«' && text.charAt(text.length - 1) === '»') return text;
+    return '«' + text + '»';
+  }
+
+  /**
+   * Плашка фактов (SPEC §4). До трёх: опыт, кого учит, каток (название ≤ 10) или цена.
+   * Меньше двух — пустой список, плашки нет. Счётчика занятий и рейтинга здесь нет.
+   */
+  function factStrip(input) {
+    input = input || {};
+    var facts = [];
+    var years = Math.floor(Number(input.experience_years));
+    if (isFinite(years) && years >= 1) {
+      facts.push({ value: word(years, 'год', 'года', 'лет'), label: 'тренерского опыта' });
+    }
+    facts.push({ value: audienceLabel(input.tier_kinds), label: 'учеников' });
+    var rink = rinkFactValue(input.rink_name);
+    if (rink) facts.push({ value: rink, label: 'основной каток' });
+    var cents = Number(input.price_cents);
+    if (isFinite(cents) && cents > 0) {
+      facts.push({ value: 'от ' + formatMoney(cents, input.currency || 'BYN'), label: 'за занятие' });
+    }
+    return facts.length < 2 ? [] : facts.slice(0, 3);
+  }
+
+  /** «Кого учит»: из тарифов; тарифов нет — строки нет. Под флагом — подпись плашки. */
   function whoTeaches(services) {
+    if (unifiedTrainerCardEnabled()) return audienceLabel(tierKinds(services));
     var kids = false;
     var adults = false;
     (services || []).forEach(function (s) {
@@ -809,6 +867,8 @@
     noticeParts: noticeParts,
     serviceAbout: serviceAbout,
     whoTeaches: whoTeaches,
+    audienceLabel: audienceLabel,
+    factStrip: factStrip,
     tidyText: tidyText,
     experienceBadge: experienceBadge,
     ratingLine: ratingLine,
