@@ -19,7 +19,8 @@ def test_shared_and_local_stylesheets_are_inlined() -> None:
     out = inline_tunnel_styles(html)
     assert "--g-bg:" in out
     assert "https://fonts.example/x.css" in out
-    assert out.count("<style>") == 2
+    assert out.count("<style") == 2
+    assert '<style data-file="theme.css?v=1">' in out
     assert out.count('<link rel="stylesheet" href="https://fonts.example/x.css"') == 1
 
 
@@ -35,6 +36,7 @@ def test_local_scripts_are_inlined_external_stay() -> None:
     assert 'src="https://telegram.org/js/telegram-web-app.js"' in out
     assert 'src="/static/webapp/client-match.js' not in out
     assert 'src="mini-app-telegram-chrome.js' not in out
+    assert '<script data-file="/static/webapp/client-match.js?v=1">' in out
 
 
 def test_deferred_script_own_domcontentloaded_still_runs(tmp_path) -> None:
@@ -55,7 +57,7 @@ def test_deferred_script_own_domcontentloaded_still_runs(tmp_path) -> None:
         '<script defer src="mini-app-telegram-chrome.js?v=1"></script>'
         "</body></html>"
     )
-    scripts = _re.findall(r"<script>(.*?)</script>", out, flags=_re.S)
+    scripts = _re.findall(r"<script(?: data-file=\"[^\"]*\")?>(.*?)</script>", out, flags=_re.S)
     assert len(scripts) == 3, "два встроенных defer-скрипта и сбор подписок последним"
     # Тело скриптов подменяем пробой: важен порядок и то, что поздняя подписка срабатывает.
     probe = [
@@ -92,5 +94,5 @@ def test_tags_inside_inline_script_strings_stay_untouched() -> None:
     out = inline_tunnel_styles(html)
     gate = out.split("</script>", 1)[0]
     assert "document.write('<link rel=\"stylesheet\" href=\"/static/webapp/mini-app-client-shell.css?v=1\">'" in gate
-    assert "<style>" not in gate
-    assert out.count("<style>") == 1
+    assert "<style" not in gate
+    assert out.count("<style") == 1
