@@ -424,7 +424,8 @@
         '</span>';
       btn.addEventListener(
         'pointerdown',
-        function () {
+        function (ev) {
+          onTabPressStart(tab.id, ev);
           onSeasonTabPointerDown(tab.id);
         },
         { passive: true }
@@ -434,10 +435,11 @@
         if (isSameTabRoute(tab.path)) {
           // Повторный тап: как раньше (наверх / выход с карты «Поиска») плюс сигнал странице.
           if (!(tab.id === 'catalog' && handleCatalogTabRetap())) scrollPageTop();
-          syncTabBarActive();
+          resetTabPress();
           dispatchRetap(tab.id);
           return;
         }
+        commitTabPress(tab.id);
         navigate(tab.path);
       });
       nav.appendChild(btn);
@@ -473,6 +475,15 @@
         '</span><span>' +
         tab.label +
         '</span>';
+      if (tab.id !== 'more') {
+        btn.addEventListener(
+          'pointerdown',
+          function (ev) {
+            onTabPressStart(tab.id, ev);
+          },
+          { passive: true }
+        );
+      }
       if (tab.id === 'catalog' || tab.id === 'bookings') {
         btn.addEventListener(
           'pointerdown',
@@ -498,13 +509,14 @@
         if (tab.path && isSameTabRoute(tab.path)) {
           if (tab.id === 'catalog' && handleCatalogTabRetap()) {
             closeMoreSheet();
-            syncTabBarActive();
+            resetTabPress();
             return;
           }
           scrollPageTop();
-          syncTabBarActive();
+          resetTabPress();
           return;
         }
+        commitTabPress(tab.id);
         navigate(tab.path);
       });
       nav.appendChild(btn);
@@ -662,14 +674,141 @@
   function syncTabBarActive() {
     var bar = document.getElementById('clientTabBar');
     if (!bar) return;
-    var active = resolveActiveTab();
+    var pressed = tabPress.tab;
+    var active = pressed || resolveActiveTab();
     bar.querySelectorAll('.client-tab-bar__btn').forEach(function (btn) {
       var id = btn.dataset.tabId;
-      var isActive = id === active || (id === 'more' && (state.moreOpen || isMoreRoute()));
+      var isActive = id === active || (!pressed && id === 'more' && (state.moreOpen || isMoreRoute()));
       btn.classList.toggle('client-tab-bar__btn--active', !!isActive);
       btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
   }
+
+  /* ── TASK-390: вкладка становится активной под пальцем ─────────────────────
+   *
+   * Раньше активная вкладка менялась только на новой странице: нажал — бар стоит
+   * как был, пока грузится следующий экран. Теперь новая вкладка подсвечивается
+   * на pointerdown, в том же кадре, а переход по-прежнему по click: палец уехал
+   * (больше 8 px, как в ga-press.js), касание отменено или click так и не пришёл —
+   * подсветка возвращается. Анимация смены включается классом --switching только
+   * на время переключения: при загрузке страницы, возврате из bfcache и
+   * программной смене (setForcedTab) бар встаёт в конечное состояние без движения.
+   */
+  var TAB_PRESS_MOVE_PX = 8;
+  var TAB_PRESS_CLICK_WAIT_MS = 450;
+  var TAB_SWITCH_MS = 260;
+  var tabPress = { tab: null, pointer: null, x: 0, y: 0, committed: false, revertTimer: null, switchTimer: null };
+
+  function clearTabPressTimer(name) {
+    if (tabPress[name] && typeof global.clearTimeout === 'function') global.clearTimeout(tabPress[name]);
+    tabPress[name] = null;
+  }
+
+  function markTabSwitching() {
+    var bar = document.getElementById('clientTabBar');
+    if (!bar) return;
+    bar.classList.add('client-tab-bar--switching');
+    clearTabPressTimer('switchTimer');
+    if (typeof global.setTimeout !== 'function') return;
+    tabPress.switchTimer = global.setTimeout(function () {
+      tabPress.switchTimer = null;
+      var current = document.getElementById('clientTabBar');
+      if (current) current.classList.remove('client-tab-bar--switching');
+    }, TAB_SWITCH_MS);
+  }
+
+  function showTabPress(tabId) {
+    if (tabPress.tab === tabId) return;
+    tabPress.tab = tabId;
+    markTabSwitching();
+    syncTabBarActive();
+  }
+
+  function onTabPressStart(tabId, ev) {
+    if (ev && ((ev.button != null && ev.button !== 0) || ev.isPrimary === false)) return;
+    clearTabPressTimer('revertTimer');
+    tabPress.pointer = ev && ev.pointerId != null ? ev.pointerId : null;
+    tabPress.x = ev && ev.clientX != null ? ev.clientX : 0;
+    tabPress.y = ev && ev.clientY != null ? ev.clientY : 0;
+    tabPress.committed = false;
+    if (tabPress.tab === tabId) return;
+    // Нажатие на уже активную вкладку — это повтор (наверх), подсветка не меняется.
+    if (!tabPress.tab && resolveActiveTab() === tabId) {
+      tabPress.pointer = null;
+      return;
+    }
+    showTabPress(tabId);
+  }
+
+  function cancelTabPress() {
+    clearTabPressTimer('revertTimer');
+    tabPress.pointer = null;
+    if (!tabPress.tab || tabPress.committed) return;
+    tabPress.tab = null;
+    markTabSwitching();
+    syncTabBarActive();
+  }
+
+  /* click пришёл: подсветка остаётся до выгрузки страницы (её сменит новая страница). */
+  function commitTabPress(tabId) {
+    clearTabPressTimer('revertTimer');
+    tabPress.pointer = null;
+    showTabPress(tabId);
+    tabPress.committed = true;
+  }
+
+  /* Сброс без анимации: повторный тап, возврат страницы из bfcache. */
+  function resetTabPress() {
+    clearTabPressTimer('revertTimer');
+    clearTabPressTimer('switchTimer');
+    tabPress.tab = null;
+    tabPress.pointer = null;
+    tabPress.committed = false;
+    var bar = document.getElementById('clientTabBar');
+    if (bar) bar.classList.remove('client-tab-bar--switching');
+    syncTabBarActive();
+  }
+
+  function isTrackedTabPointer(ev) {
+    return tabPress.pointer !== null && !tabPress.committed && (!ev || ev.pointerId == null || ev.pointerId === tabPress.pointer);
+  }
+
+  document.addEventListener(
+    'pointermove',
+    function (ev) {
+      if (!isTrackedTabPointer(ev)) return;
+      var dx = (ev.clientX || 0) - tabPress.x;
+      var dy = (ev.clientY || 0) - tabPress.y;
+      if (Math.sqrt(dx * dx + dy * dy) > TAB_PRESS_MOVE_PX) cancelTabPress();
+    },
+    { passive: true }
+  );
+  document.addEventListener(
+    'pointercancel',
+    function (ev) {
+      if (isTrackedTabPointer(ev)) cancelTabPress();
+    },
+    { passive: true }
+  );
+  document.addEventListener(
+    'pointerup',
+    function (ev) {
+      if (!isTrackedTabPointer(ev)) return;
+      tabPress.pointer = null;
+      if (!tabPress.tab || typeof global.setTimeout !== 'function') return;
+      // click идёт следом за pointerup; не пришёл — касание не стало нажатием.
+      clearTabPressTimer('revertTimer');
+      tabPress.revertTimer = global.setTimeout(function () {
+        tabPress.revertTimer = null;
+        cancelTabPress();
+      }, TAB_PRESS_CLICK_WAIT_MS);
+    },
+    { passive: true }
+  );
+  global.addEventListener('pageshow', function (ev) {
+    // Назад из bfcache: страница восстановлена с подсветкой вкладки, на которую уходили.
+    if (ev && ev.persisted) resetTabPress();
+  });
 
   function applyTabBarVisibility() {
     var bar = document.getElementById('clientTabBar');

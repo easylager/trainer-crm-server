@@ -865,3 +865,184 @@ describe('отклик бара на нажатие', () => {
     assert.match(shellSrc, /client-tab-bar__btn ga-press/);
   });
 });
+
+/* ── TASK-390: вкладка активна под пальцем, переход по click ───────────────────────────── */
+
+describe('TASK-390: активное состояние на pointerdown', () => {
+  const down = (t, id, ev) => t.btn(id).fire('pointerdown', Object.assign({ pointerId: 1, clientX: 10, clientY: 10, button: 0, isPrimary: true }, ev));
+  const switching = (t) => t.bar().classList.contains('client-tab-bar--switching');
+  const selected = (t) => t.bar().querySelectorAll('.client-tab-bar__btn').filter((b) => b.getAttribute('aria-selected') === 'true').map((b) => b.dataset.tabId);
+
+  it('season: касание «Кто кого» — активна сразу она, бар в режиме переключения; click уводит, подсветка остаётся', async () => {
+    const t = bootShell({ flags: SEASON });
+    down(t, 'kk');
+    assert.deepEqual(t.active(), ['kk']);
+    assert.deepEqual(selected(t), ['kk']);
+    assert.ok(switching(t));
+    assert.equal(t.navigations.length, 0, 'на pointerdown перехода нет');
+    t.btn('kk').fire('click');
+    assert.equal(t.navigations.length, 1);
+    assert.match(t.navigations[0], /kto-kogo/);
+    await t.flush();
+    assert.deepEqual(t.active(), ['kk'], 'до выгрузки страницы бар не откатывается');
+    assert.ok(!switching(t), 'класс анимации снят после переключения');
+  });
+
+  it('направление перехода считается от текущей страницы, а не от подсветки', () => {
+    const t = bootShell({ flags: SEASON, pathname: '/webapp/kto-kogo' });
+    down(t, 'home');
+    t.btn('home').fire('click');
+    assert.equal(t.session.get('tcb_nav_dir_v1'), 'back');
+  });
+
+  it('палец уехал больше 8 px — подсветка возвращается, перехода нет', () => {
+    const t = bootShell({ flags: SEASON });
+    down(t, 'me');
+    t.emitDoc('pointermove', { pointerId: 1, clientX: 12, clientY: 15 });
+    assert.deepEqual(t.active(), ['me'], 'дрожание пальца не отменяет');
+    t.emitDoc('pointermove', { pointerId: 1, clientX: 10, clientY: -30 });
+    assert.deepEqual(t.active(), ['home']);
+    assert.equal(t.navigations.length, 0);
+  });
+
+  it('pointercancel (прокрутка, системный жест) — откат', () => {
+    const t = bootShell({ flags: SEASON });
+    down(t, 'catalog');
+    t.emitDoc('pointercancel', { pointerId: 1 });
+    assert.deepEqual(t.active(), ['home']);
+  });
+
+  it('pointerup без click — откат по таймеру; чужой палец не считается', async () => {
+    const t = bootShell({ flags: SEASON });
+    down(t, 'catalog');
+    t.emitDoc('pointercancel', { pointerId: 2 });
+    assert.deepEqual(t.active(), ['catalog']);
+    t.emitDoc('pointerup', { pointerId: 1 });
+    assert.deepEqual(t.active(), ['catalog'], 'click ещё может прийти');
+    await t.flush();
+    assert.deepEqual(t.active(), ['home']);
+  });
+
+  it('click после pointerup отменяет откат', async () => {
+    const t = bootShell({ flags: SEASON });
+    down(t, 'catalog');
+    t.emitDoc('pointerup', { pointerId: 1 });
+    t.btn('catalog').fire('click');
+    await t.flush();
+    assert.deepEqual(t.active(), ['catalog']);
+    assert.equal(t.navigations.length, 1);
+  });
+
+  it('касание активной вкладки ничего не переключает (это повтор — наверх)', () => {
+    const t = bootShell({ flags: SEASON });
+    t.win.scrollY = 400;
+    down(t, 'home');
+    assert.deepEqual(t.active(), ['home']);
+    assert.ok(!switching(t));
+    t.btn('home').fire('click');
+    assert.equal(t.navigations.length, 0);
+    assert.equal(JSON.stringify(t.scrolls), JSON.stringify([{ top: 0, behavior: 'smooth' }]));
+  });
+
+  it('правая кнопка мыши и второй палец не подсвечивают', () => {
+    const t = bootShell({ flags: SEASON });
+    down(t, 'kk', { button: 2 });
+    down(t, 'me', { isPrimary: false });
+    assert.deepEqual(t.active(), ['home']);
+  });
+
+  it('click без pointerdown (клавиатура) тоже подсвечивает перед уходом', () => {
+    const t = bootShell({ flags: SEASON });
+    t.btn('me').fire('click');
+    assert.deepEqual(t.active(), ['me']);
+    assert.equal(t.navigations.length, 1);
+  });
+
+  it('возврат из bfcache (pageshow persisted) — бар по адресу, без анимации', () => {
+    const t = bootShell({ flags: SEASON });
+    down(t, 'kk');
+    t.btn('kk').fire('click');
+    t.win.dispatchEvent({ type: 'pageshow', persisted: true });
+    assert.deepEqual(t.active(), ['home']);
+    assert.ok(!switching(t));
+  });
+
+  it('обычный pageshow (не из кэша) ничего не трогает', () => {
+    const t = bootShell({ flags: SEASON });
+    down(t, 'kk');
+    t.win.dispatchEvent({ type: 'pageshow', persisted: false });
+    assert.deepEqual(t.active(), ['kk']);
+  });
+
+  it('вибрация selectionChanged — один раз на нажатие, без SDK — тишина', () => {
+    const t = bootShell({ flags: SEASON });
+    let n = 0;
+    t.win.Telegram.WebApp.HapticFeedback = { selectionChanged() { n++; } };
+    down(t, 'kk');
+    t.btn('kk').fire('click');
+    assert.equal(n, 1);
+    const t2 = bootShell({ flags: SEASON });
+    assert.doesNotThrow(() => { down(t2, 'kk'); t2.btn('kk').fire('click'); });
+  });
+
+  it('загрузка страницы: бар сразу в конечном состоянии, без класса анимации', () => {
+    const t = bootShell({ flags: SEASON, pathname: '/webapp/kto-kogo', bodyShell: null });
+    assert.deepEqual(t.active(), ['kk']);
+    assert.ok(!switching(t));
+  });
+});
+
+describe('TASK-390: старый бар (флаг выключен)', () => {
+  const down = (t, id) => t.btn(id).fire('pointerdown', { pointerId: 1, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+
+  it('касание «Поиска» подсвечивает его сразу; отмена возвращает разметку байт в байт', async () => {
+    const t = bootShell({});
+    down(t, 'catalog');
+    assert.deepEqual(t.active(), ['catalog']);
+    t.emitDoc('pointercancel', { pointerId: 1 });
+    await t.flush();
+    assert.equal(t.bar().html(), LEGACY_BAR_HTML);
+  });
+
+  it('«Ещё» на pointerdown не подсвечивается: шторку открывает click, как раньше', () => {
+    const t = bootShell({});
+    down(t, 'more');
+    assert.deepEqual(t.active(), ['home']);
+    t.btn('more').fire('click');
+    assert.deepEqual(t.active(), ['home', 'more']);
+  });
+
+  it('страница из «Ещё»: касание «Главной» гасит «Ещё»', () => {
+    const t = bootShell({ pathname: '/webapp/client-requests' });
+    assert.deepEqual(t.active(), ['more']);
+    down(t, 'home');
+    assert.deepEqual(t.active(), ['home']);
+    t.emitDoc('pointercancel', { pointerId: 1 });
+    assert.deepEqual(t.active(), ['more']);
+  });
+});
+
+describe('TASK-390: CSS плашки', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/mini-app-client-shell.css'), 'utf8');
+
+  it('плашка — ::before с размерами макета: 52 px при четырёх вкладках, 48 при пяти', () => {
+    const base = css.match(/\.client-tab-bar--season \.client-tab-bar__icon-wrap::before \{([^}]*)\}/);
+    assert.ok(base);
+    assert.match(base[1], /width:\s*52px/);
+    assert.match(base[1], /background:\s*var\(--g-accent\)/);
+    assert.match(css, /\.client-tab-bar--n5 \.client-tab-bar__icon-wrap::before \{[^}]*width:\s*48px/);
+  });
+
+  it('анимация только под --switching и только opacity/transform', () => {
+    const rules = css.match(/[^}]*::before \{[^}]*transition:[^}]*\}/g) || [];
+    const anim = rules.filter((r) => !/prefers-reduced-motion/.test(r) && /transition:\s*opacity/.test(r));
+    assert.equal(anim.length, 1);
+    assert.match(anim[0], /\.client-tab-bar--switching/);
+    assert.ok(!/width|left|margin/.test(anim[0].split('transition:')[1]));
+  });
+
+  it('prefers-reduced-motion выключает переход плашки', () => {
+    const rm = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
+    assert.match(rm, /--switching \.client-tab-bar__icon-wrap::before \{ transition: none; \}/);
+  });
+});
