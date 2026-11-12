@@ -100,7 +100,8 @@ def inline_tunnel_styles(html: str) -> str:
         if file is None:
             return match.group(0)
         css = _STYLE_CLOSE_RE.sub(lambda _m: "<\\/style", file.read_text(encoding="utf-8"))
-        return f"<style>{css}</style>"
+        # data-file: оболочка вкладок (client-tabs.js) узнаёт вшитый файл по имени и не грузит его второй раз.
+        return f'<style data-file="{match.group("href")}">{css}</style>'
 
     def repl_js(match: re.Match[str]) -> str:
         file = _js_file(match.group("href"))
@@ -111,7 +112,7 @@ def inline_tunnel_styles(html: str) -> str:
         if re.search(r"\bdefer\b", attrs, re.IGNORECASE):
             deferred[0] += 1
             js = _DEFER_OPEN + js + _DEFER_CLOSE
-        return f"<script>{js}</script>"
+        return f'<script data-file="{match.group("href")}">{js}</script>'
 
     kept: list[str] = []
 

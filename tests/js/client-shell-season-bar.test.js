@@ -127,7 +127,7 @@ class Node {
   }
 }
 
-function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {}, connection = null, readyState = 'complete', fetchAll = false, fetchFail = null, scriptSrc = null } = {}) {
+function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {}, connection = null, readyState = 'complete', fetchAll = false, fetchFail = null, scriptSrc = null, winExtra = null } = {}) {
   const store = new Map();
   if (flags) store.set(FLAGS_KEY, JSON.stringify(Object.assign({ u: String(userId), at: Date.now() }, flags)));
   const session = new Map();
@@ -208,6 +208,7 @@ function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyS
     },
   };
   win.window = win;
+  if (winExtra) Object.assign(win, winExtra);
   const ctx = vm.createContext({
     URL, URLSearchParams, JSON, Date, Promise, Number, String, Object, Array, Math, console,
     window: win, document: doc, location: win.location, history: win.history, Telegram: win.Telegram,
@@ -902,6 +903,19 @@ describe('направление view transition в season', () => {
     t.btn('kk').fire('click');
     assert.equal(dir(t), 'back');
   });
+  it('TASK-391: переход на страницу без opt-in (Кто кого, тренеры) не начинается — без InvalidStateError', () => {
+    const t = bootShell({ flags: SEASON, winExtra: { onpageswap: null } });
+    const swap = (url) => {
+      let skipped = 0;
+      const ev = { type: 'pageswap', viewTransition: { skipTransition() { skipped++; } }, activation: { entry: { url } } };
+      t.win.dispatchEvent(ev);
+      return skipped;
+    };
+    assert.equal(swap('https://test/webapp/kto-kogo?init_data=x'), 1);
+    assert.equal(swap('https://test/webapp/trainers?trainer_id=3'), 1);
+    assert.equal(swap('https://test/webapp/client-me?init_data=x'), 0);
+    assert.equal(swap('https://test/webapp/ice'), 0);
+  });
   it('флаг выключен: порядок прежний (kto-kogo не вкладка — всегда forward)', () => {
     const t = bootShell({ pathname: '/webapp/client-bookings' });
     t.btn('home').fire('click');
@@ -1251,5 +1265,98 @@ describe('TASK-390: CSS плашки', () => {
   it('prefers-reduced-motion выключает переход плашки', () => {
     const rm = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
     assert.match(rm, /--switching \.client-tab-bar__icon-wrap::before \{ transition: none; \}/);
+  });
+});
+
+/* ── TASK-391: оболочка вкладок (client-tabs.js) подключена к шеллу ──────────────────────── */
+
+describe('TASK-391: шелл отдаёт вкладки оболочки роутеру', () => {
+  const fakeTabs = (t, { take = true, mounted = [] } = {}) => {
+    const calls = [];
+    t.win.ClientTabs = {
+      hosted: true,
+      hosts: (id) => id === 'me' || id === 'bookings',
+      isMounted: (id) => mounted.includes(id),
+      go: (p) => { calls.push('go:' + p); return take; },
+      prefetch: (id) => { calls.push('prefetch:' + id); return Promise.resolve(); },
+    };
+    return calls;
+  };
+
+  it('нажатие на вкладку оболочки — без перезагрузки, через ClientTabs.go', () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me' });
+    const calls = fakeTabs(t);
+    t.btn('bookings').fire('click');
+    assert.deepEqual(calls, ['go:client-bookings']);
+    assert.equal(t.navigations.length, 0);
+    assert.equal(t.session.get('tcb_nav_dir_v1'), undefined, 'направление view transition не пишется');
+  });
+
+  it('роутер не взял (не его вкладка, сбой) или переход replace — полная загрузка, как без флага', () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me' });
+    fakeTabs(t, { take: false });
+    t.btn('kk').fire('click');
+    assert.equal(t.navigations.length, 1);
+    const t2 = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me' });
+    const calls = fakeTabs(t2);
+    t2.win.ClientShell.navigate('client-bookings', { replace: true });
+    assert.deepEqual(calls, []);
+    assert.equal(t2.navigations.length, 1);
+  });
+
+  it('без ClientTabs (флаг выключен) navigate — как раньше', () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me' });
+    t.btn('bookings').fire('click');
+    assert.equal(t.navigations.length, 1);
+    assert.match(t.navigations[0], /client-bookings/);
+  });
+
+  it('pointerdown на невыгруженную вкладку оболочки: фрагмент и данные, не старые ассеты; живая — ничего', async () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me', fetchAll: true });
+    const calls = fakeTabs(t);
+    t.btn('bookings').fire('pointerdown');
+    await t.flush();
+    assert.deepEqual(calls, ['prefetch:bookings']);
+    assert.ok(t.fetches.includes('/api/webapp/client/bookings'), 'тёплый кэш записей');
+    assert.ok(!t.fetches.some((u) => /mini-app-client-bookings\.css/.test(u)), 'ассеты берёт фрагмент');
+    const t2 = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me', fetchAll: true });
+    const calls2 = fakeTabs(t2, { mounted: ['bookings'] });
+    t2.btn('bookings').fire('pointerdown');
+    await t2.flush();
+    assert.deepEqual(calls2, []);
+    assert.ok(!t2.fetches.includes('/api/webapp/client/bookings'));
+  });
+
+  it('в оболочке соседняя вкладка — первый шаг, каталог ещё не начат', async () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me', fetchAll: true });
+    const calls = fakeTabs(t);
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await t.flush();
+    assert.deepEqual(calls, ['prefetch:bookings']);
+    assert.ok(!t.fetches.some((u) => /ice-tab\.js/.test(u)), 'каталог ждёт, пока прогреется вкладка оболочки');
+  });
+
+  it('фоновая подгрузка: шаг вкладки оболочки — ClientTabs.prefetch; остальные — как были', async () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me', fetchAll: true });
+    const calls = fakeTabs(t);
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    for (let i = 0; i < 40; i++) await t.flush();
+    assert.deepEqual(calls, ['prefetch:bookings']);
+    const got = t.fetches.map((u) => u.replace(/^.*\//, '').replace(/\?.*$/, ''));
+    assert.ok(got.includes('ice-tab.js') && got.includes('kto-kogo.js'));
+    assert.ok(!got.includes('client-me.js'), 'текущая вкладка не качается');
+  });
+
+  it('tabSwitchDone снимает подсветку нажатия: активна вкладка по адресу', () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me' });
+    fakeTabs(t);
+    t.btn('bookings').fire('pointerdown', { pointerId: 1, button: 0, isPrimary: true });
+    t.btn('bookings').fire('click');
+    t.win.location.pathname = '/webapp/client-bookings';
+    t.win.ClientShell.tabSwitchDone();
+    assert.deepEqual(t.active(), ['bookings']);
+    t.win.location.pathname = '/webapp/client-me';
+    t.win.ClientShell.syncTabBarActive();
+    assert.deepEqual(t.active(), ['me'], 'подсветка нажатия больше не держит бар');
   });
 });

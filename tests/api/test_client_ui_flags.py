@@ -192,14 +192,14 @@ async def test_ui_flags_endpoint(app_use_test_db, db_session, season_env) -> Non
     await db_session.commit()
 
     season_env()
-    assert await _get_flags(tid) == {"season_ui": False, "bookings_tab": False}
+    assert await _get_flags(tid) == {"season_ui": False, "bookings_tab": False, "fast_tabs": False}
 
     season_env(ids=str(tid))
-    assert await _get_flags(tid) == {"season_ui": True, "bookings_tab": True}
+    assert await _get_flags(tid) == {"season_ui": True, "bookings_tab": True, "fast_tabs": False}
 
     other = unique_test_telegram_id()
     season_env(ids=f"{tid},{other}")
-    assert await _get_flags(other) == {"season_ui": True, "bookings_tab": False}
+    assert await _get_flags(other) == {"season_ui": True, "bookings_tab": False, "fast_tabs": False}
 
 
 @pytest.mark.asyncio

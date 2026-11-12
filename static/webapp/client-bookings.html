@@ -930,7 +930,9 @@
         listEl.innerHTML = html;
       }
 
-      function loadBookings() {
+      /* silent — тихое обновление из оболочки вкладок (TASK-391): тот же список не перерисовывается,
+         сбой не стирает показанное. Страница сама зовёт без аргумента — как раньше. */
+      function loadBookings(silent) {
         var deeplinkOpen = getOpenBookingIdFromUrl() != null;
         return startBookingsFetch()
           .then(function(data) {
@@ -941,7 +943,7 @@
             if (window.ClientShell && window.ClientShell.writeBookingsWarmCache) {
               window.ClientShell.writeBookingsWarmCache({ days: days });
             }
-            if (bookingsHydratedFromWarm && freshFp === bookingsWarmFingerprint) {
+            if ((bookingsHydratedFromWarm || silent === true) && freshFp === bookingsWarmFingerprint) {
               state.days = days;
               tryOpenBookingFromQuery();
               return;
@@ -960,7 +962,7 @@
             tryOpenBookingFromQuery();
           })
           .catch(function() {
-            if (bookingsHydratedFromWarm) return;
+            if (bookingsHydratedFromWarm || silent === true) return;
             if (state.mode === 'upcoming') {
               document.getElementById('listContent').innerHTML =
                 '<div class="error">Не удалось загрузить записи. Попробуйте обновить страницу.</div>';
@@ -1279,6 +1281,11 @@
         });
       });
       window.addEventListener('popstate', syncClientBookingsHeaderBack);
+      window.addEventListener('client-tabs:refresh', function(ev) {
+        if (!ev || !ev.detail || ev.detail.tab !== 'bookings') return;
+        bookingsFetchPromise = null;
+        loadBookings(true);
+      });
 
       document.getElementById('cbTabUpcoming').onclick = function() { switchMode('upcoming'); };
       document.getElementById('cbTabHistory').onclick = function() { switchMode('history'); };

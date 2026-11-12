@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.middleware.scrape_guard import ScrapeGuardMiddleware
 from src.api.asset_stamp import stamp_html
+from src.api.client_tabs_shell import SHELL_TABS, fragment_json, shell_html
 from src.api.site_error_pages import site_http_exception_handler
 from src.api.tunnel_css import TunnelCssMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -66,8 +67,11 @@ from src.shared.outage import (
     SERVICE_UNAVAILABLE_CODE,
     service_unavailable_payload,
 )
-from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER
-from src.shared.config import Settings
+from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, get_optional_client_miniapp_principal
+from src.api.miniapp_auth.principal_keys import client_catalog_telegram_key
+from src.api.miniapp_auth.types import MiniAppPrincipal
+from src.application.client_ui_flags import fast_tabs_enabled
+from src.shared.config import Settings, get_settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
 from src.shared.sentry_init import init_sentry
 
@@ -317,8 +321,43 @@ def webapp_client_requests_page():
     return _webapp_file_response(path)
 
 
+def _fast_tabs_shell(tab: str, principal: MiniAppPrincipal | None) -> HTMLResponse | None:
+    """TASK-391: оболочка «Я» + «Записи», если флаг включён. Решает подписанный ``init_data``
+    из адреса (его дописывает ``navigate()``); без него и без флага — страница как была."""
+    if principal is None or not fast_tabs_enabled(client_catalog_telegram_key(principal), get_settings()):
+        return None
+    return HTMLResponse(content=shell_html(tab), headers=_WEBAPP_BFCACHE_HTML_HEADERS)
+
+
+@app.get("/webapp/client-tab/{tab}.json")
+def webapp_client_tab_fragment(tab: str, request: Request):
+    """TASK-391: вторая вкладка оболочки — разметка, стили и скрипты её страницы. Use ``?v=…``."""
+    if tab not in SHELL_TABS:
+        raise HTTPException(status_code=404, detail="Unknown tab")
+    return Response(
+        content=fragment_json(tab),
+        media_type="application/json",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/client-tabs.js")
+def webapp_client_tabs_js(request: Request):
+    """TASK-391: роутер оболочки «Я» + «Записи». Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-tabs.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/client-bookings")
-def webapp_client_bookings_page():
+def webapp_client_bookings_page(
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
+):
     """Client «Записи» (TASK-306): список, отмена, детали.
 
     `__FONT_V__` — как на главной и матче: preload Dela Gothic совпадает с адресом
@@ -326,6 +365,9 @@ def webapp_client_bookings_page():
     """
     from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
 
+    shell = _fast_tabs_shell("bookings", principal)
+    if shell is not None:
+        return shell
     path = _WEBAPP_DIR / "client-bookings.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
@@ -359,13 +401,18 @@ def webapp_client_home_page():
 
 
 @app.get("/webapp/client-me")
-def webapp_client_me_page():
+def webapp_client_me_page(
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
+):
     """Вкладка «Я» (TASK-370): шапка, цифры сезона, «Болею за», «Мой каток», строки.
 
     `__FONT_V__` — как на главной: preload Dela Gothic совпадает с адресом из glide-public-fonts.css.
     """
     from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
 
+    shell = _fast_tabs_shell("me", principal)
+    if shell is not None:
+        return shell
     path = _WEBAPP_DIR / "client-me.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
