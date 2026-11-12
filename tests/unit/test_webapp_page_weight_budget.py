@@ -23,10 +23,11 @@ _ATTR = re.compile(r"""(?:src|href)=["']([^"']+)["']""", re.I)
 # then the «Что ищем» sheet and ticket seats on the rink card, TASK-333, 2026-10-26;
 # then «Тренеры» in «Поиске» and trainer taps → the trainers showcase, stage 1 of entries, 2026-11-08: ice.html +1.2 KB;
 # re-measured with the trainer funnel (/t/ pages, TASK-356), 2026-11-08;
-# catalog.html +5.4 KB: the «Я» tab and season flags in the client shell, «Твой сезон на льду», 2026-11-12).
+# catalog.html +5.4 KB: the «Я» tab and season flags in the client shell, «Твой сезон на льду», 2026-11-12;
+# ice.html +12.6 KB: the season shell on «Поиск», tab press under the finger and tab-timing in the shell, fast-tabs, 2026-11-12).
 # A page may shrink; growth past +5% fails CI.
 _BASELINE_GZIP = {
-    "ice.html": 241_605,
+    "ice.html": 254_228,
     "catalog.html": 231_122,
 }
 
