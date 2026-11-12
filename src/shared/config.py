@@ -358,6 +358,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # CLIENT_SEASON_UI_TELEGRAM_IDS=1,2 (или [1,2]); CLIENT_SEASON_UI_PERCENT=0…100.
     client_season_ui_telegram_ids: EnvIntList = None
     client_season_ui_percent: int = Field(default=0, ge=0, le=100)
+    # TASK-391: вкладки «Я» и «Записи» внутри одной оболочки (PDEC-035). Действует только вместе с
+    # season_ui. CLIENT_FAST_TABS_TELEGRAM_IDS=1,2; CLIENT_FAST_TABS_PERCENT=0…100.
+    client_fast_tabs_telegram_ids: EnvIntList = None
+    client_fast_tabs_percent: int = Field(default=0, ge=0, le=100)
 
     # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
     # Full log: every update + inner gate/menu DB phase timings.

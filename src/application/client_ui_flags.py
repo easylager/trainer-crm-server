@@ -22,6 +22,21 @@ def season_ui_enabled(account_key: int, settings: Settings) -> bool:
     return season_ui_bucket(account_key) < settings.client_season_ui_percent
 
 
+def fast_tabs_bucket(account_key: int) -> int:
+    """Своя корзина: процент fast_tabs не повторяет выборку season_ui."""
+    digest = hashlib.sha256(f"fast-tabs:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def fast_tabs_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-391: «Я» и «Записи» в одной оболочке. Только поверх season_ui."""
+    if not season_ui_enabled(account_key, settings):
+        return False
+    if int(account_key) in (settings.client_fast_tabs_telegram_ids or ()):
+        return True
+    return fast_tabs_bucket(account_key) < settings.client_fast_tabs_percent
+
+
 # Профили аккаунта — как у GET /client/passes и /client/bookings/history: своя строка,
 # семейный доступ (resolve_acting_client_id) и профили из client_profile_links.
 # Любой статус и любая давность: вкладка, появившись, не исчезает.
