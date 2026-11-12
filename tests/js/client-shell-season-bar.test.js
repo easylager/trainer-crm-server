@@ -127,7 +127,7 @@ class Node {
   }
 }
 
-function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {}, connection = null, readyState = 'complete', fetchAll = false, fetchFail = null } = {}) {
+function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {}, connection = null, readyState = 'complete', fetchAll = false, fetchFail = null, scriptSrc = null } = {}) {
   const store = new Map();
   if (flags) store.set(FLAGS_KEY, JSON.stringify(Object.assign({ u: String(userId), at: Date.now() }, flags)));
   const session = new Map();
@@ -141,6 +141,7 @@ function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyS
   const timers = [];
 
   const doc = { readyState };
+  if (scriptSrc) doc.currentScript = { src: scriptSrc };
   doc.createElement = (tag) => new Node(tag, doc);
   doc.documentElement = new Node('html', doc);
   doc.documentElement.style = { setProperty() {} };
@@ -568,6 +569,14 @@ describe('п. 5: предзагрузка на pointerdown', () => {
     const hrefs = t.fetches.filter((u) => !u.startsWith('/api/')).sort();
     assert.deepEqual(hrefs, page);
     assert.ok(hrefs.every((h) => h.startsWith('/static/webapp/')), 'ни одного /webapp/kto-kogo*');
+  });
+
+  it('kk — версия берётся у самой оболочки: сервер штампует ?v= во всех страницах одной меткой', () => {
+    const t = bootShell({ flags: SEASON, scriptSrc: 'https://test/webapp/mini-app-client-shell.js?v=128573828630199' });
+    t.btn('kk').fire('pointerdown');
+    const hrefs = t.fetches.filter((u) => !u.startsWith('/api/'));
+    assert.ok(hrefs.length >= 10);
+    assert.ok(hrefs.every((h) => h.startsWith('/static/webapp/kto-kogo') && h.endsWith('?v=128573828630199')), hrefs.join());
   });
 
   it('me — client-me.css, client-me.js и тёплый кэш', async () => {

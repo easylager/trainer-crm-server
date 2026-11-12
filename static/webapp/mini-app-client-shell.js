@@ -1351,8 +1351,11 @@
     ['kto-kogo-league-identity.js', '202611122'],
     ['kto-kogo-boot.js', '202611122'],
   ];
+  /* Сервер подставляет в html всех страниц одну метку ?v= (asset_stamp.py), а не литерал из kto-kogo.html.
+     Поэтому берём метку самой оболочки (ASSET_V — из её же <script src>); литерал из списка — запасной,
+     когда версии у скрипта нет. Иначе адрес предзагрузки не совпадёт со страницей игры и кэш не сработает. */
   var KK_ASSETS = KK_ASSET_VERSIONS.map(function (pair) {
-    return { file: pair[0], base: KK_BASE, v: pair[1] };
+    return { file: pair[0], base: KK_BASE, v: ASSET_V || pair[1] };
   });
 
   /*
