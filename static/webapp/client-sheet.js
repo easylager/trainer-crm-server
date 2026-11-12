@@ -92,6 +92,8 @@
     layer.appendChild(backdrop);
     layer.appendChild(sheet);
     document.body.appendChild(layer);
+    var scrollers = body.querySelectorAll('.cs-scroll');
+    for (var s = 0; s < scrollers.length; s++) watchScroll(scrollers[s]);
 
     var record = { el: sheet, close: null };
     var state = 'open';
@@ -99,6 +101,7 @@
     var backHeld = false;
     var backWasVisible = false;
     var drag = null;
+    var swallowClick = false;
 
     function place() {
       var vv = root.visualViewport;
@@ -153,6 +156,7 @@
       document.removeEventListener('touchcancel', onTouchCancel);
       if (layer.parentNode) layer.parentNode.removeChild(layer);
       if (current === record) current = null;
+      releaseVerticalSwipe();
       unlockScroll();
       if (typeof opts.onClose === 'function') opts.onClose();
       if (!current && opener && typeof opener.focus === 'function') {
@@ -186,24 +190,64 @@
       dismiss(false);
     }
 
+    /* Жест вниз в Telegram сворачивает мини-приложение раньше, чем его видит шторка. */
+    function webApp() {
+      return root.Telegram && root.Telegram.WebApp ? root.Telegram.WebApp : null;
+    }
+
+    function holdVerticalSwipe() {
+      var app = webApp();
+      if (!app || typeof app.disableVerticalSwipes !== 'function') return;
+      try { app.disableVerticalSwipes(); } catch (err) { /* старый клиент */ }
+    }
+
+    function releaseVerticalSwipe() {
+      if (current) return;
+      var body = document.body;
+      if (body && body.classList && body.classList.contains('client-shell-more-open')) return;
+      var app = webApp();
+      if (!app || typeof app.enableVerticalSwipes !== 'function') return;
+      try { app.enableVerticalSwipes(); } catch (err) { /* старый клиент */ }
+    }
+
     function targetElement(event) {
       var target = event && event.target;
       if (target && target.nodeType === 3) target = target.parentNode;
       return target;
     }
 
+    function scrollOf(target) {
+      if (!target || typeof target.closest !== 'function') return null;
+      return target.closest('.cs-scroll');
+    }
+
+    /* Список в начале отдаёт жест шторке. Строки «Мой каток» и «За кого болею» — это label
+       на всю ширину: если считать метку запретом, свайп по списку не начнётся никогда. */
     function blockedDrag(target) {
       if (!target || typeof target.closest !== 'function') return false;
-      return !!target.closest('button, a, input, textarea, select, label, .cs-scroll');
+      var list = scrollOf(target);
+      if (list) return list.scrollTop > 1;
+      return !!target.closest('button, a, input, textarea, select, label');
+    }
+
+    function watchScroll(list) {
+      function sync() {
+        /* pan-y на верху списка: браузер забирает вертикальный жест и не даёт его отменить.
+           Пока прокрутка в начале — жест наш (шторка). Ниже — снова прокрутка списка. */
+        list.style.touchAction = list.scrollTop > 1 ? 'pan-y' : 'none';
+      }
+      sync();
+      list.addEventListener('scroll', sync);
     }
 
     function onPointerDown(event) {
       if (state !== 'open') return;
+      holdVerticalSwipe();
       if (event.button != null && event.button !== 0) return;
       var target = targetElement(event);
       if (blockedDrag(target)) return;
       if (typeof event.clientY !== 'number') return;
-      drag = { y: event.clientY, last: event.clientY };
+      drag = { y: event.clientY, last: event.clientY, moved: false };
       sheet.style.transition = 'none';
     }
 
@@ -211,6 +255,7 @@
       if (!drag || typeof event.clientY !== 'number') return;
       drag.last = event.clientY;
       var dy = Math.max(0, event.clientY - drag.y);
+      if (dy > 8) drag.moved = true;
       sheet.style.transform = 'translateY(' + dy + 'px)';
     }
 
@@ -223,10 +268,18 @@
       /* pointercancel приходит без координат: берём последнюю точку движения. */
       var y = typeof event.clientY === 'number' ? event.clientY : drag.last;
       var dy = Math.max(0, y - drag.y);
+      if (drag.moved) swallowClick = true;
       endDrag();
       sheet.style.transition = '';
       sheet.style.transform = '';
       if (dy > 80) dismiss(false);
+    }
+
+    function onClick(event) {
+      if (!swallowClick) return;
+      swallowClick = false;
+      if (event.preventDefault) event.preventDefault();
+      if (event.stopPropagation) event.stopPropagation();
     }
 
     /* Список .cs-scroll на тач-экране забирает вертикальный жест (touch-action: pan-y), и pointer-события
@@ -241,6 +294,7 @@
     function onTouchStart(event) {
       touch = null;
       if (state !== 'open') return;
+      holdVerticalSwipe();
       var t = event.touches && event.touches[0];
       var list = scrollAncestor(targetElement(event));
       if (!t || !list || typeof t.clientY !== 'number') return;
@@ -253,8 +307,11 @@
       if (!t || typeof t.clientY !== 'number') return;
       var dy = t.clientY - touch.y;
       if (!touch.active) {
-        if (dy < 0 || touch.list.scrollTop > 0) { touch = null; return; }
-        if (dy < 6) return;
+        if (touch.list.scrollTop > 1) { touch = null; return; }
+        /* Короткий рывок вверх в начале жеста — шум пальца, не отказ от закрытия. */
+        if (dy < -8) { touch = null; return; }
+        if (dy > 0 && event.cancelable !== false && event.preventDefault) event.preventDefault();
+        if (dy < 8) return;
         touch.active = true;
         sheet.style.transition = 'none';
       }
@@ -268,6 +325,7 @@
       touch = null;
       if (!cur || !cur.active) return;
       var dy = Math.max(0, cur.last - cur.y);
+      if (cur.active) swallowClick = true;
       sheet.style.transition = '';
       sheet.style.transform = '';
       if (dy > 80) dismiss(false);
@@ -306,6 +364,7 @@
     backdrop.addEventListener('click', function () {
       dismiss(false);
     });
+    sheet.addEventListener('click', onClick, true);
     sheet.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('pointerup', onPointerUp);
@@ -322,6 +381,7 @@
 
     record.close = dismiss;
     current = record;
+    holdVerticalSwipe();
     lockScroll();
     holdBack();
     place();

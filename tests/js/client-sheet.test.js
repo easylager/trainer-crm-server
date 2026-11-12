@@ -430,7 +430,7 @@ describe('ClientSheet', () => {
     assert.equal(fourth.el.isConnected, false);
   });
 
-  it('свайп с кнопки и из прокручиваемого списка шторку не закрывает', () => {
+  it('свайп с кнопки и из прокрученного списка шторку не закрывает', () => {
     const h = makeHarness();
     opener(h);
     const sheet = h.sandbox.ClientSheet.open({ labelledBy: 'sheetTitle', content: contentOf(h) });
@@ -439,10 +439,30 @@ describe('ClientSheet', () => {
     h.document.dispatch('pointerup', { clientY: 200 });
     assert.equal(h.timeouts.length, 0);
     const list = sheet.el.querySelector('.cs-scroll');
+    list.scrollTop = 40;
     list.dispatch('pointerdown', { clientY: 0, target: list });
     h.document.dispatch('pointerup', { clientY: 200 });
     assert.equal(h.timeouts.length, 0);
     assert.equal(sheet.el.isConnected, true);
+  });
+
+  it('свайп по строке списка в начале закрывает шторку и не выбирает строку', () => {
+    const h = makeHarness();
+    opener(h);
+    const sheet = h.sandbox.ClientSheet.open({ labelledBy: 'sheetTitle', content: contentOf(h) });
+    const list = sheet.el.querySelector('.cs-scroll');
+    const row = h.document.createElement('label');
+    list.appendChild(row);
+    list.scrollTop = 0;
+    assert.equal(list.style.touchAction, 'none');
+    row.dispatch('pointerdown', { clientY: 10, target: row });
+    h.document.dispatch('pointermove', { clientY: 40 });
+    h.document.dispatch('pointerup', { clientY: 140 });
+    const click = row.dispatch('click', { target: row });
+    assert.equal(click.defaultPrevented, true);
+    assert.equal(h.timeouts.length, 1);
+    h.flush();
+    assert.equal(sheet.el.isConnected, false);
   });
 
   it('pointercancel без координат закрывает по последней точке движения', () => {
@@ -499,6 +519,40 @@ describe('ClientSheet', () => {
     assert.equal(moves.some((m) => m.defaultPrevented), false);
     assert.equal(h.timeouts.length, 0);
     assert.equal(sheet.el.isConnected, true);
+  });
+
+  it('короткий рывок пальца вверх в начале жеста не срывает закрытие', () => {
+    const h = makeHarness();
+    opener(h);
+    const sheet = h.sandbox.ClientSheet.open({ labelledBy: 'sheetTitle', content: contentOf(h) });
+    const list = sheet.el.querySelector('.cs-scroll');
+    list.scrollTop = 0;
+    list.dispatch('touchstart', { touches: [{ clientY: 100 }], target: list });
+    h.document.dispatch('touchmove', { touches: [{ clientY: 97 }], cancelable: true });
+    h.document.dispatch('touchmove', { touches: [{ clientY: 200 }], cancelable: true });
+    h.document.dispatch('touchend', {});
+    assert.equal(h.timeouts.length, 1);
+    h.flush();
+    assert.equal(sheet.el.isConnected, false);
+  });
+
+  it('открытая шторка отключает вертикальный свайп Telegram и возвращает его после закрытия', () => {
+    const h = makeHarness();
+    const calls = [];
+    h.sandbox.Telegram.WebApp.disableVerticalSwipes = () => calls.push('off');
+    h.sandbox.Telegram.WebApp.enableVerticalSwipes = () => calls.push('on');
+    opener(h);
+    const sheet = h.sandbox.ClientSheet.open({ content: contentOf(h) });
+    assert.deepEqual(calls, ['off']);
+    h.document.body.classList.add('client-shell-more-open');
+    sheet.close();
+    h.flush();
+    assert.deepEqual(calls, ['off']);
+    h.document.body.classList.remove('client-shell-more-open');
+    const again = h.sandbox.ClientSheet.open({ content: contentOf(h) });
+    again.close();
+    h.flush();
+    assert.deepEqual(calls, ['off', 'off', 'on']);
   });
 
   it('после закрытия возвращает кнопку «назад» Telegram в прежнее состояние', () => {
