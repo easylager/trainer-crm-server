@@ -1327,6 +1327,15 @@ describe('TASK-391: шелл отдаёт вкладки оболочки роу
     assert.ok(!t2.fetches.includes('/api/webapp/client/bookings'));
   });
 
+  it('в оболочке соседняя вкладка — первый шаг, каталог ещё не начат', async () => {
+    const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me', fetchAll: true });
+    const calls = fakeTabs(t);
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    await t.flush();
+    assert.deepEqual(calls, ['prefetch:bookings']);
+    assert.ok(!t.fetches.some((u) => /ice-tab\.js/.test(u)), 'каталог ждёт, пока прогреется вкладка оболочки');
+  });
+
   it('фоновая подгрузка: шаг вкладки оболочки — ClientTabs.prefetch; остальные — как были', async () => {
     const t = bootShell({ flags: SEASON_BOOKINGS, pathname: '/webapp/client-me', fetchAll: true });
     const calls = fakeTabs(t);

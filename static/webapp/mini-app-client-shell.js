@@ -1797,9 +1797,21 @@
     };
     if (uiFlags.season_ui) {
       var active = resolveActiveTab();
-      seasonTabs().forEach(function (tab) {
+      var tabs = seasonTabs();
+      /* В оболочке соседняя живая вкладка — первая: иначе каталог (сотни КБ) занимает канал,
+         и первый заход в «Записи»/«Я» не успевает прогреться. */
+      var shell = shellTabs();
+      if (shell) {
+        var hosted = [];
+        var rest = [];
+        tabs.forEach(function (tab) {
+          (shell.hosts(tab.id) ? hosted : rest).push(tab);
+        });
+        tabs = hosted.concat(rest);
+      }
+      tabs.forEach(function (tab) {
         if (tab.id === active) return;
-        if (shellTabs() && shellTabs().hosts(tab.id)) step(function () { return [prefetchShellTab(tab.id)]; });
+        if (shell && shell.hosts(tab.id)) step(function () { return [prefetchShellTab(tab.id)]; });
         else if (tab.id === 'catalog') step(catalogStep);
         else if (tab.id === 'bookings') step(bookingsStep);
         else if (tab.id === 'kk') step(function () { return [prefetchKkAssets(), prefetchKkExtras()]; });

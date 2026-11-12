@@ -428,14 +428,30 @@ describe('история, bfcache, профиль', () => {
 });
 
 describe('префетч', () => {
-  it('фрагмент и его недостающие файлы с ?v= через ClientShell.fetchAsset; живую вкладку — нет', async () => {
+  it('фрагмент и preload недостающих файлов с ?v=; живую вкладку — нет', async () => {
     const t = boot({ fragments: { bookings: BOOKINGS } });
     await t.win.ClientTabs.prefetch('bookings');
-    const assets = t.fetches.filter((u) => u.startsWith('asset:')).map((u) => M.assetKey(u.slice(6)));
-    assert.deepEqual(assets.sort(), ['glide-app.css', 'learn-block.js', 'mini-app-client-bookings.css']);
-    const n = t.fetches.length;
+    const pre = t.doc.head.children
+      .filter((c) => c.getAttribute('rel') === 'preload')
+      .map((c) => c.getAttribute('as') + ':' + M.assetKey(c.getAttribute('href')));
+    assert.deepEqual(pre.sort(), ['script:learn-block.js', 'style:glide-app.css', 'style:mini-app-client-bookings.css']);
+    assert.ok(!t.fetches.some((u) => u.startsWith('asset:')), 'fetch не прогревает кэш тега');
+    const n = t.doc.head.children.length;
     await t.win.ClientTabs.prefetch('me');
-    assert.equal(t.fetches.length, n, '«Я» уже живая');
+    await t.win.ClientTabs.prefetch('bookings');
+    assert.equal(t.doc.head.children.length, n, '«Я» живая, повтор «Записей» не ставит второй preload');
+  });
+
+  it('после preload открытие вкладки всё равно вставляет свои stylesheet, не путает их с preload', async () => {
+    const t = boot({ fragments: { bookings: BOOKINGS } });
+    await t.win.ClientTabs.prefetch('bookings');
+    t.win.ClientTabs.go('client-bookings');
+    await t.settle();
+    const sheets = t.doc.head.children
+      .filter((c) => c.getAttribute('rel') === 'stylesheet')
+      .map((c) => M.assetKey(c.getAttribute('href')));
+    assert.ok(sheets.includes('glide-app.css') && sheets.includes('mini-app-client-bookings.css'));
+    assert.deepEqual(t.ran.filter((r) => !r.startsWith('code:')), ['learn-block.js?v=1']);
   });
 });
 

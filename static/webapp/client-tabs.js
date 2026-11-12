@@ -305,6 +305,29 @@
   /* ── Фрагмент и его ассеты ─────────────────────────────────────────────── */
 
   var fragments = {};
+  /* Уже поставленные preload: повтор не нужен, а второй link с тем же href Chrome качает снова. */
+  var preloaded = {};
+
+  /**
+   * Прогрев файла для будущего <link rel=stylesheet> / <script src>.
+   * fetch() этого не делает: ответ лежит в кэше другого режима запроса, и тег качает файл заново
+   * (замер: те же URL, transferSize как у первой загрузки, ~150 мс на файл, скрипты по очереди).
+   * rel=preload с тем же as браузер отдаёт тегу из своего preload-кэша и в Chromium, и в WebKit.
+   * rel=prefetch нельзя: WebKit его не выполняет, а Chrome при no-store качает дважды.
+   */
+  function preloadAsset(href, as) {
+    if (!href || preloaded[href]) return Promise.resolve();
+    preloaded[href] = true;
+    return new Promise(function (resolve) {
+      var el = doc.createElement('link');
+      el.rel = 'preload';
+      el.setAttribute('as', as);
+      el.onload = function () { resolve(); };
+      el.onerror = function () { resolve(); };
+      el.href = href;
+      head.appendChild(el);
+    });
+  }
 
   function fragmentUrl(id) {
     var dir = (root.location.pathname || '/webapp/').replace(/[^/]*$/, '') || '/webapp/';
@@ -575,19 +598,17 @@
   function prefetch(id) {
     var t = entry(id);
     if (t.mounted || !TAB_PATHS[id]) return Promise.resolve();
-    var sh = shell();
     return loadFragment(id)
       .then(function (frag) {
         var loaded = loadedScriptKeys();
-        var urls = [];
+        var waits = [];
         frag.css.forEach(function (c) {
-          if (c.href && !cssByKey[assetKey(c.href)]) urls.push(c.href);
+          if (c.href && !cssByKey[assetKey(c.href)]) waits.push(preloadAsset(c.href, 'style'));
         });
         frag.scripts.forEach(function (s) {
-          if (s.src && !loaded[assetKey(s.src)] && /\?v=\d+/.test(s.src)) urls.push(s.src);
+          if (s.src && !loaded[assetKey(s.src)] && /\?v=\d+/.test(s.src)) waits.push(preloadAsset(s.src, 'script'));
         });
-        if (!sh || typeof sh.fetchAsset !== 'function') return null;
-        return Promise.all(urls.map(sh.fetchAsset));
+        return Promise.all(waits);
       })
       .catch(function () {});
   }
