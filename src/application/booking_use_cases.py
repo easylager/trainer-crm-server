@@ -4811,11 +4811,13 @@ async def cancel_booking(
     notify_client: bool = True,
     record_recurring_week_skip: bool = True,
     cancellation_source: str = BOOKING_CANCELLATION_SOURCE_TRAINER,
+    do_commit: bool = True,
 ) -> bool:
     """
     Cancel booking: booking status to 'cancelled', slot occupancy synced (group slots may stay partially filled).
     Recurring-auto bookings: by default records a week skip so materialization will not recreate the same calendar week.
     ``cancellation_source`` records why the row was cancelled; stats omit recurring/roster system churn.
+    ``do_commit=False``: caller owns the transaction (rule detach cancels many rows atomically).
     Returns True if booking was found and cancelled.
     """
     r = await session.execute(
@@ -4853,8 +4855,9 @@ async def cancel_booking(
         )
     if notify_client:
         await _schedule_booking_cancel_notification(session, booking_id)
-    await session.commit()
-    invalidate_slots_for_trainer(trainer_id)
+    if do_commit:
+        await session.commit()
+        invalidate_slots_for_trainer(trainer_id)
     return True
 
 
@@ -4865,6 +4868,10 @@ async def detach_trainer_client_from_roster_miniapp(
 ) -> dict[str, Any] | None:
     """
     Cancels trainer's upcoming pending/confirmed bookings with this client, removes CRM roster row.
+    Active «постоянный клиент» rules of the pair are closed the same way as an explicit removal
+    (auto-bookings cancelled, windows the cycle created dropped, one «постоянное время снято»
+    message per rule instead of a cancel push per auto-booking) so the cycle stops booking a
+    removed client. One transaction.
     Blocked while the client is active/trial in a group operated by this trainer.
     Returns None if the trainer has no CRM access to the client (same rule as card auth).
     """
@@ -4889,6 +4896,42 @@ async def detach_trainer_client_from_roster_miniapp(
             "потом можно убрать из списка."
         )
 
+    try:
+        return await _detach_trainer_client_from_roster_in_transaction(
+            session, trainer_id, client_id
+        )
+    except Exception:
+        await session.rollback()
+        raise
+
+
+async def _detach_trainer_client_from_roster_in_transaction(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> dict[str, Any]:
+    from src.application.recurring_use_cases import detach_recurring_rule_in_transaction
+
+    rr_rules = await session.execute(
+        text(
+            """
+            SELECT id FROM recurring_client_slots
+            WHERE trainer_id = :tid AND client_id = :cid AND status = 'active'
+            ORDER BY id
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    cancelled_upcoming = 0
+    recurring_removed = 0
+    for (rid,) in rr_rules.fetchall():
+        closed, removed = await detach_recurring_rule_in_transaction(
+            session, trainer_id, int(rid), notify_client=True
+        )
+        if closed:
+            recurring_removed += 1
+            cancelled_upcoming += int(removed)
+
     rb = await session.execute(
         text(
             """
@@ -4906,13 +4949,13 @@ async def detach_trainer_client_from_roster_miniapp(
         {"tid": trainer_id, "cid": client_id},
     )
     bid_rows = rb.fetchall()
-    cancelled_upcoming = 0
     for (bid,) in bid_rows:
         if await cancel_booking(
             session,
             int(bid),
             trainer_id,
             cancellation_source=BOOKING_CANCELLATION_SOURCE_ROSTER_DETACH,
+            do_commit=False,
         ):
             cancelled_upcoming += 1
 
@@ -4935,9 +4978,11 @@ async def detach_trainer_client_from_roster_miniapp(
         session, int(trainer_id), int(client_id)
     )
     await session.commit()
+    invalidate_slots_for_trainer(trainer_id)
     return {
         "cancelled_upcoming_bookings": cancelled_upcoming,
         "roster_removed": roster_removed,
+        "recurring_removed": recurring_removed,
     }
 
 
