@@ -1323,19 +1323,19 @@
    */
   var KK_BASE = '/static/webapp/';
   var KK_ASSET_VERSIONS = [
-    ['kto-kogo.css', '202611121'],
-    ['kto-kogo-model.js', '202611121'],
-    ['kto-kogo-screens-model.js', '202611121'],
-    ['kto-kogo.js', '202611121'],
-    ['kto-kogo-views.js', '202611121'],
-    ['kto-kogo-hub-cards.js', '202611121'],
-    ['kto-kogo-board.js', '202611121'],
-    ['kto-kogo-leagues.js', '202611121'],
-    ['kto-kogo-coin-model.js', '202611121'],
-    ['kto-kogo-coin.js', '202611121'],
-    ['kto-kogo-matches.js', '202611121'],
-    ['kto-kogo-league-identity.js', '202611121'],
-    ['kto-kogo-boot.js', '202611121'],
+    ['kto-kogo.css', '202611122'],
+    ['kto-kogo-model.js', '202611122'],
+    ['kto-kogo-screens-model.js', '202611122'],
+    ['kto-kogo.js', '202611122'],
+    ['kto-kogo-views.js', '202611122'],
+    ['kto-kogo-hub-cards.js', '202611122'],
+    ['kto-kogo-board.js', '202611122'],
+    ['kto-kogo-leagues.js', '202611122'],
+    ['kto-kogo-coin-model.js', '202611122'],
+    ['kto-kogo-coin.js', '202611122'],
+    ['kto-kogo-matches.js', '202611122'],
+    ['kto-kogo-league-identity.js', '202611122'],
+    ['kto-kogo-boot.js', '202611122'],
   ];
   var KK_ASSETS = KK_ASSET_VERSIONS.map(function (pair) {
     return { file: pair[0], base: KK_BASE, v: pair[1] };
