@@ -142,14 +142,14 @@ describe('разводка страницы и переход из «Я»', () =
   const html = fs.readFileSync(path.join(webapp, 'client-family.html'), 'utf8');
   const appPy = fs.readFileSync(path.join(ROOT, 'src/api/app.py'), 'utf8');
 
-  it('скрипты: переключатель и сезонный «назад» до страницы, шторка — раньше client-family.js, версия 202611121', () => {
+  it('скрипты: переключатель и сезонный «назад» до страницы, шторка — раньше client-family.js, общая версия ассетов', () => {
     const order = ['client-season-back.js', 'client-profile-switcher.js', 'client-sheet.js', 'client-name-sheet.js', 'client-family.js'];
     const idx = order.map((n) => html.indexOf(n));
     idx.forEach((i, k) => assert.ok(i >= 0, order[k]));
     assert.deepEqual(idx.slice().sort((a, b) => a - b), idx);
     assert.match(html, /<button[^>]*id="btnBack"[^>]*data-season-back/);
-    assert.match(html, /client-family\.css\?v=202611121/);
-    assert.match(html, /client-family\.js\?v=202611121/);
+    assert.match(html, /client-family\.css\?v=\d{9}/);
+    assert.match(html, /client-family\.js\?v=\d{9}/);
   });
 
   it('маршруты /webapp/client-family(.js|.css) есть в app.py', () => {
