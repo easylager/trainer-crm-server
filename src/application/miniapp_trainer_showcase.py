@@ -128,6 +128,28 @@ async def _primary_arena_ids(session: AsyncSession, trainer_ids: list[int]) -> d
     return {int(r[0]): (int(r[1]) if r[1] is not None else None) for r in rows.fetchall()}
 
 
+async def _profile_city_names(session: AsyncSession, trainer_ids: list[int]) -> dict[int, str | None]:
+    """Город профиля, как в ``/client/share-trainer``: ``trainer_profiles.city_id → cities.name``."""
+    if not trainer_ids:
+        return {}
+    rows = await session.execute(
+        text(
+            """
+            SELECT tp.trainer_id, c.name
+            FROM trainer_profiles tp
+            LEFT JOIN cities c ON c.id = tp.city_id
+            WHERE tp.trainer_id = ANY(:ids)
+            """
+        ),
+        {"ids": trainer_ids},
+    )
+    out: dict[int, str | None] = {}
+    for tid, name in rows.fetchall():
+        cleaned = str(name).strip() if name is not None else ""
+        out[int(tid)] = cleaned or None
+    return out
+
+
 def primary_rink_name(
     primary_arena_id: int | None, arena_ids: list[int], ice_arenas: dict[int, dict[str, Any]]
 ) -> str | None:
@@ -241,9 +263,10 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     )
 
     win_cities = await window_arena_cities(session, [w for ws in windows.values() for w in ws])
-    # Единая карточка (TASK-400): каток для плашки. Флаг выключен — ответ прежний, без нового поля.
+    # Единая карточка (TASK-400): каток и город. Флаг выключен — ответ прежний, без новых полей.
     unified_card = Settings().unified_trainer_card_enabled
     primary_ids = await _primary_arena_ids(session, ids) if unified_card else {}
+    city_names = await _profile_city_names(session, ids) if unified_card else {}
 
     out: list[dict[str, Any]] = []
     for t in items:
@@ -294,4 +317,5 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
             out[-1]["primary_arena_name"] = primary_rink_name(
                 primary_ids.get(tid), list(t.get("arena_ids") or []), arenas
             )
+            out[-1]["city_name"] = city_names.get(tid)
     return {"city_id": city_id, "items": out}

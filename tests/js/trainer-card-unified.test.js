@@ -144,9 +144,37 @@ describe('единая карточка: порядок и условия пок
     assert.doesNotMatch(m4, />Где проходят занятия</, 'онлайн — без катка и проката');
   });
 
+  it('строка героя — «направления · город», город только если есть', async () => {
+    const withCity = (await open('A', { trainer: { city_name: 'Минск' } })).app.innerHTML;
+    assert.match(withCity, /<p class="tc-hero-sub">С нуля · Уже катаюсь · Минск<\/p>/);
+    const nasty = (await open('A', { trainer: { city_name: '<img src=x onerror=alert(1)>' } })).app.innerHTML;
+    assert.match(nasty, /С нуля · Уже катаюсь · &lt;img src=x onerror=alert\(1\)&gt;/);
+    const noCity = (await open('A')).app.innerHTML;
+    assert.match(noCity, /<p class="tc-hero-sub">С нуля · Уже катаюсь<\/p>/);
+    const bare = (await open('B', { trainer: { city_name: 'Минск' } })).app.innerHTML;
+    assert.match(bare, /<span class="tc-cap">С клюшкой<\/span><h1>Дмитрий Петров<\/h1><p class="tc-hero-sub">Минск · «Чижовка-Арена»<\/p>/);
+    const bareNoCity = (await open('B')).app.innerHTML;
+    assert.match(bareNoCity, /<h1>Дмитрий Петров<\/h1><p class="tc-hero-sub">«Чижовка-Арена»<\/p>/);
+  });
+
+  it('«О занятии» есть только при тексте услуги или заметке тренера', async () => {
+    const empty = (await open('A')).app.innerHTML;
+    assert.doesNotMatch(empty, />О занятии</);
+    const svc = STATES.A.trainer.services[0];
+    const note = (await open('A', { trainer: { services: [{ ...svc, client_notice: 'Коньки свои' }] } })).app.innerHTML;
+    assert.match(note, /<h2 class="tc-h2"[^>]*>О занятии<\/h2>/);
+    assert.match(note, /Заметка тренера/);
+    assert.match(note, /Коньки свои/);
+    const words = (await open('A', { trainer: { services: [{ ...svc, description: 'Сначала учимся падать.' }] } })).app.innerHTML;
+    assert.match(words, />О занятии</);
+    assert.match(words, /Сначала учимся падать\./);
+    assert.doesNotMatch(words, /Заметка тренера/);
+  });
+
   it('M6 нет цены — «Цену уточните у тренера»; M7 несколько направлений — все вкладки', async () => {
     const m6 = (await open('M6')).app.innerHTML;
     assert.match(m6, /<b>Цену уточните у тренера<\/b>/);
+    assert.doesNotMatch(m6, /согласовани/);
     const m7 = (await open('M7')).app.innerHTML;
     assert.deepEqual([...m7.matchAll(/data-act="dir" data-key="[^"]+" aria-pressed="[^"]+">([^<]+)</g)].map((m) => m[1]), ['С нуля', 'Уже катаюсь', 'С клюшкой']);
   });

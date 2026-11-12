@@ -39,7 +39,9 @@ def _client() -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
-async def _showcase_item(db_session, monkeypatch, *, flag: bool, arena_name: str) -> dict:
+async def _showcase_item(
+    db_session, monkeypatch, *, flag: bool, arena_name: str, clear_city: bool = False
+) -> tuple[dict, str]:
     if flag:
         monkeypatch.setenv("UNIFIED_TRAINER_CARD_ENABLED", "true")
     else:
@@ -50,19 +52,34 @@ async def _showcase_item(db_session, monkeypatch, *, flag: bool, arena_name: str
         await db_session.execute(
             text("UPDATE trainers SET primary_arena_id = NULL WHERE id = :t"), {"t": tid}
         )
+        if clear_city:
+            await db_session.execute(
+                text("UPDATE trainer_profiles SET city_id = NULL WHERE trainer_id = :t"), {"t": tid}
+            )
         await db_session.commit()
         body = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
-    return next(t for t in body["items"] if t["id"] == tid)
+    return next(t for t in body["items"] if t["id"] == tid), place["city_name"]
 
 
 @pytest.mark.asyncio
 async def test_flag_off_showcase_has_no_new_field(app_use_test_db, db_session, monkeypatch) -> None:
-    item = await _showcase_item(db_session, monkeypatch, flag=False, arena_name='"Замок"')
+    item, _city = await _showcase_item(db_session, monkeypatch, flag=False, arena_name='"Замок"')
     assert "primary_arena_name" not in item
+    assert "city_name" not in item
 
 
 @pytest.mark.asyncio
 async def test_flag_on_showcase_names_primary_rink_publicly(app_use_test_db, db_session, monkeypatch) -> None:
-    item = await _showcase_item(db_session, monkeypatch, flag=True, arena_name='"Замок"')
+    item, city = await _showcase_item(db_session, monkeypatch, flag=True, arena_name='"Замок"')
     # Основного в БД нет — единственная площадка тренера; имя в публичном виде (ёлочки).
     assert item["primary_arena_name"] == "«Замок»"
+    # Город профиля, как в /client/share-trainer. В БД не пишем.
+    assert item["city_name"] == city
+
+
+@pytest.mark.asyncio
+async def test_flag_on_without_profile_city_leaves_city_empty(app_use_test_db, db_session, monkeypatch) -> None:
+    item, _city = await _showcase_item(
+        db_session, monkeypatch, flag=True, arena_name="Чижовка", clear_city=True
+    )
+    assert item["city_name"] is None

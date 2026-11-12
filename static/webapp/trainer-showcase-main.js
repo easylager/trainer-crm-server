@@ -691,9 +691,25 @@
     return parts.length ? '<p class="tc-hero-meta">' + parts.join(' · ') + '</p>' : '';
   }
 
+  /** «направления · город». Города нет — хвоста нет (SPEC §3.1, решение по эскалации). */
+  function tcDirLine(t) {
+    var titles = M.trainerDirections(t).map(function (d) { return d.title; }).filter(Boolean);
+    var city = String((t && t.city_name) || '').trim();
+    if (city) titles.push(city);
+    return titles.join(' · ');
+  }
+
+  /** Без фото под именем: «город · каток» (SPEC §6.2). Нет части — её нет в строке. */
+  function tcPlaceLine(t) {
+    var rink = t.primary_arena_name || ((t.arenas || []).length === 1 ? t.arenas[0].name : '');
+    var city = String((t && t.city_name) || '').trim();
+    return [city, rink].filter(Boolean).join(' · ');
+  }
+
   function tcHero(t) {
     var dirs = M.trainerDirections(t);
-    var dirLine = dirs.map(function (d) { return d.title; }).join(' · ');
+    var dirLine = tcDirLine(t);
+    var capLine = dirs.map(function (d) { return d.title; }).filter(Boolean).join(' · ');
     var backLabel = S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры';
     // «Назад» — как прежде: в Telegram нативная стрелка в шапке, своя кнопка только в браузере (TASK-403 не трогаем).
     var btns = backBtn(backLabel)
@@ -707,12 +723,12 @@
       return '<header class="tc-hero tc-hero--photo"><img src="' + esc(t.photo_url) + '" alt="">' + btns +
         '<div class="tc-hero-t"><h1>' + esc(t.name) + '</h1>' + (dirLine ? '<p class="tc-hero-sub">' + esc(dirLine) + '</p>' : '') + meta + '</div></header>';
     }
-    // Без фото — типографский герой (SPEC §6.2): капсула направления, крупное имя, каток. Инициалов и силуэта нет.
+    // Без фото — типографский герой (SPEC §6.2): капсула направления, крупное имя, «город · каток».
     var hockey = dirs.length > 0 && dirs.every(function (d) { return d.key === 's-klyushkoy'; });
-    var place = t.primary_arena_name || ((t.arenas || []).length === 1 ? t.arenas[0].name : '');
+    var place = tcPlaceLine(t);
     return '<header class="tc-hero tc-hero--noph' + (hockey ? ' tc-hero--hockey' : '') + '">' +
       '<svg class="tc-lines" viewBox="0 0 390 300" preserveAspectRatio="none" fill="none" aria-hidden="true"><path d="M-20 215 C 90 175, 200 225, 410 155" stroke-width="2"/><path d="M-20 247 C 110 207, 230 257, 410 192" stroke-width="2" opacity=".66"/></svg>' +
-      btns + '<div class="tc-hero-t">' + (dirLine ? '<span class="tc-cap">' + esc(dirLine) + '</span>' : '') +
+      btns + '<div class="tc-hero-t">' + (capLine ? '<span class="tc-cap">' + esc(capLine) + '</span>' : '') +
       '<h1>' + esc(t.name) + '</h1>' + (place ? '<p class="tc-hero-sub">' + esc(place) + '</p>' : '') + meta + '</div></header>';
   }
 
