@@ -158,7 +158,10 @@ from src.bot.handlers.trainer_handlers import (
     REQUEST_RESPOND_PREFIX,
 )
 from src.bot.schedule_notifications import REQUESTS_CALLBACK
-from src.bot.trainer_cancel_client_notify import send_cancel_notification_payload
+from src.bot.trainer_cancel_client_notify import (
+    process_recurring_removed_notices_batch,
+    send_cancel_notification_payload,
+)
 from src.infrastructure.db import async_session_factory
 from src.shared.catalog_entry import client_discovery_webapp_url
 from src.shared.config import (
@@ -1869,6 +1872,14 @@ async def run_cancel_notifier_loop(client_bot: Bot) -> None:
             break
         except Exception as e:
             logger.exception("Cancel notifier: %s", e)
+        try:
+            # «Постоянное время снято» — одно сообщение на снятое правило.
+            async with async_session_factory() as session:
+                await process_recurring_removed_notices_batch(client_bot, session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Recurring removed notifier: %s", e)
         try:
             # Ответы на открытки «Пойдёшь со мной на каток?», не ушедшие сразу.
             from src.application.zovi_answer_push import process_invite_answer_pushes

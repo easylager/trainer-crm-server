@@ -7638,7 +7638,8 @@ async def _rollback_recurring_unless_full_materialization(
     if int(materialized) > 0:
         return
     hw = max(1, int(horizon_weeks))
-    await cancel_recurring_client_slot(session, trainer_id, recurring_id)
+    # The client was never told about this rule — no «постоянное время снято».
+    await cancel_recurring_client_slot(session, trainer_id, recurring_id, notify_client=False)
     raise HTTPException(
         status_code=409,
         detail=(

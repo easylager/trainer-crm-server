@@ -14,11 +14,18 @@ from src.application.booking_use_cases import (
     get_first_service_id_for_trainer,
     is_slot_start_in_past_local,
 )
+from src.application.client_profile_use_cases import (
+    sql_client_booked_for_name,
+    sql_client_notify_telegram_id,
+)
 from src.application.trainer_schedule_use_cases import (
+    delete_emptied_recurring_created_slot,
     ensure_individual_slot_for_quick_book,
+    lock_trainer_slot_writes,
     next_week_monday,
     this_week_monday,
 )
+from src.shared.ttl_cache import invalidate_slots_for_trainer
 
 RECURRING_STATUS_ACTIVE = "active"
 RECURRING_STATUS_PAUSED = "paused"
@@ -310,24 +317,49 @@ async def create_recurring_client_slot(
     return pk
 
 
-async def discard_upcoming_bookings_for_recurring_rule(
+async def _detach_recurring_auto_booking(
     session: AsyncSession,
     trainer_id: int,
-    recurring_id: int,
-) -> int:
+    booking_id: int,
+    slot_id: int,
+) -> bool:
     """
-    Drop not-yet-started bookings tied to this rule: cancel without client notification and without
-    week-skip rows (the rule itself is being removed or replaced).
+    Cancel one auto-booking as ``recurring_detach`` (silent, no week skip) and drop its window when
+    the cycle created it. No commit: rule detach / horizon prune commit once for the whole batch.
     """
     from src.application.booking_use_cases import (
         BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
         cancel_booking,
     )
 
+    if not await cancel_booking(
+        session,
+        booking_id,
+        trainer_id,
+        notify_client=False,
+        record_recurring_week_skip=False,
+        cancellation_source=BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
+        do_commit=False,
+    ):
+        return False
+    await delete_emptied_recurring_created_slot(session, trainer_id, slot_id)
+    return True
+
+
+async def discard_upcoming_bookings_for_recurring_rule(
+    session: AsyncSession,
+    trainer_id: int,
+    recurring_id: int,
+) -> int:
+    """
+    Drop not-yet-started bookings tied to this rule: cancel without per-booking client notification
+    and without week-skip rows (the rule itself is being removed), and delete windows the cycle
+    created for them. Caller owns the transaction (does not commit).
+    """
     r = await session.execute(
         text(
             """
-            SELECT b.id, s.slot_date, s.start_time
+            SELECT b.id, s.id, s.slot_date, s.start_time
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.recurring_client_slot_id = :rid
@@ -339,55 +371,166 @@ async def discard_upcoming_bookings_for_recurring_rule(
     )
     removed = 0
     for row in r.fetchall():
-        bid, sd, st0 = int(row[0]), row[1], row[2]
+        bid, sid, sd, st0 = int(row[0]), int(row[1]), row[2], row[3]
         if is_slot_start_in_past_local(sd, st0):
             continue
-        if await cancel_booking(
-            session,
-            bid,
-            trainer_id,
-            notify_client=False,
-            record_recurring_week_skip=False,
-            cancellation_source=BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
-        ):
+        if await _detach_recurring_auto_booking(session, trainer_id, bid, sid):
             removed += 1
     return removed
+
+
+async def detach_recurring_rule_in_transaction(
+    session: AsyncSession,
+    trainer_id: int,
+    recurring_id: int,
+    *,
+    notify_client: bool,
+) -> tuple[bool, int]:
+    """
+    Close an active rule inside the caller's transaction: forward auto-bookings cancelled, windows
+    the cycle created removed, rule ``cancelled``. ``notify_client`` queues one «постоянное время
+    снято» message on the rule row (skipped for sandbox clients and clients without Telegram).
+    Does not commit. Returns (rule_closed, removed_booking_count).
+    """
+    # Slot-writer lock first (same order as the materialization path), then the rule row.
+    await lock_trainer_slot_writes(session, trainer_id)
+    r0 = await session.execute(
+        text(
+            """
+            SELECT 1 FROM recurring_client_slots
+            WHERE id = :id AND trainer_id = :tid AND status = 'active'
+            FOR NO KEY UPDATE
+            """
+        ),
+        {"id": recurring_id, "tid": trainer_id},
+    )
+    if r0.fetchone() is None:
+        return False, 0
+    removed = await discard_upcoming_bookings_for_recurring_rule(session, trainer_id, recurring_id)
+    await session.execute(
+        text(
+            """
+            UPDATE recurring_client_slots r
+            SET status = :status,
+                client_notice_queued_at = CASE
+                    WHEN :notify AND EXISTS (
+                        SELECT 1 FROM clients c
+                        WHERE c.id = r.client_id
+                          AND NOT COALESCE(c.is_sandbox, false)
+                          AND """
+            + sql_client_notify_telegram_id("c")
+            + """ IS NOT NULL
+                    ) THEN CURRENT_TIMESTAMP
+                    ELSE NULL
+                END
+            WHERE r.id = :id AND r.trainer_id = :tid AND r.status = 'active'
+            """
+        ),
+        {
+            "id": recurring_id,
+            "tid": trainer_id,
+            "status": RECURRING_STATUS_CANCELLED,
+            "notify": bool(notify_client),
+        },
+    )
+    return True, removed
 
 
 async def cancel_recurring_client_slot(
     session: AsyncSession,
     trainer_id: int,
     recurring_id: int,
+    *,
+    notify_client: bool = True,
 ) -> tuple[bool, int]:
     """
-    Cancel recurring rule and remove forward auto-bookings that have not started yet (silent for client).
+    Cancel recurring rule and remove forward auto-bookings that have not started yet — one
+    transaction. The client gets one «постоянное время снято» message (queued) instead of a push per
+    booking; pass ``notify_client=False`` for rollbacks of a rule the client never heard about.
     Returns (updated_rule_ok, removed_booking_count).
     """
-    r0 = await session.execute(
-        text("""
-            SELECT 1 FROM recurring_client_slots
-            WHERE id = :id AND trainer_id = :tid AND status = 'active'
-            LIMIT 1
-        """),
-        {"id": recurring_id, "tid": trainer_id},
-    )
-    if r0.fetchone() is None:
+    try:
+        ok, removed = await detach_recurring_rule_in_transaction(
+            session, trainer_id, recurring_id, notify_client=notify_client
+        )
+    except Exception:
+        await session.rollback()
+        raise
+    if not ok:
+        await session.rollback()
         return False, 0
-    removed = await discard_upcoming_bookings_for_recurring_rule(session, trainer_id, recurring_id)
-    r = await session.execute(
-        text("""
-            UPDATE recurring_client_slots
-            SET status = :status
-            WHERE id = :id AND trainer_id = :tid AND status = 'active'
-            RETURNING id
-        """),
-        {"id": recurring_id, "tid": trainer_id, "status": RECURRING_STATUS_CANCELLED},
-    )
-    if r.fetchone() is None:
-        await session.commit()
-        return False, removed
     await session.commit()
+    invalidate_slots_for_trainer(trainer_id)
     return True, removed
+
+
+async def list_pending_recurring_removed_notices(
+    session: AsyncSession, *, limit: int = 50
+) -> list[dict[str, Any]]:
+    """Queued «постоянное время снято» messages (one per closed rule), oldest first."""
+    r = await session.execute(
+        text(
+            """
+            SELECT r.id, r.day_of_week, r.start_time, r.end_time,
+                   """
+            + sql_client_notify_telegram_id("c")
+            + """ AS client_tid,
+                   """
+            + sql_client_booked_for_name("c")
+            + """ AS booked_for_name,
+                   TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))) AS trainer_name
+            FROM recurring_client_slots r
+            JOIN clients c ON c.id = r.client_id
+            LEFT JOIN trainer_profiles p ON p.trainer_id = r.trainer_id
+            WHERE r.client_notice_queued_at IS NOT NULL
+              AND r.client_notice_sent_at IS NULL
+            ORDER BY r.client_notice_queued_at, r.id
+            LIMIT :lim
+            """
+        ),
+        {"lim": max(1, min(int(limit), 200))},
+    )
+    out: list[dict[str, Any]] = []
+    for row in r.fetchall():
+        out.append(
+            {
+                "id": int(row[0]),
+                "day_of_week": int(row[1]),
+                "start_time": row[2],
+                "end_time": row[3],
+                "client_telegram_id": int(row[4]) if row[4] is not None else None,
+                "booked_for_name": (row[5] or "").strip() or None,
+                "trainer_name": (row[6] or "").strip() or "Тренер",
+            }
+        )
+    return out
+
+
+async def claim_recurring_removed_notice(session: AsyncSession, recurring_id: int) -> bool:
+    """Reserve the send so parallel drains cannot both deliver it. Commits."""
+    r = await session.execute(
+        text(
+            """
+            UPDATE recurring_client_slots
+            SET client_notice_sent_at = CURRENT_TIMESTAMP
+            WHERE id = :id AND client_notice_queued_at IS NOT NULL AND client_notice_sent_at IS NULL
+            RETURNING id
+            """
+        ),
+        {"id": int(recurring_id)},
+    )
+    claimed = r.fetchone() is not None
+    await session.commit()
+    return claimed
+
+
+async def release_recurring_removed_notice_claim(session: AsyncSession, recurring_id: int) -> None:
+    """Undo the claim after a transient Telegram failure so the next drain retries."""
+    await session.execute(
+        text("UPDATE recurring_client_slots SET client_notice_sent_at = NULL WHERE id = :id"),
+        {"id": int(recurring_id)},
+    )
+    await session.commit()
 
 
 async def get_active_recurring_for_booking(
@@ -734,6 +877,7 @@ async def materialize_recurring_rule_for_week(
                 duration_minutes,
                 allow_off_grid_interval=True,
                 arena_id=None,
+                created_for_recurring_client_slot_id=rid,
             )
         except ValueError:
             # Overlap, group slot, or invalid interval — cannot auto-place.
@@ -839,13 +983,9 @@ async def prune_recurring_bookings_beyond_horizon(
     rolling horizon window (slot_date >= this_monday + horizon_weeks).
 
     Past sessions and weeks inside the window are kept. No week-skip rows (these were
-    over-materialized, not trainer «skip this week»).
+    over-materialized, not trainer «skip this week»). Windows the cycle created for the pruned
+    bookings are deleted. One commit for the batch.
     """
-    from src.application.booking_use_cases import (
-        BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
-        cancel_booking,
-    )
-
     h = max(1, min(52, int(horizon_weeks)))
     cutoff = this_week_monday() + timedelta(days=7 * h)
     wanted: set[int] | None = None
@@ -857,7 +997,7 @@ async def prune_recurring_bookings_beyond_horizon(
     r = await session.execute(
         text(
             """
-            SELECT b.id, s.slot_date, s.start_time, b.recurring_client_slot_id
+            SELECT b.id, s.slot_date, s.start_time, b.recurring_client_slot_id, s.id
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN recurring_client_slots r ON r.id = b.recurring_client_slot_id
@@ -871,22 +1011,27 @@ async def prune_recurring_bookings_beyond_horizon(
         ),
         {"tid": trainer_id, "cutoff": cutoff},
     )
-    removed = 0
+    todo: list[tuple[int, int]] = []
     for row in r.fetchall():
-        bid, sd, st0, rid = int(row[0]), row[1], row[2], int(row[3])
+        bid, sd, st0, rid, sid = int(row[0]), row[1], row[2], int(row[3]), int(row[4])
         if wanted is not None and rid not in wanted:
             continue
         if is_slot_start_in_past_local(sd, st0):
             continue
-        if await cancel_booking(
-            session,
-            bid,
-            trainer_id,
-            notify_client=False,
-            record_recurring_week_skip=False,
-            cancellation_source=BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
-        ):
-            removed += 1
+        todo.append((bid, sid))
+    if not todo:
+        return 0
+    removed = 0
+    try:
+        await lock_trainer_slot_writes(session, trainer_id)
+        for bid, sid in todo:
+            if await _detach_recurring_auto_booking(session, trainer_id, bid, sid):
+                removed += 1
+    except Exception:
+        await session.rollback()
+        raise
+    await session.commit()
+    invalidate_slots_for_trainer(trainer_id)
     return removed
 
 

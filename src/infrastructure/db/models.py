@@ -1692,6 +1692,11 @@ class Slot(Base):
     training_group_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("training_groups.id", ondelete="SET NULL"), nullable=True, index=True
     )  # Set when slot is generated from a cohort (TrainingGroup).
+    # Set only when the recurring auto-booking cycle INSERTed this window itself (not when it
+    # reused a trainer's window): detaching the rule may then drop the emptied slot.
+    created_for_recurring_client_slot_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("recurring_client_slots.id", ondelete="SET NULL"), nullable=True
+    )
 
     trainer: Mapped["Trainer"] = relationship(back_populates="slots", lazy="raise")
 
