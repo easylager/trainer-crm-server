@@ -1425,41 +1425,67 @@
       .catch(function () {});
   }
 
+  /*
+   * TASK-395: подгрузка ассетов соседних вкладок через fetch, а не <link rel="prefetch">.
+   * WebKit (iPhone, Telegram на iOS) rel=prefetch не выполняет вовсе, поэтому на iPhone вкладки
+   * раньше не подгружались совсем. fetch с чтением тела кладёт ответ в HTTP-кэш; ассеты с ?v=
+   * отдаются public, max-age=31536000, immutable — страница потом берёт их из кэша.
+   * Один и тот же href за жизнь страницы запрашивается один раз; ошибки глотаются.
+   */
+  var assetFetchSeen = {};
+
+  function fetchAsset(href) {
+    if (!href || assetFetchSeen[href] || typeof global.fetch !== 'function') return Promise.resolve();
+    assetFetchSeen[href] = true;
+    var forget = function () {
+      delete assetFetchSeen[href];
+    };
+    try {
+      return global
+        .fetch(href, { credentials: 'same-origin', priority: 'low' })
+        .then(function (r) {
+          if (!r || !r.ok) {
+            forget();
+            return null;
+          }
+          /* Тело читаем до конца: без этого ответ может не лечь в кэш целиком. */
+          return typeof r.arrayBuffer === 'function' ? r.arrayBuffer() : null;
+        })
+        .then(
+          function () {},
+          function () {
+            forget();
+          }
+        );
+    } catch (e) {
+      forget();
+      return Promise.resolve();
+    }
+  }
+
+  function fetchAssets(hrefs) {
+    return Promise.all(hrefs.map(fetchAsset)).then(function () {});
+  }
+
   /** Prefetch catalog bundles while user reads the hub — cuts cold-start on tab switch. */
   function prefetchIceAssets() {
     var base = webappBasePath();
-    var assets = [
-      { href: assetUrl(base, 'ice-tab.js'), as: 'script' },
-      { href: assetUrl(base, 'ice-tab-model.js'), as: 'script' },
-      { href: assetUrl(base, 'ice-map-model.js'), as: 'script' },
-      { href: assetUrl(base, 'ice-map.js'), as: 'script' },
-      { href: assetUrl(base, 'ice-tab.css'), as: 'style' },
-    ];
-    assets.forEach(function (spec) {
-      if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
-      var link = document.createElement('link');
-      link.rel = 'prefetch';
-      link.href = spec.href;
-      if (spec.as) link.as = spec.as;
-      document.head.appendChild(link);
-    });
+    return fetchAssets([
+      assetUrl(base, 'ice-tab.js'),
+      assetUrl(base, 'ice-tab-model.js'),
+      assetUrl(base, 'ice-map-model.js'),
+      assetUrl(base, 'ice-map.js'),
+      assetUrl(base, 'ice-tab.css'),
+    ]);
   }
 
   function prefetchCatalogAssets() {
     var base = webappBasePath();
-    var assets = [
-      { href: assetUrl(base, 'catalog-main.js'), as: 'script' },
-      { href: assetUrl(base, 'mini-app-catalog.css'), as: 'style' },
-      { href: assetUrl(base, 'mini-app-phone-field.js'), as: 'script' },
-    ];
-    assets.forEach(function (spec) {
-      if (document.querySelector('link[rel="prefetch"][href="' + spec.href + '"]')) return;
-      var link = document.createElement('link');
-      link.rel = 'prefetch';
-      link.href = spec.href;
-      if (spec.as) link.as = spec.as;
-      document.head.appendChild(link);
-    });
+    return fetchAssets([
+      assetUrl(base, 'catalog-main.js'),
+      assetUrl(base, 'mini-app-catalog.css'),
+      assetUrl(base, 'mini-app-phone-field.js'),
+    ]);
   }
 
   function writeBookingsWarmCache(payload) {
@@ -1528,31 +1554,19 @@
   }
 
   function prefetchBookingsAssets() {
-    var base = webappBasePath();
-    var href = assetUrl(base, 'mini-app-client-bookings.css');
-    if (document.querySelector('link[rel="prefetch"][href="' + href + '"]')) return;
-    var link = document.createElement('link');
-    link.rel = 'prefetch';
-    link.href = href;
-    link.as = 'style';
-    document.head.appendChild(link);
+    return fetchAssets([assetUrl(webappBasePath(), 'mini-app-client-bookings.css')]);
   }
 
   /* TASK-369: ассеты соседних вкладок режима season_ui — на pointerdown, как у «Поиска». */
   function prefetchFiles(files) {
     var base = webappBasePath();
-    files.forEach(function (entry) {
-      /* Строка — файл рядом со страницей (/webapp/ или /static/webapp/) с версией оболочки;
-         {file, base, v} — файл с другой базой/версией (игра грузится из /static/webapp/ со своими ?v=). */
-      var file = typeof entry === 'string' ? entry : entry.file;
-      var href = typeof entry === 'string' ? assetUrl(base, file) : assetUrl(entry.base, file, entry.v);
-      if (document.querySelector('link[rel="prefetch"][href="' + href + '"]')) return;
-      var link = document.createElement('link');
-      link.rel = 'prefetch';
-      link.href = href;
-      link.as = /\.css$/.test(file) ? 'style' : 'script';
-      document.head.appendChild(link);
-    });
+    return fetchAssets(
+      files.map(function (entry) {
+        /* Строка — файл рядом со страницей (/webapp/ или /static/webapp/) с версией оболочки;
+           {file, base, v} — файл с другой базой/версией (игра грузится из /static/webapp/ со своими ?v=). */
+        return typeof entry === 'string' ? assetUrl(base, entry) : assetUrl(entry.base, entry.file, entry.v);
+      })
+    );
   }
 
   /*
@@ -1576,16 +1590,82 @@
     ['kto-kogo-league-identity.js', '202611122'],
     ['kto-kogo-boot.js', '202611122'],
   ];
+  /* Сервер подставляет в html всех страниц одну метку ?v= (asset_stamp.py), а не литерал из kto-kogo.html.
+     Поэтому берём метку самой оболочки (ASSET_V — из её же <script src>); литерал из списка — запасной,
+     когда версии у скрипта нет. Иначе адрес предзагрузки не совпадёт со страницей игры и кэш не сработает. */
   var KK_ASSETS = KK_ASSET_VERSIONS.map(function (pair) {
-    return { file: pair[0], base: KK_BASE, v: pair[1] };
+    return { file: pair[0], base: KK_BASE, v: ASSET_V || pair[1] };
   });
 
+  /*
+   * Шрифты (Dela Gothic, Golos) берём из glide-public-fonts.css, который сервер отдаёт с подставленной
+   * версией шрифтов (app.py): адрес и ?v= совпадут с теми, что запросит страница. Часть начертаний уже
+   * в кэше с Главной (там preload), остальные — 500 и т. п. — страница игры иначе качает в момент открытия.
+   * CSS уже лежит в кэше страницы, повторный запрос дешёвый; один раз за жизнь страницы.
+   */
+  var FONT_URL_RE = /url\(\s*['"]?([^'")\s]*\.woff2\?v=[^'")\s]*)/g;
+  var fontsPrefetch = null;
+
+  function prefetchFonts() {
+    if (fontsPrefetch) return fontsPrefetch;
+    var sheet = document.querySelector && document.querySelector('link[href*="glide-public-fonts.css"]');
+    var href = sheet && (sheet.getAttribute ? sheet.getAttribute('href') : sheet.href);
+    if (!href || typeof global.fetch !== 'function') return Promise.resolve();
+    fontsPrefetch = global
+      .fetch(href, { credentials: 'same-origin', priority: 'low' })
+      .then(function (r) {
+        return r && r.ok ? r.text() : '';
+      })
+      .then(function (css) {
+        var urls = [];
+        var m;
+        FONT_URL_RE.lastIndex = 0;
+        while ((m = FONT_URL_RE.exec(css || ''))) urls.push(m[1]);
+        return fetchAssets(urls);
+      })
+      .catch(function () {});
+    return fontsPrefetch;
+  }
+
+  /*
+   * Файлы, которые страница вкладки берёт с адресами, отличными от Главной (/static/webapp/ против /webapp/)
+   * или которых на Главной нет. Только в фоне: на касании вкладки они конкурировали бы с самой страницей.
+   * Файлы с no-cache (темы, telegram-chrome) не перечислены: кэш их всё равно не хранит.
+   */
+  var KK_EXTRA_FILES = ['mini-app-client-shell.css', 'mini-app-client-shell.js', 'write-access.js'].map(function (f) {
+    return { file: f, base: KK_BASE, v: ASSET_V || KK_ASSET_VERSIONS[0][1] };
+  });
+  var ME_EXTRA_FILES = [
+    { file: 'client-sheet.css', base: KK_BASE },
+    { file: 'client-sheet.js', base: KK_BASE },
+    { file: 'client-club-sheet.js', base: KK_BASE },
+    { file: 'client-name-sheet.js', base: KK_BASE },
+    { file: 'client-rink-sheet.js', base: KK_BASE },
+    { file: 'minsk-time.js' },
+    { file: 'opening-hours.js' },
+    { file: 'glide-copy.js' },
+    { file: 'public-display-model.js' },
+  ];
+
+  function prefetchKkExtras() {
+    return Promise.all([prefetchFiles(KK_EXTRA_FILES), prefetchFonts()]).then(function () {});
+  }
+
+  function prefetchMeExtras() {
+    var base = webappBasePath();
+    return fetchAssets(
+      ME_EXTRA_FILES.map(function (e) {
+        return assetUrl(e.base || base, e.file);
+      })
+    );
+  }
+
   function prefetchKkAssets() {
-    prefetchFiles(KK_ASSETS);
+    return prefetchFiles(KK_ASSETS);
   }
 
   function prefetchMeAssets() {
-    prefetchFiles(['client-me.css', 'client-me.js']);
+    return prefetchFiles(['client-me.css', 'client-me.js']);
   }
 
   /*
@@ -1622,37 +1702,94 @@
     return meWarmInFlight;
   }
 
-  /** Prefetch book page shell — hub slot taps open book?slot_id= directly. */
+  /*
+   * Страница записи: раньше сюда же входили сама страница `book` и mini-app-client-nav.css без ?v=.
+   * Обе отдаются no-cache/no-store: через fetch в кэш они не ложатся (это ~100 КБ впустую на каждую
+   * загрузку страницы, теперь и на iPhone), а страница берёт nav.css с версией — адрес не совпадал.
+   * Остался только кэшируемый файл с ?v=.
+   */
   function prefetchBookAssets() {
-    var base = webappBasePath();
-    var assets = [
-      base + 'book',
-      base + 'mini-app-client-nav.css',
-      assetUrl(base, 'mini-app-phone-field.js'),
-    ];
-    assets.forEach(function (href) {
-      if (document.querySelector('link[rel="prefetch"][href="' + href + '"]')) return;
-      var link = document.createElement('link');
-      link.rel = 'prefetch';
-      link.href = href;
-      document.head.appendChild(link);
-    });
+    return fetchAssets([assetUrl(webappBasePath(), 'mini-app-phone-field.js')]);
   }
 
-  function scheduleCatalogNavigationPrefetch() {
-    var run = function () {
-      prefetchIceAssets();
-      prefetchCatalogAssets();
-      prefetchCatalogWarmCache();
-      prefetchBookingsAssets();
-      prefetchBookingsWarmCache();
-      prefetchBookAssets();
+  /* Экономия трафика и медленная сеть: фоном ничего не качаем (касание вкладки по-прежнему подгружает её). */
+  function backgroundPrefetchAllowed() {
+    var nav = global.navigator;
+    var c = nav && (nav.connection || nav.mozConnection || nav.webkitConnection);
+    if (!c) return true;
+    if (c.saveData) return false;
+    return !/(^|-)2g$/.test(String(c.effectiveType || ''));
+  }
+
+  /*
+   * Шаги фоновой подгрузки: по одной вкладке за раз. Вкладка «Главная» и текущая страница не качаются.
+   * Тёплые кэши данных — те же, что раньше (каталог, записи); для «Я» и «Кто кого» запросов данных нет.
+   */
+  function backgroundPrefetchSteps() {
+    var steps = [];
+    var step = function (fn) {
+      steps.push(function () {
+        return Promise.all(fn()).then(function () {});
+      });
     };
-    if (typeof global.requestIdleCallback === 'function') {
-      global.requestIdleCallback(run, { timeout: 2000 });
+    var catalogStep = function () {
+      return [prefetchIceAssets(), prefetchCatalogAssets(), prefetchCatalogWarmCache()];
+    };
+    var bookingsStep = function () {
+      return [prefetchBookingsAssets(), prefetchBookingsWarmCache()];
+    };
+    if (uiFlags.season_ui) {
+      var active = resolveActiveTab();
+      seasonTabs().forEach(function (tab) {
+        if (tab.id === active) return;
+        if (tab.id === 'catalog') step(catalogStep);
+        else if (tab.id === 'bookings') step(bookingsStep);
+        else if (tab.id === 'kk') step(function () { return [prefetchKkAssets(), prefetchKkExtras()]; });
+        else if (tab.id === 'me') step(function () { return [prefetchMeAssets(), prefetchMeExtras()]; });
+      });
     } else {
-      setTimeout(run, 600);
+      step(catalogStep);
+      step(bookingsStep);
     }
+    step(function () { return [prefetchBookAssets()]; });
+    return steps;
+  }
+
+  var backgroundPrefetchStarted = false;
+
+  function scheduleCatalogNavigationPrefetch() {
+    if (backgroundPrefetchStarted || !backgroundPrefetchAllowed()) return;
+    backgroundPrefetchStarted = true;
+    var whenIdle = function (fn) {
+      if (typeof global.requestIdleCallback === 'function') {
+        global.requestIdleCallback(fn, { timeout: 3000 });
+      } else {
+        global.setTimeout(fn, 600);
+      }
+    };
+    var run = function () {
+      var steps = backgroundPrefetchSteps();
+      var i = 0;
+      var next = function () {
+        if (i >= steps.length || !backgroundPrefetchAllowed()) return;
+        var step = steps[i++];
+        var done = function () {
+          whenIdle(next);
+        };
+        try {
+          step().then(done, done);
+        } catch (e) {
+          done();
+        }
+      };
+      next();
+    };
+    /* Только после первого экрана: страница дозагрузилась, дальше — в простое. */
+    var start = function () {
+      whenIdle(run);
+    };
+    if (document.readyState === 'complete') start();
+    else global.addEventListener('load', start, { once: true });
   }
 
   function escHtml(s) {
