@@ -110,6 +110,7 @@ from src.application.demand_signals_use_cases import record_profile_view_commit
 from src.application.trainer_use_cases import add_trainer_rating, get_trainer
 from src.application.trainer_invite_links import SHARE_REF_PREFIX, TRAINER_PREVIEW_PREFIX, parse_ref_slot
 from src.shared.catalog_visibility import trainer_is_listed
+from src.application.place_links import trainer_webapp_url
 from src.shared.catalog_entry import client_discovery_webapp_url
 from src.application.support_use_cases import create_support_message
 from src.bot.rink_query import RINK_QUERY_MAX_LEN, is_rink_query, known_city_names
@@ -138,7 +139,6 @@ from src.bot.handlers.relay_handlers import (
 )
 from src.bot import messages as msg
 from src.shared.config import Settings
-from src.shared.catalog_entry import client_discovery_webapp_url
 from src.shared.mini_app_https import mini_app_https_base
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
 from src.shared.audit import ACTOR_CLIENT_BOT, audit_log
@@ -301,16 +301,15 @@ def _trainer_catalog_card_rows(
     label = (button_text or "").strip() or msg.CLIENT_BUTTON_BOOK
     b = (base or "").rstrip("/")
     if b.startswith("https://"):
-        q = f"trainer_id={int(trainer_id)}"
-        if city_id is not None:
-            q += f"&city_id={int(city_id)}"
-        if service_id is not None:
-            q += f"&service_id={int(service_id)}"
-        if arena_id is not None:
-            q += f"&arena_id={int(arena_id)}"
-        if via:
-            q += f"&via={via}"
-        url = f"{b}/webapp/catalog?{q}"
+        url = trainer_webapp_url(
+            b,
+            trainer_id,
+            city_id=city_id,
+            service_id=service_id,
+            arena_id=arena_id,
+            via=via,
+            legacy="catalog",
+        )
         return [[InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))]]
     return [[InlineKeyboardButton(text=label, callback_data=f"{CATALOG_TRAINER_PREFIX}{trainer_id}")]]
 
@@ -326,12 +325,7 @@ def _trainer_book_rows(
     label = (button_text or "").strip() or msg.CLIENT_BUTTON_BOOK
     b = (base or "").rstrip("/")
     if b.startswith("https://"):
-        url = f"{b}/webapp/book?trainer_id={trainer_id}&v=20260420d"
-        if service_id is not None:
-            url += f"&service_id={int(service_id)}"
-        else:
-            # Deep links without explicit service must start from service picker, not stale client session.
-            url += "&force_service_choice=1"
+        url = trainer_webapp_url(b, trainer_id, service_id=service_id, legacy="book")
         return [[InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))]]
     return [[InlineKeyboardButton(text=label, callback_data="book")]]
 
@@ -373,8 +367,13 @@ def _trainer_slot_rows(
     b = (base or "").rstrip("/")
     if not slot_id or not b.startswith("https://") or not trainer_is_listed(trainer):
         return []
-    url = f"{b}/webapp/trainers?trainer_id={int(trainer_id)}&slot_id={int(slot_id)}&via={via}"
-    return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_OPEN_CHOSEN_SLOT, web_app=WebAppInfo(url=url))]]
+    url = trainer_webapp_url(b, trainer_id, slot_id=slot_id, via=via, legacy="slot")
+    label = (
+        msg.CLIENT_BUTTON_OPEN_CHOSEN_TIME
+        if Settings().unified_trainer_card_enabled
+        else msg.CLIENT_BUTTON_OPEN_CHOSEN_SLOT
+    )
+    return [[InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))]]
 
 
 def _trainer_invite_welcome_markup(
@@ -1265,6 +1264,11 @@ async def cmd_start(message: Message) -> None:
             async with async_session_factory() as db_session:
                 await set_pending_referral(telegram_id, trainer_id_ref, db_session)
             name = html.escape(_trainer_name(trainer) if trainer else "тренер")
+            invite_text = (
+                msg.unified_invite_new_client_html(name)
+                if Settings().unified_trainer_card_enabled
+                else msg.CLIENT_UNIVERSAL_INVITE_UNKNOWN.format(name=name)
+            )
             register_url = f"{base}/webapp/client-register?trainer_id={trainer_id_ref}&via={SOURCE_LINK}"
             if _trainer_slot_rows(base, trainer_id_ref, slot_id_ref, via=SOURCE_LINK, trainer=trainer):
                 # После анкеты форма откроет витрину сразу на выбранном времени.
@@ -1278,7 +1282,7 @@ async def cmd_start(message: Message) -> None:
                 ]]
             )
             await message.answer(
-                msg.CLIENT_UNIVERSAL_INVITE_UNKNOWN.format(name=name),
+                invite_text,
                 parse_mode=ParseMode.HTML,
                 reply_markup=keyboard,
             )
@@ -1296,7 +1300,15 @@ async def cmd_start(message: Message) -> None:
                 telegram_id, trainer_id_ref, db_session, client_id=client_id
             )
             bound_profile = await default_profile_for_account(db_session, telegram_id)
-        if bound_profile and bound_profile["profile_count"] > 1 and bound_profile["first_name"]:
+        card_for_listed = Settings().unified_trainer_card_enabled and trainer_is_listed(trainer)
+        if card_for_listed:
+            if bound_profile and bound_profile["profile_count"] > 1 and bound_profile["first_name"]:
+                registered_text = msg.unified_invite_registered_html(
+                    name, profile_html=html.escape(bound_profile["first_name"])
+                )
+            else:
+                registered_text = msg.unified_invite_registered_html(name)
+        elif bound_profile and bound_profile["profile_count"] > 1 and bound_profile["first_name"]:
             registered_text = msg.CLIENT_UNIVERSAL_INVITE_REGISTERED_FOR.format(
                 name=name, profile=html.escape(bound_profile["first_name"])
             )
@@ -1304,7 +1316,16 @@ async def cmd_start(message: Message) -> None:
             registered_text = msg.CLIENT_UNIVERSAL_INVITE_REGISTERED.format(name=name)
         if base_is_https:
             # ``via=link`` — источник записи «ссылка тренера» (TASK-351, booking-source.js).
-            home_url = f"{base}/webapp/client-home?via={SOURCE_LINK}"
+            # Тренер не в каталоге: витрина чужому клиенту отвечает 404, поэтому кнопка
+            # остаётся на хаб, как раньше (см. site_trainer_page.app_url).
+            if card_for_listed:
+                home_url = trainer_webapp_url(
+                    base, trainer_id_ref, via=SOURCE_LINK, legacy="catalog"
+                )
+                home_label = msg.unified_open_card_button(_trainer_name(trainer))
+            else:
+                home_url = f"{base}/webapp/client-home?via={SOURCE_LINK}"
+                home_label = msg.CLIENT_BUTTON_TRAINER_AND_BOOKING
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=_trainer_slot_rows(
                     base, trainer_id_ref, slot_id_ref, via=SOURCE_LINK, trainer=trainer
@@ -1312,7 +1333,7 @@ async def cmd_start(message: Message) -> None:
                 + [
                     [
                         InlineKeyboardButton(
-                            text=msg.CLIENT_BUTTON_TRAINER_AND_BOOKING,
+                            text=home_label,
                             web_app=WebAppInfo(url=home_url),
                         )
                     ],
@@ -1706,14 +1727,14 @@ async def cmd_book(message: Message) -> None:
         city_id = (session_data or {}).get("city_id") if session_data else None
         service_id = (session_data or {}).get("selected_service_id") if session_data else None
         arena_id = (session_data or {}).get("selected_arena_id") if session_data else None
-        q = f"trainer_id={int(trainer_id)}"
-        if city_id is not None:
-            q += f"&city_id={int(city_id)}"
-        if service_id is not None:
-            q += f"&service_id={int(service_id)}"
-        if arena_id is not None:
-            q += f"&arena_id={int(arena_id)}"
-        catalog_url = f"{base}/webapp/catalog?{q}"
+        catalog_url = trainer_webapp_url(
+            base,
+            int(trainer_id),
+            city_id=int(city_id) if city_id is not None else None,
+            service_id=int(service_id) if service_id is not None else None,
+            arena_id=int(arena_id) if arena_id is not None else None,
+            legacy="catalog",
+        )
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=catalog_url))],
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, web_app=WebAppInfo(url=client_discovery_webapp_url(base)))],
@@ -1933,10 +1954,13 @@ async def on_book(callback: CallbackQuery) -> None:
     text, keyboard = await _client_slots_content(trainer_id, client_telegram_id=telegram_id)
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://") and keyboard is not None:
-        book_url = f"{base}/webapp/book?trainer_id={trainer_id}"
         sess_sid = (session_data or {}).get("selected_service_id")
-        if sess_sid is not None:
-            book_url += f"&service_id={int(sess_sid)}"
+        book_url = trainer_webapp_url(
+            base,
+            int(trainer_id),
+            service_id=int(sess_sid) if sess_sid is not None else None,
+            legacy="book_session",
+        )
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=book_url))],
             [InlineKeyboardButton(text=msg.CLIENT_BOOK_BUTTON_BACK, callback_data=CATALOG_CALLBACK)],

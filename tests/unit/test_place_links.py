@@ -17,6 +17,7 @@ from src.application.place_links import (
     parse_trainer_deep_link,
     telegram_open_link,
     trainer_start_param,
+    trainer_webapp_url,
 )
 
 
@@ -207,3 +208,53 @@ def test_public_telegram_cta_proxy_url() -> None:
     )
     assert with_src is not None
     assert "src=copy" in with_src and "s=42" in with_src
+
+
+def test_trainer_webapp_url_flag_off_keeps_each_old_address(monkeypatch) -> None:
+    monkeypatch.delenv("UNIFIED_TRAINER_CARD_ENABLED", raising=False)
+    base = "https://glide.example"
+    assert trainer_webapp_url(base, 7, city_id=2, service_id=3, arena_id=4, via="share", legacy="catalog") == (
+        f"{base}/webapp/catalog?trainer_id=7&city_id=2&service_id=3&arena_id=4&via=share"
+    )
+    assert trainer_webapp_url(base, 7, legacy="book") == (
+        f"{base}/webapp/book?trainer_id=7&v=20260420d&force_service_choice=1"
+    )
+    assert trainer_webapp_url(base, 7, service_id=3, legacy="book") == (
+        f"{base}/webapp/book?trainer_id=7&v=20260420d&service_id=3"
+    )
+    assert trainer_webapp_url(base, 7, legacy="book_session") == f"{base}/webapp/book?trainer_id=7"
+    assert trainer_webapp_url(base, 7, service_id=3, legacy="book_session") == (
+        f"{base}/webapp/book?trainer_id=7&service_id=3"
+    )
+    assert trainer_webapp_url(base, 7, slot_id=55, legacy="book_plain") == (
+        f"{base}/webapp/book?trainer_id=7&slot_id=55"
+    )
+    assert trainer_webapp_url(base, 7, legacy="book_plain") == f"{base}/webapp/book?trainer_id=7"
+    assert trainer_webapp_url(base, 7, slot_id=55, via="link", legacy="slot") == (
+        f"{base}/webapp/trainers?trainer_id=7&slot_id=55&via=link"
+    )
+
+
+def test_trainer_webapp_url_flag_on_is_the_start_param_projection(monkeypatch) -> None:
+    monkeypatch.setenv("UNIFIED_TRAINER_CARD_ENABLED", "true")
+    param = trainer_start_param(7, 3, 55, via="p3", intent="save")
+    assert param == "trainer_7_a_3_s_55_v_p3_i_save"
+    url = trainer_webapp_url(
+        "https://glide.example",
+        7,
+        arena_id=3,
+        slot_id=55,
+        via="p3",
+        intent="save",
+        service_id=9,
+        city_id=2,
+        legacy="book",
+    )
+    assert url == (
+        "https://glide.example/webapp/trainers?"
+        "trainer_id=7&slot_id=55&arena_id=3&via=p3&intent=save&service_id=9&city_id=2"
+    )
+    # via=link не входит в контракт _v_ и не должен теряться в startapp-редиректе.
+    linked = trainer_webapp_url("https://glide.example", 7, via="link", legacy="catalog")
+    assert linked == "https://glide.example/webapp/trainers?trainer_id=7&via=link"
+    assert "startapp=" not in linked
