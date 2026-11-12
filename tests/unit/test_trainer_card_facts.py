@@ -37,6 +37,13 @@ def test_fact_strip_matches_shared_fixture() -> None:
         assert fact_strip(case) == case["facts"], case["id"]
 
 
+def test_raw_service_audience_matches_shared_fixture(monkeypatch) -> None:
+    monkeypatch.setenv("UNIFIED_TRAINER_CARD_ENABLED", "true")
+    raw = json.loads(FIXTURE.read_text(encoding="utf-8"))["raw_services"]
+    for case in raw:
+        assert _audience(case["services"]) == case["audience"], case["id"]
+
+
 def test_fact_strip_has_no_lesson_count_or_rating() -> None:
     facts = [item for case in _cases() for item in fact_strip(case)]
     labels = {item["label"] for item in facts}

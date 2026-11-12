@@ -231,6 +231,93 @@
       "price_cents": null,
       "currency": "BYN",
       "facts": []
+    },
+    {
+      "id": "years-bool",
+      "experience_years": true,
+      "tier_kinds": ["adult"],
+      "rink_name": "Замок",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«Замок»", "label": "основной каток"}
+      ]
+    },
+    {
+      "id": "years-string",
+      "experience_years": "5",
+      "tier_kinds": ["adult"],
+      "rink_name": "Замок",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«Замок»", "label": "основной каток"}
+      ]
+    },
+    {
+      "id": "years-float",
+      "experience_years": 5.5,
+      "tier_kinds": ["adult"],
+      "rink_name": "Замок",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«Замок»", "label": "основной каток"}
+      ]
+    },
+    {
+      "id": "years-null-no-experience-fact",
+      "experience_years": null,
+      "tier_kinds": ["adult"],
+      "rink_name": "Замок",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«Замок»", "label": "основной каток"}
+      ]
+    },
+    {
+      "id": "years-int-5",
+      "experience_years": 5,
+      "tier_kinds": ["adult"],
+      "rink_name": "Замок",
+      "price_cents": null,
+      "currency": "BYN",
+      "facts": [
+        {"value": "5 лет", "label": "тренерского опыта"},
+        {"value": "Любой возраст", "label": "учеников"},
+        {"value": "«Замок»", "label": "основной каток"}
+      ]
+    }
+  ],
+  "raw_services": [
+    {
+      "id": "zero-child-plus-paid-adult",
+      "services": [
+        {"price_tiers": [
+          {"tier_kind": "child", "price_cents": 0},
+          {"tier_kind": "adult", "price_cents": 5000}
+        ]}
+      ],
+      "audience": "Любой возраст"
+    },
+    {
+      "id": "only-zero-child",
+      "services": [
+        {"price_tiers": [{"tier_kind": "child", "price_cents": 0}]}
+      ],
+      "audience": "Любой возраст"
+    },
+    {
+      "id": "paid-child",
+      "services": [
+        {"price_tiers": [{"tier_kind": "child", "price_cents": 5000}]}
+      ],
+      "audience": "Дети"
     }
   ]
 }

@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -31,12 +30,10 @@ def audience_label(tier_kinds: Sequence[str] | None) -> str:
 
 
 def _years(value: Any) -> int | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    """Только целое число. Строка, дробь и bool опыта не дают."""
+    if isinstance(value, bool) or not isinstance(value, int):
         return None
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    years = math.floor(value)
-    return years if years >= 1 else None
+    return value if value >= 1 else None
 
 
 def _price_cents(value: Any) -> int | None:

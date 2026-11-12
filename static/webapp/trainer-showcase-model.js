@@ -249,13 +249,15 @@
     return typeof globalThis !== 'undefined' && globalThis.__UNIFIED_TRAINER_CARD__ === true;
   }
 
+  /** Как Python ``_tier_cents``: тариф без цены клиенту не показывается. */
   function tierKinds(services) {
     var kinds = [];
     var seen = {};
     (services || []).forEach(function (s) {
       (s.price_tiers || []).forEach(function (t) {
         var k = t && t.tier_kind;
-        if (k && !seen[k]) {
+        var cents = Number(t && t.price_cents);
+        if (k && isFinite(cents) && cents > 0 && !seen[k]) {
           seen[k] = true;
           kinds.push(k);
         }
@@ -285,8 +287,8 @@
   function factStrip(input) {
     input = input || {};
     var facts = [];
-    var years = Math.floor(Number(input.experience_years));
-    if (isFinite(years) && years >= 1) {
+    var years = input.experience_years;
+    if (typeof years === 'number' && Number.isInteger(years) && years >= 1) {
       facts.push({ value: word(years, 'год', 'года', 'лет'), label: 'тренерского опыта' });
     }
     facts.push({ value: audienceLabel(input.tier_kinds), label: 'учеников' });
