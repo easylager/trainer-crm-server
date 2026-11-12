@@ -79,8 +79,9 @@ const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
  */
 /**
  * historyLength — history.length при открытии витрины: >1 — пришли с другого экрана (есть куда «‹ Назад»).
+ * unified — включён флаг единой карточки тренера (window.__UNIFIED_TRAINER_CARD__).
  */
-function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null } = {}) {
+function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null, unified = false } = {}) {
   const calls = [];
   const app = makeEl('app');
   const doc = { activeElement: null, body: { tag: 'body' }, keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
@@ -118,6 +119,8 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
   ctx.ClientShell = { navigate: (p) => ctx.navigated.push(p), setTabBarVisible: (v) => ctx.tabBar.push(!!v) };
   if (switcher) ctx.ClientProfileSwitcher = switcher;
   if (miniAppBack) ctx.MiniAppBack = miniAppBack;
+  // Единая карточка (TASK-400): как строка, которую /webapp/trainers дописывает в <head> при включённом флаге.
+  if (unified) ctx.__UNIFIED_TRAINER_CARD__ = true;
   ctx.fetch = (url, init = {}) => {
     const u = String(url).replace(/[?&]init_data=[^&]*/, '');
     const c = { url: u, method: init.method || 'GET', headers: init.headers || {}, body: init.body ? JSON.parse(init.body) : null };

@@ -527,6 +527,8 @@
     S.waBlock = '';
     S.saveNote = '';
     S.entryNote = '';
+    S.shareNote = '';
+    S.bioOpen = false;
     loadEdge(t);
     if (opts.view !== false) go('trainer');
     return loadSlots().then(function (fresh) {
@@ -536,6 +538,7 @@
   }
 
   function renderTrainer() {
+    if (unifiedCard()) return renderTrainerCard();
     var t = S.trainer;
     var dirs = M.trainerDirections(t);
     var svcs = serviceList(t, S.dirKey);
@@ -623,6 +626,342 @@
     return h;
   }
 
+  /* ── 2u · Единая карточка тренера (TASK-400, SPEC §3.1, макеты A/B/C/F/M) ─────────────────────
+     Только при window.__UNIFIED_TRAINER_CARD__ (страница /webapp/trainers при включённом флаге).
+     Флаг выключен — renderTrainer() выше, разметка прежняя. Логика записи, «Назад» и входов не меняется. */
+
+  function unifiedCard() {
+    return window.__UNIFIED_TRAINER_CARD__ === true;
+  }
+
+  var TC_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+  var TC_ICON = {
+    back: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>',
+    mail: TC_SVG + '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+    pin: TC_SVG + '<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    cap: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-5 9 5-9 5-9-5Z"/><path d="M7 11.5V16c0 1 2.2 2.5 5 2.5s5-1.5 5-2.5v-4.5"/></svg>',
+    chevron: '<svg class="tc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>',
+    bell: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 17h12l-1.5-2V10a4.5 4.5 0 0 0-9 0v5L6 17Z"/><path d="M10 20h4"/></svg>',
+    share: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>',
+  };
+  function tcHeart(on) {
+    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + (on ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg>';
+  }
+
+  var TC_WEEKDAY = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+  /** «сб, 10:00», «9:00» без ведущего нуля (SPEC §5.2, §10). */
+  function tcWhen(slot) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(slot.slot_date || ''));
+    var wd = m ? TC_WEEKDAY[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()] : '';
+    var time = String(slot.start_time || '').slice(0, 5).replace(/^0(\d)/, '$1');
+    return wd ? wd + ', ' + time : time;
+  }
+
+  function tcFirstName(t) {
+    return String((t && t.first_name) || '').trim().split(/\s+/)[0] || 'Тренер';
+  }
+
+  /** Плашка фактов: factStrip из TASK-399 (опыт → кого учит → каток ≤10 знаков или «от N»). <2 фактов — нет. */
+  function tcFacts(t) {
+    var facts = M.factStrip({
+      experience_years: t.experience_years,
+      tier_kinds: M.tierKinds(t.services || []),
+      rink_name: t.primary_arena_name,
+      price_cents: t.min_session_price_cents,
+      currency: t.min_session_price_currency,
+    });
+    if (!facts.length) return '';
+    return '<ul class="tc-facts tc-facts--' + facts.length + '" aria-label="Коротко о тренере">' + facts.map(function (f) {
+      return '<li><b>' + esc(f.value) + '</b><span>' + esc(f.label) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  /** «★ 4,9 · 14 оценок · В Glide с сентября 2026» — части независимы, нет данных — нет части. */
+  function tcMetaLine(t) {
+    var parts = [];
+    var cap = M.ratingLine(t.rating_avg, t.rating_count);
+    var m = /^★\s*([\d,]+)\s*·\s*(.+)$/.exec(cap || '');
+    if (m) {
+      parts.push('<span role="img" aria-label="Оценка ' + esc(m[1]) + ' из 5"><span class="tc-star" aria-hidden="true">★</span> ' + esc(m[1]) + '</span>');
+      parts.push(esc(m[2]));
+    }
+    var since = M.glideSince(t.glide_since);
+    if (since) parts.push(esc(since));
+    return parts.length ? '<p class="tc-hero-meta">' + parts.join(' · ') + '</p>' : '';
+  }
+
+  function tcHero(t) {
+    var dirs = M.trainerDirections(t);
+    var dirLine = dirs.map(function (d) { return d.title; }).join(' · ');
+    var backLabel = S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры';
+    // «Назад» — как прежде: в Telegram нативная стрелка в шапке, своя кнопка только в браузере (TASK-403 не трогаем).
+    var btns = backBtn(backLabel)
+      ? '<button type="button" class="tc-hbtn tc-hbtn--back" data-act="back" aria-label="' + esc(backLabel) + '">' + TC_ICON.back + '</button>'
+      : '';
+    if (initData) {
+      btns += '<button type="button" class="tc-hbtn tc-hbtn--save" data-act="save" aria-label="Сохранить тренера" aria-pressed="' + !!S.saved + '">' + tcHeart(S.saved) + '</button>';
+    }
+    var meta = tcMetaLine(t);
+    if (t.photo_url) {
+      return '<header class="tc-hero tc-hero--photo"><img src="' + esc(t.photo_url) + '" alt="">' + btns +
+        '<div class="tc-hero-t"><h1>' + esc(t.name) + '</h1>' + (dirLine ? '<p class="tc-hero-sub">' + esc(dirLine) + '</p>' : '') + meta + '</div></header>';
+    }
+    // Без фото — типографский герой (SPEC §6.2): капсула направления, крупное имя, каток. Инициалов и силуэта нет.
+    var hockey = dirs.length > 0 && dirs.every(function (d) { return d.key === 's-klyushkoy'; });
+    var place = t.primary_arena_name || ((t.arenas || []).length === 1 ? t.arenas[0].name : '');
+    return '<header class="tc-hero tc-hero--noph' + (hockey ? ' tc-hero--hockey' : '') + '">' +
+      '<svg class="tc-lines" viewBox="0 0 390 300" preserveAspectRatio="none" fill="none" aria-hidden="true"><path d="M-20 215 C 90 175, 200 225, 410 155" stroke-width="2"/><path d="M-20 247 C 110 207, 230 257, 410 192" stroke-width="2" opacity=".66"/></svg>' +
+      btns + '<div class="tc-hero-t">' + (dirLine ? '<span class="tc-cap">' + esc(dirLine) + '</span>' : '') +
+      '<h1>' + esc(t.name) + '</h1>' + (place ? '<p class="tc-hero-sub">' + esc(place) + '</p>' : '') + meta + '</div></header>';
+  }
+
+  /** Плитки тарифов направления: Ребёнок/Взрослый. Одинаковые цены — по-прежнему две плитки (SPEC §5.1). */
+  function tcTiles(svc) {
+    var cur = (svc && svc.currency_code) || 'BYN';
+    return M.whoOptions(svc).single
+      .filter(function (r) { return r.priceCents != null && r.priceCents > 0; })
+      .map(function (r) { return { title: r.title, price: M.formatMoney(r.priceCents, cur) }; });
+  }
+
+  function tcChip(slot, i, many) {
+    var small = [];
+    if (many && slot.arena_name) small.push(slot.arena_name);
+    if (slot.capacity > 1 && slot.spots_left != null) small.push('осталось ' + M.word(slot.spots_left, 'место', 'места', 'мест'));
+    return '<button type="button" class="tc-chip' + (i === 0 ? ' is-first' : '') + (small.length ? ' tc-chip--2' : '') + '" data-act="slot" data-slot="' + esc(slot.id) + '">' +
+      esc(tcWhen(slot)) + (small.length ? '<small>' + esc(small.join(' · ')) + '</small>' : '') + '</button>';
+  }
+
+  /** Время: чипы (до 3) + «Другое время» / загрузка без прыжка / ошибка / «окон нет» (C, SPEC §6.3). */
+  function tcTimes(t) {
+    if (S.slots === null) {
+      return '<span class="tc-vh" role="status">Загружаем время…</span><div class="tc-times" aria-hidden="true"><i class="tc-sk"></i><i class="tc-sk"></i><i class="tc-sk"></i></div>';
+    }
+    if (S.slotsError) {
+      return '<p class="tc-empty-t">Не удалось загрузить время</p><button type="button" class="tc-sec tc-sec--in" data-act="reslots">Повторить</button>';
+    }
+    if (!S.slots.length) {
+      var hint = initData
+        ? (t.contact_url ? 'Напишите тренеру — время можно согласовать. Или попросите сообщить, когда оно появится.'
+          : 'Попросите сообщить, когда появится, или оставьте заявку.')
+        : (t.contact_url ? 'Напишите тренеру или откройте Telegram — там видны следующие недели.'
+          : 'Откройте Telegram — там видны следующие недели и можно договориться.');
+      return '<p class="tc-empty-t">На ближайшие 2 недели свободного времени нет</p><p class="tc-empty-p">' + esc(hint) + '</p>' +
+        (initData ? '<button type="button" class="tc-sec tc-sec--in" data-act="notify"' + (S.notify ? ' disabled' : '') + '>' + TC_ICON.bell +
+          (S.notify ? 'Сообщим, когда появится время' : 'Сообщить, когда появится время') + '</button>' : '') +
+        (S.waBlock ? '<div class="warn">' + BC.writeAccessBlockHtml(S.waBlock) + '</div>' : '');
+    }
+    var many = (t.arenas || []).length > 1;
+    return '<div class="tc-times">' + S.slots.slice(0, 3).map(function (s, i) { return tcChip(s, i, many); }).join('') +
+      '<button type="button" class="tc-chip tc-chip--alt" data-act="week">Другое время</button></div>';
+  }
+
+  /** Карточка цены (только can_book): направления → занятие → тарифы → время (макеты A, B, C, M3–M7). */
+  function tcPriceCard(t, dirs, svcs, svc) {
+    var h = '<section class="tc-card tc-pc" aria-label="Цена и время">';
+    if (dirs.length > 1) {
+      h += '<div class="tc-seg" role="group" aria-label="Занятие">' + dirs.map(function (d) {
+        return '<button type="button" data-act="dir" data-key="' + d.key + '" aria-pressed="' + (d.key === S.dirKey) + '">' + esc(d.title) + '</button>';
+      }).join('') + '</div>';
+    }
+    if (svcs.length > 1) {
+      var dur0 = t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '';
+      h += '<span class="tc-lb" id="svcLb">Какое занятие?</span><div class="svcs" role="radiogroup" aria-labelledby="svcLb">' + svcs.map(function (s) {
+        var on = Number(svc.service_id) === Number(s.service_id);
+        return '<button type="button" role="radio" data-act="svc" data-sid="' + s.service_id + '" aria-checked="' + on + '"><i></i>' +
+          '<span class="nm">' + esc(s.title || s.service_name) + (dur0 ? '<small>' + esc(dur0) + '</small>' : '') + '</span>' +
+          '<em>' + esc(M.priceFrom(s)) + '</em></button>';
+      }).join('') + '</div>';
+    }
+    var online = !!(svc && svc.is_online);
+    var n = (t.arenas || []).length;
+    var where = online ? 'онлайн' : n === 1 ? t.arenas[0].name : n > 1 ? M.word(n, 'каток', 'катка', 'катков') : '';
+    var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '';
+    var has = !!(S.slots && S.slots.length);
+    var tiles = svc ? tcTiles(svc) : [];
+    if (tiles.length > 1) {
+      h += '<div class="tc-tiles">' + tiles.map(function (x) { return '<div><small>' + esc(x.title) + '</small><b>' + esc(x.price) + '</b></div>'; }).join('') + '</div>';
+      // Подпись на месте и при загрузке: меняется только текст, высота та же — время не прыгает.
+      var lb = has ? [dur, where, 'ближайшее время'].filter(Boolean).join(' · ') : 'Ближайшее время';
+      h += '<p class="tc-lb">' + esc(lb) + '</p>' + tcTimes(t);
+    } else {
+      // Одна цена (макет B): «Ближайшее время» и длительность с катком справа, цена строкой внизу.
+      var meta = [dur, where].filter(Boolean).join(' · ');
+      h += '<div class="tc-lbrow"><p class="tc-lb">Ближайшее время</p>' + (has && meta ? '<span>' + esc(meta) + '</span>' : '') + '</div>';
+      h += tcTimes(t);
+      var price = svc ? M.priceFrom(svc) : '';
+      if (price) h += '<div class="tc-one"><span>' + esc((svc && (svc.title || svc.service_name)) || 'Занятие') + '</span><b>' + esc(price) + '</b></div>';
+      else h += '<p class="tc-one tc-one--none"><b>Цену уточните у тренера</b></p>';
+    }
+    if (online && has) h += '<p class="tc-note">Ссылку пришлёт тренер после подтверждения. Билет и прокат не нужны.</p>';
+    return h + '</section>';
+  }
+
+  /** «О тренере» — слова тренера дословно; «Читать полностью» — только если текст длиннее 5 строк. */
+  function tcAbout(t) {
+    var bio = M.tidyText(t.description);
+    if (!bio) return '';
+    return '<section class="tc-card" aria-labelledby="tcAboutH"><h2 class="tc-h2" id="tcAboutH">О тренере</h2>' +
+      '<p class="tc-bio' + (S.bioOpen ? ' open' : '') + '" id="tcBio">' + esc(bio) + '</p>' +
+      (S.bioOpen ? '' : '<button type="button" class="tc-link" data-act="bio-more" aria-controls="tcBio" aria-expanded="false" hidden>Читать полностью</button>') +
+      '</section>';
+  }
+
+  function tcEducation(t) {
+    var e = String(t.education || '').trim();
+    if (!e) return '';
+    return '<section class="tc-card" aria-labelledby="tcEduH"><h2 class="tc-h2" id="tcEduH">Образование и дипломы</h2>' +
+      '<ul class="tc-list"><li><span class="tc-ic tc-ic--sm">' + TC_ICON.cap + '</span><b>' + esc(e) + '</b></li></ul></section>';
+  }
+
+  /** «Где проходят занятия»: каток, адрес, прокат — до записи. Онлайн — формат в карточке цены (M4). */
+  function tcWhere(t, svc) {
+    if (svc && svc.is_online) return '';
+    var arenas = t.arenas || [];
+    if (!arenas.length) return '';
+    var rows = arenas.map(function (a) {
+      var sub = [a.address || '', a.rental_cents ? 'прокат ' + M.formatMoney(a.rental_cents, a.rental_currency) : ''].filter(Boolean).join(' · ');
+      var inner = '<span class="tc-ic">' + TC_ICON.pin + '</span><span class="tc-where-t"><b>' + esc(a.name) + '</b>' +
+        (sub ? '<span>' + esc(sub) + '</span>' : '') + '</span>';
+      return a.map_link
+        ? '<button type="button" class="tc-where-row" data-act="map" data-href="' + esc(a.map_link) + '">' + inner + TC_ICON.chevron + '</button>'
+        : '<div class="tc-where-row">' + inner + '</div>';
+    }).join('');
+    return '<section class="tc-card" aria-labelledby="tcWhereH"><h2 class="tc-h2" id="tcWhereH">Где проходят занятия</h2>' + rows +
+      '<p class="tc-note tc-note--sm">Билет на сеанс покупается в кассе катка.</p></section>';
+  }
+
+  function tcOtherTariffs(svc) {
+    var duo = svc ? M.whoOptions(svc).duo : [];
+    if (!duo.length) return '';
+    return '<section class="tc-card" aria-labelledby="tcTariffsH"><h2 class="tc-h2" id="tcTariffsH">Другие тарифы</h2><div class="tc-rows">' + duo.map(function (r) {
+      return '<div><span>' + esc(r.title) + '</span><b>' + esc(M.formatMoney(r.priceCents, svc.currency_code)) + '</b></div>';
+    }).join('') + '</div></section>';
+  }
+
+  /** Выходы без записи: первый — главный. F — «Оставить заявку» первым (SPEC §5.3), C — «Написать тренеру». */
+  function tcExitFooter(t, requestFirst) {
+    var acts = [];
+    if (t.contact_url) acts.push({ act: 'write', label: 'Написать тренеру' });
+    if (initData) acts[requestFirst ? 'unshift' : 'push']({ act: 'request', label: 'Оставить заявку' });
+    if (trainerPhone(t)) acts.push({ act: 'copy-phone', label: 'Скопировать телефон' });
+    if (!initData && t.telegram_url && !t.contact_url) acts.push({ act: 'open-tg', label: 'Открыть в Telegram' });
+    if (!acts.length) return '';
+    return '<div class="ft col tc-ft">' + acts.map(function (a, i) {
+      var btn = '<button type="button" class="' + (i === 0 ? 'cta' : 'sec2') + '" data-act="' + a.act + '">' + a.label + '</button>';
+      return btn + (i === 0 && a.act === 'request' ? '<small>Ответ придёт в Telegram</small>' : '');
+    }).join('') + '</div>';
+  }
+
+  function renderTrainerCard() {
+    var t = S.trainer;
+    var dirs = M.trainerDirections(t);
+    var svcs = serviceList(t, S.dirKey);
+    var svc = currentService() || (svcs.length > 1 ? svcs[0] : null);
+    var h = '<div class="tc">' + tcHero(t) + tcFacts(t) + '<div class="tc-body">';
+    if (S.entryNote) h += '<div class="entry-note" role="status">' + esc(S.entryNote) + '</div>';
+    if (t.can_book) h += tcPriceCard(t, dirs, svcs, svc);
+    h += tcAbout(t);
+    h += aboutCard(svcs, svc, { unified: true });
+    h += tcEducation(t);
+    h += tcWhere(t, svc);
+    h += tcOtherTariffs(svc);
+    if (initData) {
+      h += '<div class="tc-acts"><button type="button" class="tc-sec" data-act="save" aria-pressed="' + !!S.saved + '">' +
+        (S.saved ? '♥ Тренер сохранён · убрать' : '♡ Сохранить тренера') + '</button>' +
+        '<button type="button" class="tc-sec" data-act="share">' + TC_ICON.share + 'Поделиться тренером</button></div>';
+      if (S.saveNote) h += '<span class="mut" role="alert">' + esc(S.saveNote) + '</span>';
+      if (S.shareNote) h += '<span class="mut" role="alert">' + esc(S.shareNote) + '</span>';
+    }
+    h += '</div></div>';
+    if (!t.can_book) return h + tcExitFooter(t, true);
+    if (S.slots && S.slots.length) {
+      var first = S.slots[0];
+      return h + '<div class="ft col tc-ft"><div class="tc-ft-row"><button type="button" class="cta" data-act="slot" data-slot="' + esc(first.id) + '">Записаться на ' +
+        esc(tcWhen(first)) + '</button>' +
+        (t.contact_url ? '<button type="button" class="ico" data-act="write" aria-label="Написать тренеру">' + TC_ICON.mail + '</button>' : '') + '</div>' +
+        (initData ? '<small>' + esc(tcFirstName(t)) + ' подтвердит — сообщение придёт в Telegram</small>' : '') + '</div>';
+    }
+    if (S.slots !== null) return h + tcExitFooter(t, false);
+    return h;
+  }
+
+  /** Скелетон карточки по прямой ссылке (M1): герой, плашка и карточка цены на своих местах — без прыжка. */
+  function renderTrainerSkeleton() {
+    return '<div class="tc tc--sk" aria-busy="true"><span class="tc-vh" role="status">Загружаем карточку тренера…</span>' +
+      '<div class="tc-hero tc-sk-hero" aria-hidden="true"></div><div class="tc-facts tc-facts--3" aria-hidden="true"><i></i><i></i><i></i></div>' +
+      '<div class="tc-body" aria-hidden="true"><div class="tc-card"><i class="tc-sk-line"></i><i class="tc-sk-line tc-sk-line--short"></i>' +
+      '<div class="tc-times"><i class="tc-sk"></i><i class="tc-sk"></i><i class="tc-sk"></i></div></div></div></div>';
+  }
+
+  /** «Читать полностью» показываем, только когда текст правда обрезан (после отрисовки, по пикселям). */
+  function tcAfterRender() {
+    if (!appEl.querySelector) return;
+    var bio = appEl.querySelector('.tc-bio');
+    var more = appEl.querySelector('[data-act="bio-more"]');
+    if (bio && more) more.hidden = !(bio.scrollHeight > bio.clientHeight + 1);
+    fitFacts(appEl.querySelector('.tc-facts'));
+    // Dela догружается после первой отрисовки и шире запасного шрифта — подгоняем ещё раз.
+    var fonts = document.fonts;
+    if (fonts && fonts.status !== 'loaded' && fonts.ready) {
+      fonts.ready.then(function () { if (S.view === 'trainer') fitFacts(appEl.querySelector('.tc-facts')); });
+    }
+  }
+
+  /**
+   * Плашка не переполняется (SPEC §12): Dela широкий — ««Замок»» в 20px шире колонки и на 390.
+   * Слово не влезает — уменьшаем шрифт всей плашки (одинаковый у всех фактов), слова не рвём. Не меньше 12px.
+   */
+  function fitFacts(ul) {
+    if (!ul || !ul.style) return;
+    var base = /tc-facts--2/.test(ul.className) ? 24 : 20;
+    var bs = ul.querySelectorAll('b');
+    var size = base;
+    ul.style.setProperty('--tc-fact-fs', size + 'px');
+    function overflows() {
+      for (var i = 0; i < bs.length; i++) if (bs[i].scrollWidth > bs[i].clientWidth + 0.5) return true;
+      return false;
+    }
+    while (size > 12 && overflows()) {
+      size -= 0.5;
+      ul.style.setProperty('--tc-fact-fs', size + 'px');
+    }
+  }
+
+  window.addEventListener('resize', function () {
+    if (S.view === 'trainer' && unifiedCard() && appEl.querySelector) fitFacts(appEl.querySelector('.tc-facts'));
+  });
+
+  /** «Поделиться тренером» (ENTRIES №53): тот же API и лист Telegram, что у старой карточки каталога. */
+  function shareTrainer(el) {
+    var t = S.trainer;
+    if (!t || !initData) return;
+    var tid = t.id;
+    el.disabled = true;
+    S.shareNote = '';
+    api('/api/webapp/client/share-trainer/' + encodeURIComponent(tid) + '?share_context=catalog')
+      .then(function (d) {
+        el.disabled = false;
+        var url = String((d && d.share_url) || '').trim();
+        var body = String((d && d.share_body) || '').trim();
+        var text = String((d && d.share_text) || '').trim();
+        if (!url && !text) throw new Error('empty');
+        if (typeof window.openTelegramShareUrlFromMiniApp === 'function') {
+          window.openTelegramShareUrlFromMiniApp({ shareUrl: url, shareBody: body, fullMessage: text });
+          return;
+        }
+        openLink(url
+          ? 'https://t.me/share/url?url=' + encodeURIComponent(url) + (body ? '&text=' + encodeURIComponent(body) : '')
+          : 'https://t.me/share/url?text=' + encodeURIComponent(text));
+      })
+      .catch(function () {
+        el.disabled = false;
+        if (!S.trainer || S.trainer.id !== tid) return;
+        S.shareNote = 'Не получилось — попробуйте ещё раз.';
+        render();
+      });
+  }
+
   /** Под фото: кто это — слова тренера и проверяемые факты, до цены и времени. */
   function trustHtml(t) {
     var chips = [];
@@ -655,7 +994,8 @@
   }
 
   /** Карточка «О занятии»: наши тексты услуги + слова тренера дословно + «Не входит в цену». Данных нет — карточки нет. */
-  function aboutCard(svcs, svc) {
+  function aboutCard(svcs, svc, opts) {
+    opts = opts || {};
     var targets = svc ? [svc] : svcs;
     var named = svcs.length > 1;
     var parts = targets.map(function (s) {
@@ -671,7 +1011,11 @@
       }
       return h + '</div>';
     }).filter(Boolean);
-    return parts.length ? '<div class="card"><h4>О занятии</h4>' + parts.join('') + '</div>' : '';
+    if (!parts.length) return '';
+    if (opts.unified) {
+      return '<section class="card tc-card" aria-labelledby="tcLessonH"><h2 class="tc-h2" id="tcLessonH">О занятии</h2>' + parts.join('') + '</section>';
+    }
+    return '<div class="card"><h4>О занятии</h4>' + parts.join('') + '</div>';
   }
 
   /** Как связаться с тренером перед занятием: только реальные каналы, без пустых кнопок. */
@@ -1621,8 +1965,10 @@
     else if (S.view === 'book') html = renderBook();
     else if (S.view === 'sent') html = renderSent();
     else if (S.view === 'reqsent') html = renderReqSent();
+    else if (unifiedCard() && !S.items && !S.loadError && num(qs.get('trainer_id'))) html = renderTrainerSkeleton();
     else html = renderList();
     appEl.innerHTML = '<div class="tsw-view">' + html + '</div>';
+    if (S.view === 'trainer' && unifiedCard()) tcAfterRender();
     syncBack();
     syncTabBar();
     if (S.view === 'book' && S.book) wirePhone(S.book);
@@ -1723,6 +2069,15 @@
         toggleSaved(el);
         break;
       case 'bio': el.classList.toggle('open'); break;
+      case 'bio-more': {
+        S.bioOpen = true;
+        render();
+        // Кнопка исчезла — фокус на раскрытый текст, а не в начало страницы.
+        var bioEl = appEl.querySelector && appEl.querySelector('#tcBio');
+        if (bioEl) { bioEl.setAttribute('tabindex', '-1'); try { bioEl.focus({ preventScroll: true }); } catch (e) { /* */ } }
+        break;
+      }
+      case 'share': shareTrainer(el); break;
       case 'pick': {
         var k = el.getAttribute('data-k');
         if (b.regular) {

@@ -870,6 +870,7 @@
     serviceAbout: serviceAbout,
     whoTeaches: whoTeaches,
     audienceLabel: audienceLabel,
+    tierKinds: tierKinds,
     factStrip: factStrip,
     tidyText: tidyText,
     experienceBadge: experienceBadge,
