@@ -100,6 +100,39 @@
     return true;
   }
 
+  /**
+   * Единая карточка тренера (TASK-402, PDEC-036): при флаге внутренние входы `catalog?trainer_id=…`
+   * и `book?trainer_id=…` ведут на `trainers?trainer_id=…` (location.replace, историю не копим).
+   * Флаг ставит сервер: window.__UNIFIED_TRAINER_CARD__ (catalog.html и book.html).
+   * Не перехватываем: collective= и group_id (остаются в старом каталоге), request_id (заявки, book.html).
+   * Возвращает путь или null, если вход шим не касается.
+   */
+  var UNIFIED_CARD_PARAMS = ['slot_id', 'service_id', 'arena_id', 'city_id', 'from', 'via', 'init_data'];
+
+  function buildUnifiedCardPath(search) {
+    var qp = new URLSearchParams(search || '');
+    var tid = parseInt(qp.get('trainer_id') || '', 10);
+    if (!(tid > 0)) return null;
+    if (qp.has('collective') || qp.has('group_id') || qp.has('request_id')) return null;
+    var parts = ['trainer_id=' + encodeURIComponent(String(tid))];
+    for (var i = 0; i < UNIFIED_CARD_PARAMS.length; i++) {
+      var v = qp.get(UNIFIED_CARD_PARAMS[i]);
+      if (v) parts.push(UNIFIED_CARD_PARAMS[i] + '=' + encodeURIComponent(v));
+    }
+    return 'trainers?' + parts.join('&');
+  }
+
+  function maybeRedirectToUnifiedCard() {
+    if (global.__UNIFIED_TRAINER_CARD__ !== true) return false;
+    var path = (global.location.pathname || '').replace(/\/$/, '');
+    var seg = path.split('/').pop() || '';
+    if (seg !== 'catalog' && seg !== 'catalog.html' && seg !== 'book' && seg !== 'book.html') return false;
+    var rel = buildUnifiedCardPath(global.location.search);
+    if (!rel) return false;
+    global.location.replace(path.replace(/[^/]+$/, '') + rel);
+    return true;
+  }
+
   function buildHubBookingPath(trainerId, opts) {
     opts = opts || {};
     var state = {
@@ -120,7 +153,9 @@
     buildBookPathFromState: buildBookPathFromState,
     maybeRedirectBookShimToCatalog: maybeRedirectBookShimToCatalog,
     buildHubBookingPath: buildHubBookingPath,
+    buildUnifiedCardPath: buildUnifiedCardPath,
+    maybeRedirectToUnifiedCard: maybeRedirectToUnifiedCard,
   };
 
-  maybeRedirectBookShimToCatalog();
+  if (!maybeRedirectToUnifiedCard()) maybeRedirectBookShimToCatalog();
 })(typeof window !== 'undefined' ? window : this);
