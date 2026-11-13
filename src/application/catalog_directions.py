@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from src.application.ice_city_day import city_slug
 
@@ -201,6 +201,38 @@ def direction_by_slug(slug: str | None) -> Direction | None:
 
 def direction_by_key(key: str) -> Direction:
     return _BY_KEY[key]
+
+
+#: «С нуля» и «Уже катаюсь» — то же катание, что вкладка «Фигурное»: на досках A и C
+#: герой пишет «Фигурное катание», а вкладки цены остаются «С нуля» / «Уже катаюсь».
+#: «С клюшкой» — отдельный вид; короткое слово уже лежит в ``Direction.short`` («хоккей»),
+#: так же каталог говорит «Есть … и хоккей», не «хоккейное катание».
+_FIGURE_KEYS = frozenset({"zero", "better", "fig"})
+
+
+def public_sport_name(direction_keys: Iterable[str]) -> str | None:
+    """Публичный вид спорта, если каждое направление тренера даёт один и тот же вид.
+
+    Нет направлений, неизвестный ключ или сразу фигурное и хоккей — ``None``:
+    строка героя остаётся названиями вкладок, вид не выдумываем.
+    """
+    keys = [key for key in direction_keys if key and key != "all"]
+    if not keys:
+        return None
+    figure = direction_by_key("fig").crumb
+    hockey_short = direction_by_key("hock").short
+    hockey = hockey_short[:1].upper() + hockey_short[1:]
+    sports: set[str] = set()
+    for key in keys:
+        if key in _FIGURE_KEYS:
+            sports.add(figure)
+        elif key == "hock":
+            sports.add(hockey)
+        else:
+            return None
+    if len(sports) != 1:
+        return None
+    return next(iter(sports))
 
 
 def own_service_direction(service: Mapping[str, Any]) -> str | None:

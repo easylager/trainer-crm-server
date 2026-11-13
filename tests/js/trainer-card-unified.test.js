@@ -182,6 +182,44 @@ describe('единая карточка: порядок и условия пок
     assert.match(bareNoCity, /<h1>Дмитрий Петров<\/h1><p class="tc-hero-sub">«Чижовка-Арена»<\/p>/);
   });
 
+  it('вид спорта с сервера заменяет названия вкладок; нет вида — строка прежняя', async () => {
+    const a = (await open('A', { trainer: { sport_name: 'Фигурное катание', city_name: 'Минск' } })).app.innerHTML;
+    assert.match(a, /<p class="tc-hero-sub">Фигурное катание · Минск<\/p>/);
+    assert.doesNotMatch(a, /<p class="tc-hero-sub">[^<]*С нуля/);
+    const noCity = (await open('C', { trainer: { sport_name: 'Фигурное катание', city_name: null } })).app.innerHTML;
+    assert.match(noCity, /<p class="tc-hero-sub">Фигурное катание<\/p>/);
+    assert.doesNotMatch(noCity, /Фигурное катание ·/);
+    const f = (await open('F', { trainer: { sport_name: 'Хоккей', city_name: 'Брест' } })).app.innerHTML;
+    assert.match(f, /<p class="tc-hero-sub">Хоккей · Брест<\/p>/);
+    const cap = (await open('B', { trainer: { sport_name: 'Хоккей', city_name: 'Минск' } })).app.innerHTML;
+    assert.match(cap, /<span class="tc-cap">Хоккей<\/span>/);
+    assert.doesNotMatch(cap, /<span class="tc-cap">С клюшкой<\/span>/);
+    const mixed = (await open('A', { trainer: { sport_name: null, city_name: 'Минск' } })).app.innerHTML;
+    assert.match(mixed, /<p class="tc-hero-sub">С нуля · Уже катаюсь · Минск<\/p>/);
+  });
+
+  it('герой с фото: A  без класса 400, C и F — tc-hero--tall, B без фото — 300', async () => {
+    const a = (await open('A')).app.innerHTML;
+    assert.match(a, /<header class="tc-hero tc-hero--photo">/);
+    assert.doesNotMatch(a, /tc-hero--tall/);
+    const c = (await open('C')).app.innerHTML;
+    assert.match(c, /<header class="tc-hero tc-hero--photo tc-hero--tall">/);
+    const f = (await open('F')).app.innerHTML;
+    assert.match(f, /<header class="tc-hero tc-hero--photo tc-hero--tall">/);
+    const b = (await open('B')).app.innerHTML;
+    assert.match(b, /tc-hero--noph/);
+    assert.doesNotMatch(b, /tc-hero--tall/);
+  });
+
+  it('«Где проходят занятия» берёт публичное имя, иначе сырое', async () => {
+    const quoted = (await open('A')).app.innerHTML;
+    assert.match(quoted, /<span class="tc-where-t"><b>«Замок»<\/b>/);
+    const pub = (await open('C', { trainer: { arenas: [{ ...STATES.C.trainer.arenas[0], public_name: 'ЛДС' }] } })).app.innerHTML;
+    assert.match(pub, /<span class="tc-where-t"><b>ЛДС<\/b>/);
+    const raw = (await open('F')).app.innerHTML;
+    assert.match(raw, /<span class="tc-where-t"><b>Ледовая арена «Брест»<\/b>/);
+  });
+
   it('«О занятии» есть только при тексте услуги или заметке тренера', async () => {
     const empty = (await open('A')).app.innerHTML;
     assert.doesNotMatch(empty, />О занятии</);

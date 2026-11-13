@@ -206,6 +206,7 @@ def _service_out(svc: dict[str, Any], catalog: dict[int, tuple[bool, str | None]
 async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -> dict[str, Any]:
     """Тренеры города для витрины. Фильтр катка и вкладки клиент считает сам — по этим данным."""
     from src.application.arena_public_use_cases import _trainer_windows_on_arena
+    from src.application.catalog_directions import public_sport_name
     from src.application.site_trainer_catalog import (
         min_price_by_direction,
         services_by_direction,
@@ -318,4 +319,10 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 primary_ids.get(tid), list(t.get("arena_ids") or []), arenas
             )
             out[-1]["city_name"] = city_names.get(tid)
+            # Вид — из вкладок, в БД не пишется. Нет одного вида — null, клиент оставляет названия вкладок.
+            out[-1]["sport_name"] = public_sport_name(
+                services_by_direction(out[-1]["services"]).keys()
+            )
+            for arena in out[-1]["arenas"]:
+                arena["public_name"] = format_public_name(str(arena.get("name") or "")) or None
     return {"city_id": city_id, "items": out}

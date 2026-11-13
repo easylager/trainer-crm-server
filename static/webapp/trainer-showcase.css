@@ -238,6 +238,8 @@ body.tsw {
 .tc-hero > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; }
 .tc-hero--photo::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 210px; background: var(--tc-hero-shade); }
 .tc-hero--noph { height: 300px; }
+/* Доски C и F: фото без записи на время. A остаётся 320, B — 300 (.tc-hero--noph). */
+.tc-hero--tall { height: 400px; }
 .tc-hero--hockey { background: var(--tc-hero-hockey); }
 .tc-lines { position: absolute; inset: 0; width: 100%; height: 100%; stroke: var(--tc-hero-lines); }
 .tc-hero--hockey .tc-lines { stroke: var(--tc-hero-lines-hockey); }
