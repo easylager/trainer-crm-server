@@ -106,8 +106,15 @@
           // активного профиля: иначе запись ребёнка уходила на маму, а абонементы читались чужие.
           if (actingId != null && !hasExplicitProfileHeader(init)) {
             init = init || {};
-            var headers = init.headers ? Object.assign({}, init.headers) : {};
-            headers['X-Profile-Id'] = String(actingId);
+            var headers;
+            if (typeof Headers !== 'undefined' && init.headers instanceof Headers) {
+              // Object.assign теряет записи Headers (они не own-enumerable) — копируем штатно.
+              headers = new Headers(init.headers);
+              headers.set('X-Profile-Id', String(actingId));
+            } else {
+              headers = init.headers ? Object.assign({}, init.headers) : {};
+              headers['X-Profile-Id'] = String(actingId);
+            }
             init = Object.assign({}, init, { headers: headers });
           }
         }

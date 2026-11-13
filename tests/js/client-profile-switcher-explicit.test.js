@@ -41,13 +41,33 @@ async function boot({ stored = null } = {}) {
     },
   };
   const document = { readyState: 'complete', getElementById: () => null, addEventListener() {}, head: { appendChild() {} }, createElement: () => ({}) };
-  const ctx = { window, document, URLSearchParams, JSON, Object, String, Number, parseInt, console };
+  const ctx = { window, document, Headers, URLSearchParams, JSON, Object, String, Number, parseInt, console };
   vm.runInNewContext(src, ctx);
   await window.ClientProfileSwitcher.init();
   return { window, calls, storage };
 }
 
 describe('ClientProfileSwitcher fetch patch', () => {
+  it('Headers на входе: X-Telegram-Init-Data сохраняется, X-Profile-Id добавлен', async () => {
+    const { window, calls } = await boot({ stored: 2 });
+    await window.fetch('/api/webapp/client/passes', { headers: new Headers({ 'X-Telegram-Init-Data': 'abc' }) });
+    const h = calls.at(-1).headers;
+    assert.equal(h.get('X-Telegram-Init-Data'), 'abc');
+    assert.equal(h.get('X-Profile-Id'), '2');
+  });
+
+  it('Headers с явным X-Profile-Id не трогаем', async () => {
+    const { window, calls } = await boot({ stored: 2 });
+    await window.fetch('/api/webapp/client/passes', { headers: new Headers({ 'X-Profile-Id': '1' }) });
+    assert.equal(calls.at(-1).headers.get('X-Profile-Id'), '1');
+  });
+
+  it('обычный объект: прежний вид, оба заголовка', async () => {
+    const { window, calls } = await boot({ stored: 2 });
+    await window.fetch('/api/webapp/client/passes', { headers: { 'X-Telegram-Init-Data': 'abc' } });
+    assert.deepEqual({ ...calls.at(-1).headers }, { 'X-Telegram-Init-Data': 'abc', 'X-Profile-Id': '2' });
+  });
+
   it('без явного заголовка — активный профиль (выбранный в хабе)', async () => {
     const { window, calls } = await boot({ stored: 2 });
     await window.fetch('/api/webapp/client/passes', {});
