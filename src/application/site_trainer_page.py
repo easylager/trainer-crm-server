@@ -1459,7 +1459,7 @@ def _reviews_html(page: Mapping[str, Any]) -> str:
             + ('<button type="button" class="tp-rev__more" hidden>Читать полностью</button>' if long_ else "")
             + f"{when}</article>"
         )
-    note = '<p class="tp-muted">Отзывы оставляют только те, кто занимался у тренера. Каждый отзыв проверяем перед публикацией.</p>'
+    note = '<p class="tp-muted">Тексты отзывов проверяем перед публикацией.</p>'
     return _sec(
         "Отзывы",
         head + _scroller(f'<div class="tp-more tp-revs">{"".join(cards)}</div>', cls="tp-scroller--revs") + note,

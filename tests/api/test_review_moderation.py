@@ -120,7 +120,7 @@ async def test_site_section_needs_three_approved_reviews(app_use_test_db, db_ses
     assert four.count('<article class="tp-rev">') == 3
     assert "Ещё не проверен" not in four and "Отклонённый текст" not in four
     assert 'href="#reviews"' in four  # звёзды в шапке ведут к отзывам
-    assert "Каждый отзыв проверяем перед публикацией" in four
+    assert "Тексты отзывов проверяем перед публикацией" in four
 
 
 def test_completed_lesson_message_has_one_tap_stars() -> None:
