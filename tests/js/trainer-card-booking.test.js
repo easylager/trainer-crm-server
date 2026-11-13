@@ -278,6 +278,39 @@ describe('E, L, N', () => {
     });
   }
 
+  it('офлайн упали и витрина, и тренер: «Повторить» без экрана «Не удалось загрузить тренеров», «Назад» — список', async () => {
+    let fail = true;
+    const offline = () => Promise.reject(new TypeError('Failed to fetch'));
+    const h = boot({
+      unified: true,
+      search: '?trainer_id=' + trainer.id,
+      initData: 'x',
+      session: { city_name: 'Минск' },
+      routes: [
+        { match: (c) => c.url.split('?')[0] === '/api/public/trainer-showcase', reply: () => (fail ? offline() : resp(200, { items: [trainer] })) },
+        { match: (c) => c.url.indexOf('/catalog-trainer/') >= 0, reply: () => (fail ? offline() : resp(200, catalogCard)) },
+        slotsRoute(slots),
+      ],
+    });
+    await tick(40);
+    assert.match(h.app.innerHTML, /<h1>Не удалось загрузить тренера<\/h1>/);
+    const showcaseCalls = () => h.calls.filter((c) => c.url.split('?')[0] === '/api/public/trainer-showcase').length;
+    const before = showcaseCalls();
+    fail = false;
+    h.click({ 'data-act': 'retry-trainer' });
+    assert.doesNotMatch(h.app.innerHTML, /Не удалось загрузить тренеров/);
+    await tick(60);
+    assert.equal(showcaseCalls() - before, 1);
+    assert.equal(h.S.view, 'trainer');
+    assert.equal(h.S.loadError, false);
+    h.click({ 'data-act': 'back' });
+    await tick(20);
+    assert.equal(h.S.view, 'list');
+    assert.doesNotMatch(h.app.innerHTML, /Не удалось загрузить тренеров/);
+    assert.match(h.app.innerHTML, /Анна/);
+    assert.equal(showcaseCalls() - before, 1);
+  });
+
   it('N: «Вы в списке» и абонемент только после регистрации', async () => {
     const pass = {
       match: (c) => c.url.split('?')[0] === '/api/webapp/client/passes',

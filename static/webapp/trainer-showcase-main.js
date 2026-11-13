@@ -2321,7 +2321,7 @@
       }
       case 'map': ev.stopPropagation(); openLink(el.getAttribute('data-href')); break;
       case 'to-list': S.view = 'list'; S.stack = []; render(); window.scrollTo(0, 0); break;
-      case 'retry-trainer': S.trainerLoadError = false; S.items = null; S.view = 'list'; render(); boot(); break;
+      case 'retry-trainer': S.trainerLoadError = false; S.loadError = false; S.items = null; S.view = 'list'; render(); boot(); break;
       default: break;
     }
   }
@@ -2426,7 +2426,7 @@
       if (!S.cityId && S.session && S.session.city_id) S.cityId = num(S.session.city_id);
       loadPasses();
       return loadShowcase()
-        .then(function (d) { S.items = (d && d.items) || []; })
+        .then(function (d) { S.items = (d && d.items) || []; S.loadError = false; })
         .catch(function () { S.items = null; S.loadError = true; });
     }).then(function () {
       var tid = num(qs.get('trainer_id'));
