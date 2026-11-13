@@ -80,7 +80,7 @@ class IceSessionValidator:
         *,
         max_drop_ratio: float = DEFAULT_MAX_INVALID_SLOT_RATIO,
     ) -> IceSessionValidationOutcome:
-        seen_starts: set[tuple[int, object]] = set()
+        seen_starts: set[tuple[int, object, str]] = set()
         validated: list[CanonicalSlotDraft] = []
         drop_reasons: list[str] = []
         for draft in drafts:
@@ -88,7 +88,7 @@ class IceSessionValidator:
             if reason:
                 drop_reasons.append(reason)
                 continue
-            seen_starts.add((draft.arena_id, draft.starts_at_utc))
+            seen_starts.add((draft.arena_id, draft.starts_at_utc, draft.kind))
             validated.append(draft)
         dropped = len(drop_reasons)
         total = len(drafts)
@@ -111,7 +111,7 @@ class IceSessionValidator:
         )
 
     @staticmethod
-    def _reject_reason(draft: CanonicalSlotDraft, seen_starts: set[tuple[int, object]]) -> str | None:
+    def _reject_reason(draft: CanonicalSlotDraft, seen_starts: set[tuple[int, object, str]]) -> str | None:
         if draft.kind not in PARSER_KINDS:
             return DROP_KIND
         minutes = duration_minutes(draft.starts_at_utc, draft.ends_at_utc)
@@ -130,6 +130,7 @@ class IceSessionValidator:
             return DROP_PRICE
         if not draft.currency_code or len(draft.currency_code) != 3:
             return DROP_CURRENCY
-        if (draft.arena_id, draft.starts_at_utc) in seen_starts:
+        # Ключ как в uq_ice_sessions_parser_slot (арена, начало, тип): два зала могут начать разное в одно время.
+        if (draft.arena_id, draft.starts_at_utc, draft.kind) in seen_starts:
             return DROP_DUPLICATE
         return None
