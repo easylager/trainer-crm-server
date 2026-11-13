@@ -479,8 +479,7 @@ describe('Mini App public URL recovery', () => {
     assert.doesNotMatch(ctx.location.pathname, /client-home/);
   });
 
-  it('повтор startapp тренера с корня / ведёт на карточку, не на главную', (t) => {
-    t.skip('баг: DEEP_LINK_FLAG обнуляет target, с / открывается client-home. REVIEW-LEDGER TASK-408');
+  it('повтор startapp тренера с корня / ведёт на карточку, не на главную', () => {
     const storage = new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55_a_3_v_p3'], ['glide_mini_app_active_v1', '1']]);
     const ctx = browser('https://app.test/?startapp=trainer_7_s_55_a_3_v_p3', { storage, initData: 'signed', startParam: '' });
     assert.equal(G.maybePublicRedirect(ctx), true);

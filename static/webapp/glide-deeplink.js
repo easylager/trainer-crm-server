@@ -121,6 +121,7 @@
       var q = 'trainers?trainer_id=' + p.trainerId + '&slot_id=' + p.slotId;
       if (p.arenaId) q += '&arena_id=' + p.arenaId;
       if (p.via) q += '&via=' + encodeURIComponent(p.via);
+      if (p.intent) q += '&intent=' + p.intent;
       return { key: 'trainers', path: q };
     }
     // TASK-357: ссылка тренера с сайта открывает новую карточку тренера в витрине.
@@ -255,7 +256,8 @@
     var sp = String(readStartParam(ctx) || '').trim();
     var target = deepLinkTarget(sp);
     try {
-      if (storage && storage.getItem(DEEP_LINK_FLAG) === sp) target = null;
+      /* Повтор той же ссылки тренера с «/» — снова карточка (SPEC §8.3); остальные и /t/ — как раньше. */
+      if (storage && storage.getItem(DEEP_LINK_FLAG) === sp && !(p === '/' && target && trainerDeepLinkTarget(sp))) target = null;
     } catch (e2) { /* */ }
     var path = target && target.path;
     if (!path) {
