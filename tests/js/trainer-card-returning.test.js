@@ -298,6 +298,42 @@ describe('часть B ревью 404: чипы, стрелки, скелет, �
     assert.doesNotMatch(h.app.innerHTML, /О тренере<\/h2>/);
   });
 
+  it('G: от трёх отзывов и фото помимо героя — внутри свёрнутого блока', async () => {
+    const reviews = [1, 2, 3].map((i) => ({ name: 'Н' + i, rating: 5, text: 'Текст отзыва ' + i, date: '2026-11-0' + i }));
+    const h = await open('?trainer_id=7&from=hub', {
+      trainer: trainer({ photo_url: '/p/hero.jpg', reviews, class_photos: ['/p/hero.jpg', '/p/ice.jpg'] }),
+    });
+    assert.match(h.app.innerHTML, />О тренере, отзывы и дипломы/);
+    assert.doesNotMatch(h.app.innerHTML, /id="tcRevH"|id="tcGalH"/);
+    h.click({ 'data-act': 'trust' });
+    const openHtml = h.app.innerHTML;
+    assert.match(openHtml, /id="tcRevH"/);
+    assert.match(openHtml, /id="tcGalH"/);
+    assert.match(openHtml, /alt="Фото с занятия 1 из 1"/);
+    const gal = openHtml.slice(openHtml.indexOf('id="tcGalH"'), openHtml.indexOf('</section>', openHtml.indexOf('id="tcGalH"')));
+    assert.doesNotMatch(gal, /hero\.jpg/);
+  });
+
+  it('G: меньше трёх отзывов и только фото героя — блоков нет, подпись без отзывов', async () => {
+    const reviews = [1, 2].map((i) => ({ name: 'Н' + i, rating: 5, text: 'Текст ' + i, date: '2026-11-0' + i }));
+    const h = await open('?trainer_id=7&from=hub', {
+      trainer: trainer({ photo_url: '/p/hero.jpg', reviews, class_photos: ['/p/hero.jpg'] }),
+    });
+    assert.match(h.app.innerHTML, />О тренере и дипломы/);
+    assert.doesNotMatch(h.app.innerHTML, /отзывы и дипломы/);
+    h.click({ 'data-act': 'trust' });
+    assert.doesNotMatch(h.app.innerHTML, /id="tcRevH"|id="tcGalH"/);
+  });
+
+  it('флаг выкл: отзывы и фото не попадают в старую карточку', async () => {
+    const reviews = [1, 2, 3].map((i) => ({ name: 'Н' + i, rating: 5, text: 'Текст ' + i, date: '2026-11-0' + i }));
+    const h = await open('?trainer_id=7&from=hub', {
+      unified: false,
+      trainer: trainer({ reviews, class_photos: ['/p/ice.jpg'] }),
+    });
+    assert.doesNotMatch(h.app.innerHTML, /О тренере, отзывы и дипломы|id="tcRevH"|id="tcGalH"|На занятиях/);
+  });
+
   it('«Назад к тренеру» с пустой H входа №35 открывает G', async () => {
     const h = await open('?trainer_id=7&action=book&service_id=3&from=hub', { slots: [] });
     assert.equal(h.S.view, 'week');

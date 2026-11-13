@@ -78,7 +78,7 @@ describe('единая карточка: порядок и условия пок
   it('A: тарифы плитками, время «сб, 10:00», «9:00» без нуля, главная кнопка с подписью', async () => {
     const html = (await open('A')).app.innerHTML;
     assert.match(html, /<small>Ребёнок<\/small><b>45 BYN<\/b>.*<small>Взрослый<\/small><b>50 BYN<\/b>/);
-    assert.match(html, /<p class="tc-lb">60 мин · Замок · ближайшее время<\/p>/);
+    assert.match(html, /<p class="tc-lb">60 мин · «Замок» · ближайшее время<\/p>/);
     const chips = [...html.matchAll(/class="tc-chip[^"]*" data-act="slot" data-slot="\d+">([^<]*)</g)].map((m) => m[1]);
     assert.deepEqual(chips, ['сб, 10:00', 'сб, 11:30', 'вс, 9:00'], 'до трёх окон');
     assert.match(html, /data-act="week">Другое время</);
@@ -103,7 +103,7 @@ describe('единая карточка: порядок и условия пок
     assert.match(html, /<span class="tc-cap">С клюшкой<\/span><h1>Дмитрий Петров<\/h1>/);
     assert.deepEqual(facts(html), ['12 лет / тренерского опыта', 'Дети / учеников', 'от 50 BYN / за занятие']);
     assert.match(html, /<div class="tc-one"><span>Хоккейное катание<\/span><b>50 BYN<\/b><\/div>/);
-    assert.match(html, /<p class="tc-lb">Ближайшее время<\/p><span>60 мин · Чижовка-Арена<\/span>/);
+    assert.match(html, /<p class="tc-lb">Ближайшее время<\/p><span>60 мин · «Чижовка-Арена»<\/span>/);
   });
 
   it('C: окон нет — сообщение, «Сообщить, когда появится время»; внизу «Написать тренеру» главная, «Оставить заявку» вторая', async () => {
@@ -251,6 +251,25 @@ describe('единая карточка: порядок и условия пок
     assert.match(raw, /<span class="tc-where-t"><b>Ледовая арена «Брест»<\/b>/);
   });
 
+  it('цена, чипы и «Где» называют один каток public_name', async () => {
+    const arenas = [
+      { ...STATES.M3.trainer.arenas[0], name: 'Ледовая арена «Замок»', public_name: '«Замок»' },
+      { ...STATES.M3.trainer.arenas[1], name: 'Ледовая Чижовка', public_name: '«Чижовка»' },
+    ];
+    const many = (await open('M3', { trainer: { arenas } })).app.innerHTML;
+    assert.match(many, /сб, 10:00<small>«Замок»<\/small>/);
+    assert.match(many, /сб, 16:00<small>«Чижовка»<\/small>/);
+    assert.match(many, /<span class="tc-where-t"><b>«Замок»<\/b>/);
+    assert.match(many, /<span class="tc-where-t"><b>«Чижовка»<\/b>/);
+    assert.doesNotMatch(many, /Ледовая арена|Ледовая Чижовка/);
+    const one = (await open('A', {
+      trainer: { arenas: [{ ...STATES.A.trainer.arenas[0], name: 'Ледовая арена «Замок»', public_name: '«Замок»' }] },
+    })).app.innerHTML;
+    assert.match(one, /60 мин · «Замок» · ближайшее время/);
+    assert.match(one, /<span class="tc-where-t"><b>«Замок»<\/b>/);
+    assert.doesNotMatch(one, /Ледовая арена/);
+  });
+
   it('«О занятии» есть только при тексте услуги или заметке тренера', async () => {
     const empty = (await open('A')).app.innerHTML;
     assert.doesNotMatch(empty, />О занятии</);
@@ -342,6 +361,12 @@ describe('стили: токены и шкала радиусов (SPEC §11)', 
   it('радиусы — токены шкалы 12/14/16/18/20 (и капсула)', () => {
     const radii = [...rules.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => m[1].trim());
     assert.ok(radii.length > 5);
-    for (const r of radii) assert.match(r, /^var\(--g-r(-sm|-md|-lg|-card|-btn|-pill)?\)$/, r);
+    // Доска Sent: галочка 22px. SPEC §11 свёл бы к 20; бриф TASK-417 требует 22. Больше нигде.
+    const off = radii.filter((r) => r === '22px');
+    assert.deepEqual(off, ['22px']);
+    for (const r of radii) {
+      if (r === '22px') continue;
+      assert.match(r, /^var\(--g-r(-sm|-md|-lg|-card|-btn|-pill)?\)$/, r);
+    }
   });
 });
