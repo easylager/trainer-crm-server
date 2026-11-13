@@ -249,6 +249,61 @@ describe('доработка ревью', () => {
   });
 });
 
+describe('часть B ревью 404: чипы, стрелки, скелет, доверие, выход', () => {
+  it('на G не больше двух чипов окон, кроме «Другое время»', async () => {
+    const slots = [
+      slot(1, TODAY, '10:00'),
+      slot(2, TODAY, '11:00'),
+      slot(3, TODAY, '12:00'),
+      slot(4, D1, '09:00'),
+      slot(5, D2, '09:30'),
+    ];
+    const h = await open('?trainer_id=7&from=hub', { slots });
+    const times = (h.app.innerHTML.match(/<div class="tc-g-times">([\s\S]*?)<\/div>/) || [])[1] || '';
+    const chips = times.match(/data-act="slot"/g) || [];
+    assert.equal(chips.length, 2, times);
+    assert.match(times, /Другое время/);
+  });
+
+  it('стрелки H переходят на день с окнами и пропускают пустой', async () => {
+    const slots = [slot(1, TODAY, '10:00'), slot(4, D2, '09:00')];
+    const h = await open('?trainer_id=7&action=book&from=hub', { slots });
+    const days = h.app.querySelectorAll('[data-act="day"]');
+    assert.ok(days.length >= 2);
+    assert.equal(days[0].getAttribute('data-day'), TODAY);
+    days[0].focus();
+    const ev = h.key('ArrowRight');
+    assert.equal(ev.defaultPrevented, true);
+    assert.equal(h.S.day, D2);
+    assert.equal(h.doc.activeElement.getAttribute('data-day'), D2);
+    assert.notEqual(h.S.day, D1);
+  });
+
+  it('пока окна H не пришли, виден скелет', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub');
+    h.S.slots = null;
+    h.S.view = 'week';
+    h.ctx.__trainerShowcase.render();
+    assert.match(h.app.innerHTML, /class="tc-h-sk"/);
+    assert.match(h.app.innerHTML, /Загружаем время/);
+    assert.doesNotMatch(h.app.innerHTML, /role="tablist"/);
+  });
+
+  it('доверие свёрнуто подписью «О тренере и дипломы»', async () => {
+    const h = await open('?trainer_id=7&from=hub');
+    assert.match(h.app.innerHTML, />О тренере и дипломы/);
+    assert.doesNotMatch(h.app.innerHTML, /О тренере<\/h2>/);
+  });
+
+  it('«Назад к тренеру» с пустой H уходит с недели', async () => {
+    const h = await open('?trainer_id=7&action=book&service_id=3&from=hub', { slots: [] });
+    assert.equal(h.S.view, 'week');
+    h.click({ 'data-act': 'to-trainer' });
+    assert.equal(h.S.view, 'trainer');
+    assert.doesNotMatch(h.app.innerHTML, /Время на две недели/);
+  });
+});
+
 describe('флаг выключен', () => {
   it('from=hub не меняет карточку', async () => {
     const off = await open('?trainer_id=7&from=hub', { unified: false, last: '2026-11-02' });
