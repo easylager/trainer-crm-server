@@ -1866,7 +1866,8 @@
         var tid = t && t.trainer_id != null ? Number(t.trainer_id) : NaN;
         if (isNaN(tid) || tid <= 0) return;
         var sid = t.service_id != null ? Number(t.service_id) : hubRepeatBookServiceId(tid);
-        navigateTo(buildBookPathFromHubContext(tid, { serviceId: sid, fallbackServiceQuery: catalogPrimaryServiceQuery() }));
+        // entry=rebook читает только витрина под флагом. Старый каталог параметр не знает.
+        navigateTo(buildBookPathFromHubContext(tid, { serviceId: sid, fallbackServiceQuery: catalogPrimaryServiceQuery() }) + '&entry=rebook');
       }
 
       /**

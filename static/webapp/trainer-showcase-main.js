@@ -57,6 +57,14 @@
     slotsError: false,
     weekStart: null,
     day: null,
+    // Экран H: выбранное окно дня. Пусто — первое окно этого дня.
+    weekSlot: null,
+    // G: дата последнего занятия с ребра (last_completed_at). Нет поля — строки нет.
+    lastCompletedAt: null,
+    // G: «О тренере, отзывы и дипломы» свёрнуто, пока человек сам не откроет.
+    trustOpen: false,
+    // Тариф прошлой записи (last_created_booking_service_price_variant_id) — только подпись цены на G.
+    pastVariant: null,
     saved: false,
     notify: false,
     waBlock: '',
@@ -521,6 +529,8 @@
       if (!e) return;
       S.saved = !!e.is_saved;
       S.notify = !!e.notify_when_slots;
+      // Поле уже есть в ребре. Пустое или отсутствующее — «Последнее занятие» не показываем.
+      S.lastCompletedAt = e.last_completed_at ? e.last_completed_at : null;
       if (S.view === 'trainer' && S.trainer === t) render();
     }).catch(function () { /* не критично: кнопки останутся в исходном состоянии */ });
   }
@@ -534,8 +544,25 @@
     S.dirKey = pinDirection(t, want);
     S.serviceId = num(qs.get('service_id')) && Number(t.id) === num(qs.get('trainer_id')) ? num(qs.get('service_id')) : null;
     if (S.serviceId == null) S.serviceId = firstServiceId(t, S.dirKey);
+    // Прошлый формат — last_created_booking_service_* этой сессии с тренером. Чип слота не трогаем:
+    // у окна своя услуга, подмена отфильтровала бы его из выдачи.
+    S.pastVariant = null;
+    if (fromHub() && !qs.get('slot_id') && S.session) {
+      var pastSid = Number(S.session.last_created_booking_service_id);
+      var hasPast = pastSid > 0 && (t.services || []).some(function (s) { return Number(s.service_id) === pastSid; });
+      if (hasPast) {
+        S.serviceId = pastSid;
+        var pastDir = M.directionKeyForServiceId(pastSid);
+        if (pastDir) S.dirKey = pinDirection(t, pastDir);
+        var pastVid = Number(S.session.last_created_booking_service_price_variant_id);
+        S.pastVariant = pastVid > 0 ? pastVid : null;
+      }
+    }
     S.saved = false;
     S.notify = false;
+    S.lastCompletedAt = null;
+    S.trustOpen = false;
+    S.weekSlot = null;
     S.waBlock = '';
     S.saveNote = '';
     S.entryNote = '';
@@ -646,6 +673,26 @@
     return window.__UNIFIED_TRAINER_CARD__ === true;
   }
 
+  /** Вход с хаба под флагом. Флаг выключен — from=hub ничего не меняет. */
+  function fromHub() {
+    return unifiedCard() && qs.get('from') === 'hub';
+  }
+
+  /** №37: «Снова к» — тот же action=book, но карточка G, не неделя. */
+  function hubRebookEntry() {
+    return fromHub() && qs.get('entry') === 'rebook';
+  }
+
+  /** №35: action=book&from=hub без entry=rebook → экран H. */
+  function hubWeekEntry() {
+    return fromHub() && qs.get('action') === 'book' && !qs.get('slot_id') && !hubRebookEntry();
+  }
+
+  /** №34 и №37: карточка вернувшегося (G). */
+  function returningCard() {
+    return fromHub() && !qs.get('slot_id') && (qs.get('action') !== 'book' || hubRebookEntry());
+  }
+
   var TC_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
   var TC_ICON = {
     back: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>',
@@ -653,6 +700,7 @@
     pin: TC_SVG + '<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
     cap: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-5 9 5-9 5-9-5Z"/><path d="M7 11.5V16c0 1 2.2 2.5 5 2.5s5-1.5 5-2.5v-4.5"/></svg>',
     chevron: '<svg class="tc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>',
+    down: '<svg class="tc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
     bell: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 17h12l-1.5-2V10a4.5 4.5 0 0 0-9 0v5L6 17Z"/><path d="M10 20h4"/></svg>',
     share: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>',
     search: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
@@ -890,6 +938,7 @@
   }
 
   function renderTrainerCard() {
+    if (returningCard()) return renderReturningCard();
     var t = S.trainer;
     var dirs = M.trainerDirections(t);
     var svcs = serviceList(t, S.dirKey);
@@ -1093,6 +1142,12 @@
   /* ── 3 · Другое время ────────────────────────────────────────────── */
 
   function openWeek() {
+    if (unifiedCard()) {
+      S.day = null;
+      S.weekSlot = null;
+      go('week');
+      return;
+    }
     S.weekStart = S.todayIso;
     var first = (S.slots || [])[0];
     S.day = first && M.daysBetween(S.todayIso, first.slot_date) < 7 ? first.slot_date : S.todayIso;
@@ -1106,7 +1161,255 @@
     return M.addDays(S.todayIso, 13 - wd);
   }
 
+  var TC_MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+    'сентября', 'октября', 'ноября', 'декабря'];
+  var TC_WEEKDAY_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+
+  /** «2 ноября». Неразобранная дата — пусто, строку не показываем. */
+  function tcDayMonth(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '').slice(0, 10));
+    if (!m) return '';
+    var mo = TC_MONTHS[+m[2] - 1];
+    return mo ? String(+m[3]) + ' ' + mo : '';
+  }
+
+  function tcWeekdayFull(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '').slice(0, 10));
+    if (!m) return '';
+    return TC_WEEKDAY_FULL[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()] || '';
+  }
+
+  function tcInitials(t) {
+    var parts = String((t && t.name) || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    return (parts[0].charAt(0) + (parts[1] ? parts[1].charAt(0) : '')).toLocaleUpperCase('ru');
+  }
+
+  /** Кнопка «Назад» как на записи: в Telegram её нет, там нативная стрелка. */
+  function tcBarBack() {
+    if (window.MiniAppBack && window.MiniAppBack.isNative()) return '';
+    var label = S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры';
+    return '<button type="button" class="tc-bback" data-act="back" aria-label="' + esc(label) + '">' + TC_ICON.back + '</button>';
+  }
+
+  function horizonEndIso() {
+    return slotsHorizonIso();
+  }
+
+  function horizonDays() {
+    var end = horizonEndIso();
+    var out = [];
+    var iso = S.todayIso;
+    while (iso && iso <= end) {
+      out.push(iso);
+      iso = M.addDays(iso, 1);
+    }
+    return out;
+  }
+
+  function slotsOn(iso) {
+    return (S.slots || []).filter(function (s) { return s.slot_date === iso && s.slot_date <= horizonEndIso() && s.slot_date >= S.todayIso; });
+  }
+
+  function chooseHorizonDay() {
+    if (S.slots === null) {
+      if (!S.day) S.day = S.todayIso;
+      return;
+    }
+    var days = horizonDays();
+    var still = S.day && days.indexOf(S.day) >= 0 && slotsOn(S.day).length;
+    if (!still) {
+      var found = days.filter(function (d) { return slotsOn(d).length; })[0];
+      S.day = found || S.todayIso;
+      S.weekSlot = null;
+    }
+  }
+
+  function pickedHorizonSlot() {
+    var rows = slotsOn(S.day);
+    var cur = rows.filter(function (s) { return String(s.id) === String(S.weekSlot); })[0];
+    return cur || rows[0] || null;
+  }
+
+  function gPriceRow(svc) {
+    if (!svc) return '';
+    var rows = M.whoOptions(svc).single.filter(function (r) { return r.priceCents > 0; });
+    var row = S.pastVariant ? rows.filter(function (r) { return r.variantId === S.pastVariant; })[0] : null;
+    if (!row && rows.length === 1) row = rows[0];
+    if (!row) return '';
+    var money = M.formatMoney(row.priceCents, svc.currency_code || 'BYN');
+    if (!money) return '';
+    return '<div class="tc-g-price"><span>' + esc(row.title) + '</span><b>' + esc(money) + '</b></div>';
+  }
+
+  function gRink(t) {
+    var arenas = t.arenas || [];
+    var primary = String(t.primary_arena_name || '').trim();
+    var a = arenas.filter(function (x) { return primary && (x.name === primary || x.name === primary.replace(/[«»]/g, '')); })[0] || arenas[0];
+    var name = (a && a.name) || primary;
+    if (!name) return '';
+    var sub = [a && a.address, 'основной каток'].filter(Boolean).join(' · ');
+    var inner = '<span class="tc-ic">' + TC_ICON.pin + '</span><span class="tc-where-t"><b>' + esc(name) + '</b>' +
+      (sub ? '<span>' + esc(sub) + '</span>' : '') + '</span>';
+    if (a && a.map_link) {
+      return '<button type="button" class="tc-g-rink" data-act="map" data-href="' + esc(a.map_link) + '">' + inner + '</button>';
+    }
+    return '<div class="tc-g-rink">' + inner + '</div>';
+  }
+
+  /** G · карточка вернувшегося (доска MyTrainer). Обычная карточка — renderTrainerCard выше. */
+  function renderReturningCard() {
+    var t = S.trainer;
+    var svcs = serviceList(t, S.dirKey);
+    var svc = currentService() || (svcs.length > 1 ? svcs[0] : null);
+    var back = tcBarBack();
+    var heart = initData
+      ? '<button type="button" class="tc-g-icon" data-act="save" aria-label="' + (S.saved ? 'Тренер сохранён' : 'Сохранить тренера') + '" aria-pressed="' + !!S.saved + '">' + tcHeart(S.saved) + '</button>'
+      : '';
+    var dirLine = tcDirLine(t);
+    // last_completed_at — дата создания записи, не занятия. Честной даты нет — строки нет.
+    var h = '<div class="tc tc-g"><div class="tc-gbar">' + back + heart + '</div><div class="tc-g-pad">';
+    h += '<div class="tc-g-who">' + (t.photo_url
+      ? '<img class="tc-g-ava" src="' + esc(t.photo_url) + '" alt="">'
+      : '<div class="tc-g-ava tc-g-ava--i" aria-hidden="true">' + esc(tcInitials(t)) + '</div>') +
+      '<div class="tc-g-id"><h1>' + esc(t.name) + '</h1>' +
+      (dirLine ? '<p>' + esc(dirLine) + '</p>' : '') + '</div></div>';
+    if (t.can_book) h += gBookCard(t, svc);
+    var trustBits = [tcAbout(t), tcEducation(t)].filter(Boolean);
+    if (trustBits.length) {
+      h += '<button type="button" class="tc-g-trust" data-act="trust" aria-expanded="' + !!S.trustOpen + '">О тренере и дипломы' + TC_ICON.down + '</button>';
+      if (S.trustOpen) h += '<div class="tc-g-trust-b">' + trustBits.join('') + '</div>';
+    }
+    h += gRink(t);
+    h += '</div></div>';
+    if (!t.can_book) return h + tcExitFooter(t, true);
+    var first = (S.slots && S.slots.length) ? S.slots[0] : null;
+    if (first) {
+      return h + '<div class="ft col tc-ft"><div class="tc-ft-row"><button type="button" class="cta" data-act="slot" data-slot="' + esc(first.id) + '">Записаться снова на ' +
+        esc(tcWhen(first)) + '</button>' +
+        (t.contact_url ? '<button type="button" class="ico" data-act="write" aria-label="Написать тренеру">' + TC_ICON.mail + '</button>' : '') + '</div>' +
+        (initData ? '<small>' + esc(tcFirstName(t)) + ' подтвердит — сообщение придёт в Telegram</small>' : '') + '</div>';
+    }
+    if (S.slots !== null && !S.slotsError) return h + tcExitFooter(t, false);
+    return h;
+  }
+
+  function gBookCard(t, svc) {
+    var h = '<section class="tc-card tc-g-book" aria-label="Записаться снова">';
+    h += '<div class="tc-g-kicker">Записаться снова</div>';
+    if (S.slots === null) {
+      return h + '<span class="tc-vh" role="status">Загружаем время…</span><div class="tc-times" aria-hidden="true"><i class="tc-sk"></i><i class="tc-sk"></i></div></section>';
+    }
+    if (S.slotsError) {
+      var write = t.contact_url ? '<button type="button" class="tc-sec" data-act="write">Написать</button>' : '';
+      return h + '<p class="tc-empty-t">Не удалось загрузить время</p>' +
+        '<p class="tc-empty-p">Проверьте сеть и повторите.' + (t.contact_url ? ' Тренеру можно и написать.' : '') + '</p>' +
+        '<div class="tc-l1-acts"><button type="button" class="tc-sec tc-sec--main" data-act="reslots">Повторить</button>' + write + '</div></section>';
+    }
+    var first = S.slots[0];
+    if (!first) {
+      return h + '<p class="tc-empty-t">На ближайшие 2 недели свободного времени нет</p></section>';
+    }
+    h += '<div class="tc-g-when">' + esc(screenL_slotTitle(first)) + '</div>';
+    var bits = [];
+    if (first.arena_name) bits.push(first.arena_name);
+    var fmt = svc && (svc.title || svc.service_name);
+    if (fmt) bits.push(fmt);
+    if (t.session_duration_minutes) bits.push(t.session_duration_minutes + ' мин');
+    if (bits.length) h += '<p class="tc-g-meta">' + esc(bits.join(' · ')) + '</p>';
+    var rest = S.slots.slice(1, 3);
+    h += '<div class="tc-g-times">' + rest.map(function (s) {
+      return '<button type="button" class="tc-chip" data-act="slot" data-slot="' + esc(s.id) + '">' + esc(tcWhen(s)) + '</button>';
+    }).join('') + '<button type="button" class="tc-chip tc-chip--alt" data-act="week">Другое время</button></div>';
+    var price = gPriceRow(svc);
+    if (price) h += price;
+    return h + '</section>';
+  }
+
+  /** H · время на две недели (доска Week). Горизонт — окно /client/slots: сегодня до воскресенья следующей недели. */
+  function renderWeekH() {
+    var t = S.trainer;
+    if (!t) return '';
+    chooseHorizonDay();
+    var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '';
+    var sub = [t.name, dur].filter(Boolean).join(' · ');
+    var h = '<div class="tc tc-h"><div class="tc-bhead tc-h-head">' + tcBarBack() +
+      '<div class="tc-h-title"><h1>Время на две недели</h1>' + (sub ? '<p>' + esc(sub) + '</p>' : '') + '</div></div>';
+    h += '<div class="tc-h-pad">';
+    if (S.slots === null) {
+      return h + '<div class="tc-h-sk" aria-busy="true"><span class="tc-vh" role="status">Загружаем время…</span>' +
+        '<i></i><i></i><i></i><i></i><i></i></div></div></div>';
+    }
+    if (S.slotsError) {
+      var write = t.contact_url ? '<button type="button" class="tc-sec" data-act="write">Написать</button>' : '';
+      return h + '<p class="tc-empty-t">Не удалось загрузить время</p>' +
+        '<p class="tc-empty-p">Проверьте сеть и повторите.' + (t.contact_url ? ' Тренеру можно и написать.' : '') + '</p>' +
+        '<div class="tc-l1-acts"><button type="button" class="tc-sec tc-sec--main" data-act="reslots">Повторить</button>' + write + '</div></div></div>';
+    }
+    var days = horizonDays();
+    var any = days.some(function (iso) { return slotsOn(iso).length; });
+    if (!t.can_book || !any) {
+      h += weekDeadEnd(t);
+      return h + '</div></div>';
+    }
+    h += '<div class="tc-h-days" role="tablist" aria-label="Дни">';
+    days.forEach(function (iso) {
+      var n = slotsOn(iso).length;
+      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+      var wd = m ? TC_WEEKDAY[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()] : '';
+      if (wd) wd = wd.charAt(0).toLocaleUpperCase('ru') + wd.slice(1);
+      var num = m ? String(+m[3]) : '';
+      var on = iso === S.day && n > 0;
+      if (!n) {
+        h += '<button type="button" class="tc-h-day tc-h-day--empty" disabled aria-disabled="true">' +
+          '<span>' + esc(wd) + '</span><b>' + esc(num) + '</b><small>нет</small></button>';
+        return;
+      }
+      var count = M.word(n, 'окно', 'окна', 'окон');
+      h += '<button type="button" class="tc-h-day" role="tab" data-act="day" data-day="' + iso + '" aria-selected="' + on + '" aria-controls="tcHDay">' +
+        '<span>' + esc(wd) + '</span><b>' + esc(num) + '</b><small>' + esc(count) + '</small></button>';
+    });
+    h += '</div>';
+    var rows = slotsOn(S.day);
+    var picked = pickedHorizonSlot();
+    var head = tcWeekdayFull(S.day);
+    var dm = tcDayMonth(S.day);
+    h += '<div id="tcHDay" role="tabpanel">';
+    if (head && dm) h += '<h2 class="tc-h-daytitle">' + esc(head) + ', ' + esc(dm) + '</h2>';
+    if (rows.length) {
+      h += '<div class="tc-h-grid">' + rows.map(function (s) {
+        var on = picked && String(picked.id) === String(s.id);
+        return '<button type="button" class="tc-h-tile" data-act="week-slot" data-slot="' + esc(s.id) + '" aria-pressed="' + !!on + '"><b>' +
+          esc(String(s.start_time || '').slice(0, 5).replace(/^0(\d)/, '$1')) + '</b>' +
+          (s.arena_name ? '<span>' + esc(s.arena_name) + '</span>' : '') + '</button>';
+      }).join('') + '</div>';
+    }
+    h += '</div>';
+    if (t.contact_url) {
+      h += '<div class="tc-h-ask"><div><b>Не подходит время?</b><span>Напишите тренеру, чтобы предложить своё время</span></div>' +
+        '<button type="button" class="tc-sec" data-act="write">Написать</button></div>';
+    }
+    h += '</div></div>';
+    if (picked) {
+      h += '<div class="ft col tc-ft"><button type="button" class="cta" data-act="slot" data-slot="' + esc(picked.id) + '">Записаться на ' +
+        esc(tcWhen(picked)) + '</button>' +
+        (initData ? '<small>' + esc(tcFirstName(t)) + ' подтвердит — сообщение придёт в Telegram</small>' : '') + '</div>';
+    }
+    return h;
+  }
+
+  /** H без окон или без онлайн-записи: не пустая полоса дней и не пустой заголовок дня. */
+  function weekDeadEnd(t) {
+    if (!t.can_book) {
+      return '<p class="tc-empty-t">Сейчас записаться онлайн нельзя</p>' +
+        (initData ? '<button type="button" class="tc-sec tc-sec--main" data-act="request">Оставить заявку</button>' : '');
+    }
+    return '<p class="tc-empty-t">На ближайшие две недели свободного времени нет</p>' +
+      '<button type="button" class="tc-sec" data-act="to-trainer">Назад к тренеру</button>';
+  }
+
   function renderWeek() {
+    if (unifiedCard()) return renderWeekH();
     var t = S.trainer;
     var dirs = M.trainerDirections(t);
     var slots = S.slots || [];
@@ -1210,7 +1513,7 @@
     }, Promise.resolve());
   }
 
-  function openBooking(slot) {
+  function openBooking(slot, opts) {
     // Слот другого тренера (поздний ответ) — не записываем: запись ушла бы не тому тренеру.
     if (!S.trainer || (slot.trainer_id != null && Number(slot.trainer_id) !== Number(S.trainer.id))) return;
     var keep = S.book && S.book.slot && S.view === 'book' ? S.book : null;
@@ -1249,6 +1552,13 @@
     // В группу — одно место на запись: из двоих, отмеченных на прошлом слоте, остаётся первый.
     if (slot.capacity > 1 && S.book.selected.length > 1) S.book.selected = S.book.selected.slice(0, 1);
     BC.emitBookingAnalytics('booking_step_viewed', { step: 'form', host: 'trainers' });
+    // Чип с хаба: запись — корень, «Назад» уходит на хаб существующим back() (стек пуст). go() не зовём.
+    if (opts && opts.root) {
+      S.stack = [];
+      S.view = 'book';
+      render();
+      return;
+    }
     if (S.view === 'book') render();
     else go('book');
   }
@@ -2168,7 +2478,7 @@
     if (S.tab && S.tab !== 'all') q.set('tab', S.tab); else q.delete('tab');
     if (S.arenaId) q.set('arena_id', String(S.arenaId)); else q.delete('arena_id');
     // Фильтры витрины — в адресе; вход в тренера/время одноразовый и при перезагрузке не повторяется.
-    ['trainer_id', 'slot_id', 'service_id', 'via', 'intent'].forEach(function (k) { q.delete(k); });
+    ['trainer_id', 'slot_id', 'service_id', 'via', 'intent', 'entry'].forEach(function (k) { q.delete(k); });
     try { history.replaceState(history.state, '', location.pathname + '?' + q.toString()); } catch (e) { /* */ }
   }
 
@@ -2242,7 +2552,14 @@
       case 'reslots': loadSlots().then(render); render(); break;
       case 'wk-prev': S.weekStart = M.addDays(S.weekStart, -7); if (S.weekStart < S.todayIso) S.weekStart = S.todayIso; S.day = S.weekStart; render(); break;
       case 'wk-next': S.weekStart = M.addDays(S.weekStart, 7); S.day = S.weekStart; render(); break;
-      case 'day': S.day = el.getAttribute('data-day'); render(); break;
+      case 'day':
+        S.day = el.getAttribute('data-day');
+        if (unifiedCard()) S.weekSlot = null;
+        render();
+        break;
+      case 'week-slot': S.weekSlot = el.getAttribute('data-slot'); render(); break;
+      case 'trust': S.trustOpen = !S.trustOpen; render(); break;
+      case 'to-trainer': S.view = 'trainer'; S.stack = []; render(); window.scrollTo(0, 0); break;
       case 'notify':
         subscribeNotify(el);
         break;
@@ -2356,6 +2673,32 @@
   appEl.addEventListener('click', onClick);
   sheetEl.addEventListener('click', onClick);
   document.addEventListener('keydown', onSheetKey);
+  document.addEventListener('keydown', onWeekKey);
+
+  /** Вкладки дней H: стрелки, как ждёт role=tablist. */
+  function onWeekKey(ev) {
+    if (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft') return;
+    var cur = document.activeElement;
+    if (!cur || !cur.getAttribute || cur.getAttribute('data-act') !== 'day') return;
+    if (!appEl.querySelectorAll) return;
+    var list = appEl.querySelectorAll('[data-act="day"]');
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i] === cur) idx = i;
+    if (idx < 0) return;
+    var next = ev.key === 'ArrowRight' ? idx + 1 : idx - 1;
+    if (next < 0 || next >= list.length) return;
+    ev.preventDefault();
+    S.day = list[next].getAttribute('data-day');
+    S.weekSlot = null;
+    render();
+    if (!appEl.querySelectorAll) return;
+    var again = appEl.querySelectorAll('[data-act="day"]');
+    for (var j = 0; j < again.length; j++) {
+      if (again[j].getAttribute('data-day') === S.day) {
+        try { again[j].focus(); } catch (e) { /* */ }
+      }
+    }
+  }
   appEl.addEventListener('input', onInput);
   sheetEl.addEventListener('input', onInput);
 
@@ -2374,8 +2717,8 @@
     S.dirKey = pinDirection(t, slotDir || (S.tab !== 'all' ? S.tab : null));
     S.serviceId = viaList ? null : num(qs.get('service_id'));
     if (viaList) go('trainer');
-    else S.view = 'trainer';
-    render();
+    else if (!(fromHub() && qs.get('slot_id'))) S.view = 'trainer';
+    if (!(fromHub() && qs.get('slot_id'))) render();
     return loadSlots()
       .then(function (fresh) {
         if (!fresh || !current()) return stale;
@@ -2389,8 +2732,13 @@
       .then(function (slot) {
         // Пока ждали ответ, открыли другого тренера — ответ этого уже не нужен.
         if (slot === stale || !current()) return;
-        if (slot) openBooking(slot);
+        if (slot) openBooking(slot, fromHub() && qs.get('slot_id') ? { root: true } : null);
         else {
+          // Окно с хаба уже заняли: под шторкой карточка этого тренера, не список.
+          if (fromHub() && qs.get('slot_id') && S.view !== 'trainer') {
+            S.view = 'trainer';
+            S.stack = [];
+          }
           render();
           showTaken();
         }
@@ -2452,11 +2800,16 @@
         }
         var sid = qs.get('slot_id');
         if (sid) return openTrainerAndSlot(tr, sid, false);
-        S.view = 'trainer';
+        var weekRoot = hubWeekEntry();
+        S.view = weekRoot ? 'week' : 'trainer';
         return openTrainer(tr, { view: false }).then(function (r) {
+          if (weekRoot) {
+            S.stack = [];
+            S.view = 'week';
+          }
           // Карточка уже на экране до действия: шторка заявки и баннер «сохранён» не должны лечь на пустой экран.
           render();
-          applyEntryIntent(tr);
+          if (!weekRoot) applyEntryIntent(tr);
           return r;
         });
       });

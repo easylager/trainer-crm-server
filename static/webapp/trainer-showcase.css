@@ -394,3 +394,71 @@ button.tc-where-row { cursor: pointer; }
 .tc-miss .cta { min-height: 48px; margin-top: 16px; width: 100%; }
 .sheet.tc-sheet { border-top-left-radius: var(--g-r-lg); border-top-right-radius: var(--g-r-lg); background: var(--g-surface); color: var(--g-ink); }
 .sheet.tc-sheet .mut { color: var(--g-muted); }
+
+/* G · вернувшийся клиент (доска MyTrainer). Шапка 64px, доверие свёрнуто.
+   .tc на карточке A уезжает на −12px под поля оболочки. Здесь поля свои — минус даёт горизонтальный скролл на 320. */
+/* body в оболочке даёт 12px. −12px возвращает край экрана, внутренние 16px — поле доски. */
+.tc.tc-g, .tc.tc-h { margin: 0 -12px 0; width: auto; }
+.tc-gbar .tc-bback, .tc-h-head .tc-bback { margin-left: 0; flex: none; }
+.tc-gbar { display: flex; align-items: center; min-height: 56px; padding: 0 4px; }
+.tc-g-icon { all: unset; box-sizing: border-box; cursor: pointer; width: 44px; height: 44px; margin-left: auto; display: grid; place-items: center; color: var(--g-accent-ink); }
+.tc-g-pad { padding: 0 16px 8px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tc-g-who { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.tc-g-ava { flex: none; width: 64px; height: 64px; border-radius: var(--g-r-lg); object-fit: cover; display: block; }
+.tc-g-ava--i { display: grid; place-items: center; background: var(--g-ink); color: var(--g-surface); font: 400 22px/1 var(--g-font-display); }
+.tc-g-id { min-width: 0; }
+.tc-g-id h1 { margin: 0; font: 400 22px/1.1 var(--g-font-display); overflow-wrap: anywhere; }
+.tc-g-id p { margin: 4px 0 0; color: var(--g-muted); font-size: 13px; overflow-wrap: anywhere; }
+.tc-g-last { margin: 0; background: var(--g-accent-wash); color: var(--g-accent-ink); border-radius: var(--g-r-btn); padding: 10px 14px; font-weight: 700; }
+.tc-g-book { display: flex; flex-direction: column; gap: 0; }
+.tc-g-kicker { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--g-accent-ink); }
+.tc-g-when { margin-top: 8px; font: 400 24px/1.1 var(--g-font-display); overflow-wrap: anywhere; }
+.tc-g-meta { margin: 6px 0 0; color: var(--g-muted); overflow-wrap: anywhere; }
+.tc-g-times { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+.tc-g-price { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--g-line); display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.tc-g-price span { color: var(--g-muted); min-width: 0; overflow-wrap: anywhere; }
+.tc-g-price b { font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tc-g-trust { all: unset; box-sizing: border-box; cursor: pointer; min-height: 52px; padding: 0 16px; border-radius: var(--g-r-btn); background: var(--g-surface); border: 1px solid var(--g-line); display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; }
+.tc-g-trust[aria-expanded="true"] .tc-chev { transform: rotate(180deg); }
+.tc-g-trust-b { display: flex; flex-direction: column; gap: 12px; }
+.tc-g-rink { all: unset; box-sizing: border-box; display: flex; gap: 12px; align-items: center; min-height: 68px; padding: 14px 16px; border-radius: var(--g-r-card); background: var(--g-surface); border: 1px solid var(--g-line); width: 100%; text-align: left; }
+button.tc-g-rink { cursor: pointer; }
+.tc-g :focus-visible, .tc-h :focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; }
+/* Подвал карточки A вылезает на 12px (margin-inline: -12px). У G и H поля свои, минус не нужен — иначе 320 горизонтально скроллится. */
+.tc-g ~ .ft.tc-ft, .tc-h ~ .ft.tc-ft { margin-inline: -12px; width: auto; max-width: none; }
+.tc-g .tc-card, .tc-g-rink, .tc-h-ask { border-radius: var(--g-r-lg); }
+.tc-h-title { flex: 1; }
+.tc-h-title p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-h-sk { display: flex; gap: 8px; overflow: hidden; }
+.tc-h-sk i { flex: none; width: 64px; height: 68px; border-radius: var(--g-r-md); background: var(--g-seg); }
+
+/* H · две недели (доска Week). Дни листаются, пустой день — пунктир. */
+.tc-h-head { gap: 4px; padding: 0 8px 0 4px; }
+.tc-h-head h1 { margin: 0; font-size: 16px; font-weight: 800; line-height: 1.2; }
+.tc-h-title { min-width: 0; }
+.tc-h-title p { margin: 0; font-size: 12px; color: var(--g-muted); overflow-wrap: anywhere; }
+.tc-h-pad { padding: 4px 16px 8px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.tc-h-days { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.tc-h-days::-webkit-scrollbar { display: none; }
+.tc-h-day { all: unset; box-sizing: border-box; cursor: pointer; flex: none; width: 64px; min-height: 68px; border-radius: var(--g-r-md); background: var(--g-surface); border: 1px solid var(--g-line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.tc-h-day span { font-size: 12px; color: var(--g-muted); }
+.tc-h-day b { font-size: 20px; font-weight: 800; line-height: 1; }
+.tc-h-day small { font-size: 11px; color: var(--g-accent-ink); }
+.tc-h-day[aria-selected="true"] { background: var(--g-ink); border-color: var(--g-ink); color: var(--g-surface); }
+.tc-h-day[aria-selected="true"] span { color: inherit; opacity: .7; }
+.tc-h-day[aria-selected="true"] b { color: inherit; }
+.tc-h-day[aria-selected="true"] small { color: var(--g-surface); opacity: 1; }
+.tc-h-day--empty { cursor: default; background: transparent; border: 1px dashed var(--g-muted); color: var(--g-muted); }
+.tc-h-day--empty b, .tc-h-day--empty small { color: var(--g-muted); font-weight: 700; }
+.tc-h-daytitle { margin: 0 0 8px; font-size: 15px; font-weight: 800; }
+.tc-h-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tc-h-tile { all: unset; box-sizing: border-box; cursor: pointer; min-height: 64px; border-radius: var(--g-r-btn); background: var(--g-surface); border: 1px solid var(--g-line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center; padding: 6px; }
+.tc-h-tile b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tc-h-tile span { font-size: 11px; color: var(--g-muted); overflow-wrap: anywhere; }
+.tc-h-tile[aria-pressed="true"] { background: var(--g-accent-wash); border: 2px solid var(--g-accent); }
+.tc-h-tile[aria-pressed="true"] span { color: var(--g-accent-ink); }
+.tc-h-ask { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: var(--g-r-md); padding: 14px 16px; display: flex; gap: 12px; align-items: center; }
+.tc-h-ask div { flex: 1; min-width: 0; }
+.tc-h-ask b { display: block; font-weight: 700; }
+.tc-h-ask span { display: block; font-size: 13px; color: var(--g-muted); }
+.tc-h-ask .tc-sec { flex: none; min-height: 44px; padding: 0 16px; }
