@@ -92,14 +92,15 @@ describe('мост старого #btnBack', () => {
       closest: (sel) => (inNav && sel === '.client-mini-nav' ? {} : null),
       click: () => clicks.push(1),
     };
-    const win = { Telegram: { WebApp: f.tg } };
+    const listeners = {};
+    const win = { Telegram: { WebApp: f.tg }, addEventListener: (type, fn) => { listeners[type] = fn; } };
     const ctx = {
       window: win,
       document: { getElementById: () => btn, createElement: () => ({}), head: { appendChild() {} } },
       MutationObserver: function (cb) { observers.push(cb); this.observe = () => {}; },
     };
     vm.runInNewContext(block + bridge + '\nbridgeLegacyBackButton();', ctx);
-    return { f, btn, clicks, observers };
+    return { f, btn, clicks, observers, listeners };
   }
 
   it('кнопка видна — стрелка включена и нажимает #btnBack', () => {
@@ -114,6 +115,20 @@ describe('мост старого #btnBack', () => {
     assert.ok(!p.f.calls.includes('show'));
     p.btn.hidden = false;
     p.observers[0]();
+    assert.ok(p.f.calls.includes('show'));
+  });
+
+  it('возврат из bfcache: стрелка от прежнего экрана снимается, если у страницы своей «назад» нет', () => {
+    const p = page({ hidden: true });
+    p.f.calls.length = 0;
+    p.listeners.pageshow({ persisted: true });
+    assert.deepEqual(p.f.calls, ['hide']);
+  });
+
+  it('возврат из bfcache: если #btnBack виден, стрелка остаётся', () => {
+    const p = page({ hidden: false });
+    p.f.calls.length = 0;
+    p.listeners.pageshow({ persisted: true });
     assert.ok(p.f.calls.includes('show'));
   });
 

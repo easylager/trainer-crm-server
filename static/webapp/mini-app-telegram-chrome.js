@@ -409,6 +409,10 @@ function bridgeLegacyBackButton() {
   if (typeof MutationObserver === 'function') {
     new MutationObserver(sync).observe(btn, { attributes: true, attributeFilter: ['hidden'] });
   }
+  /* Возврат из bfcache: скрипты страницы не перезапускаются, а нативная стрелка живёт в Telegram и
+     осталась от экрана, с которого ушли (карточка катка). Без этого на корневой вкладке стрелка видна,
+     а нажатие уходит в обработчик чужого экрана. Сверяем стрелку с #btnBack заново. */
+  if (typeof window.addEventListener === 'function') window.addEventListener('pageshow', sync);
 }
 
 /* TASK-391: оболочка вкладок вставляет «Записи» после загрузки — мост ставится и тогда. */
