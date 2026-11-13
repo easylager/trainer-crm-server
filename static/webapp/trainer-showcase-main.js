@@ -206,14 +206,18 @@
   }
 
   function loadPasses() {
-    if (!initData || !S.profiles.length) return Promise.resolve();
-    return Promise.all(
-      S.profiles.map(function (p) {
-        return api('/api/webapp/client/passes', { profileId: p.client_id })
-          .then(function (d) { S.passes[p.client_id] = (d && d.items) || []; })
-          .catch(function () { S.passes[p.client_id] = []; });
+    var p = !initData || !S.profiles.length ? Promise.resolve() : Promise.all(
+      S.profiles.map(function (pr) {
+        return api('/api/webapp/client/passes', { profileId: pr.client_id })
+          .then(function (d) { S.passes[pr.client_id] = (d && d.items) || []; })
+          .catch(function () { S.passes[pr.client_id] = []; });
       })
     );
+    // Плашка N появляется после абонементов. Флаг выключен — промис тот же, перерисовки нет.
+    if (unifiedCard() && qs.get('listed') === '1') {
+      return p.then(function () { if (S.view === 'trainer') render(); });
+    }
+    return p;
   }
 
   /* ── Навигация: «‹ Назад» на странице (BackButton продукт прячет); фильтры и место в списке сохраняются ── */
@@ -229,6 +233,14 @@
 
   function back() {
     closeSheet();
+    // Экран E заменяет запись: «Назад» возвращает на карточку, не в форму (SPEC §8.1.5). Флаг выключен — как раньше.
+    if (unifiedCard() && S.view === 'sent') {
+      S.view = 'trainer';
+      S.stack = [];
+      render();
+      window.scrollTo(0, 0);
+      return;
+    }
     var prev = S.stack.pop();
     if (!prev) {
       // Корень витрины (или тренер по прямой ссылке): есть откуда пришли — туда; иначе тренер → список.
@@ -754,7 +766,11 @@
       return '<span class="tc-vh" role="status">Загружаем время…</span><div class="tc-times" aria-hidden="true"><i class="tc-sk"></i><i class="tc-sk"></i><i class="tc-sk"></i></div>';
     }
     if (S.slotsError) {
-      return '<p class="tc-empty-t">Не удалось загрузить время</p><button type="button" class="tc-sec tc-sec--in" data-act="reslots">Повторить</button>';
+      // L1: «Повторить» и «Написать» рядом с ошибкой. Нет Telegram — кнопки «Написать» нет.
+      var write = t.contact_url
+        ? '<button type="button" class="tc-sec tc-sec--in" data-act="write">Написать</button>'
+        : '';
+      return '<p class="tc-empty-t">Не удалось загрузить время</p><button type="button" class="tc-sec tc-sec--in" data-act="reslots">Повторить</button>' + write;
     }
     if (!S.slots.length) {
       var hint = initData
@@ -875,6 +891,7 @@
     var svcs = serviceList(t, S.dirKey);
     var svc = currentService() || (svcs.length > 1 ? svcs[0] : null);
     var h = '<div class="tc">' + tcHero(t) + tcFacts(t) + '<div class="tc-body">';
+    if (qs.get('listed') === '1') h += screenN_banner(t);
     if (S.entryNote) h += '<div class="entry-note" role="status">' + esc(S.entryNote) + '</div>';
     if (t.can_book) h += tcPriceCard(t, dirs, svcs, svc);
     h += tcAbout(t);
@@ -1056,7 +1073,8 @@
     var lead = acts
       ? 'Приходите за 15 минут до начала — ' + verb + ' ' + esc(who) + ', и вас встретят у входа.'
       : 'Приходите за 15 минут до начала. ' + esc(t.first_name) + ' напишет вам в чат с ботом, где встретиться.';
-    return '<div class="card meet"><h4>Где встретимся</h4>' + rows + '<p class="mt-lead">' + lead + '</p>' +
+    var meetHead = unifiedCard() ? '<h2 class="tc-h2">Где встретимся</h2>' : '<h4>Где встретимся</h4>';
+    return '<div class="card meet">' + meetHead + rows + '<p class="mt-lead">' + lead + '</p>' +
       (acts ? '<div class="mt-acts">' + acts + '</div>' : '') +
       (opts.rental ? '<p class="mut" style="font-size:12.5px">Билет на сеанс покупается в кассе катка.</p>' : '') + '</div>';
   }
@@ -1301,7 +1319,7 @@
     var place = slot.is_online ? 'онлайн' : (slot.arena_name || (arenaById(slot.arena_id) || {}).name || '');
     var svcDir = svc ? M.direction(M.directionKeyForServiceId(svc.service_id)) : null;
     var what = svc ? (svcDir && svcDir.ids.length === 1 && svc.is_public !== false ? svcDir.title : svc.service_name) : '';
-    var h = '<div class="bd">' + backBtn('Назад');
+    var h = '<div class="' + (unifiedCard() ? 'tc tc-book' : 'bd') + '">' + backBtn('Назад');
     h += '<div class="sum"><div class="k">' + (t.photo_url ? '<img src="' + esc(t.photo_url) + '" alt="">' : '<i>' + esc(t.initial || 'Т') + '</i>') +
       '<div class="when"><b>' + esc(M.slotWhen(slot, S.todayIso)) + '</b><br><span>' + esc([t.name, what, place].filter(Boolean).join(' · ')) + '</span></div></div></div>';
     if (!svc) {
@@ -1361,8 +1379,12 @@
     var label = ready ? 'Записаться на ' + String(b.slot.start_time).slice(0, 5)
       : b.regular ? 'Отметьте, кого записываем' : 'Выберите, кто будет заниматься';
     if (b.submitting) label = 'Отправляем…';
-    return '<div class="ft col"><button type="button" class="cta' + (ready ? '' : ' off') + '" data-act="submit"' + (ready && !b.submitting ? '' : ' disabled') + '>' + esc(label) + '</button>' +
-      '<small>' + esc(S.trainer.first_name) + ' подтвердит запись</small></div>';
+    var caption = unifiedCard()
+      ? esc(tcFirstName(S.trainer)) + ' подтвердит — сообщение придёт в Telegram'
+      : esc(S.trainer.first_name) + ' подтвердит запись';
+    var footClass = unifiedCard() ? 'ft col tc-ft' : 'ft col';
+    return '<div class="' + footClass + '"><button type="button" class="cta' + (ready ? '' : ' off') + '" data-act="submit"' + (ready && !b.submitting ? '' : ' disabled') + '>' + esc(label) + '</button>' +
+      '<small>' + caption + '</small></div>';
   }
 
   function pickRow(key, title, sub, price, checked, disabled, role) {
@@ -1375,7 +1397,10 @@
     var o = M.whoOptions(svc, { group: b.slot.capacity > 1 });
     var duoSelected = o.duo.some(function (r) { return r.kind === b.kind; });
     var open = b.duoOpen || duoSelected;
-    var h = '<div class="fl"><span class="lbl" id="whoLbl">Кто будет заниматься?</span><div class="pick" role="radiogroup" aria-labelledby="whoLbl">' +
+    var whoHead = unifiedCard()
+      ? '<h2 class="tc-h2" id="whoLbl">Кто будет заниматься?</h2>'
+      : '<span class="lbl" id="whoLbl">Кто будет заниматься?</span>';
+    var h = '<div class="fl">' + whoHead + '<div class="pick" role="radiogroup" aria-labelledby="whoLbl">' +
       o.single.map(function (r) { return pickRow(r.kind, r.title, '', r.price, b.kind === r.kind, false, 'radio'); }).join('') + '</div>';
     if (o.duo.length) {
       h += '<button type="button" class="duo" data-act="duo" aria-expanded="' + open + '">Двое на одном занятии ' + (open ? '▴' : '▾') + '</button>' +
@@ -1398,13 +1423,19 @@
     var b = S.book;
     var opts = regularOpts(svc);
     var hasDuo = !opts.group && M.tierChoices(svc, 2).length > 0;
-    var h = '<div class="fl"><span class="lbl">Кого записываем?' + (hasDuo ? ' <span class="mut" style="font-weight:500">Можно двоих</span>' : '') + '</span><div class="pick multi">';
+    var whoReg = unifiedCard()
+      ? '<h2 class="tc-h2" id="whoRegLbl">Кого записываем?' + (hasDuo ? ' <span class="mut">Можно двоих</span>' : '') + '</h2>'
+      : '<span class="lbl">Кого записываем?' + (hasDuo ? ' <span class="mut" style="font-weight:500">Можно двоих</span>' : '') + '</span>';
+    var h = '<div class="fl">' + whoReg + '<div class="pick multi"' + (unifiedCard() ? ' role="group" aria-labelledby="whoRegLbl"' : '') + '>';
     h += S.profiles.map(function (p) {
       var on = b.selected.some(function (x) { return Number(x.client_id) === Number(p.client_id); });
       var single = { hints: opts.hints, knownChildIds: opts.knownChildIds, group: opts.group };
       var tier = M.regularTier(svc, [p], single);
       var last = !!M.hintTier(svc, p, single);
-      var sub = last ? 'как в прошлый раз' : tier ? (tier.tier_kind === 'child' ? 'детский' : 'взрослый') : '';
+      var kindWord = tier ? (tier.tier_kind === 'child' ? 'детский' : 'взрослый') : '';
+      var sub = unifiedCard() && last && kindWord
+        ? 'как в прошлый раз · ' + kindWord
+        : last ? 'как в прошлый раз' : kindWord;
       var dis = !on && !M.canAddProfile(svc, b.selected, p, single);
       return pickRow(p.client_id, p.first_name || 'Без имени', sub, tier ? M.formatMoney(tier.price_cents, svc.currency_code) : '', on, dis, 'checkbox');
     }).join('');
@@ -1667,6 +1698,9 @@
     render();
     window.scrollTo(0, 0);
     S.book = null;
+    if (unifiedCard()) {
+      try { history.replaceState({ tswSent: 1 }, ''); } catch (e) { /* история недоступна */ }
+    }
     refreshProfiles();
   }
 
@@ -1675,22 +1709,73 @@
   function showTaken(missingTitle) {
     var b = S.book;
     var lostId = b ? b.slot.id : null;
-    var title = b ? String(b.slot.start_time).slice(0, 5) + ' уже недоступно' : (missingTitle || 'Это время уже недоступно');
+    var unified = unifiedCard();
+    var when = b && unified ? screenL_slotTitle(b.slot) : '';
+    var title = b
+      ? (unified ? when + ' уже заняли' : String(b.slot.start_time).slice(0, 5) + ' уже недоступно')
+      : (missingTitle || (unified ? 'Это время уже заняли' : 'Это время уже недоступно'));
     loadSlots().then(function (fresh) {
       if (!fresh) return;
       var alt = (S.slots || []).filter(function (s) { return String(s.id) !== String(lostId); }).slice(0, 3);
       var svc = currentService();
       var price = svc ? M.cardPriceHtml(svc).replace(/<\/?b>/g, '') : '';
-      var saved = b ? 'Данные запомнили. ' : '';
+      var saved = b ? (unified ? 'Ваши данные сохранены. ' : 'Данные запомнили. ') : '';
+      var tail = alt.length ? 'Свободное время у ' + genFirst(S.trainer.first_name) + ':' : 'Другого свободного времени пока нет.';
+      var rows = alt.map(function (s) {
+        var sub = [s.is_online ? 'онлайн' : s.arena_name, price].filter(Boolean).join(' · ');
+        var label = unified ? screenL_slotTitle(s) : M.slotWhen(s, S.todayIso).replace(/–.*$/, '');
+        return '<button type="button" data-act="slot" data-slot="' + esc(s.id) + '"><span><b>' + esc(label) + '</b><br>' + esc(sub) + '</span><em>›</em></button>';
+      }).join('');
+      var week = unified ? 'Всё время тренера' : 'Другое время';
       openSheet('<div class="sh"><h4>' + esc(title) + '</h4><button type="button" class="x" data-act="sheet-close" aria-label="Закрыть">✕</button></div>' +
-        '<span class="mut">' + esc(saved + (alt.length ? 'Свободное время у ' + genFirst(S.trainer.first_name) + ':' : 'Другого свободного времени пока нет.')) + '</span>' +
-        '<div class="opt">' + alt.map(function (s) {
-          var sub = [s.is_online ? 'онлайн' : s.arena_name, price].filter(Boolean).join(' · ');
-          return '<button type="button" data-act="slot" data-slot="' + esc(s.id) + '"><span><b>' + esc(M.slotWhen(s, S.todayIso).replace(/–.*$/, '')) + '</b><br>' + esc(sub) + '</span><em>›</em></button>';
-        }).join('') + '</div>' +
-        '<button type="button" class="more c" data-act="week">Другое время</button>');
+        '<span class="mut">' + esc(saved + tail) + '</span>' +
+        (rows ? '<div class="opt">' + rows + '</div>' : (unified ? '' : '<div class="opt"></div>')) +
+        '<button type="button" class="more c" data-act="week">' + week + '</button>');
       if (S.view === 'book') render();
     });
+  }
+
+  /** «Сб, 10:00» — заголовок шторки L2. Пустое время не подставляем. */
+  function screenL_slotTitle(slot) {
+    var w = tcWhen(slot);
+    return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
+  }
+
+  /** L3: тренера нет. Город — как в сессии, без склонения (именительного «в Минск» не пишем). */
+  function screenL_missing() {
+    var city = String((S.session && S.session.city_name) || '').trim();
+    var label = city ? 'Другие тренеры · ' + city : 'Другие тренеры';
+    return '<div class="tc tc-miss"><div class="tc-body"><h1>Такого тренера нет</h1>' +
+      '<button type="button" class="cta" data-act="to-list">' + esc(label) + '</button></div></div>';
+  }
+
+  /** N: после регистрации по ссылке тренера. Абонемента нет — строки нет. */
+  function screenN_banner(t) {
+    var first = tcFirstName(t);
+    var name = first;
+    if (RuName && /^[А-Яа-яЁё-]+$/.test(first)) {
+      name = RuName.inflectPersonName(first, '', 'gen') || first;
+    }
+    var pass = screenN_passLine(t);
+    return '<div class="tc-roster" role="status"><b>Вы в списке у ' + esc(name) + '</b>' + pass + '</div>';
+  }
+
+  function screenN_passLine(t) {
+    var ids = Object.keys(S.passes || {});
+    for (var i = 0; i < ids.length; i++) {
+      var items = S.passes[ids[i]] || [];
+      for (var j = 0; j < items.length; j++) {
+        var p = items[j];
+        if (Number(p.trainer_id) !== Number(t.id)) continue;
+        if (p.status && p.status !== 'active') continue;
+        var left = Number(p.sessions_remaining);
+        if (!(left > 0)) continue;
+        var total = Number(p.sessions_total);
+        var of = total > 0 ? ' из ' + total : '';
+        return '<span>Абонемент: осталось ' + M.word(left, 'занятие', 'занятия', 'занятий') + of + '</span>';
+      }
+    }
+    return '';
   }
 
   function genFirst(first) {
@@ -1712,27 +1797,46 @@
     var slot = x.slot;
     var place = slot.is_online ? 'онлайн' : (slot.arena_name || '');
     var line = [x.participant, M.daySmall(slot.slot_date, S.todayIso) + ', ' + String(slot.start_time).slice(0, 5), place].filter(Boolean).join(' · ');
-    var h = '<div class="bd"><div class="okc" aria-hidden="true">✓</div><div class="ctr"><h3>Запись отправлена ' + esc(M.dativeFirst(t.first_name, RuName)) + '</h3>' +
+    var unified = unifiedCard();
+    var sentTitle = 'Запись отправлена ' + esc(M.dativeFirst(t.first_name, RuName));
+    var h = '<div class="' + (unified ? 'tc tc-sent' : 'bd') + '"><div class="okc" aria-hidden="true">✓</div><div class="ctr">' +
+      (unified ? '<h1>' + sentTitle + '</h1>' : '<h3>' + sentTitle + '</h3>') +
       '<span class="mut">' + esc(line) + '</span></div>';
     var steps;
     if (canWrite) {
-      steps = [esc(t.first_name) + ' подтвердит запись — пришлём сообщение в чат с ботом.'];
-      var plan = x.data && x.data.reminder_plan ? String(x.data.reminder_plan).trim() : '';
-      if (plan) steps.push('Напомним ' + esc(plan) + '.');
+      steps = [unified
+        ? esc(t.first_name) + ' подтвердит запись — сообщение в Telegram.'
+        : esc(t.first_name) + ' подтвердит запись — пришлём сообщение в чат с ботом.'];
+      // «Напомним за 2 часа» нет в продукте (SPEC §18 B). При флаге строку не показываем.
+      if (!unified) {
+        var plan = x.data && x.data.reminder_plan ? String(x.data.reminder_plan).trim() : '';
+        if (plan) steps.push('Напомним ' + esc(plan) + '.');
+      }
       steps.push('Детали, адрес и отмена — в «Моих записях».');
     } else {
       if (unreachable) h += '<div class="warn">' + BC.writeAccessBlockHtml(unreachable) + '</div>';
       steps = ['Подтверждение тренера появится в «Моих записях».', 'Там же — детали, адрес и отмена.'];
     }
-    h += '<div class="card"><h4>Что дальше</h4><ol class="ol">' + steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol></div>';
+    var nextHead = unified ? '<h2 class="tc-h2">Что дальше</h2>' : '<h4>Что дальше</h4>';
+    h += '<div class="card">' + nextHead + '<ol class="ol">' + steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol></div>';
     if (!slot.is_online) {
       var met = arenaById(slot.arena_id) || (slot.arena_name ? { name: slot.arena_name, map_link: slot.map_link } : null);
       if (met && !met.map_link && slot.map_link) met = Object.assign({}, met, { map_link: slot.map_link });
       if (met) h += meetHtml(t, [met]);
-      h += '<div class="card"><h4>Что взять с собой</h4><p>' + esc(M.takeWithYou(x.dirKey, arenaById(slot.arena_id))) + '</p></div>';
+      var bring = unified ? '<h2 class="tc-h2">Что взять с собой</h2>' : '<h4>Что взять с собой</h4>';
+      h += '<div class="card">' + bring + '<p>' + esc(M.takeWithYou(x.dirKey, arenaById(slot.arena_id))) + '</p></div>';
     }
-    h += '</div><div class="ft col"><button type="button" class="cta" data-act="my-bookings">Мои записи</button>' +
+    if (unified) {
+      var mapLink = slot.map_link || (arenaById(slot.arena_id) || {}).map_link;
+      var route = mapLink
+        ? '<button type="button" class="sec2" data-act="route">Маршрут до катка</button>'
+        : '';
+      h += '</div><div class="ft col tc-ft"><button type="button" class="cta" data-act="my-bookings">Мои записи</button>' +
+        route + '<button type="button" class="sec2" data-act="done">Готово</button></div>';
+    } else {
+      h += '</div><div class="ft col"><button type="button" class="cta" data-act="my-bookings">Мои записи</button>' +
 '</div>';
+    }
     return h;
   }
 
@@ -1886,7 +1990,8 @@
       sheetOpener = active && active !== document.body ? active : null;
       sheetOpenerAct = sheetOpener && sheetOpener.getAttribute ? sheetOpener.getAttribute('data-act') : null;
     }
-    sheetEl.innerHTML = '<div class="dim" data-act="sheet-dim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1">' +
+    var sheetClass = unifiedCard() ? 'sheet tc-sheet' : 'sheet';
+    sheetEl.innerHTML = '<div class="dim" data-act="sheet-dim"><div class="' + sheetClass + '" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1">' +
       inner.replace('<h4>', '<h4 id="sheetTitle">') + '</div></div>';
     sheetEl.hidden = false;
     setBackgroundInert(true);
@@ -1981,6 +2086,7 @@
     else if (S.view === 'book') html = renderBook();
     else if (S.view === 'sent') html = renderSent();
     else if (S.view === 'reqsent') html = renderReqSent();
+    else if (S.view === 'missing') html = screenL_missing();
     else if (unifiedCard() && !S.items && !S.loadError && num(qs.get('trainer_id'))) html = renderTrainerSkeleton();
     else html = renderList();
     appEl.innerHTML = '<div class="tsw-view">' + html + '</div>';
@@ -2146,8 +2252,14 @@
       case 'sheet-close': closeSheet(); break;
       case 'sheet-dim': if (ev.target === el) closeSheet(); break;
       case 'my-bookings': showBookedProfile(); navigate('client-bookings'); break;
+      case 'done': navigate('client-home'); break;
       case 'my-requests': navigate('client-requests'); break;
-      case 'route': openLink(S.sent && S.sent.slot.map_link); break;
+      case 'route': {
+        var sentSlot = S.sent && S.sent.slot;
+        var mapLink = sentSlot && (sentSlot.map_link || (arenaById(sentSlot.arena_id) || {}).map_link);
+        openLink(mapLink);
+        break;
+      }
       case 'map': ev.stopPropagation(); openLink(el.getAttribute('data-href')); break;
       case 'to-list': S.view = 'list'; S.stack = []; render(); window.scrollTo(0, 0); break;
       default: break;
@@ -2265,7 +2377,15 @@
       return p.then(function (tr) {
         // Пока грузили тренера по ссылке, человек уже открыл другого — не перебиваем его выбор.
         if (gen !== S.trainerGen) return;
-        if (!tr) { render(); return; }
+        if (!tr) {
+          if (unifiedCard() && tid) {
+            S.view = 'missing';
+            render();
+            return;
+          }
+          render();
+          return;
+        }
         var sid = qs.get('slot_id');
         if (sid) return openTrainerAndSlot(tr, sid, false);
         S.view = 'trainer';

@@ -340,3 +340,44 @@ button.tc-where-row { cursor: pointer; }
 .tc--sk .tc-facts i { margin: 0 8px; border-radius: var(--g-r-sm); background: var(--g-seg); }
 .tc-sk-line { display: block; height: 14px; width: 60%; border-radius: var(--g-r-sm); background: var(--g-seg); }
 .tc-sk-line--short { width: 40%; margin-top: 8px; }
+
+/* Запись D/D2/E, шторка L2, плашка N (TASK-401). Только .tc-book / .tc-sent / .tc-roster / .tc-sheet.
+   Старые классы формы остаются; здесь они читают токены --g-*, не hex. */
+.tc-book, .tc-sent, .tc-miss {
+  --a-cta: var(--g-accent);
+  --a-cta-tx: var(--g-on-accent);
+  --a-tx: var(--g-ink);
+  --a-sf: var(--g-surface);
+  --a-bg: var(--g-bg);
+  --a-line: var(--g-line);
+  --a-hint: var(--g-muted);
+  --a-soft: var(--g-accent-wash);
+  --a-soft-tx: var(--g-accent-ink);
+  --a-chip: var(--g-chip);
+  padding: 16px 16px 0;
+  display: grid;
+  gap: 12px;
+  width: auto;
+  max-width: none;
+  margin: -12px max(-12px, (100% - 560px) / 2) 0;
+  padding-bottom: 16px;
+}
+.tc-book .sum, .tc-sent .okc { border-radius: var(--g-r-md); }
+.tc-book .sum { background: var(--g-ink); color: var(--g-bg); padding: 14px; }
+.tc-book .sum .when b, .tc-book .sum .when span { color: inherit; }
+.tc-book .sum img, .tc-book .sum i { border-radius: var(--g-r-sm); }
+.tc-book :focus-visible, .tc-sent :focus-visible, .tc-miss :focus-visible, .sheet.tc-sheet :focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 2px;
+}
+.tc-book .inpx:focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; border-color: var(--g-accent); }
+.tc-book .tc-h2, .tc-sent .tc-h2 { margin: 0; }
+.tc-book .fl { display: grid; gap: 8px; }
+.tc-sent h1, .tc-miss h1 { margin: 0; font: 400 28px/1.1 var(--g-font-display); color: var(--g-ink); }
+.tc-sent .okc { width: 56px; height: 56px; display: grid; place-items: center; background: var(--g-accent-wash); color: var(--g-accent-ink); font-weight: 800; }
+.tc-roster { display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--g-r-md); background: var(--g-accent-wash); color: var(--g-ink); }
+.tc-roster b { font-weight: 800; }
+.tc-roster span { font-size: 14px; color: var(--g-ink); }
+.tc-miss .cta { min-height: 48px; margin-top: 8px; }
+.sheet.tc-sheet { border-top-left-radius: var(--g-r-lg); border-top-right-radius: var(--g-r-lg); background: var(--g-surface); color: var(--g-ink); }
+.sheet.tc-sheet .mut { color: var(--g-muted); }

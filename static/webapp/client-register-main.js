@@ -201,8 +201,27 @@
     btnSubmit.classList.toggle('cr-loading', !!on);
   }
 
+  function unifiedReg() {
+    return window.__UNIFIED_TRAINER_CARD__ === true;
+  }
+
+  /** Карточка после регистрации (SPEC §8.2): replace, без таймера и без хаба. */
+  function trainersCardUrl() {
+    var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+    var raw = currentInit();
+    var q = 'trainer_id=' + trainerId + '&via=link&listed=1';
+    var slot = chosenSlotId();
+    if (slot) q += '&slot_id=' + slot;
+    if (raw) q += '&init_data=' + encodeURIComponent(raw);
+    return path + 'trainers?' + q;
+  }
+
   function showSuccess(opts) {
     opts = opts || {};
+    if (unifiedReg() && trainerId) {
+      window.location.replace(trainersCardUrl());
+      return;
+    }
     if (formCard) formCard.style.display = 'none';
     if (actions) actions.style.display = 'none';
     if (globalError) globalError.style.display = 'none';
@@ -311,6 +330,10 @@
       .then(function (data) {
         if (data && data.name) {
           var name = String(data.name).trim();
+          if (unifiedReg()) {
+            screenK_phoneNote(name);
+            return;
+          }
           if (heroSub) {
             heroSub.innerHTML =
               'Приглашение от <strong class="cr-hero-trainer-name">' +
@@ -322,6 +345,66 @@
       .catch(function () {
         /* non-critical */
       });
+  }
+
+  /** K: имя + телефон, пояснение, слот сверху. Узлы появляются только при флаге. */
+  function screenK_mount() {
+    if (!unifiedReg()) return;
+    document.body.classList.add('cr-k');
+    var title = document.getElementById('crHeroTitle');
+    if (title) title.textContent = 'Как вас зовут?';
+    if (heroSub) heroSub.textContent = '';
+    var last = document.getElementById('crLastNameBlock');
+    if (last) last.hidden = true;
+    screenK_phoneNote('');
+    screenK_loadSlot();
+  }
+
+  function screenK_phoneNote(name) {
+    var phoneStack = phoneError && phoneError.parentNode;
+    if (!phoneStack) return;
+    var note = document.getElementById('crPhoneNote');
+    if (!note) {
+      note = document.createElement('p');
+      note.id = 'crPhoneNote';
+      note.className = 'cr-phone-note';
+      phoneStack.appendChild(note);
+    }
+    note.textContent = name
+      ? 'Тот же номер, что у вас записан у ' + name + '.'
+      : 'Тот же номер, что у вас записан у тренера.';
+  }
+
+  function screenK_weekday(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    if (!m) return '';
+    var names = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+    return names[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()] || '';
+  }
+
+  function screenK_loadSlot() {
+    var slotId = chosenSlotId();
+    if (!slotId) return;
+    fetch(apiUrl('/client/slot/' + slotId + '?trainer_id=' + trainerId), {
+      headers: apiHeaders(),
+      cache: 'no-store',
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        var slot = data && data.available && data.slot;
+        if (!slot) return;
+        var time = String(slot.start_time || '').slice(0, 5).replace(/^0(\d)/, '$1');
+        var wd = screenK_weekday(slot.slot_date);
+        var line = [wd && time ? wd + ', ' + time : time, slot.arena_name || ''].filter(Boolean).join(' · ');
+        if (!line) return;
+        var bar = document.createElement('p');
+        bar.id = 'crSlotBar';
+        bar.className = 'cr-slot';
+        bar.textContent = line.charAt(0).toUpperCase() + line.slice(1);
+        var shell = document.getElementById('crShell');
+        if (shell) shell.insertBefore(bar, shell.firstChild);
+      })
+      .catch(function () { /* слота нет — полосу не рисуем */ });
   }
 
   function parseFetchJsonResponse(r) {
@@ -533,6 +616,7 @@
     });
   }
 
+  screenK_mount();
   loadTrainerInfo();
   checkAlreadyRegistered();
 })();

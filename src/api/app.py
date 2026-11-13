@@ -1120,7 +1120,11 @@ def webapp_client_register_page(trainer_id: Optional[int] = Query(None)):
     marker = "</head>"
     if marker not in html:
         raise HTTPException(status_code=500, detail="Invalid client-register template")
-    html = html.replace(marker, meta + marker, 1)
+    extra = meta
+    # Тот же флаг, что на /webapp/trainers: форма K без него остаётся прежней.
+    if Settings().unified_trainer_card_enabled:
+        extra += _UNIFIED_TRAINER_CARD_BOOT
+    html = html.replace(marker, extra + marker, 1)
     return HTMLResponse(
         content=html,
         media_type="text/html",
