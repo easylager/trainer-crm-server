@@ -168,11 +168,21 @@ def card_prices(svc: Mapping[str, Any]) -> list[tuple[str, str]]:
 
 
 def _audience(services: Sequence[Mapping[str, Any]]) -> str:
-    """«Дети и взрослые.» — только когда в тарифах есть и детский, и взрослый вид.
+    """Кого учит на странице тренера.
 
-    Один «Взрослый» ничего не говорит: это вид тарифа по умолчанию у старых цен.
+    Флаг выключен — прежние строки. «Дети и взрослые.» только когда в тарифах есть
+    и детский, и взрослый вид; один «Взрослый» ничего не говорит: это вид тарифа
+    по умолчанию у старых цен.
+    Флаг включён — подпись плашки (SPEC §4): «Дети» только при детских тарифах,
+    иначе «Любой возраст».
     """
+    from src.shared.config import Settings
+
     kinds = {k for s in services for k in _tier_cents(s)}
+    if Settings().unified_trainer_card_enabled:
+        from src.application.trainer_card_facts import audience_label
+
+        return audience_label(kinds)
     kids, adults = bool(kinds & _KID_KINDS), bool(kinds & _ADULT_KINDS)
     if kids and adults:
         return "Дети и взрослые."

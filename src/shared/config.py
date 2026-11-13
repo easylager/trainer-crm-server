@@ -291,6 +291,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # false — как раньше, по client_bot_main_mini_app / client_mini_app_short_name.
     # Ссылки внутри чата бота и мини-аппа не затрагивает.
     public_entry_via_start: bool = False
+    # Единая карточка тренера (TASK-399). false — витрина и HTML сайта как раньше.
+    # Mini App узнаёт флаг только со страницы /webapp/trainers: при true в <head>
+    # дописывается window.__UNIFIED_TRAINER_CARD__. Сайт читает это поле в _audience.
+    unified_trainer_card_enabled: bool = False
     # Gift certificate PDF: client-facing branding (instructions reference the Telegram mini-app paths below).
     certificate_pdf_brand_display_name: str = "GLIDE"
     # Одна строка под названием бренда — не абзац: в PDF она стоит над номиналом, и всё,
