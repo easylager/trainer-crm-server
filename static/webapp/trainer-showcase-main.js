@@ -59,9 +59,9 @@
     day: null,
     // Экран H: выбранное окно дня. Пусто — первое окно этого дня.
     weekSlot: null,
-    // G: дата последнего занятия с ребра (last_completed_at). Нет поля — строки нет.
-    lastCompletedAt: null,
-    // G: «О тренере, отзывы и дипломы» свёрнуто, пока человек сам не откроет.
+    // Пустая H по входу №35: «Назад к тренеру» открывает G, не обычную карточку.
+    returnToCard: false,
+    // G: «О тренере и дипломы» свёрнуто, пока человек сам не откроет.
     trustOpen: false,
     // Тариф прошлой записи (last_created_booking_service_price_variant_id) — только подпись цены на G.
     pastVariant: null,
@@ -529,8 +529,6 @@
       if (!e) return;
       S.saved = !!e.is_saved;
       S.notify = !!e.notify_when_slots;
-      // Поле уже есть в ребре. Пустое или отсутствующее — «Последнее занятие» не показываем.
-      S.lastCompletedAt = e.last_completed_at ? e.last_completed_at : null;
       if (S.view === 'trainer' && S.trainer === t) render();
     }).catch(function () { /* не критично: кнопки останутся в исходном состоянии */ });
   }
@@ -560,7 +558,7 @@
     }
     S.saved = false;
     S.notify = false;
-    S.lastCompletedAt = null;
+    S.returnToCard = false;
     S.trustOpen = false;
     S.weekSlot = null;
     S.waBlock = '';
@@ -688,9 +686,9 @@
     return fromHub() && qs.get('action') === 'book' && !qs.get('slot_id') && !hubRebookEntry();
   }
 
-  /** №34 и №37: карточка вернувшегося (G). */
+  /** №34, №37 и «Назад к тренеру» с пустой H входа №35: карточка вернувшегося (G). */
   function returningCard() {
-    return fromHub() && !qs.get('slot_id') && (qs.get('action') !== 'book' || hubRebookEntry());
+    return fromHub() && !qs.get('slot_id') && (qs.get('action') !== 'book' || hubRebookEntry() || S.returnToCard);
   }
 
   var TC_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
@@ -1384,7 +1382,7 @@
       var num = m ? String(+m[3]) : '';
       var on = iso === S.day && n > 0;
       if (!n) {
-        h += '<button type="button" class="tc-h-day tc-h-day--empty" disabled aria-disabled="true">' +
+        h += '<button type="button" class="tc-h-day tc-h-day--empty" role="tab" aria-selected="false" aria-disabled="true" tabindex="-1" disabled>' +
           '<span>' + esc(wd) + '</span><b>' + esc(num) + '</b><small>нет</small></button>';
         return;
       }
@@ -1424,11 +1422,24 @@
   /** H без окон или без онлайн-записи: не пустая полоса дней и не пустой заголовок дня. */
   function weekDeadEnd(t) {
     if (!t.can_book) {
-      return '<p class="tc-empty-t">Сейчас записаться онлайн нельзя</p>' +
-        (initData ? '<button type="button" class="tc-sec tc-sec--main" data-act="request">Оставить заявку</button>' : '');
+      var off = '<p class="tc-empty-t">Сейчас записаться онлайн нельзя</p>';
+      if (initData) off += '<button type="button" class="tc-sec tc-sec--main" data-act="request">Оставить заявку</button>';
+      if (t.contact_url) off += '<button type="button" class="tc-sec" data-act="write">Написать тренеру</button>';
+      else if (trainerPhone(t)) off += '<button type="button" class="tc-sec" data-act="copy-phone">Скопировать телефон</button>';
+      else if (!initData && t.telegram_url) off += '<button type="button" class="tc-sec" data-act="open-tg">Открыть в Telegram</button>';
+      return off;
     }
-    return '<p class="tc-empty-t">На ближайшие две недели свободного времени нет</p>' +
-      '<button type="button" class="tc-sec" data-act="to-trainer">Назад к тренеру</button>';
+    var h = '<p class="tc-empty-t">На ближайшие 2 недели свободного времени нет</p>';
+    if (initData) {
+      h += '<button type="button" class="tc-sec tc-sec--in" data-act="notify"' + (S.notify ? ' disabled' : '') + '>' +
+        (S.notify ? 'Сообщим, когда появится время' : 'Сообщить, когда появится время') + '</button>';
+      h += '<button type="button" class="tc-sec" data-act="request">Оставить заявку</button>';
+    }
+    if (t.contact_url) {
+      h += '<div class="tc-h-ask"><div><b>Не подходит время?</b><span>Напишите тренеру, чтобы предложить своё время</span></div>' +
+        '<button type="button" class="tc-sec" data-act="write">Написать тренеру</button></div>';
+    }
+    return h + '<button type="button" class="tc-sec" data-act="to-trainer">Назад к тренеру</button>';
   }
 
   function renderWeek() {
@@ -2582,7 +2593,7 @@
         break;
       case 'week-slot': S.weekSlot = el.getAttribute('data-slot'); render(); break;
       case 'trust': S.trustOpen = !S.trustOpen; render(); break;
-      case 'to-trainer': S.view = 'trainer'; S.stack = []; render(); window.scrollTo(0, 0); break;
+      case 'to-trainer': S.returnToCard = true; S.view = 'trainer'; S.stack = []; render(); window.scrollTo(0, 0); break;
       case 'notify':
         subscribeNotify(el);
         break;

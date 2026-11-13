@@ -256,8 +256,9 @@
     var sp = String(readStartParam(ctx) || '').trim();
     var target = deepLinkTarget(sp);
     try {
-      /* Повтор той же ссылки тренера с «/» — снова карточка (SPEC §8.3); остальные и /t/ — как раньше. */
-      if (storage && storage.getItem(DEEP_LINK_FLAG) === sp && !(p === '/' && target && trainerDeepLinkTarget(sp))) target = null;
+      /* Повтор той же ссылки тренера с «/» или со страницы /t/ — снова карточка, слот не теряется (SPEC §8.3). */
+      var trainerAgain = target && trainerDeepLinkTarget(sp) && (p === '/' || /^\/t\/[1-9][0-9]*(?:-|$)/.test(p));
+      if (storage && storage.getItem(DEEP_LINK_FLAG) === sp && !trainerAgain) target = null;
     } catch (e2) { /* */ }
     var path = target && target.path;
     if (!path) {

@@ -7,6 +7,8 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { boot, resp, tick } = require('./helpers/trainer-showcase-harness');
 
 function minskToday() {
@@ -97,13 +99,14 @@ async function open(search, opts = {}) {
 }
 
 describe('G · карточка вернувшегося', () => {
-  it('шапка ужата, последнее занятие, прошлый формат, доверие свёрнуто', async () => {
+  it('шапка ужата, строки последнего занятия нет, прошлый формат, доверие свёрнуто', async () => {
     const h = await open('?trainer_id=7&service_id=1&from=hub');
     const html = h.app.innerHTML;
     assert.match(html, /class="tc tc-g"/);
     assert.match(html, /<h1>Анна Соколова<\/h1>/);
     assert.match(html, /Фигурное катание|С нуля|Взрослое|Минск/);
     assert.doesNotMatch(html, /Последнее занятие/);
+    assert.equal(fs.readFileSync(path.join(__dirname, '../../static/webapp/trainer-showcase-main.js'), 'utf8').includes('lastCompletedAt'), false);
     assert.match(html, /Записаться снова/);
     assert.match(html, /Записаться снова на .*10:00/);
     assert.match(html, /Взрослый/);
@@ -295,12 +298,70 @@ describe('часть B ревью 404: чипы, стрелки, скелет, �
     assert.doesNotMatch(h.app.innerHTML, /О тренере<\/h2>/);
   });
 
-  it('«Назад к тренеру» с пустой H уходит с недели', async () => {
+  it('«Назад к тренеру» с пустой H входа №35 открывает G', async () => {
     const h = await open('?trainer_id=7&action=book&service_id=3&from=hub', { slots: [] });
     assert.equal(h.S.view, 'week');
     h.click({ 'data-act': 'to-trainer' });
     assert.equal(h.S.view, 'trainer');
+    assert.match(h.app.innerHTML, /class="tc tc-g"/);
     assert.doesNotMatch(h.app.innerHTML, /Время на две недели/);
+  });
+
+  it('пустая H: «2 недели», написать, сообщить и заявка', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub', { slots: [] });
+    const html = h.app.innerHTML;
+    assert.match(html, /На ближайшие 2 недели свободного времени нет/);
+    assert.doesNotMatch(html, /На ближайшие две недели/);
+    assert.match(html, /Не подходит время\?/);
+    assert.match(html, /Написать тренеру/);
+    assert.match(html, /Сообщить, когда появится время/);
+    assert.match(html, /Оставить заявку/);
+    assert.match(html, /Назад к тренеру/);
+  });
+
+  it('пустая H без contact_url не рисует «Написать»', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ contact_url: '' }),
+      slots: [],
+    });
+    assert.doesNotMatch(h.app.innerHTML, /Не подходит время/);
+    assert.doesNotMatch(h.app.innerHTML, /data-act="write"/);
+    assert.match(h.app.innerHTML, /Назад к тренеру/);
+    assert.match(h.app.innerHTML, /Сообщить, когда появится время/);
+  });
+
+  it('нельзя записаться вне Telegram — есть кнопка, не пустой экран', async () => {
+    const phone = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ can_book: false, contact_url: '', phone: '+375291112233' }),
+      slots: [],
+      initData: '',
+    });
+    assert.match(phone.app.innerHTML, /Сейчас записаться онлайн нельзя/);
+    assert.match(phone.app.innerHTML, /Скопировать телефон/);
+    const write = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ can_book: false, contact_url: '/r/tg/7', phone: '' }),
+      slots: [],
+      initData: '',
+    });
+    assert.match(write.app.innerHTML, /Написать тренеру/);
+  });
+
+  it('пустой день H — вкладка внутри tablist, без фокуса Tab', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub', {
+      slots: [slot(1, TODAY, '10:00'), slot(4, D2, '09:00')],
+    });
+    const html = h.app.innerHTML;
+    assert.match(html, /role="tablist"/);
+    assert.match(html, /role="tab" aria-selected="false" aria-disabled="true" tabindex="-1" disabled/);
+    const empty = html.match(/<button type="button" class="tc-h-day tc-h-day--empty"[^>]*>/g) || [];
+    assert.ok(empty.length > 0);
+    for (const tag of empty) {
+      assert.match(tag, /role="tab"/);
+      assert.match(tag, /aria-disabled="true"/);
+      assert.match(tag, /tabindex="-1"/);
+      assert.match(tag, /\bdisabled\b/);
+      assert.doesNotMatch(tag, /data-act="day"/);
+    }
   });
 });
 

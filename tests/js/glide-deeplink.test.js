@@ -475,7 +475,10 @@ describe('Mini App public URL recovery', () => {
     const ctx = browser('https://app.test/t/7-anna?init_data=signed', { storage, initData: '', startParam: 'trainer_7_s_55' });
     assert.equal(G.maybePublicRedirect(ctx), true);
     assert.equal(ctx.location.pathname, '/webapp/trainers');
-    assert.match(ctx.location.search, /trainer_id=7/);
+    const u = new URL(ctx.location.href);
+    assert.equal((u.search.match(/\?/g) || []).length, 1);
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('slot_id'), '55');
     assert.doesNotMatch(ctx.location.pathname, /client-home/);
   });
 
