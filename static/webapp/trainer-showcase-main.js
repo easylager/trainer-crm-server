@@ -1277,7 +1277,7 @@
     if (t.can_book) h += gBookCard(t, svc);
     var trustBits = [tcAbout(t), tcEducation(t)].filter(Boolean);
     if (trustBits.length) {
-      h += '<button type="button" class="tc-g-trust" data-act="trust" aria-expanded="' + !!S.trustOpen + '">О тренере, отзывы и дипломы' + TC_ICON.down + '</button>';
+      h += '<button type="button" class="tc-g-trust" data-act="trust" aria-expanded="' + !!S.trustOpen + '">О тренере и дипломы' + TC_ICON.down + '</button>';
       if (S.trustOpen) h += '<div class="tc-g-trust-b">' + trustBits.join('') + '</div>';
     }
     h += gRink(t);
@@ -1317,7 +1317,7 @@
     if (fmt) bits.push(fmt);
     if (t.session_duration_minutes) bits.push(t.session_duration_minutes + ' мин');
     if (bits.length) h += '<p class="tc-g-meta">' + esc(bits.join(' · ')) + '</p>';
-    var rest = S.slots.slice(1, 4);
+    var rest = S.slots.slice(1, 3);
     h += '<div class="tc-g-times">' + rest.map(function (s) {
       return '<button type="button" class="tc-chip" data-act="slot" data-slot="' + esc(s.id) + '">' + esc(tcWhen(s)) + '</button>';
     }).join('') + '<button type="button" class="tc-chip tc-chip--alt" data-act="week">Другое время</button></div>';
@@ -2673,6 +2673,32 @@
   appEl.addEventListener('click', onClick);
   sheetEl.addEventListener('click', onClick);
   document.addEventListener('keydown', onSheetKey);
+  document.addEventListener('keydown', onWeekKey);
+
+  /** Вкладки дней H: стрелки, как ждёт role=tablist. */
+  function onWeekKey(ev) {
+    if (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft') return;
+    var cur = document.activeElement;
+    if (!cur || !cur.getAttribute || cur.getAttribute('data-act') !== 'day') return;
+    if (!appEl.querySelectorAll) return;
+    var list = appEl.querySelectorAll('[data-act="day"]');
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i] === cur) idx = i;
+    if (idx < 0) return;
+    var next = ev.key === 'ArrowRight' ? idx + 1 : idx - 1;
+    if (next < 0 || next >= list.length) return;
+    ev.preventDefault();
+    S.day = list[next].getAttribute('data-day');
+    S.weekSlot = null;
+    render();
+    if (!appEl.querySelectorAll) return;
+    var again = appEl.querySelectorAll('[data-act="day"]');
+    for (var j = 0; j < again.length; j++) {
+      if (again[j].getAttribute('data-day') === S.day) {
+        try { again[j].focus(); } catch (e) { /* */ }
+      }
+    }
+  }
   appEl.addEventListener('input', onInput);
   sheetEl.addEventListener('input', onInput);
 

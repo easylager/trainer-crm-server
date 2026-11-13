@@ -397,8 +397,9 @@ button.tc-where-row { cursor: pointer; }
 
 /* G · вернувшийся клиент (доска MyTrainer). Шапка 64px, доверие свёрнуто.
    .tc на карточке A уезжает на −12px под поля оболочки. Здесь поля свои — минус даёт горизонтальный скролл на 320. */
-.tc.tc-g, .tc.tc-h { margin: 0; width: 100%; }
-.tc-gbar .tc-bback, .tc-h-head .tc-bback { margin-left: 0; }
+/* body в оболочке даёт 12px. −12px возвращает край экрана, внутренние 16px — поле доски. */
+.tc.tc-g, .tc.tc-h { margin: 0 -12px 0; width: auto; }
+.tc-gbar .tc-bback, .tc-h-head .tc-bback { margin-left: 0; flex: none; }
 .tc-gbar { display: flex; align-items: center; min-height: 56px; padding: 0 4px; }
 .tc-g-icon { all: unset; box-sizing: border-box; cursor: pointer; width: 44px; height: 44px; margin-left: auto; display: grid; place-items: center; color: var(--g-accent-ink); }
 .tc-g-pad { padding: 0 16px 8px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -424,7 +425,12 @@ button.tc-where-row { cursor: pointer; }
 button.tc-g-rink { cursor: pointer; }
 .tc-g :focus-visible, .tc-h :focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; }
 /* Подвал карточки A вылезает на 12px (margin-inline: -12px). У G и H поля свои, минус не нужен — иначе 320 горизонтально скроллится. */
-.tc-g ~ .ft.tc-ft, .tc-h ~ .ft.tc-ft { margin-inline: 0; width: 100%; max-width: 560px; }
+.tc-g ~ .ft.tc-ft, .tc-h ~ .ft.tc-ft { margin-inline: -12px; width: auto; max-width: none; }
+.tc-g .tc-card, .tc-g-rink, .tc-h-ask { border-radius: var(--g-r-lg); }
+.tc-h-title { flex: 1; }
+.tc-h-title p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-h-sk { display: flex; gap: 8px; overflow: hidden; }
+.tc-h-sk i { flex: none; width: 64px; height: 68px; border-radius: var(--g-r-md); background: var(--g-seg); }
 
 /* H · две недели (доска Week). Дни листаются, пустой день — пунктир. */
 .tc-h-head { gap: 4px; padding: 0 8px 0 4px; }
@@ -442,7 +448,7 @@ button.tc-g-rink { cursor: pointer; }
 .tc-h-day[aria-selected="true"] span { color: inherit; opacity: .7; }
 .tc-h-day[aria-selected="true"] b { color: inherit; }
 .tc-h-day[aria-selected="true"] small { color: var(--g-surface); opacity: 1; }
-.tc-h-day--empty { cursor: default; background: transparent; border: 1px dashed var(--g-line-strong); color: var(--g-muted); }
+.tc-h-day--empty { cursor: default; background: transparent; border: 1px dashed var(--g-muted); color: var(--g-muted); }
 .tc-h-day--empty b, .tc-h-day--empty small { color: var(--g-muted); font-weight: 700; }
 .tc-h-daytitle { margin: 0 0 8px; font-size: 15px; font-weight: 800; }
 .tc-h-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
