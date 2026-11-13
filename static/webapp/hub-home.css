@@ -56,6 +56,10 @@ html body.hh-body, html.trainer-theme-dark body.hh-body, html.trainer-theme-ligh
 /* ── Лента под шапкой ─────────────────────────────────────────── */
 .hm { position: relative; margin-top: -36px; padding: 0 16px; display: flex; flex-direction: column; gap: 28px; }
 .hm > [hidden] { display: none !important; }
+/* Нет слота «сейчас» (пуст) — наезжать на шапку нечему: без карточки заголовок «Мои занятия»
+   оказался бы под фото. Снимаем наезд и пустую секцию (она давала лишние 28px gap). */
+.hm > #hubNow:empty { display: none; }
+.hm:has(> #hubNow:empty) { margin-top: 0; padding-top: 24px; }
 .hs { display: flex; flex-direction: column; gap: 12px; }
 .hs__head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .hs__title { margin: 0; font-size: 22px; line-height: 1.1; }
