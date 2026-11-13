@@ -41,6 +41,7 @@ class AdminIceSessionCreateBody(BaseModel):
     age_note: str | None = None
     capacity_note: str | None = None
     external_url: str | None = None
+    hall: str | None = None
     repeat_weekly: bool = False
 
 
@@ -57,6 +58,7 @@ class AdminIceSessionPatchBody(BaseModel):
     age_note: str | None = None
     capacity_note: str | None = None
     external_url: str | None = None
+    hall: str | None = None
 
 
 class AdminIceCopyWeekBody(BaseModel):
@@ -116,6 +118,7 @@ async def post_admin_ice_session(
             capacity_note=body.capacity_note,
             external_url=body.external_url,
             repeat_weekly=body.repeat_weekly,
+            hall=body.hall,
         )
     except (LookupError, IceSessionValidationError) as exc:
         raise _map_error(exc) from exc

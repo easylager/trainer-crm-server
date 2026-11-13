@@ -185,17 +185,31 @@ def intervals_overlap(
     return a_start < b_end and b_start < a_end
 
 
+def normalize_hall(value: Any) -> str | None:
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
+
+def _different_halls(a: Any, b: Any) -> bool:
+    """Залы разные, только если названы оба и не совпадают: без названия зал считается общим."""
+    left, right = normalize_hall(a), normalize_hall(b)
+    return bool(left and right and left.casefold() != right.casefold())
+
+
 def validate_no_overlap(
     existing: Sequence[Mapping[str, Any]],
     *,
     starts_at_utc: datetime,
     ends_at_utc: datetime,
     ignore_session_id: int | None = None,
+    hall: str | None = None,
 ) -> None:
     for row in existing:
         if ignore_session_id is not None and int(row.get("id") or 0) == int(ignore_session_id):
             continue
         if (row.get("status") or STATUS_ACTIVE) != STATUS_ACTIVE:
+            continue
+        if _different_halls(hall, row.get("hall")):
             continue
         if intervals_overlap(
             starts_at_utc,
@@ -288,7 +302,7 @@ _SESSION_COLUMNS = """
     id, arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
     price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
     price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-    source_id, observed_at, valid_until, confidence, schedule_basis
+    source_id, observed_at, valid_until, confidence, schedule_basis, hall
 """
 
 
@@ -319,6 +333,7 @@ def _row_to_mapping(row: Any) -> dict[str, Any]:
         "valid_until",
         "confidence",
         "schedule_basis",
+        "hall",
     ]
     return dict(zip(keys, row, strict=True))
 
@@ -377,6 +392,7 @@ async def _insert_session(
     observed_at: datetime,
     confidence: float | None,
     schedule_basis: str = "manual",
+    hall: str | None = None,
 ) -> dict[str, Any]:
     from sqlalchemy import text as sql_text
 
@@ -388,12 +404,12 @@ async def _insert_session(
                 arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                 price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                 price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-                source_id, observed_at, confidence, schedule_basis
+                source_id, observed_at, confidence, schedule_basis, hall
             ) VALUES (
                 :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date, :starts_at_local, :ends_at_local,
                 :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor, :currency_code,
                 :price_note, :session_label, :age_note, :capacity_note, :external_url, :status, :recurrence_key,
-                :source_id, :observed_at, :confidence, :schedule_basis
+                :source_id, :observed_at, :confidence, :schedule_basis, :hall
             )
             RETURNING {_SESSION_COLUMNS}
             """
@@ -422,6 +438,7 @@ async def _insert_session(
             "observed_at": observed_at,
             "confidence": confidence,
             "schedule_basis": schedule_basis,
+            "hall": hall,
         },
     )
     return _row_to_mapping(result.fetchone())
@@ -445,9 +462,11 @@ async def create_ice_session(
     external_url: str | None = None,
     repeat_weekly: bool = False,
     horizon_weeks: int = RECURRENCE_HORIZON_WEEKS,
+    hall: str | None = None,
 ) -> dict[str, Any]:
     from src.shared.currency import resolve_currency
 
+    hall = normalize_hall(hall)
     kind_value = validate_kind(kind)
     minutes = validate_duration_minutes(duration_minutes)
     validate_prices(
@@ -468,7 +487,7 @@ async def create_ice_session(
             duration_minutes=minutes,
             tz_name=tz_name,
         )
-        validate_no_overlap(existing, starts_at_utc=parts.starts_at_utc, ends_at_utc=parts.ends_at_utc)
+        validate_no_overlap(existing, starts_at_utc=parts.starts_at_utc, ends_at_utc=parts.ends_at_utc, hall=hall)
         for prev in planned:
             if intervals_overlap(parts.starts_at_utc, parts.ends_at_utc, prev.starts_at_utc, prev.ends_at_utc):
                 raise IceSessionOverlapError("Сеанс пересекается с другим сеансом на этой арене")
@@ -498,6 +517,7 @@ async def create_ice_session(
             observed_at=now,
             confidence=1.0,
             schedule_basis="manual",
+            hall=hall,
         )
         inserted.append(row)
         existing.append(row)
@@ -577,6 +597,7 @@ async def update_ice_session(
     age_note: Any = _UNSET,
     capacity_note: Any = _UNSET,
     external_url: Any = _UNSET,
+    hall: Any = _UNSET,
 ) -> dict[str, Any]:
     result = await session.execute(
         sql_text(f"SELECT {_SESSION_COLUMNS} FROM ice_sessions WHERE id = :id"),
@@ -605,12 +626,14 @@ async def update_ice_session(
         duration_minutes=minutes,
         tz_name=tz_name,
     )
+    hall_value = normalize_hall(current.get("hall")) if hall is _UNSET else normalize_hall(hall)
     existing = await _load_active_sessions(session, int(current["arena_id"]))
     validate_no_overlap(
         existing,
         starts_at_utc=parts.starts_at_utc,
         ends_at_utc=parts.ends_at_utc,
         ignore_session_id=session_id,
+        hall=hall_value,
     )
     note = current["price_note"] if price_note is _UNSET else price_note
     label = current["session_label"] if session_label is _UNSET else session_label
@@ -637,7 +660,8 @@ async def update_ice_session(
                 session_label = :session_label,
                 age_note = :age_note,
                 capacity_note = :capacity_note,
-                external_url = :external_url
+                external_url = :external_url,
+                hall = :hall
             WHERE id = :id
             RETURNING {_SESSION_COLUMNS}
             """
@@ -659,6 +683,7 @@ async def update_ice_session(
             "age_note": age,
             "capacity_note": cap,
             "external_url": url,
+            "hall": hall_value,
         },
     )
     return serialize_ice_session(_row_to_mapping(updated.fetchone()))
@@ -691,6 +716,7 @@ async def apply_ice_session_patch(
         "age_note",
         "capacity_note",
         "external_url",
+        "hall",
     ):
         if key in fields:
             kwargs[key] = fields[key]
@@ -762,6 +788,7 @@ async def copy_ice_week(
                     capacity_note=slot["capacity_note"],
                     external_url=slot["external_url"],
                     repeat_weekly=False,
+                    hall=slot.get("hall"),
                 )
                 copied += 1
             except IceSessionOverlapError:
@@ -820,7 +847,12 @@ async def rematerialize_recurrence(
             skipped += 1
             continue
         try:
-            validate_no_overlap(existing, starts_at_utc=parts.starts_at_utc, ends_at_utc=parts.ends_at_utc)
+            validate_no_overlap(
+                existing,
+                starts_at_utc=parts.starts_at_utc,
+                ends_at_utc=parts.ends_at_utc,
+                hall=template.get("hall"),
+            )
         except IceSessionOverlapError:
             skipped += 1
             continue
@@ -831,12 +863,12 @@ async def rematerialize_recurrence(
                     arena_id, kind, starts_at_utc, ends_at_utc, local_date, starts_at_local, ends_at_local,
                     price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code,
                     price_note, session_label, age_note, capacity_note, external_url, status, recurrence_key,
-                    source_id, observed_at, confidence, schedule_basis
+                    source_id, observed_at, confidence, schedule_basis, hall
                 ) VALUES (
                     :arena_id, :kind, :starts_at_utc, :ends_at_utc, :local_date, :starts_at_local, :ends_at_local,
                     :price_adult_minor, :price_child_minor, :price_rental_minor, :price_minor, :currency_code,
                     :price_note, :session_label, :age_note, :capacity_note, :external_url, :status, :recurrence_key,
-                    :source_id, :observed_at, :confidence, :schedule_basis
+                    :source_id, :observed_at, :confidence, :schedule_basis, :hall
                 )
                 ON CONFLICT (recurrence_key, local_date) WHERE recurrence_key IS NOT NULL
                 DO NOTHING
@@ -867,6 +899,7 @@ async def rematerialize_recurrence(
                 "observed_at": now,
                 "confidence": 1.0,
                 "schedule_basis": template.get("schedule_basis") or "manual",
+                "hall": normalize_hall(template.get("hall")),
             },
         )
         row = inserted.fetchone()

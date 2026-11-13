@@ -302,6 +302,7 @@
       <input type="time" id="addTime" value="11:00" aria-label="Время начала">
       <input type="number" id="addDuration" min="30" max="120" step="15" value="45" aria-label="Длительность минут">
     </div>
+    <select id="addHall" hidden aria-label="Зал"></select>
     <div class="quick-btns">
       <button type="button" class="btn-mk" id="btnAddMk">+ Массовое катание</button>
       <button type="button" class="btn-ohm" id="btnAddOhm">+ ОХМ</button>
@@ -328,7 +329,7 @@
         Добавить выбранный тип
       </button>
     </details>
-    <div class="composer-hint" id="composerHint">Слоты не пересекаются · длительность 30–120 мин</div>
+    <div class="composer-hint" id="composerHint">Слоты в одном зале не пересекаются · длительность 30–120 мин</div>
   </div>
 
   <div class="sheet-backdrop" id="editSheet" role="dialog" aria-modal="true" hidden>
