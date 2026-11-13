@@ -73,6 +73,39 @@ function resp(status, data, delay = 0) {
 
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 
+/** Кнопки из innerHTML #app — те же объекты, что видит onWeekKey (сравнение по ссылке и focus). */
+function trackAppButtons(el, doc) {
+  let html = '';
+  let nodes = [];
+  Object.defineProperty(el, 'innerHTML', {
+    configurable: true,
+    get: () => html,
+    set(v) {
+      html = v == null ? '' : String(v);
+      nodes = [];
+      const re = /<button\b([^>]*)>/g;
+      let m;
+      while ((m = re.exec(html))) {
+        const attrs = {};
+        m[1].replace(/([\w:-]+)="([^"]*)"/g, (_, k, val) => { attrs[k] = val; });
+        const n = {
+          tag: 'button',
+          attrs,
+          disabled: /\bdisabled\b/.test(m[1]),
+          getAttribute: (k) => (k in attrs ? attrs[k] : null),
+          setAttribute(k, val) { attrs[k] = String(val); },
+          focus() { doc.activeElement = this; },
+        };
+        nodes.push(n);
+      }
+    },
+  });
+  el.querySelectorAll = (sel) => {
+    if (sel === '[data-act="day"]') return nodes.filter((n) => n.getAttribute('data-act') === 'day');
+    return [];
+  };
+}
+
 /**
  * routes: [{ match(call) → bool, reply(call) → Promise<Response> }]; первые совпавшие выигрывают.
  * profiles: ответ GET /client/profiles (можно функцией — на каждый вызов).
@@ -86,6 +119,7 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
   const calls = [];
   const app = makeEl('app');
   const doc = { activeElement: null, body: { tag: 'body' }, keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
+  trackAppButtons(app, doc);
   doc.activeElement = doc.body;
   const sheet = makeSheet(doc);
   const store = {};

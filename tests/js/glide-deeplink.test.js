@@ -491,6 +491,29 @@ describe('Mini App public URL recovery', () => {
     assert.equal(u.searchParams.get('via'), 'p3');
   });
 
+  it('intent вместе с via и ареной доезжает в адрес карточки', () => {
+    assert.deepEqual(G.deepLinkTarget('trainer_7_s_55_a_9_v_p3_i_save'), {
+      key: 'trainers',
+      path: 'trainers?trainer_id=7&slot_id=55&arena_id=9&via=p3&intent=save',
+    });
+  });
+
+  it('повтор group/catalog/arena/col_ с / при стоящем флаге остаётся главной', () => {
+    for (const sp of ['group_12', 'catalog_7', 'arena_9', 'col_zamok']) {
+      const storage = new Map([[G.DEEP_LINK_FLAG, sp], ['glide_mini_app_active_v1', '1']]);
+      const ctx = browser('https://app.test/', { storage, initData: 'signed', startParam: sp });
+      assert.equal(G.maybePublicRedirect(ctx), true, sp);
+      assert.equal(ctx.location.pathname, '/webapp/client-home', sp);
+    }
+  });
+
+  it('/ без startapp при защёлке Mini App открывает главную', () => {
+    const storage = new Map([['glide_mini_app_active_v1', '1']]);
+    const ctx = browser('https://app.test/', { storage, initData: 'signed', startParam: '' });
+    assert.equal(G.maybePublicRedirect(ctx), true);
+    assert.equal(ctx.location.pathname, '/webapp/client-home');
+  });
+
   it('public home and shared place/city/match template wire recovery', () => {
     for (const file of ['catalog-home.html', 'b.html']) {
       const html = fs.readFileSync(path.join(webapp, '../share', file), 'utf8');
