@@ -1004,17 +1004,17 @@
         var own = Number((target && target.completed_count) || 0);
         var done = total > 0 ? total : own;
         var name = target ? ((target.trainer_display_name || '') + '').trim() : '';
-        var last = target && target.last_completed_at ? target.last_completed_at : null;
+        // TASK-419: дату «последнее занятие» не показываем — last_completed_at приходит как
+        // MAX(created_at) в срезе UTC, на границе суток день врёт. Вернуть, когда API отдаст день слота.
         var input = {
           kind: 'dormant',
           slots: Array.isArray(slots) ? slots : [],
           passes: hubBootstrapPasses(hubMeta),
           certificates: hubBootstrapCertificates(hubMeta),
         };
-        if (done > 0 || last) {
+        if (done > 0) {
           input.history = {};
           if (done > 0) input.history.completed_count = done;
-          if (last) input.history.last_completed_at = last;
         }
         if (name) {
           input.trainer = withDeclinedForms({

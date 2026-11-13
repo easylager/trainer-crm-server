@@ -368,9 +368,8 @@ describe('S3: возврат — остаток или история, окна 
     assert.match(input, /kind: 'dormant'/);
     assert.match(input, /hubMeta\.activity && hubMeta\.activity\.completed_total/);
     assert.match(input, /if \(done > 0\) input\.history/);
-    // Было: поля не существовало в bootstrap, и выдумывать дату запрещалось.
-    // Стало: `rebook_targets` несут `last_completed_at` — дата настоящая, из edges.
-    assert.match(input, /last_completed_at/);
+    // TASK-419: дату последнего занятия не передаём — источник MAX(created_at) в UTC врёт на границе суток.
+    assert.doesNotMatch(input.replace(/\/\/.*$/gm, ''), /last_completed_at/);
     assert.match(input, /passes: hubBootstrapPasses\(hubMeta\)/);
   });
 
@@ -551,5 +550,14 @@ describe('S3: CSS — долг S1 закрыт, мёртвые стили убр
     // И она остаётся пилюлей, а не кружком: у кружка нет горизонтального padding.
     const rule = homeCss.match(/\.me__dm \{[^}]*\}/);
     assert.ok(rule && /padding:\s*0\s+\d+px/.test(rule[0]), rule && rule[0]);
+  });
+});
+
+describe('TASK-419: «Был …» на сохранённых без даты (граница суток UTC)', () => {
+  it('pastMetaLine не читает last_completed_at', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/client-saved-trainers-main.js'), 'utf8');
+    const m = src.match(/function pastMetaLine\(edge\) \{[\s\S]*?\n  \}/);
+    assert.ok(m);
+    assert.doesNotMatch(m[0].replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''), /last_completed_at|shortDateLabel/);
   });
 });
