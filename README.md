@@ -143,6 +143,8 @@ PYTHONPATH=. python scripts/create_trainer_link.py --bot-username YourTrainerBot
 
 `pytest` **не** должен смотреть на staging/production: в [`tests/conftest.py`](tests/conftest.py) при старте проверяется `DATABASE_URL` (локальный хост и имя базы `trainer_crm_test`). Railway/Supabase и т.п. без `PYTEST_ALLOW_REMOTE_DB=1` отклоняются. Создайте БД `trainer_crm_test`, выполните `alembic upgrade head`, в `.env` укажите URL на неё для тестов — отдельно от URL приложения.
 
+Раскладка пустой недели карточки тренера (не в CI): `node tests/e2e/trainer-week-empty.check.mjs`. Нужен Playwright (`playwright` в `node_modules`); код выхода 1 — расхождение с доской.
+
 ## IndexNow (Bing, Яндекс)
 
 Пинг поисковикам об изменении страниц `/p/{город}/{slug}` и `/c/{город}`. По умолчанию выключен: без флага ничего не отправляется и ключ-файл не отдаётся.
