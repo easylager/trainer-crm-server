@@ -81,7 +81,8 @@ const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
  * historyLength — history.length при открытии витрины: >1 — пришли с другого экрана (есть куда «‹ Назад»).
  * unified — включён флаг единой карточки тренера (window.__UNIFIED_TRAINER_CARD__).
  */
-function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null, unified = false } = {}) {
+/** sessionStore — содержимое sessionStorage при открытии (форма K кладёт туда тренера, к которому привязала). */
+function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null, unified = false, sessionStore = {} } = {}) {
   const calls = [];
   const app = makeEl('app');
   const doc = { activeElement: null, body: { tag: 'body' }, keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
@@ -106,6 +107,7 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
       },
     },
     localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
+    sessionStorage: { getItem: (k) => sessionStore[k] ?? null, setItem: (k, v) => { sessionStore[k] = String(v); }, removeItem: (k) => { delete sessionStore[k]; } },
     document: doc,
     scrollTo() {}, scrollY: 0,
     winHandlers: {},

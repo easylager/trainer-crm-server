@@ -1,92 +1,30 @@
 /**
- * TASK-401: форма K. Флаг выключен — таймер и хаб. Флаг включён — replace на карточку, без таймера.
+ * TASK-401: форма K (доска Register). Флаг выключен — как на базе d4419b77 (снимок), таймер и хаб.
+ * Флаг включён — заголовок, пояснение, имя → телефон, подсказка, слот в две строки, replace на карточку.
  * Run: node --test tests/js/client-register-unified.test.js
  */
 'use strict';
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
+const { bootRegister, jsonResponse, tick } = require('./helpers/client-register-harness');
+const { capture } = require('./helpers/client-register-flag-off-scenarios');
+const SNAPSHOT = require('./fixtures/client-register-flag-off.snapshot.json');
 
-function el(id) {
-  return {
-    id,
-    hidden: false,
-    textContent: '',
-    innerHTML: '',
-    value: '',
-    style: {},
-    classList: { toggle() {}, add() {} },
-    addEventListener() {},
-    focus() {},
-    parentNode: null,
-  };
-}
+const SLOT = { available: true, slot: { slot_date: '2026-11-21', start_time: '10:00', arena_name: 'Замок' } };
+const LISTED_KEY = 'trainer_crm_listed_trainer_id';
+const selfRegister = (reply) => ({ match: (u) => u.includes('/client/self-register'), reply });
+const texts = (h, id) => (h.ids[id] ? h.ids[id].textContent : undefined);
 
-function boot(opts = {}) {
-  const ids = {};
-  ['crHeroSub', 'crPhone', 'crPhoneError', 'crFirstName', 'crFirstNameError', 'crLastName', 'crGlobalError',
-    'crBtnSubmit', 'crFormCard', 'crActions', 'crSuccessScreen', 'crSuccessSub', 'crBtnOpenHome', 'crHeroTitle',
-    'crLastNameBlock', 'crShell'].forEach((id) => { ids[id] = el(id); });
-  ids.crPhoneError.parentNode = { appendChild(node) { ids.crPhoneNote = node; } };
-  ids.crShell.firstChild = null;
-  ids.crShell.insertBefore = (node) => { ids.crSlotBar = node; };
-  const timeouts = [];
-  const replaced = [];
-  const hrefs = [];
-  const fetches = [];
-  const ctx = {
-    console, URL, URLSearchParams, Date, JSON, Math, Number, String, Object, Array, encodeURIComponent,
-    setTimeout(fn, ms) { timeouts.push({ fn, ms }); return timeouts.length; },
-    clearTimeout() {},
-    location: {
-      search: opts.search || '?trainer_id=7',
-      pathname: '/webapp/client-register',
-      href: '',
-      replace(url) { replaced.push(url); },
-    },
-    document: {
-      body: { classList: { add(c) { this.cls = c; } } },
-      getElementById: (id) => ids[id] || null,
-      querySelector: () => null,
-      createElement: (tag) => ({ tag, id: '', className: '', textContent: '', hidden: false }),
-      head: { appendChild() {} },
-    },
-    fetch(url) {
-      const u = String(url);
-      fetches.push(u);
-      let data = {};
-      if (u.includes('/client/session')) data = opts.session || {};
-      else if (u.includes('/trainer-info/')) data = { name: 'Анна Соколова' };
-      else if (u.includes('/client/self-register')) data = { status: 'linked' };
-      else if (u.includes('/client/slot/')) data = opts.slot || { available: false, slot: null };
-      else if (u.includes('/register-event')) data = { ok: true };
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        headers: { get: () => 'application/json' },
-        json: () => Promise.resolve(data),
-        text: () => Promise.resolve(JSON.stringify(data)),
-      });
-    },
-    navigator: {},
-  };
-  Object.defineProperty(ctx.location, 'href', { set(v) { hrefs.push(v); }, get() { return hrefs[0] || ''; } });
-  ctx.window = ctx;
-  ctx.Telegram = { WebApp: { initData: 'user=1', ready() {}, expand() {}, colorScheme: 'light' } };
-  if (opts.unified) ctx.__UNIFIED_TRAINER_CARD__ = true;
-  vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../static/webapp/client-register-main.js'), 'utf8'), ctx);
-  return { ctx, ids, timeouts, replaced, hrefs, fetches };
-}
+describe('форма регистрации: флаг выключен', () => {
+  it('дерево, запросы, таймеры и переходы побайтно как на базе d4419b77', async () => {
+    const now = await capture({ withRuName: true });
+    assert.deepEqual(Object.keys(now), Object.keys(SNAPSHOT));
+    for (const k of Object.keys(SNAPSHOT)) assert.deepEqual(now[k], SNAPSHOT[k], k);
+  });
 
-const tick = () => new Promise((r) => setTimeout(r, 30));
-
-describe('форма регистрации', () => {
-  it('флаг выключен: хаб и таймер, без пояснения K', async () => {
-    const h = boot({ session: { client_phone: '+375291112233', client_first_name: 'Анна' } });
+  it('хаб и таймер, без пояснения K', async () => {
+    const h = bootRegister({ session: { client_phone: '+375291112233', client_first_name: 'Анна' } });
     await tick();
     const redirect = h.timeouts.find((t) => t.ms >= 2000 && t.ms < 10000);
     assert.ok(redirect, 'автопереход');
@@ -94,24 +32,149 @@ describe('форма регистрации', () => {
     assert.ok(h.hrefs.some((u) => u.includes('client-home')));
     assert.equal(h.replaced.length, 0);
     assert.equal(h.ids.crPhoneNote, undefined);
-    assert.equal(h.ids.crHeroTitle.textContent, '');
+    assert.equal(texts(h, 'crHeroTitle'), 'Короткий профиль');
+  });
+});
+
+describe('K: слот по ссылке (A1)', () => {
+  it('адрес /client/slot — один «?», trainer_id и init_data на месте', async () => {
+    const h = bootRegister({ unified: true, search: '?trainer_id=7&slot_id=55', slot: SLOT });
+    await tick();
+    const call = h.fetches.find((f) => f.url.includes('/client/slot/'));
+    assert.ok(call, 'слот запрошен');
+    assert.equal((call.url.match(/\?/g) || []).length, 1, call.url);
+    const u = new URL(call.url, 'https://x');
+    assert.equal(u.pathname, '/api/webapp/client/slot/55');
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('init_data'), 'user=1');
   });
 
-  it('флаг включён: пояснение, слот сверху, replace на карточку без таймера', async () => {
-    const h = boot({
+  it('вне Telegram (без initData) — адрес без init_data, trainer_id на месте', async () => {
+    const h = bootRegister({ unified: true, search: '?trainer_id=7&slot_id=55', initData: '', slot: SLOT });
+    await tick();
+    const call = h.fetches.find((f) => f.url.includes('/client/slot/'));
+    assert.equal(call.url, '/api/webapp/client/slot/55?trainer_id=7');
+  });
+});
+
+describe('K по доске Register (A2, A3)', () => {
+  it('заголовок, пояснение, имя → телефон, подсказка без точки, приватность, слот в две строки', async () => {
+    const h = bootRegister({ unified: true, search: '?trainer_id=7&slot_id=55', slot: SLOT });
+    await tick();
+    assert.equal(texts(h, 'crHeroTitle'), 'Профиль для записи к Анне');
+    assert.equal(texts(h, 'crHeroSub'),
+      'Чтобы Анна нашла вас в своём списке и подтянула ваши абонементы и записи — укажите имя и телефон.');
+    assert.equal(texts(h, 'crPhoneNote'), 'Тот же номер, что у вас записан у Анны');
+    assert.equal(texts(h, 'crKPrivacy'), 'Имя и телефон видит только Анна');
+    assert.equal(h.ids.crLastNameBlock.hidden, true);
+    assert.equal(h.ids.crPhone.getAttribute('aria-describedby'), 'crPhoneNote');
+
+    const card = h.ids.crFormCard.children;
+    assert.ok(card.indexOf(h.ids.crFirstName.parentNode) < card.indexOf(h.ids.crPhone.parentNode.parentNode), 'сначала имя');
+    const tree = h.tree();
+    assert.match(tree, /label \{Ваше имя\}/);
+    assert.match(tree, /label \{Телефон\}/);
+    // подсказка сразу под полем телефона, до строки ошибки
+    const phoneStack = h.ids.crPhoneError.parentNode.children;
+    assert.equal(phoneStack.indexOf(h.ids.crPhoneNote) + 1, phoneStack.indexOf(h.ids.crPhoneError));
+
+    const bar = h.ids.crSlotBar;
+    assert.equal(h.ids.crShell.children[0], bar, 'слот сверху');
+    assert.deepEqual(bar.children.map((c) => c.textContent), ['Сб, 10:00', 'Анна Соколова · «Замок»']);
+  });
+
+  it('мужское имя — «нашёл/подтянул», «к Дмитрию», «у Дмитрия»', async () => {
+    const h = bootRegister({ unified: true, trainerInfo: { id: 7, name: 'Дмитрий Петров' } });
+    await tick();
+    assert.equal(texts(h, 'crHeroTitle'), 'Профиль для записи к Дмитрию');
+    assert.match(texts(h, 'crHeroSub'), /^Чтобы Дмитрий нашёл вас в своём списке и подтянул /);
+    assert.equal(texts(h, 'crPhoneNote'), 'Тот же номер, что у вас записан у Дмитрия');
+  });
+
+  it('склонение не сработало (нет ru-person-name.js, латиница) — имя как есть, без ошибки', async () => {
+    const noLib = bootRegister({ unified: true, withRuName: false });
+    await tick();
+    assert.equal(texts(noLib, 'crHeroTitle'), 'Профиль для записи к Анна');
+    assert.equal(texts(noLib, 'crPhoneNote'), 'Тот же номер, что у вас записан у Анна');
+    const latin = bootRegister({ unified: true, trainerInfo: { id: 7, name: 'Anna Sokolova' } });
+    await tick();
+    assert.equal(texts(latin, 'crPhoneNote'), 'Тот же номер, что у вас записан у Anna');
+  });
+
+  it('имя тренера не пришло — «тренер», без пустых мест', async () => {
+    const h = bootRegister({ unified: true, routes: [{ match: (u) => u.includes('/trainer-info/'), reply: () => jsonResponse(404, { detail: 'нет' }) }] });
+    await tick();
+    assert.equal(texts(h, 'crHeroTitle'), 'Профиль для записи к тренеру');
+    assert.equal(texts(h, 'crPhoneNote'), 'Тот же номер, что у вас записан у тренера');
+    assert.equal(texts(h, 'crKPrivacy'), 'Имя и телефон видит только тренер');
+  });
+
+  it('слот недоступен — полосы нет', async () => {
+    const h = bootRegister({ unified: true, search: '?trainer_id=7&slot_id=55' });
+    await tick();
+    assert.equal(h.ids.crSlotBar, undefined);
+  });
+});
+
+describe('K: после сохранения', () => {
+  it('replace на карточку без таймера; привязка записана для этого тренера', async () => {
+    const h = bootRegister({
       unified: true,
       search: '?trainer_id=7&slot_id=55',
       session: { client_phone: '+375291112233', client_first_name: 'Анна' },
-      slot: { available: true, slot: { slot_date: '2026-11-21', start_time: '10:00', arena_name: 'Замок' } },
+      slot: SLOT,
     });
     await tick();
-    assert.equal(h.ids.crHeroTitle.textContent, 'Как вас зовут?');
-    assert.equal(h.ids.crLastNameBlock.hidden, true);
-    assert.match(h.ids.crPhoneNote.textContent, /Тот же номер, что у вас записан у Анна Соколова/);
-    assert.match(h.ids.crSlotBar.textContent, /Сб, 10:00 · Замок/);
     assert.ok(h.replaced.some((u) => u.includes('trainers?trainer_id=7') && u.includes('listed=1') && u.includes('slot_id=55')));
     assert.ok(!h.timeouts.some((t) => t.ms >= 2000 && t.ms < 10000));
     assert.equal(h.hrefs.length, 0);
-    assert.ok(!h.replaced.some((u) => u.includes('client-home')));
+    assert.equal(h.store[LISTED_KEY], '7');
   });
+
+  it('отправка формы: успех → привязка записана и replace', async () => {
+    const h = bootRegister({ unified: true });
+    await tick();
+    h.ids.crPhone.value = '29 123-45-67';
+    h.ids.crFirstName.value = 'Мария';
+    h.submit();
+    await tick();
+    assert.equal(h.store[LISTED_KEY], '7');
+    assert.equal(h.replaced.length, 1);
+  });
+
+  it('отправка формы: 409 — ошибка под телефоном, привязки нет, переходов нет', async () => {
+    const h = bootRegister({ unified: true, routes: [selfRegister(() => jsonResponse(409, { detail: 'Этот номер уже используется другим аккаунтом Telegram.' }))] });
+    await tick();
+    h.ids.crPhone.value = '29 123-45-67';
+    h.ids.crFirstName.value = 'Мария';
+    h.submit();
+    await tick();
+    assert.equal(h.store[LISTED_KEY], undefined);
+    assert.equal(h.replaced.length, 0);
+    assert.match(texts(h, 'crPhoneError'), /уже используется/);
+  });
+});
+
+describe('K: профиль уже полный, привязка не удалась (A6)', () => {
+  for (const [name, reply, re] of [
+    ['409', () => jsonResponse(409, { detail: 'Этот номер уже используется другим аккаунтом Telegram.' }), /уже используется/],
+    ['500', () => jsonResponse(500, { detail: 'Internal Server Error' }), /Internal Server Error/],
+    ['сеть', () => Promise.reject(new TypeError('Failed to fetch')), /Проверьте интернет/],
+  ]) {
+    it(name + ': ошибка на экране, форма для повтора, ни «Вы в списке», ни перехода', async () => {
+      const h = bootRegister({
+        unified: true,
+        session: { client_phone: '+375291112233', client_first_name: 'Анна' },
+        routes: [selfRegister(reply)],
+      });
+      await tick();
+      assert.equal(h.replaced.length, 0, 'нет перехода на карточку');
+      assert.equal(h.hrefs.length, 0);
+      assert.equal(h.store[LISTED_KEY], undefined, 'привязка не записана');
+      assert.match(texts(h, 'crGlobalError'), re);
+      assert.ok(h.ids.crGlobalError.classList.contains('cr-global-error--visible'));
+      assert.notEqual(h.ids.crFormCard.style.display, 'none', 'форма на месте');
+      assert.notEqual(h.ids.crActions.style.display, 'none', 'кнопка «Продолжить» на месте');
+    });
+  }
 });

@@ -32,7 +32,9 @@
   }
   function apiUrl(path) {
     var raw = currentInit();
-    return '/api/webapp' + path + (raw ? '?init_data=' + encodeURIComponent(raw) : '');
+    if (!raw) return '/api/webapp' + path;
+    // У пути уже могут быть параметры (слот K: ?trainer_id=) — тогда init_data идёт через «&».
+    return '/api/webapp' + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
   }
 
   /**
@@ -267,7 +269,7 @@
         }
         var firstName = String(sess.client_first_name || '').trim() || 'Клиент';
         var lastName = String(sess.client_last_name || '').trim();
-        fetch(apiUrl('/client/self-register'), {
+        var linking = fetch(apiUrl('/client/self-register'), {
           method: 'POST',
           headers: apiHeaders(),
           body: JSON.stringify({
@@ -276,8 +278,12 @@
             first_name: firstName,
             last_name: lastName || null,
           }),
-        })
-          .then(parseFetchJsonResponse)
+        }).then(parseFetchJsonResponse);
+        if (unifiedReg()) {
+          screenK_linkResult(linking, done);
+          return;
+        }
+        linking
           .then(function () {
             done();
           })
@@ -331,7 +337,7 @@
         if (data && data.name) {
           var name = String(data.name).trim();
           if (unifiedReg()) {
-            screenK_phoneNote(name);
+            screenK_setTrainer(name);
             return;
           }
           if (heroSub) {
@@ -347,32 +353,87 @@
       });
   }
 
-  /** K: имя + телефон, пояснение, слот сверху. Узлы появляются только при флаге. */
+  /* ── K: форма по ссылке тренера (доска Register, SPEC §8.2). Только при флаге. ──────────────────
+     Имя тренера приходит из trainer-info позже разметки: до ответа (и если ответа нет) — «тренер». */
+
+  var kTrainer = { full: '', first: '' };
+  var kSlot = null;
+  /** Ключ «регистрация с этим тренером прошла»: читает витрина (плашка N), сам параметр listed=1 — не доказательство. */
+  var LISTED_KEY = 'trainer_crm_listed_trainer_id';
+
   function screenK_mount() {
     if (!unifiedReg()) return;
     document.body.classList.add('cr-k');
-    var title = document.getElementById('crHeroTitle');
-    if (title) title.textContent = 'Как вас зовут?';
-    if (heroSub) heroSub.textContent = '';
     var last = document.getElementById('crLastNameBlock');
     if (last) last.hidden = true;
-    screenK_phoneNote('');
+    // Сначала имя, потом телефон (как на доске).
+    var nameStack = firstNameInput && firstNameInput.parentNode;
+    var phoneStack = phoneError && phoneError.parentNode;
+    if (formCard && nameStack && phoneStack && typeof formCard.insertBefore === 'function') {
+      formCard.insertBefore(nameStack, phoneStack);
+    }
+    var nameLabel = document.querySelector('label[for="crFirstName"]');
+    if (nameLabel) nameLabel.textContent = 'Ваше имя';
+    var phoneLabel = document.querySelector('label[for="crPhone"]');
+    if (phoneLabel) phoneLabel.textContent = 'Телефон';
+    if (phoneStack) {
+      var note = document.createElement('p');
+      note.id = 'crPhoneNote';
+      note.className = 'cr-phone-note';
+      phoneStack.insertBefore(note, phoneError);
+      if (phoneInput) phoneInput.setAttribute('aria-describedby', 'crPhoneNote');
+    }
+    if (actions) {
+      var privacy = document.createElement('p');
+      privacy.id = 'crKPrivacy';
+      privacy.className = 'cr-k-privacy';
+      actions.appendChild(privacy);
+    }
+    screenK_texts();
     screenK_loadSlot();
   }
 
-  function screenK_phoneNote(name) {
-    var phoneStack = phoneError && phoneError.parentNode;
-    if (!phoneStack) return;
-    var note = document.getElementById('crPhoneNote');
-    if (!note) {
-      note = document.createElement('p');
-      note.id = 'crPhoneNote';
-      note.className = 'cr-phone-note';
-      phoneStack.appendChild(note);
+  /** Склонение имени тренера; модуля нет или имя не русское — имя как есть. */
+  function screenK_case(first, cas) {
+    var R = window.RuPersonName;
+    if (!first || !R || typeof R.inflectPersonName !== 'function' || !/^[А-Яа-яЁё-]+$/.test(first)) return first;
+    try {
+      return R.inflectPersonName(first, '', cas) || first;
+    } catch (e) {
+      return first;
     }
-    note.textContent = name
-      ? 'Тот же номер, что у вас записан у ' + name + '.'
-      : 'Тот же номер, что у вас записан у тренера.';
+  }
+
+  function screenK_isFemale(first) {
+    var R = window.RuPersonName;
+    if (R && typeof R.guessGender === 'function') {
+      try {
+        return R.guessGender(first) === 'f';
+      } catch (e) { /* ниже — простое правило */ }
+    }
+    return /[ая]$/i.test(first);
+  }
+
+  function screenK_texts() {
+    var first = kTrainer.first;
+    var title = document.getElementById('crHeroTitle');
+    if (title) title.textContent = 'Профиль для записи к ' + (first ? screenK_case(first, 'dat') : 'тренеру');
+    if (heroSub) {
+      var fem = first && screenK_isFemale(first);
+      heroSub.textContent = 'Чтобы ' + (first || 'тренер') + (fem ? ' нашла' : ' нашёл') +
+        ' вас в своём списке и ' + (fem ? 'подтянула' : 'подтянул') + ' ваши абонементы и записи — укажите имя и телефон.';
+    }
+    var note = document.getElementById('crPhoneNote');
+    if (note) note.textContent = 'Тот же номер, что у вас записан у ' + (first ? screenK_case(first, 'gen') : 'тренера');
+    var privacy = document.getElementById('crKPrivacy');
+    if (privacy) privacy.textContent = 'Имя и телефон видит только ' + (first || 'тренер');
+    screenK_slotBar();
+  }
+
+  function screenK_setTrainer(name) {
+    kTrainer.full = String(name || '').trim();
+    kTrainer.first = kTrainer.full.split(/\s+/)[0] || '';
+    screenK_texts();
   }
 
   function screenK_weekday(iso) {
@@ -380,6 +441,43 @@
     if (!m) return '';
     var names = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
     return names[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()] || '';
+  }
+
+  function screenK_quoted(name) {
+    var s = String(name || '').trim();
+    if (!s || (s.charAt(0) === '«' && s.charAt(s.length - 1) === '»')) return s;
+    return '«' + s + '»';
+  }
+
+  /** Слот сверху в две строки: «Сб, 10:00» / «Анна Соколова · «Замок»». */
+  function screenK_slotBar() {
+    if (!kSlot) return;
+    var time = String(kSlot.start_time || '').slice(0, 5).replace(/^0(\d)/, '$1');
+    var wd = screenK_weekday(kSlot.slot_date);
+    var when = wd && time ? wd + ', ' + time : time;
+    if (!when) return;
+    var place = kSlot.is_online ? 'онлайн' : screenK_quoted(kSlot.arena_name);
+    var who = [kTrainer.full, place].filter(Boolean).join(' · ');
+    var bar = document.getElementById('crSlotBar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'crSlotBar';
+      bar.className = 'cr-slot';
+      var shell = document.getElementById('crShell');
+      if (!shell) return;
+      shell.insertBefore(bar, shell.firstChild);
+    }
+    bar.textContent = '';
+    var b = document.createElement('b');
+    b.className = 'cr-slot-when';
+    b.textContent = when.charAt(0).toUpperCase() + when.slice(1);
+    bar.appendChild(b);
+    if (who) {
+      var span = document.createElement('span');
+      span.className = 'cr-slot-who';
+      span.textContent = who;
+      bar.appendChild(span);
+    }
   }
 
   function screenK_loadSlot() {
@@ -391,20 +489,43 @@
     })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        var slot = data && data.available && data.slot;
-        if (!slot) return;
-        var time = String(slot.start_time || '').slice(0, 5).replace(/^0(\d)/, '$1');
-        var wd = screenK_weekday(slot.slot_date);
-        var line = [wd && time ? wd + ', ' + time : time, slot.arena_name || ''].filter(Boolean).join(' · ');
-        if (!line) return;
-        var bar = document.createElement('p');
-        bar.id = 'crSlotBar';
-        bar.className = 'cr-slot';
-        bar.textContent = line.charAt(0).toUpperCase() + line.slice(1);
-        var shell = document.getElementById('crShell');
-        if (shell) shell.insertBefore(bar, shell.firstChild);
+        kSlot = (data && data.available && data.slot) || null;
+        screenK_slotBar();
       })
       .catch(function () { /* слота нет — полосу не рисуем */ });
+  }
+
+  /** Регистрация с этим тренером подтверждена ответом сервера — витрина покажет «Вы в списке». */
+  function screenK_markListed() {
+    try {
+      sessionStorage.setItem(LISTED_KEY, String(trainerId));
+    } catch (e) {
+      /* нет хранилища — плашки не будет, но и неправды тоже */
+    }
+  }
+
+  /**
+   * Профиль уже полный, привязка к тренеру при входе: успех — на карточку; ошибка — сказать и дать повторить
+   * кнопкой «Продолжить» (форма остаётся на экране), а не уводить на «Вы в списке».
+   */
+  function screenK_linkResult(linking, done) {
+    linking
+      .then(function (res) {
+        if (!res.ok) {
+          var detail = res.data && typeof res.data.detail === 'string' && res.data.detail
+            ? res.data.detail
+            : 'Ошибка при сохранении. Попробуйте ещё раз.';
+          sendRegisterEvent('link_error', res.status + ': ' + detail);
+          showGlobalError(detail);
+          return;
+        }
+        screenK_markListed();
+        done();
+      })
+      .catch(function () {
+        sendRegisterEvent('link_network_error');
+        showGlobalError('Проблема с соединением. Проверьте интернет и попробуйте ещё раз.');
+      });
   }
 
   function parseFetchJsonResponse(r) {
@@ -510,6 +631,7 @@
           }
           var st = res.data && res.data.status ? String(res.data.status) : '';
           sendRegisterEvent('submit_success', st);
+          if (unifiedReg()) screenK_markListed();
           var hubHint =
             'Откройте «Главная» — кнопка слева внизу в Telegram. Там ваш тренер как основной.';
           if (st === 'already_registered' || st === 'linked') {

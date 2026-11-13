@@ -9,6 +9,8 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const { boot, resp, tick } = require('./helpers/trainer-showcase-harness');
 const { STATES } = require('./fixtures/trainer-card-states');
+const { capture } = require('./helpers/trainer-booking-flag-off-scenarios');
+const FLAG_OFF = require('./fixtures/trainer-booking-flag-off.snapshot.json');
 
 const FORBIDDEN = ['Время за вами', 'Если ответа не будет', 'Устанавливать ничего не нужно', 'Вы занимались', 'каталог', 'Ледовая арена «Замок»', 'запись после согласования цены', 'за 2 часа'];
 
@@ -19,6 +21,19 @@ const slotsRoute = (slots, status = 200) => ({
 
 const trainer = STATES.A.trainer;
 const slots = STATES.A.slots;
+
+/** Ответ /client/catalog-trainer/{id} для тренера A (форма карточки каталога). */
+const catalogCard = {
+  id: trainer.id, can_book: true, contact_telegram_url: '/r/tg/1',
+  profile: { first_name: 'Анна', last_name: 'Соколова', session_duration_minutes: 60 },
+  services: trainer.services, arena_ids: [3], arena_names: ['Замок'],
+};
+
+/** Тренер не из выдачи города: /client/catalog-trainer/{id}. status 0 — обрыв сети. */
+const trainerFallback = (status) => ({
+  match: (c) => c.url.indexOf('/catalog-trainer/') >= 0,
+  reply: () => (status ? resp(status, { detail: 'x' }) : Promise.reject(new TypeError('Failed to fetch'))),
+});
 
 function openBook(opts = {}) {
   return boot({
@@ -31,10 +46,17 @@ function openBook(opts = {}) {
     routes: opts.routes || [slotsRoute(opts.slots || slots)],
     miniAppBack: opts.miniAppBack,
     tg: opts.tg,
+    sessionStore: opts.sessionStore,
   });
 }
 
 describe('флаг выключен — запись как раньше', () => {
+  it('D, D2, E, «Назад» с E, L1, L2, L3, listed=1, ссылка со слотом — побайтно как на базе d4419b77', async () => {
+    const now = await capture();
+    assert.deepEqual(Object.keys(now), Object.keys(FLAG_OFF));
+    for (const k of Object.keys(FLAG_OFF)) assert.deepEqual(now[k], FLAG_OFF[k], k);
+  });
+
   it('шторка «время недоступно» и подпись кнопки не меняются', async () => {
     const h = await openBook({ unified: false, routes: [
       slotsRoute(slots),
@@ -207,11 +229,37 @@ describe('E, L, N', () => {
       initData: 'x',
       showcase: { items: [] },
       session: { city_name: 'Минск' },
+      routes: [trainerFallback(404)],
     });
     await tick(40);
     assert.match(miss.app.innerHTML, /<h1>Такого тренера нет<\/h1>/);
     assert.match(miss.app.innerHTML, /Другие тренеры · Минск/);
+    assert.doesNotMatch(miss.app.innerHTML, /Не удалось загрузить тренера/);
   });
+
+  for (const [name, route] of [['503', () => trainerFallback(503)], ['сеть', () => trainerFallback(0)]]) {
+    it('L3 только на 404: ' + name + ' при загрузке тренера — «Не удалось загрузить тренера», «Повторить» перезагружает', async () => {
+      let fail = true;
+      const h = boot({
+        unified: true,
+        search: '?trainer_id=99',
+        initData: 'x',
+        showcase: { items: [] },
+        session: { city_name: 'Минск' },
+        routes: [{ match: (c) => c.url.indexOf('/catalog-trainer/99') >= 0, reply: (c) => (fail ? route().reply(c) : resp(200, catalogCard)) }, slotsRoute(slots)],
+      });
+      await tick(40);
+      assert.doesNotMatch(h.app.innerHTML, /Такого тренера нет/);
+      assert.match(h.app.innerHTML, /<h1>Не удалось загрузить тренера<\/h1>/);
+      assert.match(h.app.innerHTML, /Проверьте сеть и повторите\./);
+      assert.match(h.app.innerHTML, /data-act="retry-trainer">Повторить</);
+      fail = false;
+      h.click({ 'data-act': 'retry-trainer' });
+      await tick(60);
+      assert.equal(h.S.view, 'trainer');
+      assert.match(h.app.innerHTML, /<h1>Анна Соколова<\/h1>/);
+    });
+  }
 
   it('N: «Вы в списке» и абонемент только после регистрации', async () => {
     const pass = {
@@ -224,12 +272,48 @@ describe('E, L, N', () => {
       }),
     };
     const profiles = { items: [{ client_id: 9, role: 'self', first_name: 'Анна' }], default_profile_id: 9 };
-    const listed = await openBook({ search: '?trainer_id=1&listed=1', profiles, routes: [slotsRoute(slots), pass] });
+    const linked = { trainer_crm_listed_trainer_id: '1' };
+    const listed = await openBook({ search: '?trainer_id=1&listed=1', profiles, routes: [slotsRoute(slots), pass], sessionStore: linked });
     await tick(80);
     assert.match(listed.app.innerHTML, /Вы в списке у Анны/);
     assert.match(listed.app.innerHTML, /Абонемент: осталось 3 занятия из 8/);
-    const plain = await openBook({ profiles, routes: [slotsRoute(slots), pass] });
+    const plain = await openBook({ profiles, routes: [slotsRoute(slots), pass], sessionStore: linked });
     await tick(80);
     assert.doesNotMatch(plain.app.innerHTML, /Вы в списке/);
+  });
+
+  it('N: &listed=1 без привязки формой K — плашки нет', async () => {
+    const h = await openBook({ search: '?trainer_id=1&listed=1' });
+    await tick(60);
+    assert.equal(h.S.view, 'trainer');
+    assert.doesNotMatch(h.app.innerHTML, /Вы в списке/);
+  });
+
+  it('N: привязка к другому тренеру — плашки нет', async () => {
+    const h = await openBook({ search: '?trainer_id=1&listed=1', sessionStore: { trainer_crm_listed_trainer_id: '2' } });
+    await tick(60);
+    assert.doesNotMatch(h.app.innerHTML, /Вы в списке/);
+  });
+
+  it('N: «Назад» → список → другой тренер — у него плашки нет, у своего есть', async () => {
+    const other = { ...STATES.B.trainer };
+    const h = boot({
+      unified: true,
+      search: '?trainer_id=1&listed=1&via=link',
+      initData: 'x',
+      showcase: { items: [trainer, other] },
+      session: { client_phone: '+375291112233', client_first_name: 'Анна' },
+      routes: [slotsRoute(slots)],
+      sessionStore: { trainer_crm_listed_trainer_id: '1' },
+    });
+    await tick(60);
+    assert.match(h.app.innerHTML, /Вы в списке у Анны/);
+    h.click({ 'data-act': 'back' });
+    await tick(20);
+    assert.equal(h.S.view, 'list');
+    h.click({ 'data-act': 'trainer', 'data-tid': String(other.id) });
+    await tick(60);
+    assert.equal(h.S.trainer.id, other.id);
+    assert.doesNotMatch(h.app.innerHTML, /Вы в списке/);
   });
 });

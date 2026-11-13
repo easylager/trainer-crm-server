@@ -214,7 +214,7 @@
       })
     );
     // Плашка N появляется после абонементов. Флаг выключен — промис тот же, перерисовки нет.
-    if (unifiedCard() && qs.get('listed') === '1') {
+    if (LISTED_TID) {
       return p.then(function () { if (S.view === 'trainer') render(); });
     }
     return p;
@@ -891,7 +891,7 @@
     var svcs = serviceList(t, S.dirKey);
     var svc = currentService() || (svcs.length > 1 ? svcs[0] : null);
     var h = '<div class="tc">' + tcHero(t) + tcFacts(t) + '<div class="tc-body">';
-    if (qs.get('listed') === '1') h += screenN_banner(t);
+    if (screenN_isListed(t)) h += screenN_banner(t);
     if (S.entryNote) h += '<div class="entry-note" role="status">' + esc(S.entryNote) + '</div>';
     if (t.can_book) h += tcPriceCard(t, dirs, svcs, svc);
     h += tcAbout(t);
@@ -1749,6 +1749,35 @@
       '<button type="button" class="cta" data-act="to-list">' + esc(label) + '</button></div></div>';
   }
 
+  /**
+   * N: «Вы в списке» — только у того тренера, к которому форма K реально привязала (успешный ответ
+   * self-register записан в sessionStorage). Параметр listed=1 в ссылке сам по себе ничего не доказывает:
+   * его можно дописать руками, а после «Назад» → список → другой тренер он остаётся в адресе.
+   */
+  var LISTED_TID = screenN_listedTrainerId();
+
+  function screenN_listedTrainerId() {
+    if (!unifiedCard() || qs.get('listed') !== '1') return null;
+    var tid = num(qs.get('trainer_id'));
+    try {
+      var linked = num(window.sessionStorage.getItem('trainer_crm_listed_trainer_id'));
+      return tid && linked === tid ? tid : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function screenN_isListed(t) {
+    return !!(LISTED_TID && t && Number(t.id) === LISTED_TID);
+  }
+
+  /** Тренер по ссылке не загрузился (сеть, 5xx): не «тренера нет», а повтор (как L1 на доске States). */
+  function screenL_loadError() {
+    return '<div class="tc tc-miss"><div class="tc-body"><h1>Не удалось загрузить тренера</h1>' +
+      '<p class="tc-empty-p">Проверьте сеть и повторите.</p>' +
+      '<button type="button" class="cta" data-act="retry-trainer">Повторить</button></div></div>';
+  }
+
   /** N: после регистрации по ссылке тренера. Абонемента нет — строки нет. */
   function screenN_banner(t) {
     var first = tcFirstName(t);
@@ -2087,6 +2116,7 @@
     else if (S.view === 'sent') html = renderSent();
     else if (S.view === 'reqsent') html = renderReqSent();
     else if (S.view === 'missing') html = screenL_missing();
+    else if (S.view === 'trainer-error') html = screenL_loadError();
     else if (unifiedCard() && !S.items && !S.loadError && num(qs.get('trainer_id'))) html = renderTrainerSkeleton();
     else html = renderList();
     appEl.innerHTML = '<div class="tsw-view">' + html + '</div>';
@@ -2262,6 +2292,7 @@
       }
       case 'map': ev.stopPropagation(); openLink(el.getAttribute('data-href')); break;
       case 'to-list': S.view = 'list'; S.stack = []; render(); window.scrollTo(0, 0); break;
+      case 'retry-trainer': S.trainerLoadError = false; S.items = null; S.view = 'list'; render(); boot(); break;
       default: break;
     }
   }
@@ -2373,13 +2404,17 @@
       if (!tid) { render(); return; }
       var t = trainerById(tid);
       var gen = S.trainerGen;
-      var p = t ? Promise.resolve(t) : loadTrainerFallback(tid).catch(function () { return null; });
+      var p = t ? Promise.resolve(t) : loadTrainerFallback(tid).catch(function (err) {
+        // L3 «Такого тренера нет» — только когда сервер так и ответил (404). Сеть и 5xx — ошибка загрузки с «Повторить».
+        if (unifiedCard() && !(err && err.status === 404)) S.trainerLoadError = true;
+        return null;
+      });
       return p.then(function (tr) {
         // Пока грузили тренера по ссылке, человек уже открыл другого — не перебиваем его выбор.
         if (gen !== S.trainerGen) return;
         if (!tr) {
           if (unifiedCard() && tid) {
-            S.view = 'missing';
+            S.view = S.trainerLoadError ? 'trainer-error' : 'missing';
             render();
             return;
           }
