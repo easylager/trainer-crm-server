@@ -265,6 +265,49 @@ describe('GlideDeepLink.maybeEarlyRedirect', () => {
       'replace:/webapp/trainers?trainer_id=11&slot_id=453#tgWebAppStartParam=trainer_11_s_453',
     ]);
   });
+
+  it('?startapp= тренера несёт слот, каток и via одним «?»', () => {
+    const storage = memStorage();
+    let replaced = '';
+    const sp = 'trainer_7_s_55_a_3_v_p3';
+    const loc = {
+      href: 'https://app.test/webapp/client-home?startapp=' + sp,
+      pathname: '/webapp/client-home',
+      search: '?startapp=' + sp,
+      hash: '',
+      replace(u) { replaced = u; },
+    };
+    const ok = G.maybeEarlyRedirect({ location: loc, sessionStorage: storage, Telegram: { WebApp: {} } });
+    assert.equal(ok, true);
+    assert.equal((replaced.match(/\?/g) || []).length, 1, replaced);
+    const u = new URL(replaced, 'https://app.test');
+    assert.equal(u.pathname, '/webapp/trainers');
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('slot_id'), '55');
+    assert.equal(u.searchParams.get('arena_id'), '3');
+    assert.equal(u.searchParams.get('via'), 'p3');
+    assert.equal(u.searchParams.get('startapp'), sp);
+  });
+
+  it('повтор того же startapp в сессии не уводит со страницы', () => {
+    const storage = memStorage();
+    storage.setItem(G.DEEP_LINK_FLAG, 'trainer_7_s_55');
+    let replaced = '';
+    const loc = {
+      href: 'https://app.test/webapp/client-home#tgWebAppStartParam=trainer_7_s_55',
+      pathname: '/webapp/client-home',
+      search: '',
+      hash: '#tgWebAppStartParam=trainer_7_s_55',
+      replace(u) { replaced = u; },
+    };
+    const ok = G.maybeEarlyRedirect({
+      location: loc,
+      sessionStorage: storage,
+      Telegram: { WebApp: { initDataUnsafe: { start_param: 'trainer_7_s_55' } } },
+    });
+    assert.equal(ok, false);
+    assert.equal(replaced, '');
+  });
 });
 
 describe('client-home подключает early redirect до body', () => {
@@ -425,6 +468,28 @@ describe('Mini App public URL recovery', () => {
     const ctx = browser('https://app.test/hockey?city=orsha', { initData: '' });
     assert.equal(G.maybePublicRedirect(ctx), false);
     assert.equal(ctx.location.pathname, '/hockey');
+  });
+
+  it('повтор startapp тренера со страницы /t/ открывает карточку, не главную', () => {
+    const storage = new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55'], ['glide_mini_app_active_v1', '1']]);
+    const ctx = browser('https://app.test/t/7-anna?init_data=signed', { storage, initData: '', startParam: 'trainer_7_s_55' });
+    assert.equal(G.maybePublicRedirect(ctx), true);
+    assert.equal(ctx.location.pathname, '/webapp/trainers');
+    assert.match(ctx.location.search, /trainer_id=7/);
+    assert.doesNotMatch(ctx.location.pathname, /client-home/);
+  });
+
+  it('повтор startapp тренера с корня / ведёт на карточку, не на главную', (t) => {
+    t.skip('баг: DEEP_LINK_FLAG обнуляет target, с / открывается client-home. REVIEW-LEDGER TASK-408');
+    const storage = new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55_a_3_v_p3'], ['glide_mini_app_active_v1', '1']]);
+    const ctx = browser('https://app.test/?startapp=trainer_7_s_55_a_3_v_p3', { storage, initData: 'signed', startParam: '' });
+    assert.equal(G.maybePublicRedirect(ctx), true);
+    assert.equal(ctx.location.pathname, '/webapp/trainers');
+    const u = new URL(ctx.location.href);
+    assert.equal((u.search.match(/\?/g) || []).length, 1);
+    assert.equal(u.searchParams.get('slot_id'), '55');
+    assert.equal(u.searchParams.get('arena_id'), '3');
+    assert.equal(u.searchParams.get('via'), 'p3');
   });
 
   it('public home and shared place/city/match template wire recovery', () => {

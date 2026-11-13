@@ -48,6 +48,9 @@ describe('шим единой карточки: флаг включён', () => 
     ['45 после покупки абонемента', '/webapp/catalog?trainer_id=7&city_id=2&service_id=3&arena_id=9&offset=2', ['/webapp/trainers?trainer_id=7&service_id=3&arena_id=9&city_id=2']],
     ['via доезжает', '/webapp/catalog?trainer_id=7&slot_id=1&via=k5', ['/webapp/trainers?trainer_id=7&slot_id=1&via=k5']],
     ['страница по /webapp/catalog.html', '/webapp/catalog.html?trainer_id=7', ['/webapp/trainers?trainer_id=7']],
+    // REVIEW-LEDGER 402: tab=catalog не исключение — с trainer_id это карточка.
+    ['tab=catalog + trainer_id', '/webapp/catalog?tab=catalog&trainer_id=7&service_id=3', ['/webapp/trainers?trainer_id=7&service_id=3']],
+    ['book.html со слотом и катком', '/webapp/book.html?trainer_id=7&slot_id=55&arena_id=9&via=k5', ['/webapp/trainers?trainer_id=7&slot_id=55&arena_id=9&via=k5']],
   ];
   for (const [name, from, to] of entries) {
     it(name, () => assert.deepEqual(load(from, true), to));
@@ -64,12 +67,19 @@ describe('шим не перехватывает (AC-003, AC-005)', () => {
     assert.deepEqual(load('/webapp/book.html?trainer_id=7&request_id=5', true), []);
   });
   it('catalog без trainer_id', () => assert.deepEqual(load('/webapp/catalog?city_id=2', true), []));
-  it('catalog?trainer_id=0 / мусор', () => {
+  it('catalog?trainer_id=0 / мусор / пустой / отрицательный', () => {
     assert.deepEqual(load('/webapp/catalog?trainer_id=abc', true), []);
     assert.deepEqual(load('/webapp/catalog?trainer_id=0', true), []);
+    assert.deepEqual(load('/webapp/catalog?trainer_id=', true), []);
+    assert.deepEqual(load('/webapp/catalog?trainer_id=-3', true), []);
+    assert.deepEqual(load('/webapp/book?trainer_id=0', true), []);
   });
-  it('другие страницы (trainers, client-bookings)', () => {
-    assert.deepEqual(load('/webapp/trainers?trainer_id=7', true), []);
+  it('tab=catalog без trainer_id не карточка', () => {
+    assert.deepEqual(load('/webapp/catalog?tab=catalog&city_id=2', true), []);
+  });
+  it('другие страницы (trainers, client-bookings) — петли нет', () => {
+    assert.deepEqual(load('/webapp/trainers?trainer_id=7&slot_id=55', true), []);
+    assert.deepEqual(load('/webapp/trainers.html?trainer_id=7', true), []);
     assert.deepEqual(load('/webapp/client-bookings?trainer_id=7', true), []);
   });
 });

@@ -3,6 +3,7 @@
  * TASK-401: сценарии записи при ВЫКЛЮЧЕННОМ флаге единой карточки — D, D2, E, «Назад» с E, L1, L2, L3,
  * карточка с `listed=1`. Снимок снят этим же кодом на базе d4419b77 (до TASK-401) и лежит в
  * tests/js/fixtures/trainer-booking-flag-off.snapshot.json; тест сверяет текущую ветку с ним побайтно.
+ * Снимок прогнан на чистом дереве 161bd810 (до эпика): те же ключи совпали побайтно.
  * Снимается всё, что видит человек и сервер: разметка #app и шторки, экран, вызовы API, история, переходы.
  */
 const { boot, resp, tick } = require('./trainer-showcase-harness');
@@ -182,6 +183,14 @@ async function capture() {
     });
     await tick(80);
     out.listed = snap(h);
+  }
+
+  // Заявка: шторка при выключенном флаге (до отправки — телефон проверяет виджет).
+  {
+    const h = open();
+    await tick(40);
+    h.click({ 'data-act': 'request' });
+    out['request:open'] = snap(h);
   }
 
   // Ссылка со слотом (slot_id) — сразу запись.

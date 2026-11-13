@@ -49,7 +49,7 @@ const facts = (html) => [...strip(html).matchAll(/<li><b>([^<]*)<\/b><span>([^<]
 const FORBIDDEN = ['Время за вами', 'Если ответа не будет', 'Устанавливать ничего не нужно', 'Вы занимались', 'каталог', 'Ледовая арена «Замок»', 'Тренирует'];
 
 describe('флаг выключен — карточка как раньше', () => {
-  it('разметка всех состояний и списка побайтно совпадает со снимком до TASK-400 (7bac8350)', async () => {
+  it('разметка всех состояний и списка побайтно совпадает со снимком 161bd810', async () => {
     for (const key of Object.keys(STATES)) {
       for (const initData of ['x', '']) {
         const h = await open(key, { unified: false, initData });
@@ -119,6 +119,31 @@ describe('единая карточка: порядок и условия пок
     const html = (await open('F')).app.innerHTML;
     assert.doesNotMatch(html, /tc-pc|data-act="slot"|tc-chip/);
     assert.match(html, /<div class="ft col tc-ft"><button type="button" class="cta" data-act="request">Оставить заявку<\/button><small>Ответ придёт в Telegram<\/small><button type="button" class="sec2" data-act="write">Написать тренеру<\/button>/);
+  });
+
+  it('дыры в данных не сдвигают оставшиеся секции (позиции, не подстрока)', async () => {
+    const bare = STATES.M2.trainer;
+    const html = (await open('M2', {
+      trainer: {
+        ...bare,
+        description: '',
+        education: '',
+        services: [{ ...bare.services[0], price_tiers: [{ id: 1, tier_kind: 'adult', price_cents: 5000 }] }],
+      },
+    })).app.innerHTML;
+    const marks = ['<h1>', 'class="tc-facts', ' tc-pc"', 'class="tc-sec" data-act="save"', 'class="ft col tc-ft"'];
+    const pos = order(html, marks);
+    pos.forEach((p, i) => assert.ok(p >= 0, 'нет секции #' + i));
+    assert.deepEqual([...pos].sort((a, b) => a - b), pos);
+    assert.doesNotMatch(html, />О тренере<|>Образование и дипломы<|>Другие тарифы<|>О занятии<|>Отзывы<|>На занятиях</);
+  });
+
+  it('«О занятии» стоит между «О тренере» и «Образование», когда есть текст услуги', async () => {
+    const svc = { ...STATES.A.trainer.services[0], description: 'Сначала учимся падать.' };
+    const html = (await open('A', { trainer: { services: [svc] } })).app.innerHTML;
+    const pos = order(html, ['>О тренере<', '>О занятии<', '>Образование и дипломы<', '>Где проходят занятия<', '>Другие тарифы<']);
+    pos.forEach((p) => assert.ok(p >= 0));
+    assert.deepEqual([...pos].sort((a, b) => a - b), pos);
   });
 
   it('пустое не выводим: нет описания/образования/«двое» — нет блоков; <2 фактов — нет плашки', async () => {

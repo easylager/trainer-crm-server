@@ -72,6 +72,9 @@ def test_flag_off_start_param_still_opens_home(monkeypatch: pytest.MonkeyPatch) 
     assert client_discovery_webapp_url("https://glide.example", trainer_id=12) == (
         "https://glide.example/webapp/catalog?trainer_id=12"
     )
+    assert client_discovery_webapp_url(
+        "https://glide.example", trainer_id=12, city_id=2, service_id=3, arena_id=9
+    ) == "https://glide.example/webapp/catalog?trainer_id=12&city_id=2&service_id=3&arena_id=9"
 
 
 def test_flag_on_start_param_opens_card_from_builder(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -81,9 +84,9 @@ def test_flag_on_start_param_opens_card_from_builder(monkeypatch: pytest.MonkeyP
     assert reply is not None
     assert reply["url"] == "https://glide.example/webapp/trainers?trainer_id=7&slot_id=55&via=p3"
     assert start_entry_reply("welcome_ref_7", webapp_base_url="https://glide.example") is None
-    assert client_discovery_webapp_url("https://glide.example", trainer_id=12, service_id=4) == (
-        "https://glide.example/webapp/trainers?trainer_id=12&service_id=4"
-    )
+    assert client_discovery_webapp_url(
+        "https://glide.example", trainer_id=12, city_id=2, service_id=4, arena_id=9
+    ) == "https://glide.example/webapp/trainers?trainer_id=12&arena_id=9&service_id=4&city_id=2"
 
 
 def test_flag_on_bot_keyboards_use_the_card(monkeypatch: pytest.MonkeyPatch) -> None:

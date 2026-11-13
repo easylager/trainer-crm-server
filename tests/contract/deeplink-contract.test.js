@@ -16,6 +16,7 @@ const path = require('node:path');
 
 const webapp = path.resolve(__dirname, '../../static/webapp');
 const CASES = JSON.parse(fs.readFileSync(path.join(__dirname, 'deeplink_cases.json'), 'utf8'));
+const TRAINER_CASES = JSON.parse(fs.readFileSync(path.join(__dirname, 'trainer_deeplink_cases.json'), 'utf8'));
 const FIELDS = ['kind', 'arena_id', 'session_id', 'city_id', 'intent', 'when'];
 
 function loadDeepLinkTarget() {
@@ -65,6 +66,34 @@ describe('deeplink contract (js shell: ' + loaded.source + ')', () => {
       assert.deepEqual(targetToContract(loaded.fn(c.start_param)), want, c.note || '');
     });
   });
+});
+
+describe('trainer deeplink contract (js = python fields)', () => {
+  const G = require(path.join(webapp, 'glide-deeplink.js'));
+  const fields = ['trainer_id', 'arena_id', 'slot_id', 'via', 'intent'];
+
+  function fromTarget(target) {
+    if (!target) return null;
+    assert.equal((target.path.match(/\?/g) || []).length, 1, target.path);
+    const q = new URLSearchParams(target.path.split('?')[1] || '');
+    const out = {};
+    for (const f of fields) out[f] = q.get(f);
+    return out;
+  }
+
+  for (const c of TRAINER_CASES) {
+    it(c.start_param || '<empty>', (t) => {
+      if (c.skip) { t.skip(c.skip); return; }
+      const target = G.deepLinkTarget(c.start_param);
+      if (c.expect == null) {
+        assert.equal(target, null, c.note || '');
+        return;
+      }
+      assert.equal(target && target.path, c.path, c.note || '');
+      assert.deepEqual(fromTarget(target), c.expect);
+      assert.equal(target.path.includes('service_id'), false, 'service_id живёт в query входа, не в start_param');
+    });
+  }
 });
 
 describe('deeplink contract (arena-card-model)', () => {
