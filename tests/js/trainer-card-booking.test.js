@@ -315,6 +315,27 @@ describe('E, L, N', () => {
     assert.equal(showcaseCalls() - before, 1);
   });
 
+  it('N: role=status звучит при смене текста плашки и молчит на повторном render()', async () => {
+    const h = openBook({
+      search: '?trainer_id=1&listed=1',
+      sessionStore: { trainer_crm_listed_trainer_id: '1' },
+      profiles: { items: [{ client_id: 9, role: 'self', first_name: 'Анна' }], default_profile_id: 9 },
+      routes: [slotsRoute(slots), {
+        match: (c) => c.url.split('?')[0] === '/api/webapp/client/passes',
+        reply: () => resp(200, { items: [] }, 5000),
+      }],
+    });
+    await tick(80);
+    assert.match(h.app.innerHTML, /<div class="tc-roster"><b>Вы в списке у Анны<\/b><\/div>/);
+    h.ctx.__trainerShowcase.render();
+    assert.doesNotMatch(h.app.innerHTML, /class="tc-roster" role="status"/);
+    h.S.passes[9] = [{ trainer_id: 1, status: 'active', sessions_remaining: 3, sessions_total: 8 }];
+    h.ctx.__trainerShowcase.render();
+    assert.match(h.app.innerHTML, /<div class="tc-roster" role="status"><b>Вы в списке у Анны<\/b><span>Абонемент: осталось 3 занятия из 8<\/span><\/div>/);
+    h.ctx.__trainerShowcase.render();
+    assert.doesNotMatch(h.app.innerHTML, /class="tc-roster" role="status"/);
+  });
+
   it('N: «Вы в списке» и абонемент только после регистрации', async () => {
     const pass = {
       match: (c) => c.url.split('?')[0] === '/api/webapp/client/passes',

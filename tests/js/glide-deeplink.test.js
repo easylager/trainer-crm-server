@@ -530,11 +530,18 @@ describe('Mini App public URL recovery', () => {
   });
 
   it('повтор group/catalog/arena/col_ с / при стоящем флаге остаётся главной', () => {
+    // group_ и col_ приложению не цели: иначе проверка «осталась главная» пустая
+    // (любой незнакомый параметр и так ведёт на client-home).
+    assert.equal(G.deepLinkTarget('group_12'), null);
+    assert.equal(G.deepLinkTarget('col_zamok'), null);
+    assert.equal(G.deepLinkTarget('catalog_7').key, 'ice');
+    assert.equal(G.deepLinkTarget('arena_9').key, 'arena');
     for (const sp of ['group_12', 'catalog_7', 'arena_9', 'col_zamok']) {
       const storage = new Map([[G.DEEP_LINK_FLAG, sp], ['glide_mini_app_active_v1', '1']]);
       const ctx = browser('https://app.test/', { storage, initData: 'signed', startParam: sp });
       assert.equal(G.maybePublicRedirect(ctx), true, sp);
       assert.equal(ctx.location.pathname, '/webapp/client-home', sp);
+      assert.equal(new URL(ctx.location.href).searchParams.get('trainer_id'), null, sp);
     }
   });
 

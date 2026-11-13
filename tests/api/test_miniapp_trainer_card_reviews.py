@@ -163,3 +163,84 @@ async def test_flag_off_showcase_has_no_reviews_nor_class_photos(app_use_test_db
     item = await _item(db_session, monkeypatch, flag=False, reviews=THREE_AND_HIDDEN, photos=3)
     assert "reviews" not in item
     assert "class_photos" not in item
+
+
+async def _two_trainers(db_session, client) -> tuple[dict, int, int]:
+    place = await _place(db_session)
+    a = await _trainer_on(db_session, client, place, first_name=f"А{uuid.uuid4().hex[:4]}")
+    b = await _trainer_on(db_session, client, place, first_name=f"Б{uuid.uuid4().hex[:4]}")
+    return place, a, b
+
+
+async def _rate(db_session, tid: int, n: int, *, status: str, body: str) -> None:
+    tg = 8_300_000_000 + tid * 100 + n
+    await add_trainer_rating(db_session, tid, tg, 5, review_text=body)
+    await db_session.execute(
+        text("UPDATE trainer_ratings SET review_status = :s WHERE trainer_id = :t AND client_telegram_id = :c"),
+        {"s": status, "t": tid, "c": tg},
+    )
+
+
+def _spy_review_sql(monkeypatch, session):
+    hits: list[str] = []
+    original = session.execute
+
+    async def execute(statement, *args, **kwargs):
+        sql = str(statement)
+        if "review_status" in sql:
+            hits.append(sql)
+        return await original(statement, *args, **kwargs)
+
+    monkeypatch.setattr(session, "execute", execute)
+    return hits
+
+
+@pytest.mark.asyncio
+async def test_batch_reviews_match_per_trainer_loader(app_use_test_db, db_session) -> None:
+    """Один ANY(:ids) даёт то же, что _load_reviews по каждому тренеру: отбор, порядок, потолок 12."""
+    from src.application.miniapp_trainer_showcase import load_showcase_reviews
+    from src.application.site_trainer_page import _load_reviews
+
+    async with _client() as client:
+        _place_row, tid_a, tid_b = await _two_trainers(db_session, client)
+    for i in range(13):
+        await _rate(db_session, tid_a, i, status="approved", body=f"Текст {i:02d}")
+    await _rate(db_session, tid_a, 20, status="pending", body="Ещё не проверен")
+    await _rate(db_session, tid_a, 21, status="approved", body="   ")
+    for i in range(3):
+        await _rate(db_session, tid_b, i, status="approved", body=f"У второго {i}")
+    await db_session.commit()
+
+    batch = await load_showcase_reviews(db_session, [tid_a, tid_b])
+    assert batch[tid_a] == await _load_reviews(db_session, tid_a)
+    assert batch[tid_b] == await _load_reviews(db_session, tid_b)
+    assert len(batch[tid_a]) == 12
+    assert all("Ещё не проверен" not in row["text"] for row in batch[tid_a])
+    assert batch[tid_a][0]["text"] == "Текст 12"
+    assert batch == await load_showcase_reviews(db_session, [tid_b, tid_a])
+
+
+@pytest.mark.asyncio
+async def test_flag_on_loads_reviews_once_flag_off_loads_none(app_use_test_db, db_session, monkeypatch) -> None:
+    async with _client() as client:
+        place, tid_a, tid_b = await _two_trainers(db_session, client)
+        for tid in (tid_a, tid_b):
+            for i in range(3):
+                await _rate(db_session, tid, i, status="approved", body=f"Отзыв {tid}-{i}")
+        await db_session.commit()
+
+        monkeypatch.setenv("UNIFIED_TRAINER_CARD_ENABLED", "true")
+        on_hits = _spy_review_sql(monkeypatch, db_session)
+        body = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+        by_id = {t["id"]: t for t in body["items"]}
+        assert len(by_id[tid_a]["reviews"]) == 3
+        assert len(by_id[tid_b]["reviews"]) == 3
+        assert len(on_hits) == 1
+        assert "ANY" in on_hits[0]
+
+        monkeypatch.delenv("UNIFIED_TRAINER_CARD_ENABLED", raising=False)
+        off_hits = _spy_review_sql(monkeypatch, db_session)
+        body_off = (await client.get(f"/api/public/trainer-showcase?city_id={place['city_id']}")).json()
+        off_item = next(t for t in body_off["items"] if t["id"] == tid_a)
+        assert "reviews" not in off_item
+        assert off_hits == []

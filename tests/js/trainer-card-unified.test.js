@@ -25,6 +25,11 @@ const slotsRoute = (slots, status = 200) => ({
 async function open(key, opts = {}) {
   const st = STATES[key];
   const trainer = { ...st.trainer, ...(opts.trainer || {}) };
+  // Снимок «флаг выкл» должен видеть поля единой карточки и не рисовать их.
+  if (opts.unified === false) {
+    if (!trainer.city_name) trainer.city_name = 'Минск';
+    if (!trainer.primary_arena_name) trainer.primary_arena_name = '«Замок»';
+  }
   const h = boot({
     unified: opts.unified !== false,
     search: '?trainer_id=' + trainer.id,

@@ -24,13 +24,34 @@
   var sheetEl = document.getElementById('sheet');
   // Пришли с другого экрана (главная, «Поиск», каток, «Сохранённые») — снимок до наших pushState:
   // тогда «‹ Назад» в корне витрины уводит обратно (history.back), как #btnBack на других экранах клиента.
-  // Под флагом единой карточки (TASK-403): где есть Navigation API, верим ему — он видит только записи этой
-  // страницы и её фрейма. history.length в iframe (Telegram Web) считает и историю родителя: холодная ссылка
-  // выглядела бы «пришли откуда-то», а history.back() увёл бы родительскую страницу. Флаг выключен — как раньше.
+  // Под флагом единой карточки (TASK-403/418): где есть Navigation API, верим ему — он видит только записи этой
+  // страницы и её фрейма. history.length в iframe (Telegram Web) считает и историю родителя и на холодной
+  // ссылке врёт. API нет — same-origin document.referrer; в WebView он часто пуст, тогда метка, которую
+  // ClientShell.navigate кладёт перед переходом на витрину. Чужой или пустой referrer без метки — корень.
+  // Флаг выключен — по-прежнему history.length > 1.
+  var CAME_FROM_APP_KEY = 'trainer_crm_showcase_from_app';
+  function sameOriginReferrer() {
+    try {
+      var ref = document.referrer;
+      if (!ref) return false;
+      return new URL(ref).origin === new URL(location.href).origin;
+    } catch (e) { return false; }
+  }
+  function consumeCameFromApp() {
+    try {
+      var hit = window.sessionStorage.getItem(CAME_FROM_APP_KEY) === '1';
+      window.sessionStorage.removeItem(CAME_FROM_APP_KEY);
+      return hit;
+    } catch (e) { return false; }
+  }
   var CAME_FROM = (function () {
     try {
       var nav = window.navigation;
-      if (unifiedCard() && nav && typeof nav.canGoBack === 'boolean') return nav.canGoBack;
+      if (unifiedCard() && nav && typeof nav.canGoBack === 'boolean') {
+        consumeCameFromApp();
+        return nav.canGoBack;
+      }
+      if (unifiedCard()) return sameOriginReferrer() || consumeCameFromApp();
       return Number(history.length) > 1;
     } catch (e) { return false; }
   })();
@@ -254,10 +275,12 @@
     if (unifiedCard() && S.view === 'sent') {
       S.view = 'trainer';
       S.stack = [];
+      // Окна до записи устарели. retain оставил бы занятое время на кнопке, пока сервер не ответит:
+      // loadSlots без retain сразу ставит слоты в null — карточка рисует скелетон, не «сб, 10:00».
+      var pendingSlots = loadSlots();
       render();
       window.scrollTo(0, 0);
-      // Окна до записи устарели: только что занятое время иначе снова стоит первым и на главной кнопке.
-      loadSlots({ retain: true }).then(function (fresh) { if (fresh && S.view === 'trainer') render(); });
+      pendingSlots.then(function (fresh) { if (fresh && S.view === 'trainer') render(); });
       return;
     }
     // Карточка по внешней ссылке — корень (SPEC §8.1.3): стрелки нет, в список ведёт «Другие тренеры» внизу.
@@ -266,7 +289,8 @@
     var prev = S.stack.pop();
     if (!prev) {
       // Корень витрины (или тренер по прямой ссылке): есть откуда пришли — туда; иначе тренер → список.
-      if (CAME_FROM) {
+      // from=hub — вход из приложения (SPEC §8.1.7): «Назад» на хаб, даже если WebView не отдал referrer.
+      if (CAME_FROM || fromHub()) {
         leave();
         return;
       }
@@ -2254,7 +2278,12 @@
       '<button type="button" class="cta" data-act="retry-trainer">Повторить</button></div></div></div>';
   }
 
-  /** N: после регистрации по ссылке тренера. Абонемента нет — строки нет. */
+  /**
+   * N: после регистрации по ссылке тренера. Абонемента нет — строки нет.
+   * role=status озвучивается при появлении узла. render() пересобирает #app целиком, поэтому
+   * живой регион ставим только когда текст плашки изменился — повтор того же render() молчит.
+   */
+  var screenN_said = '';
   function screenN_banner(t) {
     var first = tcFirstName(t);
     var name = first;
@@ -2262,7 +2291,10 @@
       name = RuName.inflectPersonName(first, '', 'gen') || first;
     }
     var pass = screenN_passLine(t);
-    return '<div class="tc-roster" role="status"><b>Вы в списке у ' + esc(name) + '</b>' + pass + '</div>';
+    var body = '<b>Вы в списке у ' + esc(name) + '</b>' + pass;
+    var live = body !== screenN_said;
+    if (live) screenN_said = body;
+    return '<div class="tc-roster"' + (live ? ' role="status"' : '') + '>' + body + '</div>';
   }
 
   function screenN_passLine(t) {
