@@ -9,6 +9,7 @@ from src.application.ice_session_use_cases import IceSessionValidationError
 from src.ingestion.types import CanonicalSlotDraft
 from src.ingestion.validate import (
     DEFAULT_MAX_INVALID_SLOT_RATIO,
+    DROP_DUPLICATE,
     DROP_DURATION,
     IceSessionValidator,
     max_invalid_slot_ratio,
@@ -84,3 +85,19 @@ def test_empty_drafts_is_ok() -> None:
 def test_bad_max_invalid_slot_ratio_config_never_raises(raw, expected) -> None:
     """Ревью #9: кривой конфиг не должен ронять прогон необработанным исключением."""
     assert max_invalid_slot_ratio({"max_invalid_slot_ratio": raw}) == expected
+
+
+def test_same_start_different_kind_both_kept() -> None:
+    """Два зала (СДЮШОР Минск): фигурное на главной и массовое на тренировочной в 17:15 — не дубль."""
+    figure = _slot(60)
+    figure = CanonicalSlotDraft(**{**figure.__dict__, "kind": "figure_free", "hall": "Главная арена"})
+    mass = CanonicalSlotDraft(**{**_slot(45).__dict__, "hall": "Тренировочная арена"})
+    outcome = IceSessionValidator().validate_outcome([figure, mass])
+    assert len(outcome.validated) == 2
+    assert outcome.slots_dropped == 0
+
+
+def test_same_start_same_kind_still_a_duplicate() -> None:
+    outcome = IceSessionValidator().validate_outcome([_slot(45), _slot(45), _slot(45, hour_offset=2)])
+    assert len(outcome.validated) == 2
+    assert outcome.drop_reasons == [DROP_DUPLICATE]
