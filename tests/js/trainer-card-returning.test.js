@@ -7,6 +7,8 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { boot, resp, tick } = require('./helpers/trainer-showcase-harness');
 
 function minskToday() {
@@ -97,13 +99,14 @@ async function open(search, opts = {}) {
 }
 
 describe('G · карточка вернувшегося', () => {
-  it('шапка ужата, последнее занятие, прошлый формат, доверие свёрнуто', async () => {
+  it('шапка ужата, строки последнего занятия нет, прошлый формат, доверие свёрнуто', async () => {
     const h = await open('?trainer_id=7&service_id=1&from=hub');
     const html = h.app.innerHTML;
     assert.match(html, /class="tc tc-g"/);
     assert.match(html, /<h1>Анна Соколова<\/h1>/);
     assert.match(html, /Фигурное катание|С нуля|Взрослое|Минск/);
     assert.doesNotMatch(html, /Последнее занятие/);
+    assert.equal(fs.readFileSync(path.join(__dirname, '../../static/webapp/trainer-showcase-main.js'), 'utf8').includes('lastCompletedAt'), false);
     assert.match(html, /Записаться снова/);
     assert.match(html, /Записаться снова на .*10:00/);
     assert.match(html, /Взрослый/);
@@ -295,16 +298,124 @@ describe('часть B ревью 404: чипы, стрелки, скелет, �
     assert.doesNotMatch(h.app.innerHTML, /О тренере<\/h2>/);
   });
 
-  it('«Назад к тренеру» с пустой H уходит с недели', async () => {
+  it('«Назад к тренеру» с пустой H входа №35 открывает G', async () => {
     const h = await open('?trainer_id=7&action=book&service_id=3&from=hub', { slots: [] });
     assert.equal(h.S.view, 'week');
     h.click({ 'data-act': 'to-trainer' });
     assert.equal(h.S.view, 'trainer');
+    assert.match(h.app.innerHTML, /class="tc tc-g"/);
     assert.doesNotMatch(h.app.innerHTML, /Время на две недели/);
+  });
+
+  it('пустая H по доске NoSlots: блок на всю ширину, «Сообщить» с колокольчиком, главная «Написать тренеру» внизу', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub', { slots: [] });
+    const html = h.app.innerHTML;
+    assert.match(html, /На ближайшие 2 недели свободного времени нет/);
+    assert.doesNotMatch(html, /На ближайшие две недели/);
+    // Блок — заголовок, пояснение и «Сообщить» одной колонкой, без кнопки сбоку (на 320 текст не сжимается).
+    assert.match(html, /<section class="tc-card tc-h-none" aria-labelledby="tcHNoneH"><h2 class="tc-h2" id="tcHNoneH">Ближайшее время<\/h2>/);
+    assert.doesNotMatch(html, /tc-h-ask|Не подходит время\?/);
+    assert.match(html, /<p class="tc-empty-p">Напишите тренеру — время можно согласовать\. Или попросите сообщить, когда оно появится\.<\/p>/);
+    assert.match(html, /data-act="notify"><svg [^>]*aria-hidden="true"><path d="M6 17h12[^"]*"\/><path d="M10 20h4"\/><\/svg>Сообщить, когда появится время<\/button>/);
+    const block = html.slice(html.indexOf('tc-h-none'), html.indexOf('</section>', html.indexOf('tc-h-none')));
+    assert.doesNotMatch(block, /data-act="(write|request)"/);
+    // Низ: «Написать тренеру» — главная (cta 52px в .tc-ft), «Оставить заявку» — вторичная.
+    assert.match(html, /<\/section><button type="button" class="tc-sec" data-act="to-trainer">Назад к тренеру<\/button><\/div><\/div>/);
+    assert.match(html, /<div class="ft col tc-ft"><button type="button" class="cta" data-act="write">Написать тренеру<\/button><button type="button" class="sec2" data-act="request">Оставить заявку<\/button><\/div><\/div>$/);
+    assert.equal((html.match(/class="cta"/g) || []).length, 1);
+  });
+
+  it('пустая H без contact_url — без «Написать», главная «Оставить заявку»', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ contact_url: '' }),
+      slots: [],
+    });
+    const html = h.app.innerHTML;
+    assert.doesNotMatch(html, /data-act="write"/);
+    assert.match(html, /<p class="tc-empty-p">Попросите сообщить, когда появится, или оставьте заявку\.<\/p>/);
+    assert.match(html, /Сообщить, когда появится время/);
+    assert.match(html, /data-act="to-trainer">Назад к тренеру/);
+    assert.match(html, /<div class="ft col tc-ft"><button type="button" class="cta" data-act="request">Оставить заявку<\/button><small>Ответ придёт в Telegram<\/small><\/div><\/div>$/);
+  });
+
+  it('пустая H вне Telegram без contact_url: телефон или Telegram, не только «Назад к тренеру»', async () => {
+    const phone = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ contact_url: '', phone: '+375291112233' }),
+      slots: [],
+      initData: '',
+    });
+    assert.equal(phone.S.view, 'week');
+    assert.match(phone.app.innerHTML, /data-act="to-trainer">Назад к тренеру/);
+    assert.match(phone.app.innerHTML, /<div class="ft col tc-ft"><button type="button" class="cta" data-act="copy-phone">Скопировать телефон<\/button><\/div><\/div>$/);
+    assert.doesNotMatch(phone.app.innerHTML, /data-act="notify"|data-act="request"/);
+    const tg = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ contact_url: '', phone: '', telegram_url: 'https://t.me/glide_bot?startapp=trainer_7' }),
+      slots: [],
+      initData: '',
+    });
+    assert.match(tg.app.innerHTML, /<div class="ft col tc-ft"><button type="button" class="cta" data-act="open-tg">Открыть в Telegram<\/button><\/div><\/div>$/);
+    const write = await open('?trainer_id=7&action=book&from=hub', { slots: [], initData: '' });
+    assert.match(write.app.innerHTML, /<div class="ft col tc-ft"><button type="button" class="cta" data-act="write">Написать тренеру<\/button><\/div><\/div>$/);
+  });
+
+  it('нельзя записаться — на H есть «Назад к тренеру» (в Telegram и вне)', async () => {
+    for (const initData of ['init', '']) {
+      const h = await open('?trainer_id=7&action=book&from=hub', {
+        trainer: trainer({ can_book: false }),
+        slots: [],
+        initData,
+      });
+      assert.equal(h.S.view, 'week');
+      assert.match(h.app.innerHTML, /Сейчас записаться онлайн нельзя/);
+      assert.match(h.app.innerHTML, /data-act="to-trainer">Назад к тренеру/);
+      h.click({ 'data-act': 'to-trainer' });
+      assert.equal(h.S.view, 'trainer');
+    }
+  });
+
+  it('нельзя записаться вне Telegram — есть кнопка, не пустой экран', async () => {
+    const phone = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ can_book: false, contact_url: '', phone: '+375291112233' }),
+      slots: [],
+      initData: '',
+    });
+    assert.match(phone.app.innerHTML, /Сейчас записаться онлайн нельзя/);
+    assert.match(phone.app.innerHTML, /Скопировать телефон/);
+    const write = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ can_book: false, contact_url: '/r/tg/7', phone: '' }),
+      slots: [],
+      initData: '',
+    });
+    assert.match(write.app.innerHTML, /Написать тренеру/);
+  });
+
+  it('пустой день H — вкладка внутри tablist, без фокуса Tab', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub', {
+      slots: [slot(1, TODAY, '10:00'), slot(4, D2, '09:00')],
+    });
+    const html = h.app.innerHTML;
+    assert.match(html, /role="tablist"/);
+    assert.match(html, /role="tab" aria-selected="false" aria-disabled="true" tabindex="-1" disabled/);
+    const empty = html.match(/<button type="button" class="tc-h-day tc-h-day--empty"[^>]*>/g) || [];
+    assert.ok(empty.length > 0);
+    for (const tag of empty) {
+      assert.match(tag, /role="tab"/);
+      assert.match(tag, /aria-disabled="true"/);
+      assert.match(tag, /tabindex="-1"/);
+      assert.match(tag, /\bdisabled\b/);
+      assert.doesNotMatch(tag, /data-act="day"/);
+    }
   });
 });
 
 describe('флаг выключен', () => {
+  it('пустая неделя с хаба — без блока H и без низа единой карточки', async () => {
+    const off = await open('?trainer_id=7&action=book&service_id=3&from=hub', { unified: false, slots: [] });
+    const plain = await open('?trainer_id=7&action=book&service_id=3', { unified: false, slots: [] });
+    assert.equal(off.app.innerHTML, plain.app.innerHTML);
+    assert.doesNotMatch(off.app.innerHTML, /tc-h-none|tc-ft|Ближайшее время|Назад к тренеру/);
+  });
+
   it('from=hub не меняет карточку', async () => {
     const off = await open('?trainer_id=7&from=hub', { unified: false, last: '2026-11-02' });
     const plain = await open('?trainer_id=7', { unified: false, last: '2026-11-02' });
