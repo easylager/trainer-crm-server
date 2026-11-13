@@ -1019,6 +1019,14 @@
   var TAB_ORDER = { home: 0, catalog: 1, bookings: 2, more: 3 };
   var TAB_ORDER_SEASON = { home: 0, catalog: 1, bookings: 2, kk: 3, me: 4 };
 
+  var SHOWCASE_FROM_APP_KEY = 'trainer_crm_showcase_from_app';
+
+  function rememberShowcaseFromApp(path) {
+    var key = normalizeRoutePath(path).split('?')[0].replace(/\.html$/, '').replace(/^.*\//, '');
+    if (key !== 'trainers') return;
+    try { global.sessionStorage.setItem(SHOWCASE_FROM_APP_KEY, '1'); } catch (e) { /* приватный режим */ }
+  }
+
   function rememberNavDirection(path) {
     var season = uiFlags.season_ui;
     var order = season ? TAB_ORDER_SEASON : TAB_ORDER;
@@ -1111,6 +1119,9 @@
     }
     if (!(opts && opts.replace) && shellTabs() && shellTabs().go(path)) return;
     rememberNavDirection(path);
+    // Витрина без Navigation API не верит history.length. WebView часто не отдаёт referrer
+    // на внутреннем переходе — метка доказывает, что страницу открыла оболочка, не холодная ссылка.
+    rememberShowcaseFromApp(path);
     /* /p/… — публичная страница места, не файл внутри /static/webapp/. */
     var raw = String(path || '');
     var url = raw.charAt(0) === '/' ? withInit(raw) : withInit(webappBasePath() + raw);

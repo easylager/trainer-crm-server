@@ -373,6 +373,23 @@ describe('часть B ревью 404: чипы, стрелки, скелет, �
     }
   });
 
+  it('нельзя записаться вне Telegram без телефона и contact_url — «Открыть в Telegram»', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({
+        can_book: false,
+        contact_url: '',
+        phone: '',
+        telegram_url: 'https://t.me/glide_bot?startapp=trainer_7',
+      }),
+      slots: [],
+      initData: '',
+    });
+    assert.equal(h.S.view, 'week');
+    assert.match(h.app.innerHTML, /Сейчас записаться онлайн нельзя/);
+    assert.match(h.app.innerHTML, /data-act="open-tg">Открыть в Telegram/);
+    assert.doesNotMatch(h.app.innerHTML, /data-act="write"|Скопировать телефон/);
+  });
+
   it('нельзя записаться вне Telegram — есть кнопка, не пустой экран', async () => {
     const phone = await open('?trainer_id=7&action=book&from=hub', {
       trainer: trainer({ can_book: false, contact_url: '', phone: '+375291112233' }),

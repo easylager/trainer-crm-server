@@ -171,6 +171,52 @@ def primary_rink_name(
     return format_public_name(str(arena.get("name") or "")) or None
 
 
+async def load_showcase_reviews(session: AsyncSession, trainer_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+    """Отзывы всех тренеров выдачи одним запросом (TASK-418).
+
+    Отбор тот же, что у ``site_trainer_page._load_reviews``: подтверждённые, непустой текст,
+    новые сверху, не больше ``REVIEWS_SHOWN`` на тренера. Пустой список id — запроса нет.
+    """
+    from src.application.review_moderation_use_cases import display_name
+    from src.application.site_trainer_page import REVIEW_PREVIEW_CHARS, REVIEWS_SHOWN
+
+    ids = [int(tid) for tid in trainer_ids]
+    if not ids:
+        return {}
+    rows = await session.execute(
+        text("""
+            SELECT trainer_id, rating, review_text, created_at, first_name, last_name
+            FROM (
+                SELECT r.trainer_id, r.rating, r.review_text, r.created_at, r.id AS rating_id,
+                       c.first_name, c.last_name,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY r.trainer_id
+                           ORDER BY r.created_at DESC, r.id DESC
+                       ) AS rn
+                FROM trainer_ratings r
+                LEFT JOIN clients c ON c.telegram_id = r.client_telegram_id
+                WHERE r.trainer_id = ANY(:ids)
+                  AND r.review_status = 'approved'
+                  AND btrim(COALESCE(r.review_text, '')) <> ''
+            ) ranked
+            WHERE rn <= :lim
+            ORDER BY trainer_id, created_at DESC, rating_id DESC
+            """),
+        {"ids": ids, "lim": REVIEWS_SHOWN},
+    )
+    out: dict[int, list[dict[str, Any]]] = {}
+    for trainer_id, rating, body, created, first, last in rows.fetchall():
+        out.setdefault(int(trainer_id), []).append(
+            {
+                "rating": max(1, min(5, int(rating))),
+                "text": str(body).strip()[: REVIEW_PREVIEW_CHARS * 4],
+                "date": created.date() if created else None,
+                "name": display_name(first, last),
+            }
+        )
+    return out
+
+
 def showcase_reviews(reviews: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
     """«Отзывы» единой карточки (TASK-416): то, что ``/t/`` уже отобрал (``_load_reviews``), в JSON.
 
@@ -259,7 +305,6 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     from src.application.place_links import public_telegram_cta_url, trainer_start_param
     from src.application.arena_public_use_cases import TRAINER_WINDOWS_LIMIT
     from src.application.site_trainer_page import WEEK_LOOKAHEAD_DAYS, WEEK_WINDOWS_LIMIT, contact_url
-    from src.application.site_trainer_page import _load_reviews as load_trainer_reviews
     from src.application.site_trainers import trainer_initial, trainer_name, trainer_photo_url
     from src.application.subscription_tier_use_cases import get_trainer_booking_availability
     from src.application.trainer_min_price import enrich_min_session_price
@@ -312,6 +357,8 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     unified_card = Settings().unified_trainer_card_enabled
     primary_ids = await _primary_arena_ids(session, ids) if unified_card else {}
     city_names = await _profile_city_names(session, ids) if unified_card else {}
+    # Флаг выключен — отзывы не читаем (ни одного запроса). Включён — один ANY(:ids) на всю выдачу.
+    reviews_by_trainer = await load_showcase_reviews(session, ids) if unified_card else {}
 
     out: list[dict[str, Any]] = []
     for t in items:
@@ -370,6 +417,6 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
             for arena in out[-1]["arenas"]:
                 arena["public_name"] = format_public_name(str(arena.get("name") or "")) or None
             # Отзывы и фото — те же, что на ``/t/`` (TASK-416): подтверждённые тексты, фото после героя.
-            out[-1]["reviews"] = showcase_reviews(await load_trainer_reviews(session, tid))
+            out[-1]["reviews"] = showcase_reviews(reviews_by_trainer.get(tid, []))
             out[-1]["class_photos"] = class_photo_urls(t)
     return {"city_id": city_id, "items": out}

@@ -116,10 +116,11 @@ function trackAppButtons(el, doc) {
  */
 /** sessionStore — содержимое sessionStorage при открытии (форма K кладёт туда тренера, к которому привязала). */
 /** navigation — window.navigation (Navigation API), например { canGoBack: false }; не задан — API нет. */
-function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null, unified = false, sessionStore = {}, navigation = null } = {}) {
+/** referrer — document.referrer на момент открытия (same-origin = пришли из приложения, если API нет). */
+function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null, unified = false, sessionStore = {}, navigation = null, referrer = '' } = {}) {
   const calls = [];
   const app = makeEl('app');
-  const doc = { activeElement: null, body: { tag: 'body' }, keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
+  const doc = { activeElement: null, body: { tag: 'body' }, referrer: referrer || '', keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
   trackAppButtons(app, doc);
   doc.activeElement = doc.body;
   const sheet = makeSheet(doc);

@@ -252,6 +252,28 @@ async def test_pass_button_follows_the_flag(wired, monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.asyncio
+async def test_cert_code_button_keeps_service_from_bind(wired, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Вторая ветка cert_<CODE> (client_handlers ~1112): service_id из привязки, не None."""
+    wired["bind"].return_value = (2, 4)
+    monkeypatch.setattr(ch, "activate_certificate_by_code", AsyncMock(return_value={
+        "trainer_id": 7, "amount_cents": 10000, "recipient_name": None, "recipient_phone": None,
+    }))
+    monkeypatch.setattr(ch, "resolve_trainer_currency", AsyncMock(return_value="BYN"))
+    monkeypatch.setattr(ch, "apply_certificate_recipient_to_client", AsyncMock())
+
+    monkeypatch.setenv("UNIFIED_TRAINER_CARD_ENABLED", "true")
+    message = _message("cert_GIFT")
+    await ch.cmd_start(message)
+    assert _buttons(message)[0].text == msg.CLIENT_BUTTON_CERT_TRAINER_BOOK
+    assert _urls(message) == ["https://glide.example/webapp/trainers?trainer_id=7&service_id=4&city_id=2"]
+
+    monkeypatch.delenv("UNIFIED_TRAINER_CARD_ENABLED", raising=False)
+    message_off = _message("cert_GIFT")
+    await ch.cmd_start(message_off)
+    assert _urls(message_off) == ["https://glide.example/webapp/catalog?trainer_id=7&city_id=2&service_id=4"]
+
+
+@pytest.mark.asyncio
 async def test_welcome_t_cert_button_follows_the_flag(wired, monkeypatch: pytest.MonkeyPatch) -> None:
     token = "11111111-1111-4111-8111-111111111111"
     wired["bind"].return_value = (2, 3)

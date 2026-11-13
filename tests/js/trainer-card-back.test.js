@@ -30,6 +30,9 @@ function slotsRoute(list) {
   return { match: (c) => c.url.split('?')[0] === '/api/webapp/client/slots', reply: () => resp(200, { slots: typeof list === 'function' ? list() : list }) };
 }
 
+const SAME_ORIGIN = 'https://x/static/webapp/client-home';
+const FOREIGN = 'https://evil.example/landing';
+
 function open(opts = {}) {
   return boot({
     unified: opts.unified !== false,
@@ -37,6 +40,8 @@ function open(opts = {}) {
     initData: 'x',
     historyLength: opts.historyLength == null ? 1 : opts.historyLength,
     navigation: opts.navigation || null,
+    referrer: opts.referrer || '',
+    sessionStore: opts.sessionStore || {},
     showcase: { items: [trainer, other] },
     session: opts.session || SESSION,
     routes: opts.routes || [slotsRoute(STATES.A.slots)],
@@ -86,9 +91,9 @@ describe('AC-001 · внешний вход без слота — карточк
     assert.match(h.app.innerHTML, OTHERS);
   });
 
-  it('вход из приложения (история есть) — стрелка есть и уводит туда, кнопки «Другие тренеры» нет', async () => {
+  it('вход из приложения (same-origin referrer) — стрелка есть и уводит туда, кнопки «Другие тренеры» нет', async () => {
     const back = nativeBack();
-    const h = open({ historyLength: 3, miniAppBack: back });
+    const h = open({ historyLength: 5, referrer: SAME_ORIGIN, miniAppBack: back });
     await tick(60);
     assert.equal(back.shown, true);
     assert.doesNotMatch(h.app.innerHTML, /Другие тренеры в/);
@@ -138,6 +143,66 @@ describe('CAME_FROM: Navigation API вместо history.length (iframe Telegram
     assert.match(h.app.innerHTML, /data-act="back">‹ Назад<\/button>/);
     h.click({ 'data-act': 'back' });
     assert.equal(h.ctx.history.left, 1);
+  });
+
+  it('API нет × referrer пустой: history.length не делает карточку «из приложения»', async () => {
+    const back = nativeBack();
+    const h = open({ historyLength: 5, referrer: '', miniAppBack: back });
+    await tick(60);
+    assert.equal(back.shown, false);
+    assert.match(h.app.innerHTML, OTHERS);
+  });
+
+  it('API нет × referrer свой: пришли из приложения, даже если история короткая', async () => {
+    const back = nativeBack();
+    const h = open({ historyLength: 1, referrer: SAME_ORIGIN, miniAppBack: back });
+    await tick(60);
+    assert.equal(back.shown, true);
+    back.press();
+    assert.equal(h.ctx.history.left, 1);
+  });
+
+  it('API нет × referrer чужой: холодная ссылка, карточка корень', async () => {
+    const back = nativeBack();
+    const h = open({ historyLength: 5, referrer: FOREIGN, miniAppBack: back });
+    await tick(60);
+    assert.equal(back.shown, false);
+    assert.match(h.app.innerHTML, OTHERS);
+  });
+
+  it('API нет × referrer пустой, но метка оболочки: пришли из приложения', async () => {
+    const back = nativeBack();
+    const h = open({
+      historyLength: 1,
+      referrer: '',
+      sessionStore: { trainer_crm_showcase_from_app: '1' },
+      miniAppBack: back,
+    });
+    await tick(60);
+    assert.equal(back.shown, true);
+    assert.equal(h.ctx.sessionStorage.getItem('trainer_crm_showcase_from_app'), null);
+    back.press();
+    assert.equal(h.ctx.history.left, 1);
+  });
+
+  it('API есть — referrer его не перебивает', async () => {
+    const cold = nativeBack();
+    const h = open({ historyLength: 1, referrer: SAME_ORIGIN, navigation: { canGoBack: false }, miniAppBack: cold });
+    await tick(60);
+    assert.equal(cold.shown, false);
+    assert.match(h.app.innerHTML, OTHERS);
+    const fromApp = nativeBack();
+    const h2 = open({ historyLength: 5, referrer: '', navigation: { canGoBack: true }, miniAppBack: fromApp });
+    await tick(60);
+    assert.equal(fromApp.shown, true);
+  });
+
+  it('флаг выключен: same-origin referrer при history.length 1 не считается приходом', async () => {
+    const h = open({ unified: false, historyLength: 1, referrer: SAME_ORIGIN });
+    await tick(60);
+    h.click({ 'data-act': 'back' });
+    assert.equal(h.ctx.history.left, 0);
+    assert.equal(h.S.view, 'list');
   });
 });
 
@@ -210,12 +275,46 @@ describe('AC-002 · после отправки записи история за
     assert.doesNotMatch(h.app.innerHTML, /data-slot="101"/);
     assert.match(h.app.innerHTML, /data-act="slot" data-slot="102">Записаться на сб, 11:30<\/button>/);
   });
+
+  it('«Назад» с E сначала скелетон, не прежнее «сб, 10:00»', async () => {
+    let n = 0;
+    const back = nativeBack();
+    const h = open({
+      miniAppBack: back,
+      routes: [
+        {
+          match: (c) => c.url.split('?')[0] === '/api/webapp/client/slots',
+          reply: () => {
+            n += 1;
+            const slots = n === 1 ? STATES.A.slots : STATES.A.slots.slice(1);
+            return resp(200, { slots }, n === 1 ? 0 : 250);
+          },
+        },
+        { match: (c) => c.url.split('?')[0] === '/api/webapp/client/booking', reply: () => resp(200, { success: true }) },
+      ],
+    });
+    await tick(60);
+    h.click({ 'data-act': 'slot', 'data-slot': '101' });
+    h.click({ 'data-act': 'pick', 'data-k': 'adult' });
+    h.input('name', 'Анна', 'self');
+    h.S.book.phone = '+375291112233';
+    h.click({ 'data-act': 'submit' });
+    await tick(60);
+    assert.equal(h.S.view, 'sent');
+    back.press();
+    assert.equal(h.S.view, 'trainer');
+    assert.equal(h.S.slots, null);
+    assert.match(h.app.innerHTML, /class="tc-sk"/);
+    assert.doesNotMatch(h.app.innerHTML, /data-slot="101"|Записаться на сб, 10:00/);
+    await tick(320);
+    assert.match(h.app.innerHTML, /data-act="slot" data-slot="102">Записаться на сб, 11:30<\/button>/);
+  });
 });
 
 describe('нативная стрелка и «висящие» записи истории', () => {
   it('из приложения: неделя → стрелка → стрелка — один уход со страницы, без цикла и без списка', async () => {
     const back = nativeBack();
-    const h = open({ historyLength: 2, miniAppBack: back });
+    const h = open({ historyLength: 2, referrer: SAME_ORIGIN, miniAppBack: back });
     await tick(60);
     h.click({ 'data-act': 'week' });
     assert.equal(h.S.view, 'week');
@@ -231,6 +330,17 @@ describe('нативная стрелка и «висящие» записи и�
 });
 
 describe('syncUrl', () => {
+  it('без entry в адресе фильтр всё равно снимает одноразовые параметры и entry не появляется', async () => {
+    const h = open({ search: '?trainer_id=1&slot_id=5&service_id=3&via=p3&intent=save&city_id=1' });
+    await tick(60);
+    h.click({ 'data-act': 'to-list' });
+    h.click({ 'data-act': 'tab', 'data-key': 's-nulya' });
+    const q = new URLSearchParams(String(h.ctx.history.url).split('?')[1] || '');
+    for (const k of ['trainer_id', 'slot_id', 'service_id', 'via', 'intent', 'entry']) assert.equal(q.has(k), false, k);
+    assert.equal(q.get('tab'), 's-nulya');
+    assert.equal(q.get('city_id'), '1');
+  });
+
   it('фильтр витрины пишет адрес заменой: без trainer_id/slot_id/service_id/via/intent/entry, state прежний', async () => {
     const h = open({ search: '?trainer_id=1&slot_id=5&service_id=3&via=p3&intent=save&entry=rebook&city_id=1' });
     await tick(60);
