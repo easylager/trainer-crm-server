@@ -35,7 +35,7 @@ function runShellOnPlace(initData, opts = {}) {
         querySelectorAll() { return []; },
       },
       addEventListener() {},
-      sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+      sessionStorage: opts.store || { getItem() { return null; }, setItem() {}, removeItem() {} },
       Telegram: { WebApp: { initData: initData || '' } },
       navigation: null,
       ClientShell: undefined,
@@ -82,6 +82,48 @@ describe('Mini App shell navigation boundaries', () => {
     const ctx = runShellOnPlace('signed', { delayBoot: true });
     ctx.window.ClientShell.navigate('ice');
     assert.equal(ctx.window.location.href, '/webapp/ice?init_data=signed');
+  });
+
+  it('переход на витрину ставит метку, переход на другой экран — нет', () => {
+    function store() {
+      const data = {};
+      return {
+        data,
+        getItem(k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+        setItem(k, v) { data[k] = String(v); },
+        removeItem(k) { delete data[k]; },
+      };
+    }
+    const toCard = store();
+    const card = runShellOnPlace('signed', { delayBoot: true, store: toCard });
+    card.window.ClientShell.navigate('trainers?trainer_id=7');
+    assert.equal(toCard.data.trainer_crm_showcase_from_app, '1');
+    const toIce = store();
+    const ice = runShellOnPlace('signed', { delayBoot: true, store: toIce });
+    ice.window.ClientShell.navigate('ice');
+    assert.equal(toIce.data.trainer_crm_showcase_from_app, undefined);
+  });
+
+  it('replace на витрину — холодный диплинк, не «пришли из приложения»', () => {
+    const data = {};
+    const store = {
+      data,
+      getItem(k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem(k, v) { data[k] = String(v); },
+      removeItem(k) { delete data[k]; },
+    };
+    let replaced;
+    const loc = {
+      pathname: '/webapp/client-home',
+      search: '',
+      href: 'https://test/webapp/client-home',
+      replace(value) { replaced = value; },
+    };
+    const ctx = runShellOnPlace('signed', { delayBoot: true, store, location: loc });
+    ctx.window.ClientShell.navigate('trainers?trainer_id=7', { replace: true });
+    assert.equal(replaced, '/webapp/trainers?trainer_id=7&init_data=signed');
+    assert.equal(data.trainer_crm_showcase_cold, '1');
+    assert.equal(data.trainer_crm_showcase_from_app, undefined);
   });
 
   it('startup navigation replaces the entry rather than assigning href', () => {

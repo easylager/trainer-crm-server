@@ -265,3 +265,46 @@ async def get_booking_source_breakdown(session: Any, *, as_of: Any = None) -> di
     ]
     totals = {k: sum(counts[c][k] for c in counts) for k in ("bookings_7d", "bookings_30d", "writes_7d", "writes_30d")}
     return {"metric": "booking_sources", "as_of": now.isoformat(), "rows": rows, "totals": totals}
+
+
+EMPTY_VIA_SQL = """
+SELECT COUNT(*) FILTER (WHERE b.source IS NOT NULL)::int AS self_bookings,
+       COUNT(*) FILTER (WHERE b.source = 'unknown')::int AS empty_via,
+       COUNT(*) FILTER (WHERE b.source IS NULL)::int AS no_source
+FROM bookings b
+WHERE NOT b.is_sandbox
+  AND b.created_at >= :since AND b.created_at < :until
+"""
+
+
+async def get_empty_via_share(session: Any, *, days: int = 30, as_of: Any = None) -> dict[str, Any]:
+    """Доля самозаписей, у которых метка ``via`` не доехала.
+
+    Самозапись — ``bookings.source IS NOT NULL`` (её пишет клиент из Mini App).
+    Пустой ``via`` — код ``unknown``: ни тело, ни подписанный ``start_param`` источник не дали.
+    ``source IS NULL`` — запись тренера или строка до появления колонки; в долю не входит.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import text
+
+    now = as_of or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    since = now - timedelta(days=days)
+    row = (
+        await session.execute(text(EMPTY_VIA_SQL), {"since": since, "until": now})
+    ).one()
+    self_bookings = int(row.self_bookings or 0)
+    empty_via = int(row.empty_via or 0)
+    share = (empty_via / self_bookings) if self_bookings else None
+    return {
+        "metric": "empty_via",
+        "days": days,
+        "as_of": now.isoformat(),
+        "since": since.isoformat(),
+        "self_bookings": self_bookings,
+        "empty_via": empty_via,
+        "share": share,
+        "no_source": int(row.no_source or 0),
+    }

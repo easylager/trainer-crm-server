@@ -81,7 +81,7 @@ body.tg-dark {
   --g-ink: #f1f5f7;
   --g-muted: #8aa0b3;
   --g-ink-2: #c3d2dc;
-  --g-line: #2b3744;
+  --g-line: #3a4857;
   --g-line-strong: #3a4857;
   --g-accent: #7FD7D8;
   --g-accent-pressed: #45B9BB;
@@ -101,7 +101,7 @@ body.tg-dark {
   /* Подложки чипов и сегментов: без тёмных значений светлые плашки оставались на тёмном фоне (TASK-303). */
   --g-chip: #24303c;
   --g-seg: #24303c;
-  --g-quiet: #6f8496;
+  --g-quiet: #8397a8;
 }
 
 /* ═════════════ Mini App: ICE PAPER (светлая) и ARENA (тёмная) ═════════════ */

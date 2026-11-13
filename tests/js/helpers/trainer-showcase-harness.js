@@ -73,17 +73,55 @@ function resp(status, data, delay = 0) {
 
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 
+/** Кнопки из innerHTML #app — те же объекты, что видит onWeekKey (сравнение по ссылке и focus). */
+function trackAppButtons(el, doc) {
+  let html = '';
+  let nodes = [];
+  Object.defineProperty(el, 'innerHTML', {
+    configurable: true,
+    get: () => html,
+    set(v) {
+      html = v == null ? '' : String(v);
+      nodes = [];
+      const re = /<button\b([^>]*)>/g;
+      let m;
+      while ((m = re.exec(html))) {
+        const attrs = {};
+        m[1].replace(/([\w:-]+)="([^"]*)"/g, (_, k, val) => { attrs[k] = val; });
+        const n = {
+          tag: 'button',
+          attrs,
+          disabled: /\bdisabled\b/.test(m[1]),
+          getAttribute: (k) => (k in attrs ? attrs[k] : null),
+          setAttribute(k, val) { attrs[k] = String(val); },
+          focus() { doc.activeElement = this; },
+        };
+        nodes.push(n);
+      }
+    },
+  });
+  el.querySelectorAll = (sel) => {
+    if (sel === '[data-act="day"]') return nodes.filter((n) => n.getAttribute('data-act') === 'day');
+    return [];
+  };
+}
+
 /**
  * routes: [{ match(call) → bool, reply(call) → Promise<Response> }]; первые совпавшие выигрывают.
  * profiles: ответ GET /client/profiles (можно функцией — на каждый вызов).
  */
 /**
  * historyLength — history.length при открытии витрины: >1 — пришли с другого экрана (есть куда «‹ Назад»).
+ * unified — включён флаг единой карточки тренера (window.__UNIFIED_TRAINER_CARD__).
  */
-function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null } = {}) {
+/** sessionStore — содержимое sessionStorage при открытии (форма K кладёт туда тренера, к которому привязала). */
+/** navigation — window.navigation (Navigation API), например { canGoBack: false }; не задан — API нет. */
+/** referrer — document.referrer на момент открытия (same-origin = пришли из приложения, если API нет). */
+function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null, unified = false, sessionStore = {}, navigation = null, referrer = '' } = {}) {
   const calls = [];
   const app = makeEl('app');
-  const doc = { activeElement: null, body: { tag: 'body' }, keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
+  const doc = { activeElement: null, body: { tag: 'body' }, referrer: referrer || '', keyHandlers: [], addEventListener(t, fn) { if (t === 'keydown') doc.keyHandlers.push(fn); }, getElementById: null, querySelector: () => null };
+  trackAppButtons(app, doc);
   doc.activeElement = doc.body;
   const sheet = makeSheet(doc);
   const store = {};
@@ -95,7 +133,11 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
     history: {
       state: null, length: historyLength, backs: 0, left: 0, entries: [],
       pushState(st) { this.entries.push(st); this.state = st; this.length += 1; },
-      replaceState(st) { this.state = st; if (this.entries.length) this.entries[this.entries.length - 1] = st; },
+      replaceState(st, title, url) {
+        this.state = st;
+        if (this.entries.length) this.entries[this.entries.length - 1] = st;
+        if (url !== undefined) this.url = url;
+      },
       back() {
         this.backs += 1;
         if (!this.entries.length) { this.left += 1; return; }
@@ -105,6 +147,7 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
       },
     },
     localStorage: { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } },
+    sessionStorage: { getItem: (k) => sessionStore[k] ?? null, setItem: (k, v) => { sessionStore[k] = String(v); }, removeItem: (k) => { delete sessionStore[k]; } },
     document: doc,
     scrollTo() {}, scrollY: 0,
     winHandlers: {},
@@ -118,6 +161,9 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
   ctx.ClientShell = { navigate: (p) => ctx.navigated.push(p), setTabBarVisible: (v) => ctx.tabBar.push(!!v) };
   if (switcher) ctx.ClientProfileSwitcher = switcher;
   if (miniAppBack) ctx.MiniAppBack = miniAppBack;
+  if (navigation) ctx.navigation = navigation;
+  // Единая карточка (TASK-400): как строка, которую /webapp/trainers дописывает в <head> при включённом флаге.
+  if (unified) ctx.__UNIFIED_TRAINER_CARD__ = true;
   ctx.fetch = (url, init = {}) => {
     const u = String(url).replace(/[?&]init_data=[^&]*/, '');
     const c = { url: u, method: init.method || 'GET', headers: init.headers || {}, body: init.body ? JSON.parse(init.body) : null };
@@ -162,7 +208,8 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
     };
     ctx.BookingClient.writeAccessBlockHtml = (st) => (st ? '<div data-wa-block="' + st + '">Разрешите сообщения</div>' : '');
   }
-  for (const f of ['trainer-showcase-model.js', 'ru-person-name.js', 'trainer-showcase-main.js']) {
+  // Тот же набор, что в trainers.html: падеж города (CatalogGeoModel.cityLocative) — для «Другие тренеры в …».
+  for (const f of ['trainer-showcase-model.js', 'ru-person-name.js', 'catalog-geo-model.js', 'trainer-showcase-main.js']) {
     vm.runInContext(fs.readFileSync(path.join(webapp, f), 'utf8'), ctx, { filename: f });
   }
   const S = ctx.__trainerShowcase.state;

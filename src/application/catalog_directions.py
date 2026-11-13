@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from src.application.ice_city_day import city_slug
 
@@ -201,6 +201,36 @@ def direction_by_slug(slug: str | None) -> Direction | None:
 
 def direction_by_key(key: str) -> Direction:
     return _BY_KEY[key]
+
+
+#: «С нуля» и «Уже катаюсь» вид не называют (решение владельца 2026-11-13):
+#: они не делают тренера фигуристом и не мешают виду, если есть «Фигурное» или «С клюшкой».
+_NEUTRAL_KEYS = frozenset({"zero", "better"})
+
+
+def public_sport_name(direction_keys: Iterable[str]) -> str | None:
+    """Публичный вид спорта, если направления тренера сходятся к одному виду.
+
+    Нейтральные вкладки отбрасываются. Нет «Фигурного» и «С клюшкой», оба сразу,
+    неизвестный ключ — ``None``: строка героя остаётся названиями вкладок.
+    """
+    keys = [key for key in direction_keys if key and key != "all" and key not in _NEUTRAL_KEYS]
+    if not keys:
+        return None
+    figure = direction_by_key("fig").crumb
+    hockey_short = direction_by_key("hock").short
+    hockey = hockey_short[:1].upper() + hockey_short[1:]
+    sports: set[str] = set()
+    for key in keys:
+        if key == "fig":
+            sports.add(figure)
+        elif key == "hock":
+            sports.add(hockey)
+        else:
+            return None
+    if len(sports) != 1:
+        return None
+    return next(iter(sports))
 
 
 def own_service_direction(service: Mapping[str, Any]) -> str | None:

@@ -2233,6 +2233,18 @@ async def post_client_booking(
         raise HTTPException(status_code=422, detail=detail) from e
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
+    # TASK-397: форма отправлена. Телефон и имя в событие не кладём.
+    try:
+        from src.application.trainer_card_measure import record_booking_submit
+
+        await record_booking_submit(
+            session,
+            trainer_id=int(trainer_id),
+            booking_id=int(booking_id),
+            source=booking_source,
+        )
+    except Exception:
+        logger.exception("trainer card booking_submit measure failed booking_id=%s", booking_id)
     out: dict[str, object] = {"success": True, "booking_id": booking_id}
     if client_request_id is None and place_mismatch:
         out["place_mismatch"] = True
@@ -6597,6 +6609,90 @@ async def post_client_register_event(
     return {"ok": True}
 
 
+class TrainerCardEventBody(BaseModel):
+    """Событие карточки из Mini App. Лишние поля (телефон, имя, init_data) игнорируются."""
+
+    event: str = Field(..., min_length=1, max_length=40)
+    trainer_id: int
+    action: str | None = Field(None, max_length=16)
+    target: str | None = Field(None, max_length=16)
+    via: str | None = Field(None, max_length=24)
+
+
+@router.post("/client/trainer-card-event")
+async def post_client_trainer_card_event(
+    body: TrainerCardEventBody,
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Просмотр карточки, нажатие кнопки, открытие формы, первое касание после регистрации.
+
+    Источник берётся из подписанного ``start_param``, если он есть. В строку не попадают
+    телефон, имя и init_data.
+    """
+    from src.application.catalog_consumer_events import telegram_actor_hash, telegram_launch_context
+    from src.application.trainer_card_measure import (
+        CLIENT_MEASURE_KINDS,
+        CTA_ACTIONS,
+        DEMAND_EVENT_CARD_CTA_TAP,
+        DEMAND_EVENT_LINK_REG_FIRST_TAP,
+        FIRST_TAP_TARGETS,
+        record_miniapp_trainer_event,
+        via_from_start_param,
+    )
+
+    kind = (body.event or "").strip()
+    if kind not in CLIENT_MEASURE_KINDS:
+        raise HTTPException(status_code=400, detail="Unsupported trainer card event")
+    action = (body.action or "").strip().lower() or None
+    target = (body.target or "").strip().lower() or None
+    if kind == DEMAND_EVENT_CARD_CTA_TAP and action not in CTA_ACTIONS:
+        raise HTTPException(status_code=400, detail="Unsupported trainer card action")
+    if kind == DEMAND_EVENT_LINK_REG_FIRST_TAP and target not in FIRST_TAP_TARGETS:
+        raise HTTPException(status_code=400, detail="Unsupported trainer card target")
+    launch = telegram_launch_context(cred.raw) if principal.platform == MiniAppPlatform.TELEGRAM else {}
+    start_param = (launch.get("start_param") or "").strip() or None
+    via = via_from_start_param(start_param) or (body.via or "")
+    recorded = await record_miniapp_trainer_event(
+        session,
+        trainer_id=body.trainer_id,
+        kind=kind,
+        actor_hash=telegram_actor_hash(client_catalog_telegram_key(principal)),
+        via=via or None,
+        action=action,
+        target=target,
+        start_param=start_param,
+    )
+    return {"ok": True, "recorded": recorded}
+
+
+@router.post("/public/trainer-card-view")
+async def post_public_trainer_card_view(
+    request: Request,
+    trainer_id: int = Query(..., ge=1),
+    via: str | None = Query(None, max_length=24),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Просмотр страницы ``/t/<id>``. Маяк со страницы; ботов отсекает срез по ``ua_class``."""
+    from fastapi.responses import Response as FastResponse
+
+    from src.api.middleware.http_limits import client_ip_from_request
+    from src.application.catalog_consumer_events import is_prefetch_navigation_request
+    from src.application.trainer_card_measure import record_site_trainer_card_view
+
+    if is_prefetch_navigation_request(request):
+        return FastResponse(status_code=204)
+    await record_site_trainer_card_view(
+        session,
+        trainer_id=trainer_id,
+        via=via,
+        user_agent=request.headers.get("user-agent"),
+        client_ip=client_ip_from_request(request),
+    )
+    return FastResponse(status_code=204)
+
+
 @router.get("/trainer/welcome-link/pass")
 async def get_trainer_welcome_link_pass(
     pass_product_id: int = Query(..., description="Pass product id (must belong to trainer)"),
@@ -7638,7 +7734,8 @@ async def _rollback_recurring_unless_full_materialization(
     if int(materialized) > 0:
         return
     hw = max(1, int(horizon_weeks))
-    await cancel_recurring_client_slot(session, trainer_id, recurring_id)
+    # The client was never told about this rule — no «постоянное время снято».
+    await cancel_recurring_client_slot(session, trainer_id, recurring_id, notify_client=False)
     raise HTTPException(
         status_code=409,
         detail=(

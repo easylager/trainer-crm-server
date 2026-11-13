@@ -168,11 +168,21 @@ def card_prices(svc: Mapping[str, Any]) -> list[tuple[str, str]]:
 
 
 def _audience(services: Sequence[Mapping[str, Any]]) -> str:
-    """«Дети и взрослые.» — только когда в тарифах есть и детский, и взрослый вид.
+    """Кого учит на странице тренера.
 
-    Один «Взрослый» ничего не говорит: это вид тарифа по умолчанию у старых цен.
+    Флаг выключен — прежние строки. «Дети и взрослые.» только когда в тарифах есть
+    и детский, и взрослый вид; один «Взрослый» ничего не говорит: это вид тарифа
+    по умолчанию у старых цен.
+    Флаг включён — подпись плашки (SPEC §4): «Дети» только при детских тарифах,
+    иначе «Любой возраст».
     """
+    from src.shared.config import Settings
+
     kinds = {k for s in services for k in _tier_cents(s)}
+    if Settings().unified_trainer_card_enabled:
+        from src.application.trainer_card_facts import audience_label
+
+        return audience_label(kinds)
     kids, adults = bool(kinds & _KID_KINDS), bool(kinds & _ADULT_KINDS)
     if kids and adults:
         return "Дети и взрослые."
@@ -1312,7 +1322,7 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
     if page.get("contact_url"):
         body += (
             '<div class="tp-request"><div><b>Не подходит время?</b>'
-            "<span>Напишите тренеру — он предложит своё.</span></div>"
+            "<span>Напишите тренеру, чтобы предложить своё время</span></div>"
             f'<a class="tp-btn tp-btn--ghost" href="{esc(page["contact_url"])}"{_write_attrs(page, via)}>Написать</a></div>'
         )
     return _sec("Всё время на неделю", body, sec_id="time", nosnippet=True)
@@ -1449,7 +1459,7 @@ def _reviews_html(page: Mapping[str, Any]) -> str:
             + ('<button type="button" class="tp-rev__more" hidden>Читать полностью</button>' if long_ else "")
             + f"{when}</article>"
         )
-    note = '<p class="tp-muted">Отзывы оставляют только те, кто занимался у тренера. Каждый отзыв проверяем перед публикацией.</p>'
+    note = '<p class="tp-muted">Тексты отзывов проверяем перед публикацией.</p>'
     return _sec(
         "Отзывы",
         head + _scroller(f'<div class="tp-more tp-revs">{"".join(cards)}</div>', cls="tp-scroller--revs") + note,

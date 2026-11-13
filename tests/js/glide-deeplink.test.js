@@ -265,6 +265,49 @@ describe('GlideDeepLink.maybeEarlyRedirect', () => {
       'replace:/webapp/trainers?trainer_id=11&slot_id=453#tgWebAppStartParam=trainer_11_s_453',
     ]);
   });
+
+  it('?startapp= тренера несёт слот, каток и via одним «?»', () => {
+    const storage = memStorage();
+    let replaced = '';
+    const sp = 'trainer_7_s_55_a_3_v_p3';
+    const loc = {
+      href: 'https://app.test/webapp/client-home?startapp=' + sp,
+      pathname: '/webapp/client-home',
+      search: '?startapp=' + sp,
+      hash: '',
+      replace(u) { replaced = u; },
+    };
+    const ok = G.maybeEarlyRedirect({ location: loc, sessionStorage: storage, Telegram: { WebApp: {} } });
+    assert.equal(ok, true);
+    assert.equal((replaced.match(/\?/g) || []).length, 1, replaced);
+    const u = new URL(replaced, 'https://app.test');
+    assert.equal(u.pathname, '/webapp/trainers');
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('slot_id'), '55');
+    assert.equal(u.searchParams.get('arena_id'), '3');
+    assert.equal(u.searchParams.get('via'), 'p3');
+    assert.equal(u.searchParams.get('startapp'), sp);
+  });
+
+  it('повтор того же startapp в сессии не уводит со страницы', () => {
+    const storage = memStorage();
+    storage.setItem(G.DEEP_LINK_FLAG, 'trainer_7_s_55');
+    let replaced = '';
+    const loc = {
+      href: 'https://app.test/webapp/client-home#tgWebAppStartParam=trainer_7_s_55',
+      pathname: '/webapp/client-home',
+      search: '',
+      hash: '#tgWebAppStartParam=trainer_7_s_55',
+      replace(u) { replaced = u; },
+    };
+    const ok = G.maybeEarlyRedirect({
+      location: loc,
+      sessionStorage: storage,
+      Telegram: { WebApp: { initDataUnsafe: { start_param: 'trainer_7_s_55' } } },
+    });
+    assert.equal(ok, false);
+    assert.equal(replaced, '');
+  });
 });
 
 describe('client-home подключает early redirect до body', () => {
@@ -425,6 +468,88 @@ describe('Mini App public URL recovery', () => {
     const ctx = browser('https://app.test/hockey?city=orsha', { initData: '' });
     assert.equal(G.maybePublicRedirect(ctx), false);
     assert.equal(ctx.location.pathname, '/hockey');
+  });
+
+  it('повтор startapp тренера со страницы /t/ открывает карточку, не главную', () => {
+    const storage = new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55'], ['glide_mini_app_active_v1', '1']]);
+    const ctx = browser('https://app.test/t/7-anna?init_data=signed', { storage, initData: '', startParam: 'trainer_7_s_55' });
+    assert.equal(G.maybePublicRedirect(ctx), true);
+    assert.equal(ctx.location.pathname, '/webapp/trainers');
+    const u = new URL(ctx.location.href);
+    assert.equal((u.search.match(/\?/g) || []).length, 1);
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('slot_id'), '55');
+    assert.doesNotMatch(ctx.location.pathname, /client-home/);
+  });
+
+  it('использованная ссылка тренера 7 на /t/ другого тренера не перехватывает — открывается тренер страницы', () => {
+    for (const sp of ['trainer_7', 'trainer_7_s_55']) {
+      const storage = new Map([[G.DEEP_LINK_FLAG, sp], ['glide_mini_app_active_v1', '1']]);
+      const ctx = browser('https://app.test/t/9-aleksandr?init_data=signed', { storage, initData: '', startParam: sp });
+      assert.equal(G.maybePublicRedirect(ctx), true);
+      const u = new URL(ctx.location.href);
+      assert.equal(u.pathname, '/webapp/trainers');
+      assert.equal(u.searchParams.get('trainer_id'), '9', sp);
+      assert.equal(u.searchParams.get('slot_id'), null, sp);
+      assert.equal(storage.get(G.DEEP_LINK_FLAG), sp);
+    }
+  });
+
+  it('id тренера на /t/ сверяется числом: /t/70 не совпадает с trainer_7, /t/7 без слага — совпадает', () => {
+    const other = browser('https://app.test/t/70-ivan?init_data=signed', {
+      storage: new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55'], ['glide_mini_app_active_v1', '1']]), initData: '', startParam: 'trainer_7_s_55',
+    });
+    assert.equal(G.maybePublicRedirect(other), true);
+    assert.equal(new URL(other.location.href).searchParams.get('trainer_id'), '70');
+    const same = browser('https://app.test/t/7?init_data=signed', {
+      storage: new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55'], ['glide_mini_app_active_v1', '1']]), initData: '', startParam: 'trainer_7_s_55',
+    });
+    assert.equal(G.maybePublicRedirect(same), true);
+    const u = new URL(same.location.href);
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('slot_id'), '55');
+  });
+
+  it('повтор startapp тренера с корня / ведёт на карточку, не на главную', () => {
+    const storage = new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55_a_3_v_p3'], ['glide_mini_app_active_v1', '1']]);
+    const ctx = browser('https://app.test/?startapp=trainer_7_s_55_a_3_v_p3', { storage, initData: 'signed', startParam: '' });
+    assert.equal(G.maybePublicRedirect(ctx), true);
+    assert.equal(ctx.location.pathname, '/webapp/trainers');
+    const u = new URL(ctx.location.href);
+    assert.equal((u.search.match(/\?/g) || []).length, 1);
+    assert.equal(u.searchParams.get('slot_id'), '55');
+    assert.equal(u.searchParams.get('arena_id'), '3');
+    assert.equal(u.searchParams.get('via'), 'p3');
+  });
+
+  it('intent вместе с via и ареной доезжает в адрес карточки', () => {
+    assert.deepEqual(G.deepLinkTarget('trainer_7_s_55_a_9_v_p3_i_save'), {
+      key: 'trainers',
+      path: 'trainers?trainer_id=7&slot_id=55&arena_id=9&via=p3&intent=save',
+    });
+  });
+
+  it('повтор group/catalog/arena/col_ с / при стоящем флаге остаётся главной', () => {
+    // group_ и col_ приложению не цели: иначе проверка «осталась главная» пустая
+    // (любой незнакомый параметр и так ведёт на client-home).
+    assert.equal(G.deepLinkTarget('group_12'), null);
+    assert.equal(G.deepLinkTarget('col_zamok'), null);
+    assert.equal(G.deepLinkTarget('catalog_7').key, 'ice');
+    assert.equal(G.deepLinkTarget('arena_9').key, 'arena');
+    for (const sp of ['group_12', 'catalog_7', 'arena_9', 'col_zamok']) {
+      const storage = new Map([[G.DEEP_LINK_FLAG, sp], ['glide_mini_app_active_v1', '1']]);
+      const ctx = browser('https://app.test/', { storage, initData: 'signed', startParam: sp });
+      assert.equal(G.maybePublicRedirect(ctx), true, sp);
+      assert.equal(ctx.location.pathname, '/webapp/client-home', sp);
+      assert.equal(new URL(ctx.location.href).searchParams.get('trainer_id'), null, sp);
+    }
+  });
+
+  it('/ без startapp при защёлке Mini App открывает главную', () => {
+    const storage = new Map([['glide_mini_app_active_v1', '1']]);
+    const ctx = browser('https://app.test/', { storage, initData: 'signed', startParam: '' });
+    assert.equal(G.maybePublicRedirect(ctx), true);
+    assert.equal(ctx.location.pathname, '/webapp/client-home');
   });
 
   it('public home and shared place/city/match template wire recovery', () => {

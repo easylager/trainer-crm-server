@@ -18,7 +18,7 @@ import re
 from typing import Any
 from urllib.parse import urlencode
 
-from src.application.place_links import is_valid_start_param
+from src.application.place_links import is_valid_start_param, parse_trainer_start_param, trainer_webapp_url
 from src.bot import messages as msg
 
 #: Параметры, которые страница игры читает сама (``kto-kogo.js``): ``kks_<метка>`` — рекламный
@@ -66,6 +66,25 @@ def start_entry_reply(payload: str | None, *, webapp_base_url: str | None) -> di
     base = (webapp_base_url or "").strip().rstrip("/")
     if not base.lower().startswith("https://"):
         return None
+    parsed_trainer = parse_trainer_start_param(value)
+    if parsed_trainer is not None:
+        from src.shared.config import Settings
+
+        if Settings().unified_trainer_card_enabled:
+            url = trainer_webapp_url(
+                base,
+                int(parsed_trainer["trainer_id"]),
+                arena_id=parsed_trainer["arena_id"],
+                slot_id=parsed_trainer["slot_id"],
+                via=parsed_trainer["via"],
+                intent=parsed_trainer["intent"],
+                legacy="catalog",
+            )
+            return {
+                "text": msg.CLIENT_START_ENTRY_APP,
+                "button_text": msg.CLIENT_BUTTON_START_ENTRY_APP,
+                "url": url,
+            }
     query = urlencode({"startapp": value})
     if _GAME_PAGE_RE.match(value):
         url = f"{base}/webapp/kto-kogo?{query}"

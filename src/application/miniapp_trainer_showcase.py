@@ -13,6 +13,9 @@
 * ``windows`` — ближайшие свободные окна на одного (те же, что у страницы тренера ``/t/…``);
 * ``arenas`` — только лёд (``venue_type = 'ice'``) с прокатом, если он известен по сеансам катка.
 
+Под флагом ``unified_trainer_card_enabled`` (единая карточка) ещё ``reviews`` и ``class_photos``
+(TASK-416) — те же отзывы и фото, что у страницы ``/t/``. Флаг выключен — этих ключей нет.
+
 Направления (вкладки) и их тексты — слой «пишем мы», живут в клиенте; сервер отдаёт услуги
 тренера с ``is_public``, чтобы своя услуга без направления не попадала во вкладки.
 """
@@ -28,6 +31,7 @@ from src.application.catalog_directions import service_title, split_service_summ
 from src.application.site_trainer_page import education_line
 from src.application.trainer_client_invite_tracking import sql_booking_not_self
 from src.shared.map_links import build_yandex_by_map_url
+from src.shared.public_display import format_public_name
 
 #: Сколько тренеров берём в выдачу. Каталог крошечный (6 опубликованных); пагинация — открытый вопрос эпика.
 SHOWCASE_LIMIT = 50
@@ -117,6 +121,142 @@ async def _service_catalog_info(session: AsyncSession, service_ids: set[int]) ->
     return {int(r[0]): (bool(r[1]), r[2]) for r in rows.fetchall()}
 
 
+async def _primary_arena_ids(session: AsyncSession, trainer_ids: list[int]) -> dict[int, int | None]:
+    """``{trainer_id: trainers.primary_arena_id}`` — сырое значение, без исправления."""
+    if not trainer_ids:
+        return {}
+    rows = await session.execute(
+        text("SELECT id, primary_arena_id FROM trainers WHERE id = ANY(:ids)"), {"ids": trainer_ids}
+    )
+    return {int(r[0]): (int(r[1]) if r[1] is not None else None) for r in rows.fetchall()}
+
+
+async def _profile_city_names(session: AsyncSession, trainer_ids: list[int]) -> dict[int, str | None]:
+    """Город профиля, как в ``/client/share-trainer``: ``trainer_profiles.city_id → cities.name``."""
+    if not trainer_ids:
+        return {}
+    rows = await session.execute(
+        text(
+            """
+            SELECT tp.trainer_id, c.name
+            FROM trainer_profiles tp
+            LEFT JOIN cities c ON c.id = tp.city_id
+            WHERE tp.trainer_id = ANY(:ids)
+            """
+        ),
+        {"ids": trainer_ids},
+    )
+    out: dict[int, str | None] = {}
+    for tid, name in rows.fetchall():
+        cleaned = str(name).strip() if name is not None else ""
+        out[int(tid)] = cleaned or None
+    return out
+
+
+def primary_rink_name(
+    primary_arena_id: int | None, arena_ids: list[int], ice_arenas: dict[int, dict[str, Any]]
+) -> str | None:
+    """Основной каток для плашки (TASK-400): правило ``reconcile_primary_arena`` без записи в БД.
+
+    Основной — ``primary_arena_id``, если он среди площадок тренера, иначе наименьший id площадки.
+    Плашка говорит «основной каток», поэтому основной не лёд (зал) — катка нет, другим катком не подменяем.
+    """
+    ids = [int(a) for a in arena_ids]
+    if not ids:
+        return None
+    primary = primary_arena_id if primary_arena_id in ids else min(ids)
+    arena = ice_arenas.get(primary)
+    if not arena:
+        return None
+    return format_public_name(str(arena.get("name") or "")) or None
+
+
+async def load_showcase_reviews(session: AsyncSession, trainer_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+    """Отзывы всех тренеров выдачи одним запросом (TASK-418).
+
+    Отбор тот же, что у ``site_trainer_page._load_reviews``: подтверждённые, непустой текст,
+    новые сверху, не больше ``REVIEWS_SHOWN`` на тренера. Пустой список id — запроса нет.
+    """
+    from src.application.review_moderation_use_cases import display_name
+    from src.application.site_trainer_page import REVIEW_PREVIEW_CHARS, REVIEWS_SHOWN
+
+    ids = [int(tid) for tid in trainer_ids]
+    if not ids:
+        return {}
+    rows = await session.execute(
+        text("""
+            SELECT trainer_id, rating, review_text, created_at, first_name, last_name
+            FROM (
+                SELECT r.trainer_id, r.rating, r.review_text, r.created_at, r.id AS rating_id,
+                       c.first_name, c.last_name,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY r.trainer_id
+                           ORDER BY r.created_at DESC, r.id DESC
+                       ) AS rn
+                FROM trainer_ratings r
+                LEFT JOIN clients c ON c.telegram_id = r.client_telegram_id
+                WHERE r.trainer_id = ANY(:ids)
+                  AND r.review_status = 'approved'
+                  AND btrim(COALESCE(r.review_text, '')) <> ''
+            ) ranked
+            WHERE rn <= :lim
+            ORDER BY trainer_id, created_at DESC, rating_id DESC
+            """),
+        {"ids": ids, "lim": REVIEWS_SHOWN},
+    )
+    out: dict[int, list[dict[str, Any]]] = {}
+    for trainer_id, rating, body, created, first, last in rows.fetchall():
+        out.setdefault(int(trainer_id), []).append(
+            {
+                "rating": max(1, min(5, int(rating))),
+                "text": str(body).strip()[: REVIEW_PREVIEW_CHARS * 4],
+                "date": created.date() if created else None,
+                "name": display_name(first, last),
+            }
+        )
+    return out
+
+
+def showcase_reviews(reviews: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+    """«Отзывы» единой карточки (TASK-416): то, что ``/t/`` уже отобрал (``_load_reviews``), в JSON.
+
+    Порог тот же, что у сайта (``REVIEWS_MIN_SHOWN``): меньше трёх текстов — ``None``, блока нет,
+    оценка остаётся только в герое. Дата — ``YYYY-MM-DD`` (подпись «2 ноября 2026» собирает клиент).
+    """
+    from src.shared.review_moderation import REVIEWS_MIN_SHOWN
+
+    if len(reviews) < REVIEWS_MIN_SHOWN:
+        return None
+    return [
+        {
+            "name": r["name"],
+            "rating": int(r["rating"]),
+            "text": r["text"],
+            "date": r["date"].isoformat() if r.get("date") else None,
+        }
+        for r in reviews
+    ]
+
+
+def class_photo_urls(trainer: dict[str, Any]) -> list[str]:
+    """«На занятиях» (TASK-416): фото тренера после первого — первое уже в герое (``trainer_photo_url``).
+
+    Тот же ключ и тот же URL, что у героя (``file_key_list`` или ``file_key`` через ``b_photo_url``);
+    повтор героя и дубли отбрасываем. Пусто — блока нет.
+    """
+    from src.application.site_trainers import trainer_photo_url
+    from src.application.style_b import b_photo_url
+
+    hero = trainer_photo_url(trainer)
+    out: list[str] = []
+    for photo in (trainer.get("photos") or [])[1:]:
+        photo = photo or {}
+        url = b_photo_url(photo.get("file_key_list") or photo.get("file_key"))
+        if url and url != hero and url not in out:
+            out.append(url)
+    return out
+
+
 def _service_out(svc: dict[str, Any], catalog: dict[int, tuple[bool, str | None]]) -> dict[str, Any]:
     sid = int(svc["service_id"])
     is_public, summary = catalog.get(sid, (False, None))
@@ -155,6 +295,7 @@ def _service_out(svc: dict[str, Any], catalog: dict[int, tuple[bool, str | None]
 async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -> dict[str, Any]:
     """Тренеры города для витрины. Фильтр катка и вкладки клиент считает сам — по этим данным."""
     from src.application.arena_public_use_cases import _trainer_windows_on_arena
+    from src.application.catalog_directions import public_sport_name
     from src.application.site_trainer_catalog import (
         min_price_by_direction,
         services_by_direction,
@@ -170,6 +311,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     from src.application.trainer_use_cases import list_active_trainers_for_client
     from src.shared.notification_hours import NOTIFICATION_TZ
     from src.shared.phone_guard import sanitize_public_phone
+    from src.shared.config import Settings
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
     raw_items, _total = await list_active_trainers_for_client(
@@ -211,6 +353,12 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     )
 
     win_cities = await window_arena_cities(session, [w for ws in windows.values() for w in ws])
+    # Единая карточка (TASK-400): каток и город. Флаг выключен — ответ прежний, без новых полей.
+    unified_card = Settings().unified_trainer_card_enabled
+    primary_ids = await _primary_arena_ids(session, ids) if unified_card else {}
+    city_names = await _profile_city_names(session, ids) if unified_card else {}
+    # Флаг выключен — отзывы не читаем (ни одного запроса). Включён — один ANY(:ids) на всю выдачу.
+    reviews_by_trainer = await load_showcase_reviews(session, ids) if unified_card else {}
 
     out: list[dict[str, Any]] = []
     for t in items:
@@ -257,4 +405,18 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 ],
             }
         )
+        if unified_card:
+            out[-1]["primary_arena_name"] = primary_rink_name(
+                primary_ids.get(tid), list(t.get("arena_ids") or []), arenas
+            )
+            out[-1]["city_name"] = city_names.get(tid)
+            # Вид — из вкладок, в БД не пишется. Нет одного вида — null, клиент оставляет названия вкладок.
+            out[-1]["sport_name"] = public_sport_name(
+                services_by_direction(out[-1]["services"]).keys()
+            )
+            for arena in out[-1]["arenas"]:
+                arena["public_name"] = format_public_name(str(arena.get("name") or "")) or None
+            # Отзывы и фото — те же, что на ``/t/`` (TASK-416): подтверждённые тексты, фото после героя.
+            out[-1]["reviews"] = showcase_reviews(reviews_by_trainer.get(tid, []))
+            out[-1]["class_photos"] = class_photo_urls(t)
     return {"city_id": city_id, "items": out}

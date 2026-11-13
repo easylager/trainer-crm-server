@@ -39,6 +39,20 @@ def client_discovery_webapp_url(
     origin = (base or "").rstrip("/")
     tid = int(trainer_id) if trainer_id is not None else 0
     if tid > 0:
+        from src.shared.config import Settings
+
+        if Settings().unified_trainer_card_enabled:
+            from src.application.place_links import trainer_webapp_url
+
+            sid = int(service_id) if service_id is not None and int(service_id) > 0 else None
+            return trainer_webapp_url(
+                origin,
+                tid,
+                city_id=city_id,
+                service_id=sid,
+                arena_id=arena_id,
+                legacy="discovery",
+            )
         q: dict[str, str] = {"trainer_id": str(tid)}
         if city_id is not None:
             q["city_id"] = str(int(city_id))

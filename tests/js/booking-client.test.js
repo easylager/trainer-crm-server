@@ -68,6 +68,47 @@ describe('slotsUrl (TASK-357)', () => {
   it('init_data идёт отдельным параметром, а не хвостом service_id', () => {
     const { slotsUrl } = loadBookingClient();
     const url = slotsUrl({ trainer_id: 9, service_id: 1 }, 'a=1&hash=x');
+    assert.equal((url.match(/\?/g) || []).length, 1, url);
     assert.equal(url, '/api/webapp/client/slots?trainer_id=9&service_id=1&init_data=a%3D1%26hash%3Dx');
+  });
+
+  it('слот-запрос несёт trainer_id, service_id и arena_id одним «?»', () => {
+    const { slotsUrl } = loadBookingClient();
+    const url = slotsUrl({ trainer_id: 7, service_id: 3, arena_id: 9 }, 'user=1');
+    assert.equal((url.match(/\?/g) || []).length, 1, url);
+    const u = new URL(url, 'https://x');
+    assert.equal(u.pathname, '/api/webapp/client/slots');
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('service_id'), '3');
+    assert.equal(u.searchParams.get('arena_id'), '9');
+    assert.equal(u.searchParams.get('init_data'), 'user=1');
+  });
+
+  it('fetchClientSlots теряет арену, если buildSlotsQueryParams её не кладёт', async () => {
+    const seen = [];
+    const prev = global.fetch;
+    global.fetch = async (url) => {
+      seen.push(String(url));
+      return { ok: true, json: async () => ({ slots: [] }) };
+    };
+    try {
+      const { fetchClientSlots } = loadBookingClient();
+      await fetchClientSlots({ trainerId: 7, serviceId: 3, arenaId: 9, initData: 'user=1' });
+    } finally {
+      global.fetch = prev;
+    }
+    assert.equal(seen.length, 1);
+    const url = seen[0];
+    assert.equal((url.match(/\?/g) || []).length, 1, url);
+    const u = new URL(url, 'https://x');
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('service_id'), '3');
+    assert.equal(u.searchParams.get('arena_id'), '9');
+    assert.equal(u.searchParams.get('init_data'), 'user=1');
+  });
+
+  it('без init_data вопрос один и параметры на месте', () => {
+    const { slotsUrl } = loadBookingClient();
+    assert.equal(slotsUrl({ trainer_id: 7, service_id: 3 }, ''), '/api/webapp/client/slots?trainer_id=7&service_id=3');
   });
 });

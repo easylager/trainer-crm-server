@@ -1,0 +1,13 @@
+[
+  {"start_param": "trainer_7", "path": "trainers?trainer_id=7", "expect": {"trainer_id": "7", "arena_id": null, "slot_id": null, "via": null, "intent": null}},
+  {"start_param": "trainer_7_s_55", "path": "trainers?trainer_id=7&slot_id=55", "expect": {"trainer_id": "7", "arena_id": null, "slot_id": "55", "via": null, "intent": null}},
+  {"start_param": "trainer_7_a_3", "path": "trainers?trainer_id=7&arena_id=3", "expect": {"trainer_id": "7", "arena_id": "3", "slot_id": null, "via": null, "intent": null}},
+  {"start_param": "trainer_7_s_55_a_3_v_p3", "path": "trainers?trainer_id=7&slot_id=55&arena_id=3&via=p3", "expect": {"trainer_id": "7", "arena_id": "3", "slot_id": "55", "via": "p3", "intent": null}},
+  {"start_param": "trainer_7_v_p3_a_3_s_55", "path": "trainers?trainer_id=7&slot_id=55&arena_id=3&via=p3", "expect": {"trainer_id": "7", "arena_id": "3", "slot_id": "55", "via": "p3", "intent": null}},
+  {"start_param": "trainer_7_i_request", "path": "trainers?trainer_id=7&intent=request", "expect": {"trainer_id": "7", "arena_id": null, "slot_id": null, "via": null, "intent": "request"}},
+  {"start_param": "trainer_7_i_save_s_9", "path": "trainers?trainer_id=7&slot_id=9&intent=save", "expect": {"trainer_id": "7", "arena_id": null, "slot_id": "9", "via": null, "intent": "save"}},
+  {"start_param": "trainer_7_u_3", "note": "service_id в start_param нет: незнакомый хвост не становится услугой", "path": "trainers?trainer_id=7", "expect": {"trainer_id": "7", "arena_id": null, "slot_id": null, "via": null, "intent": null}},
+  {"start_param": "trainer_7_a_", "expect": null},
+  {"start_param": "trainer_0", "expect": null},
+  {"start_param": "trainer_", "expect": null}
+]

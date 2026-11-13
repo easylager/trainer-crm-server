@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from aiogram.types import InlineKeyboardMarkup
 
 from src.shared.byr_currency_display import BYR_SIGN, format_kopeks_byn_display, format_rubles_byn_display
+from src.application.place_links import trainer_webapp_url
 from src.shared.catalog_entry import client_discovery_webapp_url
 from src.shared.currency import currency_label_ru
 from src.shared.validation import truncate_text
@@ -321,6 +322,34 @@ CLIENT_UNIVERSAL_INVITE_REGISTERED_FOR = (
     "Оттуда можно записаться на занятие; другой профиль выбирается в аватарке сверху."
 )
 CLIENT_UNIVERSAL_INVITE_REGISTER_BTN = "Продолжить"
+CLIENT_BUTTON_OPEN_CARD = "Открыть карточку {name}"
+CLIENT_BUTTON_OPEN_CHOSEN_TIME = "Открыть выбранное время"
+
+
+def unified_invite_new_client_html(name_html: str) -> str:
+    """SPEC §8.2: новый клиент по ссылке тренера. ``name_html`` уже экранирован."""
+    return (
+        f"Вас пригласил тренер {name_html}. "
+        f"Чтобы {name_html} нашёл вас в своём списке и подтянул ваши абонементы и записи — подтвердите телефон."
+    )
+
+
+def unified_invite_registered_html(name_html: str, *, profile_html: str | None = None) -> str:
+    """SPEC §8.2: профиль уже полный. ``name_html`` / ``profile_html`` экранированы."""
+    if profile_html:
+        return f"Вы привязаны к тренеру {name_html}. Профиль — {profile_html}."
+    return f"Вы привязаны к тренеру {name_html}."
+
+
+def unified_open_card_button(name: str) -> str:
+    """«Открыть карточку {Имя}». Подпись кнопки Telegram — не длиннее 64 символов."""
+    shown = (name or "").strip() or "тренера"
+    label = CLIENT_BUTTON_OPEN_CARD.format(name=shown)
+    if len(label) <= 64:
+        return label
+    prefix = "Открыть карточку "
+    room = 64 - len(prefix) - 1
+    return prefix + shown[:room].rstrip() + "…"
 CLIENT_UNIVERSAL_INVITE_RETRY_LATER = (
     "👋 Спасибо, что перешли по ссылке тренера! Сейчас регистрация временно недоступна — "
     "попробуйте открыть эту же ссылку ещё раз через пару минут."
@@ -1036,6 +1065,26 @@ def format_client_recurring_set_by_trainer_notification_html(
     return "".join(parts)
 
 
+def format_client_recurring_removed_by_trainer_notification_html(
+    *,
+    trainer_name: str,
+    weekday_short: str,
+    time_range: str,
+    booked_for_name: str | None = None,
+) -> str:
+    """One client-bot message when the trainer removes the weekly time (not one per cancelled booking)."""
+    tn = html.escape((trainer_name or "").strip() or "Тренер")
+    ws = html.escape((weekday_short or "").strip() or "—")
+    tr = html.escape((time_range or "").strip() or "—")
+    return (
+        "🗓 <b>Постоянное время снято</b>\n\n"
+        + format_client_booked_for_html(booked_for_name)
+        + f"👤 <b>Тренер:</b> {tn}\n"
+        + f"📆 <b>Было каждую неделю:</b> {ws} · {tr}\n\n"
+        + "Будущие записи на это время отменены."
+    )
+
+
 def build_client_recurring_set_inline_keyboard(
     *,
     trainer_telegram_id: int | None,
@@ -1182,11 +1231,9 @@ def build_client_fill_slots_invite_keyboard(
         return None
     tid = int(trainer_id)
     if online_booking:
-        url = f"{base}/webapp/book?trainer_id={tid}"
-        if slot_id is not None:
-            url += f"&slot_id={int(slot_id)}"
+        url = trainer_webapp_url(base, tid, slot_id=slot_id, legacy="book_plain")
     else:
-        url = f"{base}/webapp/catalog?trainer_id={tid}"
+        url = trainer_webapp_url(base, tid, legacy="catalog")
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -1923,7 +1970,9 @@ def build_client_booking_completed_inline_keyboard(
             [
                 InlineKeyboardButton(
                     text=CLIENT_BUTTON_BOOK_AGAIN_COMPLETED,
-                    web_app=WebAppInfo(url=f"{base}/webapp/catalog?trainer_id={int(trainer_id)}"),
+                    web_app=WebAppInfo(
+                        url=trainer_webapp_url(base, int(trainer_id), legacy="catalog")
+                    ),
                 ),
             ]
         )

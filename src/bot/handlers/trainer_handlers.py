@@ -2315,7 +2315,9 @@ async def on_make_recurring_trainer(callback: CallbackQuery) -> None:
             )
             materialized = int(maintained.get("created") or 0)
             if materialized <= 0:
-                await cancel_recurring_client_slot(session, trainer_id, recurring_id)
+                await cancel_recurring_client_slot(
+                    session, trainer_id, recurring_id, notify_client=False
+                )
                 await callback.message.answer(msg.TRAINER_RECURRING_MATERIALIZE_INCOMPLETE)
                 return
     await callback.message.answer(msg.TRAINER_RECURRING_DONE)

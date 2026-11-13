@@ -208,6 +208,27 @@ def _webapp_file_response(path: Path):
     )
 
 
+_UNIFIED_TRAINER_CARD_BOOT_SCRIPT = "<script>window.__UNIFIED_TRAINER_CARD__=true;</script>\n"
+
+
+def _unified_flag_head_response(path: Path):
+    """catalog.html / book.html: при флаге единой карточки ставим window.__UNIFIED_TRAINER_CARD__ первым в <head>.
+
+    Шим входов (booking-deeplink.js) читает флаг при загрузке, поэтому скрипт стоит до остальных, а не перед </head>.
+    Флаг выключен — страница отдаётся как раньше.
+    """
+    if not Settings().unified_trainer_card_enabled:
+        return _webapp_file_response(path)
+    html = stamp_html(path.read_text(encoding="utf-8"))
+    marker = "<head>"
+    if marker not in html:
+        raise HTTPException(status_code=500, detail="Invalid webapp template")
+    return HTMLResponse(
+        content=html.replace(marker, marker + "\n  " + _UNIFIED_TRAINER_CARD_BOOT_SCRIPT, 1),
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
 def _webapp_versioned_asset_cache_headers(request: Request) -> dict[str, str]:
     """Long cache only when the client sends ?v= (version bump in HTML); else avoid stale immutable for legacy links."""
     if request.query_params.get("v"):
@@ -229,7 +250,7 @@ def webapp_book_page():
     path = _WEBAPP_DIR / "book.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    return _unified_flag_head_response(path)
 
 
 @app.get("/webapp/catalog")
@@ -241,7 +262,12 @@ def webapp_catalog_page(request: Request):
     path = _WEBAPP_DIR / "catalog.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    return _unified_flag_head_response(path)
+
+
+# Тот же приём, что ключ карт на /webapp/ice: сервер дописывает настройку в HTML страницы.
+# Скрипт стоит перед </head>, модель читает флаг в момент вызова, не при загрузке файла.
+_UNIFIED_TRAINER_CARD_BOOT = "<script>window.__UNIFIED_TRAINER_CARD__=true;</script>\n"
 
 
 @app.get("/webapp/trainers")
@@ -250,7 +276,16 @@ def webapp_trainers_page():
     path = _WEBAPP_DIR / "trainers.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+    if not Settings().unified_trainer_card_enabled:
+        return _webapp_file_response(path)
+    html = stamp_html(path.read_text(encoding="utf-8"))
+    marker = "</head>"
+    if marker not in html:
+        raise HTTPException(status_code=500, detail="Invalid trainers template")
+    return HTMLResponse(
+        content=html.replace(marker, _UNIFIED_TRAINER_CARD_BOOT + marker, 1),
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
 
 
 @app.get("/webapp/arena")
@@ -1106,7 +1141,11 @@ def webapp_client_register_page(trainer_id: Optional[int] = Query(None)):
     marker = "</head>"
     if marker not in html:
         raise HTTPException(status_code=500, detail="Invalid client-register template")
-    html = html.replace(marker, meta + marker, 1)
+    extra = meta
+    # Тот же флаг, что на /webapp/trainers: форма K без него остаётся прежней.
+    if Settings().unified_trainer_card_enabled:
+        extra += _UNIFIED_TRAINER_CARD_BOOT
+    html = html.replace(marker, extra + marker, 1)
     return HTMLResponse(
         content=html,
         media_type="text/html",

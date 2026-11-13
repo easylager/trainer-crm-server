@@ -242,8 +242,68 @@
     return String(text || '').replace(/[ \t]+([,.;:!?])/g, '$1').replace(/[ \t]{2,}/g, ' ').trim();
   }
 
-  /** «Кого учит»: из тарифов; тарифов нет — строки нет. */
+  var KID_ONLY_KINDS = { child: true, two_children: true };
+
+  /** Флаг приходит со страницы /webapp/trainers, только когда он включён. Иначе — прежние строки. */
+  function unifiedTrainerCardEnabled() {
+    return typeof globalThis !== 'undefined' && globalThis.__UNIFIED_TRAINER_CARD__ === true;
+  }
+
+  /** Как Python ``_tier_cents``: тариф без цены клиенту не показывается. */
+  function tierKinds(services) {
+    var kinds = [];
+    var seen = {};
+    (services || []).forEach(function (s) {
+      (s.price_tiers || []).forEach(function (t) {
+        var k = t && t.tier_kind;
+        var cents = Number(t && t.price_cents);
+        if (k && isFinite(cents) && cents > 0 && !seen[k]) {
+          seen[k] = true;
+          kinds.push(k);
+        }
+      });
+    });
+    return kinds;
+  }
+
+  /** «Дети» — только детские тарифы. Иначе, включая «только взрослые» и пусто, — «Любой возраст». */
+  function audienceLabel(kinds) {
+    var list = kinds || [];
+    if (list.length && list.every(function (k) { return KID_ONLY_KINDS[k]; })) return 'Дети';
+    return 'Любой возраст';
+  }
+
+  function rinkFactValue(name) {
+    var text = String(name || '').trim();
+    if (!text || text.length > 10) return '';
+    if (text.charAt(0) === '«' && text.charAt(text.length - 1) === '»') return text;
+    return '«' + text + '»';
+  }
+
+  /**
+   * Плашка фактов (SPEC §4). До трёх: опыт, кого учит, каток (название ≤ 10) или цена.
+   * Меньше двух — пустой список, плашки нет. Счётчика занятий и рейтинга здесь нет.
+   */
+  function factStrip(input) {
+    input = input || {};
+    var facts = [];
+    var years = input.experience_years;
+    if (typeof years === 'number' && Number.isInteger(years) && years >= 1) {
+      facts.push({ value: word(years, 'год', 'года', 'лет'), label: 'тренерского опыта' });
+    }
+    facts.push({ value: audienceLabel(input.tier_kinds), label: 'учеников' });
+    var rink = rinkFactValue(input.rink_name);
+    if (rink) facts.push({ value: rink, label: 'основной каток' });
+    var cents = Number(input.price_cents);
+    if (isFinite(cents) && cents > 0) {
+      facts.push({ value: 'от ' + formatMoney(cents, input.currency || 'BYN'), label: 'за занятие' });
+    }
+    return facts.length < 2 ? [] : facts.slice(0, 3);
+  }
+
+  /** «Кого учит»: из тарифов; тарифов нет — строки нет. Под флагом — подпись плашки. */
   function whoTeaches(services) {
+    if (unifiedTrainerCardEnabled()) return audienceLabel(tierKinds(services));
     var kids = false;
     var adults = false;
     (services || []).forEach(function (s) {
@@ -283,6 +343,44 @@
     var mi = Number(m[2]) - 1;
     if (mi < 0 || mi > 11) return '';
     return 'В Glide с ' + MONTHS_GEN[mi] + ' ' + m[1];
+  }
+
+  /** Лента отзывов — от трёх подтверждённых текстов, как на сайте (REVIEWS_MIN_SHOWN, SPEC §3.1 №8). */
+  var REVIEWS_MIN_SHOWN = 3;
+  /** Карточка отзыва: до 220 знаков, дальше «Читать полностью» (доска A). */
+  var REVIEW_PREVIEW_CHARS = 220;
+
+  /** Отзывы для блока: только с текстом; меньше трёх — пусто (блока нет, оценка остаётся в герое). */
+  function reviewsShown(list) {
+    var rows = (Array.isArray(list) ? list : []).filter(function (r) {
+      return r && String(r.text || '').trim();
+    });
+    return rows.length >= REVIEWS_MIN_SHOWN ? rows : [];
+  }
+
+  /** «2 ноября 2026» из «2026-11-02». Нет даты — пусто. */
+  function reviewDate(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    if (!m) return '';
+    var mi = Number(m[2]) - 1;
+    if (mi < 0 || mi > 11) return '';
+    return Number(m[3]) + ' ' + MONTHS_GEN[mi] + ' ' + m[1];
+  }
+
+  /** «★★★★☆» — оценка 1…5 закрашенными, остаток пустыми (доска A). */
+  function reviewStars(n) {
+    var k = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
+    return new Array(k + 1).join('★') + new Array(6 - k).join('☆');
+  }
+
+  /** Начало длинного отзыва: до 220 знаков по границе слова и «…». Короткий — как есть, ``cut=false``. */
+  function reviewPreview(text) {
+    var s = String(text || '').trim();
+    if (s.length <= REVIEW_PREVIEW_CHARS) return { text: s, cut: false };
+    var head = s.slice(0, REVIEW_PREVIEW_CHARS);
+    var sp = head.lastIndexOf(' ');
+    if (sp > REVIEW_PREVIEW_CHARS * 0.6) head = head.slice(0, sp);
+    return { text: head.replace(/[\s,.;:!?—–-]+$/, '') + '…', cut: true };
   }
 
   function whereLine(arenas) {
@@ -809,10 +907,18 @@
     noticeParts: noticeParts,
     serviceAbout: serviceAbout,
     whoTeaches: whoTeaches,
+    audienceLabel: audienceLabel,
+    tierKinds: tierKinds,
+    factStrip: factStrip,
     tidyText: tidyText,
     experienceBadge: experienceBadge,
     ratingLine: ratingLine,
     glideSince: glideSince,
+    REVIEWS_MIN_SHOWN: REVIEWS_MIN_SHOWN,
+    reviewsShown: reviewsShown,
+    reviewDate: reviewDate,
+    reviewStars: reviewStars,
+    reviewPreview: reviewPreview,
     cardFacts: cardFacts,
     whoOptions: whoOptions,
     priceRows: priceRows,

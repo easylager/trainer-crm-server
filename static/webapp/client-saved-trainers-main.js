@@ -494,11 +494,9 @@
 
   function pastMetaLine(edge) {
     var sessions = sessionsLabel(edge.completed_count);
-    var lastDate = shortDateLabel(edge.last_completed_at);
-    if (sessions && lastDate) return sessions + ' · ' + lastDate;
-    if (sessions) return sessions;
-    if (lastDate) return 'Был ' + lastDate;
-    return '';
+    // TASK-419: без даты последнего занятия — last_completed_at это MAX(created_at) в UTC,
+    // на границе суток день неверен. Вернуть, когда API отдаст день слота в поясе города.
+    return sessions || '';
   }
 
   function renderPastStrip(list) {

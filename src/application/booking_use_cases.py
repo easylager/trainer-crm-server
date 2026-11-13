@@ -263,6 +263,7 @@ async def sync_slot_status_for_occupancy(session: AsyncSession, slot_id: int) ->
     """
     Set slot to 'booked' when pending+confirmed count >= capacity, else 'available'.
     Call after booking create/cancel/decline within the same transaction.
+    A 'cancelled' slot (hidden recurring window, cancelled group occurrence) is never revived.
     """
     r = await session.execute(
         text("SELECT capacity FROM slots WHERE id = :sid"),
@@ -273,10 +274,11 @@ async def sync_slot_status_for_occupancy(session: AsyncSession, slot_id: int) ->
         return
     cap = max(1, int(row[0]))
     cnt = await _count_occupying_bookings(session, slot_id)
-    if cnt >= cap:
-        await session.execute(text("UPDATE slots SET status = 'booked' WHERE id = :id"), {"id": slot_id})
-    else:
-        await session.execute(text("UPDATE slots SET status = 'available' WHERE id = :id"), {"id": slot_id})
+    new_status = "booked" if cnt >= cap else "available"
+    await session.execute(
+        text("UPDATE slots SET status = :st WHERE id = :id AND status <> 'cancelled'"),
+        {"st": new_status, "id": slot_id},
+    )
 
 
 def is_slot_end_in_past_local(slot_date: date | None, end_time: time | None) -> bool:
@@ -4803,6 +4805,19 @@ async def mark_booking_notified(session: AsyncSession, booking_id: int) -> None:
     await session.commit()
 
 
+async def _hide_emptied_recurring_window(
+    session: AsyncSession, trainer_id: int, slot_id: int
+) -> None:
+    """One-off cancel/decline: a window the recurring cycle created must not linger as free time.
+
+    Soft-hide (``status='cancelled'``), never DELETE — the cancelled booking keeps its notifications,
+    history and stats. No-op for trainer-made windows and occupied/group slots.
+    """
+    from src.application.trainer_schedule_use_cases import hide_emptied_recurring_created_slot
+
+    await hide_emptied_recurring_created_slot(session, int(trainer_id), int(slot_id))
+
+
 async def cancel_booking(
     session: AsyncSession,
     booking_id: int,
@@ -4811,11 +4826,13 @@ async def cancel_booking(
     notify_client: bool = True,
     record_recurring_week_skip: bool = True,
     cancellation_source: str = BOOKING_CANCELLATION_SOURCE_TRAINER,
+    do_commit: bool = True,
 ) -> bool:
     """
     Cancel booking: booking status to 'cancelled', slot occupancy synced (group slots may stay partially filled).
     Recurring-auto bookings: by default records a week skip so materialization will not recreate the same calendar week.
     ``cancellation_source`` records why the row was cancelled; stats omit recurring/roster system churn.
+    ``do_commit=False``: caller owns the transaction (rule detach cancels many rows atomically).
     Returns True if booking was found and cancelled.
     """
     r = await session.execute(
@@ -4847,14 +4864,18 @@ async def cancel_booking(
             session, int(recurring_for_skip), slot_date_for_skip
         )
     await sync_slot_status_for_occupancy(session, slot_id)
+    if cancellation_source != BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH:
+        # Rule detach / prune delete the window themselves; a one-off cancel only hides it.
+        await _hide_emptied_recurring_window(session, trainer_id, slot_id)
     if client_id_cancel is not None and slot_date_for_skip is not None:
         await resync_pending_reminders_for_client_day(
             session, client_id_cancel, slot_date_for_skip, do_commit=False
         )
     if notify_client:
         await _schedule_booking_cancel_notification(session, booking_id)
-    await session.commit()
-    invalidate_slots_for_trainer(trainer_id)
+    if do_commit:
+        await session.commit()
+        invalidate_slots_for_trainer(trainer_id)
     return True
 
 
@@ -4865,6 +4886,10 @@ async def detach_trainer_client_from_roster_miniapp(
 ) -> dict[str, Any] | None:
     """
     Cancels trainer's upcoming pending/confirmed bookings with this client, removes CRM roster row.
+    Active «постоянный клиент» rules of the pair are closed the same way as an explicit removal
+    (auto-bookings cancelled, windows the cycle created dropped, one «постоянное время снято»
+    message per rule instead of a cancel push per auto-booking) so the cycle stops booking a
+    removed client. One transaction.
     Blocked while the client is active/trial in a group operated by this trainer.
     Returns None if the trainer has no CRM access to the client (same rule as card auth).
     """
@@ -4889,6 +4914,42 @@ async def detach_trainer_client_from_roster_miniapp(
             "потом можно убрать из списка."
         )
 
+    try:
+        return await _detach_trainer_client_from_roster_in_transaction(
+            session, trainer_id, client_id
+        )
+    except Exception:
+        await session.rollback()
+        raise
+
+
+async def _detach_trainer_client_from_roster_in_transaction(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> dict[str, Any]:
+    from src.application.recurring_use_cases import detach_recurring_rule_in_transaction
+
+    rr_rules = await session.execute(
+        text(
+            """
+            SELECT id FROM recurring_client_slots
+            WHERE trainer_id = :tid AND client_id = :cid AND status = 'active'
+            ORDER BY id
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    cancelled_upcoming = 0
+    recurring_removed = 0
+    for (rid,) in rr_rules.fetchall():
+        closed, removed = await detach_recurring_rule_in_transaction(
+            session, trainer_id, int(rid), notify_client=True
+        )
+        if closed:
+            recurring_removed += 1
+            cancelled_upcoming += int(removed)
+
     rb = await session.execute(
         text(
             """
@@ -4906,13 +4967,13 @@ async def detach_trainer_client_from_roster_miniapp(
         {"tid": trainer_id, "cid": client_id},
     )
     bid_rows = rb.fetchall()
-    cancelled_upcoming = 0
     for (bid,) in bid_rows:
         if await cancel_booking(
             session,
             int(bid),
             trainer_id,
             cancellation_source=BOOKING_CANCELLATION_SOURCE_ROSTER_DETACH,
+            do_commit=False,
         ):
             cancelled_upcoming += 1
 
@@ -4935,9 +4996,11 @@ async def detach_trainer_client_from_roster_miniapp(
         session, int(trainer_id), int(client_id)
     )
     await session.commit()
+    invalidate_slots_for_trainer(trainer_id)
     return {
         "cancelled_upcoming_bookings": cancelled_upcoming,
         "roster_removed": roster_removed,
+        "recurring_removed": recurring_removed,
     }
 
 
@@ -5129,6 +5192,7 @@ async def cancel_booking_by_client(
             session, int(recurring_for_skip), slot_date
         )
     await sync_slot_status_for_occupancy(session, slot_id_cancel)
+    await _hide_emptied_recurring_window(session, int(trainer_id_cache), slot_id_cancel)
     if client_id is not None and slot_date is not None:
         await resync_pending_reminders_for_client_day(session, client_id, slot_date, do_commit=False)
     payload = _payload_from_row(row[:9], slot_id=slot_id_cancel, already_cancelled=False)
@@ -5228,6 +5292,17 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     )
     row2 = r2.fetchone()
     await session.commit()
+    # TASK-397: время до подтверждения. После commit, чтобы сбой учёта не откатил статус.
+    try:
+        from src.application.trainer_card_measure import record_booking_confirmed
+
+        await record_booking_confirmed(session, trainer_id=int(trainer_id), booking_id=int(booking_id))
+    except Exception:
+        logger.warning(
+            "trainer card booking_confirmed measure failed booking_id=%s",
+            booking_id,
+            exc_info=True,
+        )
     if not row2:
         return None
     ms, st_tip = await try_claim_first_booking_milestones(session, trainer_id)
@@ -5395,6 +5470,7 @@ async def decline_booking(
         {"bid": booking_id},
     )
     await sync_slot_status_for_occupancy(session, slot_id_decl)
+    await _hide_emptied_recurring_window(session, trainer_id, slot_id_decl)
     if client_row_decl is not None and slot_date_decl is not None:
         await resync_pending_reminders_for_client_day(
             session, client_row_decl, slot_date_decl, do_commit=False

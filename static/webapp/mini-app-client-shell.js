@@ -1019,6 +1019,25 @@
   var TAB_ORDER = { home: 0, catalog: 1, bookings: 2, more: 3 };
   var TAB_ORDER_SEASON = { home: 0, catalog: 1, bookings: 2, kk: 3, me: 4 };
 
+  var SHOWCASE_FROM_APP_KEY = 'trainer_crm_showcase_from_app';
+  var SHOWCASE_COLD_KEY = 'trainer_crm_showcase_cold';
+
+  function rememberShowcaseFromApp(path, opts) {
+    var key = normalizeRoutePath(path).split('?')[0].replace(/\.html$/, '').replace(/^.*\//, '');
+    if (key !== 'trainers') return;
+    try {
+      // replace — холодный диплинк (trainer_*): историю оболочки подменяем, назад идти некуда.
+      // Обычный переход — человек пришёл из приложения, даже если WebView не отдал referrer.
+      if (opts && opts.replace) {
+        global.sessionStorage.setItem(SHOWCASE_COLD_KEY, '1');
+        global.sessionStorage.removeItem(SHOWCASE_FROM_APP_KEY);
+      } else {
+        global.sessionStorage.setItem(SHOWCASE_FROM_APP_KEY, '1');
+        global.sessionStorage.removeItem(SHOWCASE_COLD_KEY);
+      }
+    } catch (e) { /* приватный режим */ }
+  }
+
   function rememberNavDirection(path) {
     var season = uiFlags.season_ui;
     var order = season ? TAB_ORDER_SEASON : TAB_ORDER;
@@ -1111,6 +1130,9 @@
     }
     if (!(opts && opts.replace) && shellTabs() && shellTabs().go(path)) return;
     rememberNavDirection(path);
+    // Витрина без Navigation API не верит history.length. WebView часто не отдаёт referrer
+    // на внутреннем переходе — метка доказывает, что страницу открыла оболочка, не холодная ссылка.
+    rememberShowcaseFromApp(path, opts);
     /* /p/… — публичная страница места, не файл внутри /static/webapp/. */
     var raw = String(path || '');
     var url = raw.charAt(0) === '/' ? withInit(raw) : withInit(webappBasePath() + raw);
@@ -1633,19 +1655,19 @@
    */
   var KK_BASE = '/static/webapp/';
   var KK_ASSET_VERSIONS = [
-    ['kto-kogo.css', '202611132'],
-    ['kto-kogo-model.js', '202611132'],
-    ['kto-kogo-screens-model.js', '202611132'],
-    ['kto-kogo.js', '202611132'],
-    ['kto-kogo-views.js', '202611132'],
-    ['kto-kogo-hub-cards.js', '202611132'],
-    ['kto-kogo-board.js', '202611132'],
-    ['kto-kogo-leagues.js', '202611132'],
-    ['kto-kogo-coin-model.js', '202611132'],
-    ['kto-kogo-coin.js', '202611132'],
-    ['kto-kogo-matches.js', '202611132'],
-    ['kto-kogo-league-identity.js', '202611132'],
-    ['kto-kogo-boot.js', '202611132'],
+    ['kto-kogo.css', '202611133'],
+    ['kto-kogo-model.js', '202611133'],
+    ['kto-kogo-screens-model.js', '202611133'],
+    ['kto-kogo.js', '202611133'],
+    ['kto-kogo-views.js', '202611133'],
+    ['kto-kogo-hub-cards.js', '202611133'],
+    ['kto-kogo-board.js', '202611133'],
+    ['kto-kogo-leagues.js', '202611133'],
+    ['kto-kogo-coin-model.js', '202611133'],
+    ['kto-kogo-coin.js', '202611133'],
+    ['kto-kogo-matches.js', '202611133'],
+    ['kto-kogo-league-identity.js', '202611133'],
+    ['kto-kogo-boot.js', '202611133'],
   ];
   /* Сервер подставляет в html всех страниц одну метку ?v= (asset_stamp.py), а не литерал из kto-kogo.html.
      Поэтому берём метку самой оболочки (ASSET_V — из её же <script src>); литерал из списка — запасной,
