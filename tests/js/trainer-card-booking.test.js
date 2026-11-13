@@ -243,12 +243,13 @@ describe('E, L, N', () => {
       search: '?trainer_id=99',
       initData: 'x',
       showcase: { items: [] },
-      session: { city_name: 'Минск' },
+      session: { city_id: 1, city_name: 'Минск' },
       routes: [trainerFallback(404)],
     });
     await tick(40);
     assert.match(miss.app.innerHTML, /<h1>Такого тренера нет<\/h1>/);
-    assert.match(miss.app.innerHTML, /Другие тренеры · Минск/);
+    // Доска States 3: «Другие тренеры в Минске» — предложный падеж (TASK-403, AC-003).
+    assert.match(miss.app.innerHTML, /data-act="to-list">Другие тренеры в Минске<\/button>/);
     assert.doesNotMatch(miss.app.innerHTML, /Не удалось загрузить тренера/);
     assert.match(miss.app.innerHTML, /<span class="tc-miss-ic"><svg [^>]*><circle cx="11" cy="11" r="7"\/>/);
     assert.match(miss.app.innerHTML, /Возможно, ссылка устарела\. Другие тренеры города — по кнопке ниже\./);
@@ -303,7 +304,8 @@ describe('E, L, N', () => {
     assert.equal(showcaseCalls() - before, 1);
     assert.equal(h.S.view, 'trainer');
     assert.equal(h.S.loadError, false);
-    h.click({ 'data-act': 'back' });
+    // Карточка по ссылке — корень (TASK-403, SPEC §8.1.3): в список ведёт «Другие тренеры», не «Назад».
+    h.click({ 'data-act': 'to-list' });
     await tick(20);
     assert.equal(h.S.view, 'list');
     assert.doesNotMatch(h.app.innerHTML, /Не удалось загрузить тренеров/);
@@ -358,7 +360,8 @@ describe('E, L, N', () => {
     });
     await tick(60);
     assert.match(h.app.innerHTML, /Вы в списке у Анны/);
-    h.click({ 'data-act': 'back' });
+    // Карточка по ссылке — корень (TASK-403): в список — «Другие тренеры» внизу.
+    h.click({ 'data-act': 'to-list' });
     await tick(20);
     assert.equal(h.S.view, 'list');
     h.click({ 'data-act': 'trainer', 'data-tid': String(other.id) });

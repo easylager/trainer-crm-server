@@ -24,7 +24,16 @@
   var sheetEl = document.getElementById('sheet');
   // Пришли с другого экрана (главная, «Поиск», каток, «Сохранённые») — снимок до наших pushState:
   // тогда «‹ Назад» в корне витрины уводит обратно (history.back), как #btnBack на других экранах клиента.
-  var CAME_FROM = (function () { try { return Number(history.length) > 1; } catch (e) { return false; } })();
+  // Под флагом единой карточки (TASK-403): где есть Navigation API, верим ему — он видит только записи этой
+  // страницы и её фрейма. history.length в iframe (Telegram Web) считает и историю родителя: холодная ссылка
+  // выглядела бы «пришли откуда-то», а history.back() увёл бы родительскую страницу. Флаг выключен — как раньше.
+  var CAME_FROM = (function () {
+    try {
+      var nav = window.navigation;
+      if (unifiedCard() && nav && typeof nav.canGoBack === 'boolean') return nav.canGoBack;
+      return Number(history.length) > 1;
+    } catch (e) { return false; }
+  })();
   // Панель вкладок прячем там, где закреплена кнопка записи/итога: запись, «отправлено», «заявка отправлена».
   var TABBAR_VIEWS = { list: true, trainer: true, week: true };
 
@@ -247,8 +256,13 @@
       S.stack = [];
       render();
       window.scrollTo(0, 0);
+      // Окна до записи устарели: только что занятое время иначе снова стоит первым и на главной кнопке.
+      loadSlots({ retain: true }).then(function (fresh) { if (fresh && S.view === 'trainer') render(); });
       return;
     }
+    // Карточка по внешней ссылке — корень (SPEC §8.1.3): стрелки нет, в список ведёт «Другие тренеры» внизу.
+    // Сюда попадаем только по popstate браузера (своя «назад» на корне не рисуется) — остаёмся на карточке.
+    if (rootCard()) return;
     var prev = S.stack.pop();
     if (!prev) {
       // Корень витрины (или тренер по прямой ссылке): есть откуда пришли — туда; иначе тренер → список.
@@ -676,6 +690,29 @@
     return unifiedCard() && qs.get('from') === 'hub';
   }
 
+  /**
+   * Карточка — корень (SPEC §8.1.3, ENTRIES §D п. 2): открыта по ссылке (?trainer_id=) снаружи — истории до
+   * витрины нет, — и глубже по витрине не ходили. Стрелки «Назад» нет, внизу «Другие тренеры {город}».
+   * После записи E стек пуст — «Назад» с E приводит сюда же (п. 5). С хаба — не корень: «Назад» ведёт на хаб.
+   */
+  function rootCard() {
+    return unifiedCard() && !CAME_FROM && !fromHub() && S.view === 'trainer' && !S.stack.length && !!num(qs.get('trainer_id'));
+  }
+
+  /**
+   * «Другие тренеры в Минске»; падеж неизвестен — «Другие тренеры · Тверь». Город — тот, чей список откроется
+   * (витрина грузится по S.cityId); город адреса не совпал с городом сессии или его нет — без города.
+   */
+  function othersLabel() {
+    var s = S.session || {};
+    var same = num(s.city_id) != null && num(s.city_id) === S.cityId;
+    var city = same ? String(s.city_name || '').trim() : '';
+    if (!city) return 'Другие тренеры';
+    var geo = window.CatalogGeoModel;
+    var loc = geo && typeof geo.cityLocative === 'function' ? geo.cityLocative(city) : null;
+    return loc ? 'Другие тренеры в ' + loc : 'Другие тренеры · ' + city;
+  }
+
   /** №37: «Снова к» — тот же action=book, но карточка G, не неделя. */
   function hubRebookEntry() {
     return fromHub() && qs.get('entry') === 'rebook';
@@ -780,8 +817,8 @@
     var dirLine = tcDirLine(t);
     var capLine = dirs.map(function (d) { return d.title; }).filter(Boolean).join(' · ');
     var backLabel = S.stack.length ? 'Тренеры' : CAME_FROM ? 'Назад' : 'Все тренеры';
-    // «Назад» — как прежде: в Telegram нативная стрелка в шапке, своя кнопка только в браузере (TASK-403 не трогаем).
-    var btns = backBtn(backLabel)
+    // В Telegram нативная стрелка в шапке, своя кнопка только в браузере; на корне (ссылка снаружи) её нет (TASK-403).
+    var btns = backBtn(backLabel) && !rootCard()
       ? '<button type="button" class="tc-hbtn tc-hbtn--back" data-act="back" aria-label="' + esc(backLabel) + '">' + TC_ICON.back + '</button>'
       : '';
     if (initData) {
@@ -983,6 +1020,8 @@
       if (S.saveNote) h += '<span class="mut" role="alert">' + esc(S.saveNote) + '</span>';
       if (S.shareNote) h += '<span class="mut" role="alert">' + esc(S.shareNote) + '</span>';
     }
+    // Корень по внешней ссылке: отдельный выход в список, не «Назад» (SPEC §8.1.3).
+    if (rootCard()) h += '<button type="button" class="tc-sec" data-act="to-list">' + esc(othersLabel()) + '</button>';
     h += '</div></div>';
     if (!t.can_book) return h + tcExitFooter(t, true);
     if (S.slots && S.slots.length) {
@@ -2106,10 +2145,9 @@
     return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
   }
 
-  /** L3: тренера нет. Город — как в сессии, без склонения (именительного «в Минск» не пишем). */
+  /** L3: тренера нет. «Другие тренеры в Минске» (доска States 3) — othersLabel(), падеж из CatalogGeoModel. */
   function screenL_missing() {
-    var city = String((S.session && S.session.city_name) || '').trim();
-    var label = city ? 'Другие тренеры · ' + city : 'Другие тренеры';
+    var label = othersLabel();
     return '<div class="tc tc-miss"><div class="tc-body"><div class="tc-miss-card">' +
       '<span class="tc-miss-ic">' + TC_ICON.search + '</span><h1>Такого тренера нет</h1>' +
       '<p class="tc-empty-p">Возможно, ссылка устарела. Другие тренеры города — по кнопке ниже.</p>' +
@@ -2471,7 +2509,8 @@
     if (!Back) return;
     // Список — корень раздела «Поиск» (панель вкладок под рукой): стрелки нет. Она появляется,
     // только когда идём вглубь (карточка тренера, неделя, запись) и ведёт на шаг назад.
-    if (S.view !== 'list' || S.stack.length) Back.set(back);
+    // Карточка по внешней ссылке — тоже корень (SPEC §8.1.3): стрелки нет (флаг выключен — rootCard() ложен).
+    if ((S.view !== 'list' || S.stack.length) && !rootCard()) Back.set(back);
     else Back.clear();
   }
 
