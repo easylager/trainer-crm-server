@@ -256,8 +256,11 @@
     var sp = String(readStartParam(ctx) || '').trim();
     var target = deepLinkTarget(sp);
     try {
-      /* Повтор той же ссылки тренера с «/» или со страницы /t/ — снова карточка, слот не теряется (SPEC §8.3). */
-      var trainerAgain = target && trainerDeepLinkTarget(sp) && (p === '/' || /^\/t\/[1-9][0-9]*(?:-|$)/.test(p));
+      /* Повтор той же ссылки тренера с «/» или со страницы /t/ этого же тренера — снова карточка, слот не теряется
+         (SPEC §8.3). На /t/ другого тренера использованная ссылка не перехватывает — открывается тренер страницы. */
+      var coach = target && parseTrainerDeepLink(sp);
+      var tPage = /^\/t\/([1-9][0-9]*)(?:-|$)/.exec(p);
+      var trainerAgain = !!coach && (p === '/' || (!!tPage && Number(tPage[1]) === coach.trainerId));
       if (storage && storage.getItem(DEEP_LINK_FLAG) === sp && !trainerAgain) target = null;
     } catch (e2) { /* */ }
     var path = target && target.path;

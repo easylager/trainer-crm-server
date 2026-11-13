@@ -482,6 +482,34 @@ describe('Mini App public URL recovery', () => {
     assert.doesNotMatch(ctx.location.pathname, /client-home/);
   });
 
+  it('использованная ссылка тренера 7 на /t/ другого тренера не перехватывает — открывается тренер страницы', () => {
+    for (const sp of ['trainer_7', 'trainer_7_s_55']) {
+      const storage = new Map([[G.DEEP_LINK_FLAG, sp], ['glide_mini_app_active_v1', '1']]);
+      const ctx = browser('https://app.test/t/9-aleksandr?init_data=signed', { storage, initData: '', startParam: sp });
+      assert.equal(G.maybePublicRedirect(ctx), true);
+      const u = new URL(ctx.location.href);
+      assert.equal(u.pathname, '/webapp/trainers');
+      assert.equal(u.searchParams.get('trainer_id'), '9', sp);
+      assert.equal(u.searchParams.get('slot_id'), null, sp);
+      assert.equal(storage.get(G.DEEP_LINK_FLAG), sp);
+    }
+  });
+
+  it('id тренера на /t/ сверяется числом: /t/70 не совпадает с trainer_7, /t/7 без слага — совпадает', () => {
+    const other = browser('https://app.test/t/70-ivan?init_data=signed', {
+      storage: new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55'], ['glide_mini_app_active_v1', '1']]), initData: '', startParam: 'trainer_7_s_55',
+    });
+    assert.equal(G.maybePublicRedirect(other), true);
+    assert.equal(new URL(other.location.href).searchParams.get('trainer_id'), '70');
+    const same = browser('https://app.test/t/7?init_data=signed', {
+      storage: new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55'], ['glide_mini_app_active_v1', '1']]), initData: '', startParam: 'trainer_7_s_55',
+    });
+    assert.equal(G.maybePublicRedirect(same), true);
+    const u = new URL(same.location.href);
+    assert.equal(u.searchParams.get('trainer_id'), '7');
+    assert.equal(u.searchParams.get('slot_id'), '55');
+  });
+
   it('повтор startapp тренера с корня / ведёт на карточку, не на главную', () => {
     const storage = new Map([[G.DEEP_LINK_FLAG, 'trainer_7_s_55_a_3_v_p3'], ['glide_mini_app_active_v1', '1']]);
     const ctx = browser('https://app.test/?startapp=trainer_7_s_55_a_3_v_p3', { storage, initData: 'signed', startParam: '' });

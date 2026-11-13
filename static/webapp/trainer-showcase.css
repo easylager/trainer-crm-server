@@ -464,3 +464,6 @@ button.tc-g-rink { cursor: pointer; }
 .tc-h-ask b { display: block; font-weight: 700; }
 .tc-h-ask span { display: block; font-size: 13px; color: var(--g-muted); }
 .tc-h-ask .tc-sec { flex: none; min-height: 44px; padding: 0 16px; }
+/* Пустая H (доска NoSlots): блок «окон нет» на всю ширину, выходы — внизу, как у карточки C. */
+.tc-h-none .warn { margin-top: 12px; }
+.tc-h-none .tc-sec svg { flex: none; }
