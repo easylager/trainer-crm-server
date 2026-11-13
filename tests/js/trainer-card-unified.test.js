@@ -181,7 +181,8 @@ describe('единая карточка: порядок и условия пок
 
   it('ошибка загрузки времени — «Не удалось загрузить время» и «Повторить»; выход внизу остаётся', async () => {
     const html = (await open('A', { slotsStatus: 500 })).app.innerHTML;
-    assert.match(html, /Не удалось загрузить время<\/p><button type="button" class="tc-sec tc-sec--in" data-act="reslots">Повторить<\/button>/);
+    // TASK-401 (доска States 1): строка «Проверьте сеть…» и «Повторить» / «Написать» в ряд.
+    assert.match(html, /Не удалось загрузить время<\/p><p class="tc-empty-p">Проверьте сеть и повторите\. Тренеру можно и написать\.<\/p><div class="tc-l1-acts"><button type="button" class="tc-sec tc-sec--main" data-act="reslots">Повторить<\/button>/);
     assert.match(html, /class="ft col tc-ft"><button type="button" class="cta" data-act="write">Написать тренеру/);
   });
 

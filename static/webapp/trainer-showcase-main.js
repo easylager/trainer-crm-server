@@ -655,6 +655,8 @@
     chevron: '<svg class="tc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>',
     bell: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 17h12l-1.5-2V10a4.5 4.5 0 0 0-9 0v5L6 17Z"/><path d="M10 20h4"/></svg>',
     share: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>',
+    search: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+    check: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
   };
   function tcHeart(on) {
     return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + (on ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg>';
@@ -766,11 +768,13 @@
       return '<span class="tc-vh" role="status">Загружаем время…</span><div class="tc-times" aria-hidden="true"><i class="tc-sk"></i><i class="tc-sk"></i><i class="tc-sk"></i></div>';
     }
     if (S.slotsError) {
-      // L1: «Повторить» и «Написать» рядом с ошибкой. Нет Telegram — кнопки «Написать» нет.
+      // L1 (доска States 1): «Повторить» и «Написать» в ряд. Нет Telegram — ни кнопки «Написать», ни строки о ней.
       var write = t.contact_url
-        ? '<button type="button" class="tc-sec tc-sec--in" data-act="write">Написать</button>'
+        ? '<button type="button" class="tc-sec" data-act="write">Написать</button>'
         : '';
-      return '<p class="tc-empty-t">Не удалось загрузить время</p><button type="button" class="tc-sec tc-sec--in" data-act="reslots">Повторить</button>' + write;
+      return '<p class="tc-empty-t">Не удалось загрузить время</p>' +
+        '<p class="tc-empty-p">Проверьте сеть и повторите.' + (t.contact_url ? ' Тренеру можно и написать.' : '') + '</p>' +
+        '<div class="tc-l1-acts"><button type="button" class="tc-sec tc-sec--main" data-act="reslots">Повторить</button>' + write + '</div>';
     }
     if (!S.slots.length) {
       var hint = initData
@@ -1319,7 +1323,7 @@
     var place = slot.is_online ? 'онлайн' : (slot.arena_name || (arenaById(slot.arena_id) || {}).name || '');
     var svcDir = svc ? M.direction(M.directionKeyForServiceId(svc.service_id)) : null;
     var what = svc ? (svcDir && svcDir.ids.length === 1 && svc.is_public !== false ? svcDir.title : svc.service_name) : '';
-    var h = '<div class="' + (unifiedCard() ? 'tc tc-book' : 'bd') + '">' + backBtn('Назад');
+    var h = unifiedCard() ? '<div class="tc tc-book">' + screenD_head() : '<div class="bd">' + backBtn('Назад');
     h += '<div class="sum"><div class="k">' + (t.photo_url ? '<img src="' + esc(t.photo_url) + '" alt="">' : '<i>' + esc(t.initial || 'Т') + '</i>') +
       '<div class="when"><b>' + esc(M.slotWhen(slot, S.todayIso)) + '</b><br><span>' + esc([t.name, what, place].filter(Boolean).join(' · ')) + '</span></div></div></div>';
     if (!svc) {
@@ -1719,20 +1723,42 @@
       var alt = (S.slots || []).filter(function (s) { return String(s.id) !== String(lostId); }).slice(0, 3);
       var svc = currentService();
       var price = svc ? M.cardPriceHtml(svc).replace(/<\/?b>/g, '') : '';
-      var saved = b ? (unified ? 'Ваши данные сохранены. ' : 'Данные запомнили. ') : '';
-      var tail = alt.length ? 'Свободное время у ' + genFirst(S.trainer.first_name) + ':' : 'Другого свободного времени пока нет.';
-      var rows = alt.map(function (s) {
-        var sub = [s.is_online ? 'онлайн' : s.arena_name, price].filter(Boolean).join(' · ');
-        var label = unified ? screenL_slotTitle(s) : M.slotWhen(s, S.todayIso).replace(/–.*$/, '');
-        return '<button type="button" data-act="slot" data-slot="' + esc(s.id) + '"><span><b>' + esc(label) + '</b><br>' + esc(sub) + '</span><em>›</em></button>';
-      }).join('');
-      var week = unified ? 'Всё время тренера' : 'Другое время';
+      if (unified) {
+        screenL_takenSheet(title, alt, !!b);
+        if (S.view === 'book') render();
+        return;
+      }
+      var saved = b ? 'Данные запомнили. ' : '';
       openSheet('<div class="sh"><h4>' + esc(title) + '</h4><button type="button" class="x" data-act="sheet-close" aria-label="Закрыть">✕</button></div>' +
-        '<span class="mut">' + esc(saved + tail) + '</span>' +
-        (rows ? '<div class="opt">' + rows + '</div>' : (unified ? '' : '<div class="opt"></div>')) +
-        '<button type="button" class="more c" data-act="week">' + week + '</button>');
+        '<span class="mut">' + esc(saved + (alt.length ? 'Свободное время у ' + genFirst(S.trainer.first_name) + ':' : 'Другого свободного времени пока нет.')) + '</span>' +
+        '<div class="opt">' + alt.map(function (s) {
+          var sub = [s.is_online ? 'онлайн' : s.arena_name, price].filter(Boolean).join(' · ');
+          return '<button type="button" data-act="slot" data-slot="' + esc(s.id) + '"><span><b>' + esc(M.slotWhen(s, S.todayIso).replace(/–.*$/, '')) + '</b><br>' + esc(sub) + '</span><em>›</em></button>';
+        }).join('') + '</div>' +
+        '<button type="button" class="more c" data-act="week">Другое время</button>');
       if (S.view === 'book') render();
     });
+  }
+
+  /** L2 (доска States 2): «Выберите другое время у {Имя}:», окна чипами «сб, 11:30», «Всё время тренера». */
+  function screenL_takenSheet(title, alt, hadForm) {
+    var saved = hadForm ? 'Ваши данные сохранены. ' : '';
+    var tail = alt.length ? 'Выберите другое время у ' + genFirst(S.trainer.first_name) + ':' : 'Другого свободного времени пока нет.';
+    var chips = alt.map(function (s) {
+      return '<button type="button" class="tc-chip" data-act="slot" data-slot="' + esc(s.id) + '">' + esc(tcWhen(s)) + '</button>';
+    }).join('');
+    openSheet('<div class="sh"><h4>' + esc(title) + '</h4><button type="button" class="x" data-act="sheet-close" aria-label="Закрыть">✕</button></div>' +
+      '<span class="mut">' + esc(saved + tail) + '</span>' +
+      (chips ? '<div class="tc-l2-times">' + chips + '</div>' : '') +
+      '<button type="button" class="tc-sec" data-act="week">Всё время тренера</button>');
+  }
+
+  /** D: шапка «‹ Запись» (доска Book). В Telegram стрелка нативная — остаётся только заголовок. */
+  function screenD_head() {
+    var native = window.MiniAppBack && window.MiniAppBack.isNative();
+    return '<div class="tc-bhead">' +
+      (native ? '' : '<button type="button" class="tc-bback" data-act="back" aria-label="Назад">' + TC_ICON.back + '</button>') +
+      '<h1>Запись</h1></div>';
   }
 
   /** «Сб, 10:00» — заголовок шторки L2. Пустое время не подставляем. */
@@ -1745,8 +1771,10 @@
   function screenL_missing() {
     var city = String((S.session && S.session.city_name) || '').trim();
     var label = city ? 'Другие тренеры · ' + city : 'Другие тренеры';
-    return '<div class="tc tc-miss"><div class="tc-body"><h1>Такого тренера нет</h1>' +
-      '<button type="button" class="cta" data-act="to-list">' + esc(label) + '</button></div></div>';
+    return '<div class="tc tc-miss"><div class="tc-body"><div class="tc-miss-card">' +
+      '<span class="tc-miss-ic">' + TC_ICON.search + '</span><h1>Такого тренера нет</h1>' +
+      '<p class="tc-empty-p">Возможно, ссылка устарела. Другие тренеры города — по кнопке ниже.</p>' +
+      '<button type="button" class="cta" data-act="to-list">' + esc(label) + '</button></div></div></div>';
   }
 
   /**
@@ -1773,9 +1801,9 @@
 
   /** Тренер по ссылке не загрузился (сеть, 5xx): не «тренера нет», а повтор (как L1 на доске States). */
   function screenL_loadError() {
-    return '<div class="tc tc-miss"><div class="tc-body"><h1>Не удалось загрузить тренера</h1>' +
+    return '<div class="tc tc-miss"><div class="tc-body"><div class="tc-miss-card"><h1>Не удалось загрузить тренера</h1>' +
       '<p class="tc-empty-p">Проверьте сеть и повторите.</p>' +
-      '<button type="button" class="cta" data-act="retry-trainer">Повторить</button></div></div>';
+      '<button type="button" class="cta" data-act="retry-trainer">Повторить</button></div></div></div>';
   }
 
   /** N: после регистрации по ссылке тренера. Абонемента нет — строки нет. */
@@ -1828,7 +1856,7 @@
     var line = [x.participant, M.daySmall(slot.slot_date, S.todayIso) + ', ' + String(slot.start_time).slice(0, 5), place].filter(Boolean).join(' · ');
     var unified = unifiedCard();
     var sentTitle = 'Запись отправлена ' + esc(M.dativeFirst(t.first_name, RuName));
-    var h = '<div class="' + (unified ? 'tc tc-sent' : 'bd') + '"><div class="okc" aria-hidden="true">✓</div><div class="ctr">' +
+    var h = '<div class="' + (unified ? 'tc tc-sent' : 'bd') + '"><div class="okc" aria-hidden="true">' + (unified ? TC_ICON.check : '✓') + '</div><div class="ctr">' +
       (unified ? '<h1>' + sentTitle + '</h1>' : '<h3>' + sentTitle + '</h3>') +
       '<span class="mut">' + esc(line) + '</span></div>';
     var steps;
@@ -1851,7 +1879,8 @@
     if (!slot.is_online) {
       var met = arenaById(slot.arena_id) || (slot.arena_name ? { name: slot.arena_name, map_link: slot.map_link } : null);
       if (met && !met.map_link && slot.map_link) met = Object.assign({}, met, { map_link: slot.map_link });
-      if (met) h += meetHtml(t, [met]);
+      // При флаге блока «Где встретимся» нет (доска Sent): маршрут — кнопкой внизу, адрес — в «Моих записях».
+      if (met && !unified) h += meetHtml(t, [met]);
       var bring = unified ? '<h2 class="tc-h2">Что взять с собой</h2>' : '<h4>Что взять с собой</h4>';
       h += '<div class="card">' + bring + '<p>' + esc(M.takeWithYou(x.dirKey, arenaById(slot.arena_id))) + '</p></div>';
     }
@@ -1861,7 +1890,7 @@
         ? '<button type="button" class="sec2" data-act="route">Маршрут до катка</button>'
         : '';
       h += '</div><div class="ft col tc-ft"><button type="button" class="cta" data-act="my-bookings">Мои записи</button>' +
-        route + '<button type="button" class="sec2" data-act="done">Готово</button></div>';
+        route + '<button type="button" class="tc-link tc-done" data-act="done">Готово</button></div>';
     } else {
       h += '</div><div class="ft col"><button type="button" class="cta" data-act="my-bookings">Мои записи</button>' +
 '</div>';

@@ -362,9 +362,13 @@ button.tc-where-row { cursor: pointer; }
   margin: -12px max(-12px, (100% - 560px) / 2) 0;
   padding-bottom: 16px;
 }
-.tc-book .sum, .tc-sent .okc { border-radius: var(--g-r-md); }
-.tc-book .sum { background: var(--g-ink); color: var(--g-bg); padding: 14px; }
-.tc-book .sum .when b, .tc-book .sum .when span { color: inherit; }
+/* Сводка D тёмная в обеих темах (доски Book и BookDark): --g-dark не переключается темой, в отличие от --g-ink. */
+.tc-book .sum { background: var(--g-dark); color: var(--g-on-photo); border: 0; border-radius: var(--g-r-lg); padding: 16px; }
+.tc-book .sum .when b { color: inherit; }
+.tc-book .sum .when span { color: var(--g-on-dark-muted); }
+.tc-bhead { display: flex; align-items: center; min-height: 44px; }
+.tc-bhead h1 { margin: 0; font-size: 16px; font-weight: 800; line-height: 1.2; color: var(--g-ink); }
+.tc-bback { all: unset; box-sizing: border-box; cursor: pointer; width: 44px; height: 44px; margin-left: -12px; display: grid; place-items: center; color: var(--g-accent-ink); }
 .tc-book .sum img, .tc-book .sum i { border-radius: var(--g-r-sm); }
 .tc-book :focus-visible, .tc-sent :focus-visible, .tc-miss :focus-visible, .sheet.tc-sheet :focus-visible {
   outline: 2px solid var(--g-accent);
@@ -373,11 +377,20 @@ button.tc-where-row { cursor: pointer; }
 .tc-book .inpx:focus-visible { outline: 2px solid var(--g-accent); outline-offset: 2px; border-color: var(--g-accent); }
 .tc-book .tc-h2, .tc-sent .tc-h2 { margin: 0; }
 .tc-book .fl { display: grid; gap: 8px; }
-.tc-sent h1, .tc-miss h1 { margin: 0; font: 400 28px/1.1 var(--g-font-display); color: var(--g-ink); }
-.tc-sent .okc { width: 56px; height: 56px; display: grid; place-items: center; background: var(--g-accent-wash); color: var(--g-accent-ink); font-weight: 800; }
+.tc-sent h1 { margin: 0; font: 400 24px/1.1 var(--g-font-display); color: var(--g-ink); }
+.tc-sent .okc { width: 64px; height: 64px; border-radius: var(--g-r-lg); display: grid; place-items: center; background: var(--g-accent-wash); color: var(--g-accent-ink); }
+.tc-ft .tc-done { margin: 0; display: flex; justify-content: center; }
+.tc-miss-card { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: var(--g-r-card); padding: 24px 20px; text-align: center; display: grid; justify-items: center; }
+.tc-miss-ic { width: 56px; height: 56px; margin-bottom: 14px; border-radius: var(--g-r-card); background: var(--g-chip); color: var(--g-muted); display: grid; place-items: center; }
+.tc-miss h1 { margin: 0; font-size: 17px; font-weight: 800; line-height: 1.3; color: var(--g-ink); }
+.tc-miss .tc-empty-p { font-size: 14px; }
+.tc-l1-acts { display: flex; gap: 8px; margin-top: 12px; }
+.tc-l1-acts .tc-sec { flex: 1; min-width: 0; }
+.tc-sec--main { background: var(--g-accent); color: var(--g-on-accent); border-color: transparent; font-weight: 800; }
+.tc-l2-times { display: flex; flex-wrap: wrap; gap: 8px; }
 .tc-roster { display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--g-r-md); background: var(--g-accent-wash); color: var(--g-ink); }
 .tc-roster b { font-weight: 800; }
 .tc-roster span { font-size: 14px; color: var(--g-ink); }
-.tc-miss .cta { min-height: 48px; margin-top: 8px; }
+.tc-miss .cta { min-height: 48px; margin-top: 16px; width: 100%; }
 .sheet.tc-sheet { border-top-left-radius: var(--g-r-lg); border-top-right-radius: var(--g-r-lg); background: var(--g-surface); color: var(--g-ink); }
 .sheet.tc-sheet .mut { color: var(--g-muted); }

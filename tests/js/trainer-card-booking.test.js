@@ -188,7 +188,10 @@ describe('E, L, N', () => {
     assert.match(html, /Что взять с собой/);
     assert.match(html, /Мои записи/);
     assert.match(html, /Маршрут до катка/);
-    assert.match(html, /Готово/);
+    assert.match(html, /<button type="button" class="tc-link tc-done" data-act="done">Готово<\/button>/, '«Готово» — ссылка, без рамки');
+    assert.doesNotMatch(html, /Где встретимся/, 'блока «Где встретимся» на E нет (доска Sent)');
+    assert.doesNotMatch(html, /Написать тренеру/);
+    assert.match(html, /<div class="okc" aria-hidden="true"><svg [^>]*><path d="m5 12.5 4.5 4.5L19 7.5"\/><\/svg><\/div>/);
     assert.doesNotMatch(html, /Напомним|за 2 часа/);
     assert.equal(h.S.view, 'sent');
     back.fn();
@@ -215,6 +218,13 @@ describe('E, L, N', () => {
     assert.match(h.sheet.innerHTML, /Ваши данные сохранены/);
     assert.match(h.sheet.innerHTML, /Всё время тренера/);
     assert.doesNotMatch(h.sheet.innerHTML, /Время за вами/);
+    // доска States 2: «Выберите другое время у Анны:», окна чипами со строчной «сб, 11:30»
+    assert.match(h.sheet.innerHTML, /Ваши данные сохранены\. Выберите другое время у Анны:/);
+    assert.doesNotMatch(h.sheet.innerHTML, /Свободное время/);
+    const chips = [...h.sheet.innerHTML.matchAll(/<button type="button" class="tc-chip" data-act="slot" data-slot="(\d+)">([^<]*)<\/button>/g)].map((m) => m[2]);
+    assert.deepEqual(chips, ['сб, 11:30', 'вс, 9:00', 'вт, 18:00']);
+    assert.doesNotMatch(h.sheet.innerHTML, /class="opt"/, 'не строки');
+    assert.match(h.sheet.innerHTML, /<button type="button" class="tc-sec" data-act="week">Всё время тренера<\/button>/);
   });
 
   it('L1: «Написать» рядом с «Повторить»; L3: тренера нет', async () => {
@@ -223,6 +233,11 @@ describe('E, L, N', () => {
     assert.match(err.app.innerHTML, /Не удалось загрузить время/);
     assert.match(err.app.innerHTML, /data-act="reslots">Повторить/);
     assert.match(err.app.innerHTML, /data-act="write">Написать</);
+    assert.match(err.app.innerHTML, /<p class="tc-empty-p">Проверьте сеть и повторите\. Тренеру можно и написать\.<\/p>/);
+    const noTg = await openBook({ trainer: { ...trainer, contact_url: null }, routes: [slotsRoute([], 500)] });
+    await tick(40);
+    assert.match(noTg.app.innerHTML, /<p class="tc-empty-p">Проверьте сеть и повторите\.<\/p>/);
+    assert.doesNotMatch(noTg.app.innerHTML, /Написать/);
     const miss = boot({
       unified: true,
       search: '?trainer_id=99',
@@ -235,6 +250,8 @@ describe('E, L, N', () => {
     assert.match(miss.app.innerHTML, /<h1>Такого тренера нет<\/h1>/);
     assert.match(miss.app.innerHTML, /Другие тренеры · Минск/);
     assert.doesNotMatch(miss.app.innerHTML, /Не удалось загрузить тренера/);
+    assert.match(miss.app.innerHTML, /<span class="tc-miss-ic"><svg [^>]*><circle cx="11" cy="11" r="7"\/>/);
+    assert.match(miss.app.innerHTML, /Возможно, ссылка устарела\. Другие тренеры города — по кнопке ниже\./);
   });
 
   for (const [name, route] of [['503', () => trainerFallback(503)], ['сеть', () => trainerFallback(0)]]) {
@@ -315,5 +332,36 @@ describe('E, L, N', () => {
     await tick(60);
     assert.equal(h.S.trainer.id, other.id);
     assert.doesNotMatch(h.app.innerHTML, /Вы в списке/);
+  });
+});
+
+describe('B: D по доске Book и размеры E', () => {
+  it('D: заголовок «Запись»; в браузере — стрелка «Назад», в Telegram — только заголовок', async () => {
+    const h = await openBook();
+    await tick(40);
+    h.click({ 'data-act': 'slot', 'data-slot': '101' });
+    assert.match(h.app.innerHTML, /<div class="tc-bhead"><button type="button" class="tc-bback" data-act="back" aria-label="Назад"><svg[^>]*>.*?<\/svg><\/button><h1>Запись<\/h1><\/div>/);
+    assert.equal(h.app.innerHTML.match(/<h1/g).length, 1);
+    const back = { fn: null, isNative() { return true; }, set(fn) { this.fn = fn; }, clear() { this.fn = null; } };
+    const tgh = await openBook({ miniAppBack: back });
+    await tick(40);
+    tgh.click({ 'data-act': 'slot', 'data-slot': '101' });
+    assert.match(tgh.app.innerHTML, /<div class="tc-bhead"><h1>Запись<\/h1><\/div>/);
+  });
+
+  it('CSS: сводка D тёмная в обеих темах, .okc 64 и r20, h1 E 24px — токены', () => {
+    const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../static/webapp/trainer-showcase.css'), 'utf8');
+    const rule = (sel) => {
+      const i = css.indexOf('\n' + sel + ' {');
+      assert.ok(i >= 0, sel);
+      return css.slice(i, css.indexOf('}', i));
+    };
+    assert.match(rule('.tc-book .sum'), /background: var\(--g-dark\)/);
+    assert.match(rule('.tc-book .sum'), /color: var\(--g-on-photo\)/);
+    assert.doesNotMatch(rule('.tc-book .sum'), /--g-ink/);
+    assert.match(rule('.tc-sent .okc'), /width: 64px; height: 64px; border-radius: var\(--g-r-lg\)/);
+    assert.match(rule('.tc-sent h1'), /font: 400 24px\/1\.1 var\(--g-font-display\)/);
+    const block = css.slice(css.indexOf('/* Запись D/D2/E'));
+    assert.doesNotMatch(block, /#[0-9a-fA-F]{3,6}\b/, 'в блоке 401 нет hex');
   });
 });
