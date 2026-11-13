@@ -580,6 +580,7 @@
     S.entryNote = '';
     S.shareNote = '';
     S.bioOpen = false;
+    S.revOpen = {};
     loadEdge(t);
     if (opts.view !== false) go('trainer');
     return loadSlots().then(function (fresh) {
@@ -984,6 +985,51 @@
     }).join('') + '</div></section>';
   }
 
+  /**
+   * «Отзывы» (SPEC §3.1 №8, доска A): от трёх подтверждённых текстов — сводка и лента вбок; меньше — блока нет,
+   * оценка остаётся в герое. Сводка — та же строка, что в герое (RuText); нет оценки — только лента.
+   */
+  function tcReviews(t) {
+    var rows = M.reviewsShown(t.reviews);
+    if (!rows.length) return '';
+    var head = '';
+    var m = /^★\s*([\d,]+)\s*·\s*(.+)$/.exec(M.ratingLine(t.rating_avg, t.rating_count) || '');
+    if (m) {
+      head = '<div class="tc-rev-sum"><b>' + esc(m[1]) + '</b><div><span class="tc-rev-stars" role="img" aria-label="Рейтинг ' + esc(m[1]) + ' из 5">' +
+        M.reviewStars(parseFloat(m[1].replace(',', '.'))) + '</span><span>' + esc(m[2]) + '</span></div></div>';
+    }
+    var cards = rows.map(function (r, i) {
+      var open = !!(S.revOpen && S.revOpen[i]);
+      var pv = M.reviewPreview(r.text);
+      var n = Math.max(1, Math.min(5, Math.round(Number(r.rating) || 0)));
+      var when = M.reviewDate(r.date);
+      return '<article class="tc-rev"><header><b>' + esc(r.name || 'Ученик') + '</b><span class="tc-rev-stars" role="img" aria-label="' + n + ' из 5">' +
+        M.reviewStars(n) + '</span></header><p id="tcRev' + i + '">' + esc(open ? String(r.text).trim() : pv.text) + '</p>' +
+        (pv.cut && !open ? '<button type="button" class="tc-link" data-act="rev-more" data-i="' + i + '" aria-controls="tcRev' + i + '" aria-expanded="false">Читать полностью</button>' : '') +
+        (when ? '<time datetime="' + esc(String(r.date).slice(0, 10)) + '">' + esc(when) + '</time>' : '') + '</article>';
+    }).join('');
+    return '<section class="tc-card tc-revs" aria-labelledby="tcRevH"><h2 class="tc-h2" id="tcRevH">Отзывы</h2>' + head +
+      '<div class="tc-lane tc-rev-lane" role="region" aria-label="Отзывы учеников" tabindex="0">' + cards + '</div>' +
+      '<p class="tc-note tc-rev-note">Тексты отзывов проверяем перед публикацией.</p></section>';
+  }
+
+  /** «На занятиях» (SPEC §3.1 №9, доска A): фото помимо героя, лента вбок. Нет таких фото — блока нет. */
+  function tcClassPhotos(t) {
+    var hero = t.photo_url || '';
+    var seen = {};
+    var urls = (Array.isArray(t.class_photos) ? t.class_photos : []).filter(function (u) {
+      u = String(u || '');
+      if (!u || u === hero || seen[u]) return false;
+      seen[u] = true;
+      return true;
+    });
+    if (!urls.length) return '';
+    return '<section class="tc-gal" aria-labelledby="tcGalH"><h2 class="tc-h2" id="tcGalH">На занятиях</h2>' +
+      '<ul class="tc-lane tc-gal-lane" aria-label="Фото с занятий" tabindex="0">' + urls.map(function (u, i) {
+        return '<li><img src="' + esc(u) + '" alt="Фото с занятия ' + (i + 1) + ' из ' + urls.length + '" loading="lazy" decoding="async"></li>';
+      }).join('') + '</ul></section>';
+  }
+
   /** Выходы без записи: первый — главный. F — «Оставить заявку» первым (SPEC §5.3), C — «Написать тренеру». */
   function tcExitFooter(t, requestFirst) {
     var acts = [];
@@ -1013,6 +1059,8 @@
     h += tcEducation(t);
     h += tcWhere(t, svc);
     h += tcOtherTariffs(svc);
+    h += tcReviews(t);
+    h += tcClassPhotos(t);
     if (initData) {
       h += '<div class="tc-acts"><button type="button" class="tc-sec" data-act="save" aria-pressed="' + !!S.saved + '">' +
         (S.saved ? '♥ Тренер сохранён · убрать' : '♡ Сохранить тренера') + '</button>' +
@@ -2641,6 +2689,21 @@
         // Кнопка исчезла — фокус на раскрытый текст, а не в начало страницы.
         var bioEl = appEl.querySelector && appEl.querySelector('#tcBio');
         if (bioEl) { bioEl.setAttribute('tabindex', '-1'); try { bioEl.focus({ preventScroll: true }); } catch (e) { /* */ } }
+        break;
+      }
+      case 'rev-more': {
+        var ri = el.getAttribute('data-i');
+        var lane = appEl.querySelector && appEl.querySelector('.tc-rev-lane');
+        var laneX = lane ? lane.scrollLeft : 0;
+        S.revOpen = S.revOpen || {};
+        S.revOpen[ri] = true;
+        render();
+        // Лента перерисована — возвращаем её прокрутку, иначе раскрытый отзыв уезжает за край.
+        lane = appEl.querySelector && appEl.querySelector('.tc-rev-lane');
+        if (lane) lane.scrollLeft = laneX;
+        // Кнопка исчезла — фокус на раскрытый отзыв, а не в начало страницы.
+        var revEl = appEl.querySelector && appEl.querySelector('#tcRev' + ri);
+        if (revEl) { revEl.setAttribute('tabindex', '-1'); try { revEl.focus({ preventScroll: true }); } catch (e) { /* */ } }
         break;
       }
       case 'share': shareTrainer(el); break;
