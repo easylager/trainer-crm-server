@@ -850,9 +850,10 @@
       .map(function (r) { return { title: r.title, price: M.formatMoney(r.priceCents, cur) }; });
   }
 
-  function tcChip(slot, i, many) {
+  function tcChip(t, slot, i, many) {
     var small = [];
-    if (many && slot.arena_name) small.push(slot.arena_name);
+    var place = many ? tcSlotPlace(t, slot) : '';
+    if (place && place !== 'онлайн') small.push(place);
     if (slot.capacity > 1 && slot.spots_left != null) small.push('осталось ' + M.word(slot.spots_left, 'место', 'места', 'мест'));
     return '<button type="button" class="tc-chip' + (i === 0 ? ' is-first' : '') + (small.length ? ' tc-chip--2' : '') + '" data-act="slot" data-slot="' + esc(slot.id) + '">' +
       esc(tcWhen(slot)) + (small.length ? '<small>' + esc(small.join(' · ')) + '</small>' : '') + '</button>';
@@ -887,7 +888,7 @@
     }
     if (!S.slots.length) return tcNoSlots(t);
     var many = (t.arenas || []).length > 1;
-    return '<div class="tc-times">' + S.slots.slice(0, 3).map(function (s, i) { return tcChip(s, i, many); }).join('') +
+    return '<div class="tc-times">' + S.slots.slice(0, 3).map(function (s, i) { return tcChip(t, s, i, many); }).join('') +
       '<button type="button" class="tc-chip tc-chip--alt" data-act="week">Другое время</button></div>';
   }
 
@@ -910,7 +911,7 @@
     }
     var online = !!(svc && svc.is_online);
     var n = (t.arenas || []).length;
-    var where = online ? 'онлайн' : n === 1 ? t.arenas[0].name : n > 1 ? M.word(n, 'каток', 'катка', 'катков') : '';
+    var where = online ? 'онлайн' : n === 1 ? tcArenaLabel(t, t.arenas[0]) : n > 1 ? M.word(n, 'каток', 'катка', 'катков') : '';
     var dur = t.session_duration_minutes ? t.session_duration_minutes + ' мин' : '';
     var has = !!(S.slots && S.slots.length);
     var tiles = svc ? tcTiles(svc) : [];
@@ -957,6 +958,15 @@
     var primary = String((t && t.primary_arena_name) || '').trim();
     if (list.length === 1 && primary) return primary;
     return (a && a.name) || '';
+  }
+
+  /** Имя площадки слота — то же, что в «Где»: public_name, иначе короткое primary, иначе сырое. */
+  function tcSlotPlace(t, slot) {
+    if (!slot) return '';
+    if (slot.is_online) return 'онлайн';
+    var a = arenaOf(t, slot.arena_id);
+    if (a) return tcArenaLabel(t, a);
+    return slot.arena_name || '';
   }
 
   /** «Где проходят занятия»: каток, адрес, прокат — до записи. Онлайн — формат в карточке цены (M4). */
@@ -1227,7 +1237,8 @@
   function meetHtml(t, arenas, opts) {
     opts = opts || {};
     var rows = (arenas || []).filter(Boolean).map(function (a) {
-      return '<div class="mt-place"><div><b>' + esc(a.name) + '</b>' + (a.address ? '<span>' + esc(a.address) + '</span>' : '') +
+      var placeName = unifiedCard() ? (tcArenaLabel(t, a) || a.name) : a.name;
+      return '<div class="mt-place"><div><b>' + esc(placeName) + '</b>' + (a.address ? '<span>' + esc(a.address) + '</span>' : '') +
         (opts.rental && a.rental_cents ? '<span>Прокат коньков ' + esc(M.formatMoney(a.rental_cents, a.rental_currency)) + '</span>' : '') + '</div>' +
         (a.map_link ? '<button type="button" class="mt-route" data-act="map" data-href="' + esc(a.map_link) + '">Маршрут</button>' : '') + '</div>';
     }).join('');
@@ -1357,7 +1368,7 @@
     var arenas = t.arenas || [];
     var primary = String(t.primary_arena_name || '').trim();
     var a = arenas.filter(function (x) { return primary && (x.name === primary || x.name === primary.replace(/[«»]/g, '')); })[0] || arenas[0];
-    var name = (a && a.name) || primary;
+    var name = a ? tcArenaLabel(t, a) : primary;
     if (!name) return '';
     var sub = [a && a.address, 'основной каток'].filter(Boolean).join(' · ');
     var inner = '<span class="tc-ic">' + TC_ICON.pin + '</span><span class="tc-where-t"><b>' + esc(name) + '</b>' +
@@ -1386,9 +1397,13 @@
       '<div class="tc-g-id"><h1>' + esc(t.name) + '</h1>' +
       (dirLine ? '<p>' + esc(dirLine) + '</p>' : '') + '</div></div>';
     if (t.can_book) h += gBookCard(t, svc);
-    var trustBits = [tcAbout(t), tcEducation(t)].filter(Boolean);
+    var reviews = tcReviews(t);
+    var photos = tcClassPhotos(t);
+    var trustBits = [tcAbout(t), tcEducation(t), reviews, photos].filter(Boolean);
     if (trustBits.length) {
-      h += '<button type="button" class="tc-g-trust" data-act="trust" aria-expanded="' + !!S.trustOpen + '">О тренере и дипломы' + TC_ICON.down + '</button>';
+      // Доска G: «О тренере, отзывы и дипломы», когда внутри есть отзывы (≥3). Нет отзывов — не обещаем их.
+      var trustLabel = reviews ? 'О тренере, отзывы и дипломы' : 'О тренере и дипломы';
+      h += '<button type="button" class="tc-g-trust" data-act="trust" aria-expanded="' + !!S.trustOpen + '">' + trustLabel + TC_ICON.down + '</button>';
       if (S.trustOpen) h += '<div class="tc-g-trust-b">' + trustBits.join('') + '</div>';
     }
     h += gRink(t);
@@ -1423,7 +1438,10 @@
     }
     h += '<div class="tc-g-when">' + esc(screenL_slotTitle(first)) + '</div>';
     var bits = [];
-    if (first.arena_name) bits.push(first.arena_name);
+    if (!first.is_online) {
+      var place = tcSlotPlace(t, first);
+      if (place) bits.push(place);
+    } else if (first.arena_name) bits.push(first.arena_name);
     var fmt = svc && (svc.title || svc.service_name);
     if (fmt) bits.push(fmt);
     if (t.session_duration_minutes) bits.push(t.session_duration_minutes + ' мин');
@@ -1487,9 +1505,10 @@
     if (rows.length) {
       h += '<div class="tc-h-grid">' + rows.map(function (s) {
         var on = picked && String(picked.id) === String(s.id);
+        var p = s.is_online ? (s.arena_name || '') : tcSlotPlace(t, s);
         return '<button type="button" class="tc-h-tile" data-act="week-slot" data-slot="' + esc(s.id) + '" aria-pressed="' + !!on + '"><b>' +
           esc(String(s.start_time || '').slice(0, 5).replace(/^0(\d)/, '$1')) + '</b>' +
-          (s.arena_name ? '<span>' + esc(s.arena_name) + '</span>' : '') + '</button>';
+          (p ? '<span>' + esc(p) + '</span>' : '') + '</button>';
       }).join('') + '</div>';
     }
     h += '</div>';
@@ -1746,12 +1765,16 @@
     var t = S.trainer;
     var svc = bookingService();
     var slot = b.slot;
-    var place = slot.is_online ? 'онлайн' : (slot.arena_name || (arenaById(slot.arena_id) || {}).name || '');
+    var place = unifiedCard()
+      ? tcSlotPlace(t, slot)
+      : (slot.is_online ? 'онлайн' : (slot.arena_name || (arenaById(slot.arena_id) || {}).name || ''));
     var svcDir = svc ? M.direction(M.directionKeyForServiceId(svc.service_id)) : null;
     var what = svc ? (svcDir && svcDir.ids.length === 1 && svc.is_public !== false ? svcDir.title : svc.service_name) : '';
     var h = unifiedCard() ? '<div class="tc tc-book">' + screenD_head() : '<div class="bd">' + backBtn('Назад');
+    // Доска Book: «Сб, 10:00». Общий M.slotWhen («Сб, 21 ноября, 10:00») не трогаем — им пользуется старая карточка.
+    var whenText = unifiedCard() ? screenL_slotTitle(slot) : M.slotWhen(slot, S.todayIso);
     h += '<div class="sum"><div class="k">' + (t.photo_url ? '<img src="' + esc(t.photo_url) + '" alt="">' : '<i>' + esc(t.initial || 'Т') + '</i>') +
-      '<div class="when"><b>' + esc(M.slotWhen(slot, S.todayIso)) + '</b><br><span>' + esc([t.name, what, place].filter(Boolean).join(' · ')) + '</span></div></div></div>';
+      '<div class="when"><b>' + esc(whenText) + '</b><br><span>' + esc([t.name, what, place].filter(Boolean).join(' · ')) + '</span></div></div></div>';
     if (!svc) {
       var svcs = servicesForSlot(t, slot);
       h += '<div class="fl"><span class="lbl">Какое занятие?</span><div class="opt">' + svcs.map(function (s) {
@@ -2277,9 +2300,9 @@
     var canWrite = waState === 'already';
     var unreachable = BC.unreachableState();
     var slot = x.slot;
-    var place = slot.is_online ? 'онлайн' : (slot.arena_name || '');
-    var line = [x.participant, M.daySmall(slot.slot_date, S.todayIso) + ', ' + String(slot.start_time).slice(0, 5), place].filter(Boolean).join(' · ');
     var unified = unifiedCard();
+    var place = unified ? (tcSlotPlace(t, slot) || (slot.is_online ? 'онлайн' : (slot.arena_name || ''))) : (slot.is_online ? 'онлайн' : (slot.arena_name || ''));
+    var line = [x.participant, M.daySmall(slot.slot_date, S.todayIso) + ', ' + String(slot.start_time).slice(0, 5), place].filter(Boolean).join(' · ');
     var sentTitle = 'Запись отправлена ' + esc(M.dativeFirst(t.first_name, RuName));
     var h = '<div class="' + (unified ? 'tc tc-sent' : 'bd') + '"><div class="okc" aria-hidden="true">' + (unified ? TC_ICON.check : '✓') + '</div><div class="ctr">' +
       (unified ? '<h1>' + sentTitle + '</h1>' : '<h3>' + sentTitle + '</h3>') +

@@ -216,6 +216,8 @@
     .cr-slot-who { font-size: 13px; line-height: 1.4; color: var(--g-on-dark-muted); }
     .cr-phone-note { margin: 6px 0 0; font-size: 12px; line-height: 1.4; color: var(--g-muted); }
     .cr-k-privacy { margin: 8px 0 0; text-align: center; font-size: 12px; line-height: 1.4; color: var(--g-muted); }
+    /* Поля и слот на 16px от края (доска Register). body Mini App даёт 12px — вместе с margin карточки 16px выходило 28. */
+    body.cr-k { padding-left: 0; padding-right: 0; --cr-field-line: #7b8fa0; }
     body.cr-k .cr-shell { background: var(--g-bg); }
     body.cr-k .cr-hero { padding: 16px 16px 0; text-align: left; }
     body.cr-k .cr-hero-title { margin: 0; font: 400 24px/1.1 var(--g-font-display); color: var(--g-ink); }
@@ -233,7 +235,7 @@
     body.cr-k .cr-field-stack input.cr-input,
     body.cr-k .crm-phone-field .crm-phone-field-row {
       min-height: 52px;
-      border: 1px solid var(--g-muted);
+      border: 1px solid var(--cr-field-line);
       border-radius: var(--g-r);
       background: var(--g-surface);
       color: var(--g-ink);

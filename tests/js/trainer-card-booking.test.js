@@ -87,6 +87,8 @@ describe('D и D2', () => {
     assert.match(html, /<em>45 BYN<\/em>/);
     assert.match(html, /<em>50 BYN<\/em>/);
     assert.match(html, /Анна подтвердит — сообщение придёт в Telegram/);
+    assert.match(html, /<div class="when"><b>Сб, 10:00<\/b>/);
+    assert.doesNotMatch(html, /21 ноября/);
     for (const bad of FORBIDDEN) assert.ok(!html.includes(bad), bad);
 
     const same = structuredClone(trainer);
@@ -395,7 +397,12 @@ describe('B: D по доске Book и размеры E', () => {
     assert.match(rule('.tc-book .sum'), /background: var\(--g-dark\)/);
     assert.match(rule('.tc-book .sum'), /color: var\(--g-on-photo\)/);
     assert.doesNotMatch(rule('.tc-book .sum'), /--g-ink/);
-    assert.match(rule('.tc-sent .okc'), /width: 64px; height: 64px; border-radius: var\(--g-r-lg\)/);
+    assert.match(rule('.tc-sent .okc'), /width: 64px; height: 64px; border-radius: 22px/);
+    assert.match(rule('.tc-sent .okc'), /background: var\(--tc-sent-wash\)/);
+    assert.match(rule('.tc-book .sum img, .tc-book .sum i'), /width: 56px; height: 56px; border-radius: var\(--g-r-md\)/);
+    assert.match(rule('.tc-book .sum .when b'), /font: 400 22px\/1\.1 var\(--g-font-display\)/);
+    assert.match(rule('.sheet.tc-sheet h4'), /font-size: 20px/);
+    assert.match(css, /\.sheet h4 \{ margin: 0; font: 400 18px\/1\.15 var\(--display\); \}/);
     assert.match(rule('.tc-sent h1'), /font: 400 24px\/1\.1 var\(--g-font-display\)/);
     const block = css.slice(css.indexOf('/* Запись D/D2/E'));
     assert.doesNotMatch(block, /#[0-9a-fA-F]{3,6}\b/, 'в блоке 401 нет hex');
