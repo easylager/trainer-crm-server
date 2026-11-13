@@ -28,6 +28,7 @@ from src.application.catalog_directions import service_title, split_service_summ
 from src.application.site_trainer_page import education_line
 from src.application.trainer_client_invite_tracking import sql_booking_not_self
 from src.shared.map_links import build_yandex_by_map_url
+from src.shared.public_display import format_public_name
 
 #: Сколько тренеров берём в выдачу. Каталог крошечный (6 опубликованных); пагинация — открытый вопрос эпика.
 SHOWCASE_LIMIT = 50
@@ -117,6 +118,56 @@ async def _service_catalog_info(session: AsyncSession, service_ids: set[int]) ->
     return {int(r[0]): (bool(r[1]), r[2]) for r in rows.fetchall()}
 
 
+async def _primary_arena_ids(session: AsyncSession, trainer_ids: list[int]) -> dict[int, int | None]:
+    """``{trainer_id: trainers.primary_arena_id}`` — сырое значение, без исправления."""
+    if not trainer_ids:
+        return {}
+    rows = await session.execute(
+        text("SELECT id, primary_arena_id FROM trainers WHERE id = ANY(:ids)"), {"ids": trainer_ids}
+    )
+    return {int(r[0]): (int(r[1]) if r[1] is not None else None) for r in rows.fetchall()}
+
+
+async def _profile_city_names(session: AsyncSession, trainer_ids: list[int]) -> dict[int, str | None]:
+    """Город профиля, как в ``/client/share-trainer``: ``trainer_profiles.city_id → cities.name``."""
+    if not trainer_ids:
+        return {}
+    rows = await session.execute(
+        text(
+            """
+            SELECT tp.trainer_id, c.name
+            FROM trainer_profiles tp
+            LEFT JOIN cities c ON c.id = tp.city_id
+            WHERE tp.trainer_id = ANY(:ids)
+            """
+        ),
+        {"ids": trainer_ids},
+    )
+    out: dict[int, str | None] = {}
+    for tid, name in rows.fetchall():
+        cleaned = str(name).strip() if name is not None else ""
+        out[int(tid)] = cleaned or None
+    return out
+
+
+def primary_rink_name(
+    primary_arena_id: int | None, arena_ids: list[int], ice_arenas: dict[int, dict[str, Any]]
+) -> str | None:
+    """Основной каток для плашки (TASK-400): правило ``reconcile_primary_arena`` без записи в БД.
+
+    Основной — ``primary_arena_id``, если он среди площадок тренера, иначе наименьший id площадки.
+    Плашка говорит «основной каток», поэтому основной не лёд (зал) — катка нет, другим катком не подменяем.
+    """
+    ids = [int(a) for a in arena_ids]
+    if not ids:
+        return None
+    primary = primary_arena_id if primary_arena_id in ids else min(ids)
+    arena = ice_arenas.get(primary)
+    if not arena:
+        return None
+    return format_public_name(str(arena.get("name") or "")) or None
+
+
 def _service_out(svc: dict[str, Any], catalog: dict[int, tuple[bool, str | None]]) -> dict[str, Any]:
     sid = int(svc["service_id"])
     is_public, summary = catalog.get(sid, (False, None))
@@ -170,6 +221,7 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     from src.application.trainer_use_cases import list_active_trainers_for_client
     from src.shared.notification_hours import NOTIFICATION_TZ
     from src.shared.phone_guard import sanitize_public_phone
+    from src.shared.config import Settings
     from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
     raw_items, _total = await list_active_trainers_for_client(
@@ -211,6 +263,10 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
     )
 
     win_cities = await window_arena_cities(session, [w for ws in windows.values() for w in ws])
+    # Единая карточка (TASK-400): каток и город. Флаг выключен — ответ прежний, без новых полей.
+    unified_card = Settings().unified_trainer_card_enabled
+    primary_ids = await _primary_arena_ids(session, ids) if unified_card else {}
+    city_names = await _profile_city_names(session, ids) if unified_card else {}
 
     out: list[dict[str, Any]] = []
     for t in items:
@@ -257,4 +313,9 @@ async def load_trainer_showcase(session: AsyncSession, *, city_id: int | None) -
                 ],
             }
         )
+        if unified_card:
+            out[-1]["primary_arena_name"] = primary_rink_name(
+                primary_ids.get(tid), list(t.get("arena_ids") or []), arenas
+            )
+            out[-1]["city_name"] = city_names.get(tid)
     return {"city_id": city_id, "items": out}
