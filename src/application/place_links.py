@@ -368,6 +368,117 @@ def parse_trainer_deep_link(value: str | None) -> tuple[int, int | None] | None:
     return int(parsed["trainer_id"]), parsed["arena_id"]
 
 
+#: ``via`` ссылки тренера и рекомендации: в контракт ``_v_`` не входят (там только ``p``/``c``/``k``).
+_BOOKING_VIA = frozenset({"link", "share"})
+
+#: Кэш-бастер старой формы записи. Новый адрес его не тащит.
+_BOOK_CACHE_BUST = "20260420d"
+
+
+def _unified_card_on() -> bool:
+    from src.shared.config import Settings
+
+    return bool(Settings().unified_trainer_card_enabled)
+
+
+def _query(pairs: list[tuple[str, str]]) -> str:
+    return urlencode(pairs)
+
+
+def trainer_webapp_url(
+    base: str,
+    trainer_id: int,
+    *,
+    city_id: int | None = None,
+    service_id: int | None = None,
+    arena_id: int | None = None,
+    slot_id: int | None = None,
+    via: str | None = None,
+    intent: str | None = None,
+    legacy: str = "catalog",
+) -> str:
+    """Адрес Mini App на тренера.
+
+    Флаг ``unified_trainer_card_enabled`` включён — единая карточка. Хвосты
+    ``trainer_<id>[_a_][_s_][_v_][_i_]`` собирает только ``trainer_start_param``;
+    в query попадают разобранные поля плюс то, чего в контракте нет
+    (``service_id``, ``city_id``, ``via=link|share``). ``startapp`` в этот адрес
+    не кладётся: редирект диплинка стёр бы ``via=link``.
+
+    Флаг выключен — прежний адрес этого входа (``legacy``), байт в байт.
+    """
+    origin = (base or "").rstrip("/")
+    if _unified_card_on():
+        place_via = via if via and _TRAINER_VIA_RE.match(via) else None
+        param = trainer_start_param(
+            int(trainer_id),
+            arena_id=arena_id,
+            slot_id=slot_id,
+            via=place_via,
+            intent=intent,
+        )
+        parsed = parse_trainer_start_param(param) or {
+            "trainer_id": int(trainer_id),
+            "arena_id": None,
+            "slot_id": None,
+            "via": None,
+            "intent": None,
+        }
+        pairs: list[tuple[str, str]] = [("trainer_id", str(int(parsed["trainer_id"])))]
+        if parsed["slot_id"]:
+            pairs.append(("slot_id", str(int(parsed["slot_id"]))))
+        if parsed["arena_id"]:
+            pairs.append(("arena_id", str(int(parsed["arena_id"]))))
+        booking_via = via if via in _BOOKING_VIA else None
+        shown_via = parsed["via"] or booking_via
+        if shown_via:
+            pairs.append(("via", str(shown_via)))
+        if parsed["intent"]:
+            pairs.append(("intent", str(parsed["intent"])))
+        if service_id is not None and int(service_id) > 0:
+            pairs.append(("service_id", str(int(service_id))))
+        if city_id is not None and int(city_id) > 0:
+            pairs.append(("city_id", str(int(city_id))))
+        return f"{origin}/webapp/trainers?{_query(pairs)}"
+
+    tid = int(trainer_id)
+    if legacy == "book":
+        url = f"{origin}/webapp/book?trainer_id={tid}&v={_BOOK_CACHE_BUST}"
+        if service_id is not None:
+            return url + f"&service_id={int(service_id)}"
+        return url + "&force_service_choice=1"
+    if legacy == "book_session":
+        url = f"{origin}/webapp/book?trainer_id={tid}"
+        if service_id is not None:
+            return url + f"&service_id={int(service_id)}"
+        return url
+    if legacy == "book_plain":
+        url = f"{origin}/webapp/book?trainer_id={tid}"
+        if slot_id is not None:
+            return url + f"&slot_id={int(slot_id)}"
+        return url
+    if legacy == "slot":
+        return f"{origin}/webapp/trainers?trainer_id={tid}&slot_id={int(slot_id or 0)}&via={via or ''}"
+    pairs = [("trainer_id", str(tid))]
+    if legacy == "discovery":
+        if city_id is not None:
+            pairs.append(("city_id", str(int(city_id))))
+        if service_id is not None and int(service_id) > 0:
+            pairs.append(("service_id", str(int(service_id))))
+        if arena_id is not None:
+            pairs.append(("arena_id", str(int(arena_id))))
+        return f"{origin}/webapp/catalog?{_query(pairs)}"
+    if city_id is not None:
+        pairs.append(("city_id", str(int(city_id))))
+    if service_id is not None:
+        pairs.append(("service_id", str(int(service_id))))
+    if arena_id is not None:
+        pairs.append(("arena_id", str(int(arena_id))))
+    if via:
+        pairs.append(("via", via))
+    return f"{origin}/webapp/catalog?{_query(pairs)}"
+
+
 def parse_place_deep_link(value: str | None) -> tuple[int, int | None] | None:
     """``arena_42`` → ``(42, None)``; ``arena_42_s_7`` → ``(42, 7)``. Slug не принимаем."""
     match = _PLACE_DEEP_RE.match((value or "").strip())
