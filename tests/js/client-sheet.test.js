@@ -454,7 +454,8 @@ describe('ClientSheet', () => {
     const row = h.document.createElement('label');
     list.appendChild(row);
     list.scrollTop = 0;
-    assert.equal(list.style.touchAction, 'none');
+    /* touch-action: none на списке в начале блокирует и нативную прокрутку: scrollTop не растёт, и список не листается. */
+    assert.notEqual(list.style.touchAction, 'none');
     row.dispatch('pointerdown', { clientY: 10, target: row });
     h.document.dispatch('pointermove', { clientY: 40 });
     h.document.dispatch('pointerup', { clientY: 140 });
