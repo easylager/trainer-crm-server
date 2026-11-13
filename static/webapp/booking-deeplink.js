@@ -119,6 +119,9 @@
       var v = qp.get(UNIFIED_CARD_PARAMS[i]);
       if (v) parts.push(UNIFIED_CARD_PARAMS[i] + '=' + encodeURIComponent(v));
     }
+    // №35 «Все окна» и №37 «Снова к» приходят как action=book&from=hub.
+    // Раньше action отбрасывался и витрина открывала обычную карточку.
+    if (qp.get('action') === 'book') parts.push('action=book');
     return 'trainers?' + parts.join('&');
   }
 

@@ -39,7 +39,7 @@ describe('шим единой карточки: флаг включён', () => 
     ['24 пуш «есть окно»: book + slot_id', '/webapp/book?trainer_id=7&slot_id=55', ['/webapp/trainers?trainer_id=7&slot_id=55']],
     ['28 /book: catalog', '/webapp/catalog?trainer_id=7&city_id=2', ['/webapp/trainers?trainer_id=7&city_id=2']],
     ['34 хаб «Мой тренер»', '/webapp/catalog?trainer_id=7&service_id=3&from=hub', ['/webapp/trainers?trainer_id=7&service_id=3&from=hub']],
-    ['35/37 «Все окна»/«Снова к»', '/webapp/catalog?trainer_id=7&action=book&from=hub', ['/webapp/trainers?trainer_id=7&from=hub']],
+    ['35/37 «Все окна»/«Снова к»', '/webapp/catalog?trainer_id=7&action=book&from=hub', ['/webapp/trainers?trainer_id=7&from=hub&action=book']],
     ['36 чип окна на хабе', '/webapp/catalog?trainer_id=7&slot_id=55&from=hub', ['/webapp/trainers?trainer_id=7&slot_id=55&from=hub']],
     ['39 сохранённые на хабе', '/webapp/catalog?trainer_id=7', ['/webapp/trainers?trainer_id=7']],
     ['41 «Сохранённые» -> «Записаться»', '/webapp/book?trainer_id=7&from=saved-trainers', ['/webapp/trainers?trainer_id=7&from=saved-trainers']],
