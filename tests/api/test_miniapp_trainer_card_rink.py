@@ -77,7 +77,8 @@ async def test_flag_on_showcase_names_primary_rink_publicly(app_use_test_db, db_
     assert item["primary_arena_name"] == "«Замок»"
     # Город профиля, как в /client/share-trainer. В БД не пишем.
     assert item["city_name"] == city
-    assert item["sport_name"] == "Фигурное катание"
+    # У созданного тренера только «С нуля» — нейтральная вкладка, вида нет.
+    assert item["sport_name"] is None
     assert item["arenas"][0]["public_name"] == "«Замок»"
     assert item["arenas"][0]["name"] == '"Замок"'
 
@@ -127,9 +128,29 @@ async def test_flag_on_hockey_direction_names_the_sport(app_use_test_db, db_sess
 
 
 @pytest.mark.asyncio
-async def test_flag_on_mixed_directions_have_no_sport(app_use_test_db, db_session, monkeypatch) -> None:
-    item = await _replace_services(
+async def test_flag_on_neutral_plus_one_sport(app_use_test_db, db_session, monkeypatch) -> None:
+    hockey = await _replace_services(
         db_session, monkeypatch, ["Обучение катанию «с нуля»", "Хоккейное катание"]
+    )
+    assert hockey["sport_name"] == "Хоккей"
+    figure = await _replace_services(
+        db_session, monkeypatch, ["Обучение катанию «с нуля»", "Фигурное катание"]
+    )
+    assert figure["sport_name"] == "Фигурное катание"
+
+
+@pytest.mark.asyncio
+async def test_flag_on_both_sports_have_no_sport(app_use_test_db, db_session, monkeypatch) -> None:
+    item = await _replace_services(
+        db_session, monkeypatch, ["Фигурное катание", "Хоккейное катание"]
+    )
+    assert item["sport_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_flag_on_only_neutral_directions_have_no_sport(app_use_test_db, db_session, monkeypatch) -> None:
+    item = await _replace_services(
+        db_session, monkeypatch, ["Обучение катанию «с нуля»", "Совершенствование катания"]
     )
     assert item["sport_name"] is None
 

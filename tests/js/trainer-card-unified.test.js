@@ -198,17 +198,48 @@ describe('единая карточка: порядок и условия пок
     assert.match(mixed, /<p class="tc-hero-sub">С нуля · Уже катаюсь · Минск<\/p>/);
   });
 
-  it('герой с фото: A  без класса 400, C и F — tc-hero--tall, B без фото — 300', async () => {
-    const a = (await open('A')).app.innerHTML;
+  const heroClass = (html) => (/<header class="([^"]*tc-hero[^"]*)"/.exec(html) || [])[1];
+
+  it('герой с фото: окна витрины — 320, нет окон или нельзя записаться — 400, без фото — 300', async () => {
+    const win = { slot_id: 9, starts_at: '2026-11-21T07:00:00', ends_at: '2026-11-21T08:00:00', arena_id: 3 };
+    const a = (await open('A', { trainer: { windows: [win] } })).app.innerHTML;
     assert.match(a, /<header class="tc-hero tc-hero--photo">/);
     assert.doesNotMatch(a, /tc-hero--tall/);
     const c = (await open('C')).app.innerHTML;
     assert.match(c, /<header class="tc-hero tc-hero--photo tc-hero--tall">/);
-    const f = (await open('F')).app.innerHTML;
+    const f = (await open('F', { trainer: { windows: [win] } })).app.innerHTML;
     assert.match(f, /<header class="tc-hero tc-hero--photo tc-hero--tall">/);
     const b = (await open('B')).app.innerHTML;
     assert.match(b, /tc-hero--noph/);
     assert.doesNotMatch(b, /tc-hero--tall/);
+  });
+
+  it('высота героя одна до слотов, после слотов и после смены вкладки', async () => {
+    const win = { slot_id: 9, starts_at: '2026-11-21T07:00:00', ends_at: '2026-11-21T08:00:00', arena_id: 3 };
+    const st = STATES.A;
+    const trainer = { ...st.trainer, windows: [win] };
+    const h = boot({
+      unified: true,
+      search: '?trainer_id=' + trainer.id,
+      initData: 'x',
+      showcase: { items: [trainer] },
+      routes: [{
+        match: (c) => c.url.split('?')[0] === '/api/webapp/client/slots',
+        reply: (c) => resp(200, { slots: String(c.url).includes('service_id=2') ? [] : st.slots }),
+      }],
+    });
+    await tick(0);
+    const before = heroClass(h.app.innerHTML);
+    await tick(60);
+    const after = heroClass(h.app.innerHTML);
+    assert.ok(before, 'герой уже есть до ответа слотов');
+    assert.equal(after, before);
+    assert.doesNotMatch(before, /tc-hero--tall/);
+    h.click({ 'data-act': 'dir', 'data-key': 'uzhe-katayus' });
+    assert.equal(heroClass(h.app.innerHTML), before);
+    await tick(60);
+    assert.equal(heroClass(h.app.innerHTML), before);
+    assert.equal(h.S.slots.length, 0, 'у второй вкладки окон нет — высота всё равно прежняя');
   });
 
   it('«Где проходят занятия» берёт публичное имя, иначе сырое', async () => {

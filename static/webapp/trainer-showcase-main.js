@@ -763,11 +763,11 @@
     return titles.join(' · ');
   }
 
-  /** Фото 400px на досках C (окон нет) и F (нельзя записаться). Пока слоты грузятся — 320, как A. */
+  /** Фото 400px, когда записаться нельзя или в выдаче нет окон. Слоты вкладки высоту не меняют. */
   function tcHeroTall(t) {
-    if (!t.photo_url) return false;
+    if (!t || !t.photo_url) return false;
     if (!t.can_book) return true;
-    return Array.isArray(S.slots) && !S.slots.length && !S.slotsError;
+    return !(t.windows && t.windows.length);
   }
 
   /** Без фото под именем: «город · каток» (SPEC §6.2). Нет части — её нет в строке. */
