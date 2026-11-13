@@ -9,6 +9,9 @@
  * Если сеанс начался без источника, а тренера выбрали в самом Mini App — «miniapp».
  * Хранится в sessionStorage: переживает переход catalog → book, но не следующий запуск.
  * Run tests: node --test tests/js/booking-source.test.js
+ *
+ * TASK-397: те же страницы шлют события карточки (просмотр, кнопки, форма, первое
+ * касание после регистрации). В тело события не попадают контакт и подпись запуска.
  */
 (function (global, factory) {
   var api = factory(global);
@@ -120,8 +123,145 @@
     return capture(ctx) || read(ctx, APP_KEY);
   }
 
+  var REG_TID_KEY = 'trainer_crm_client_register_tid';
+  var FIRST_TAP_KEY = 'glide_link_reg_first_tap_v1';
+
+  /** Кнопка карточки → код события. «Записаться» — кнопка слота с классом cta. */
+  function ctaAction(act, className) {
+    act = String(act || '');
+    if (act === 'write') return 'write';
+    if (act === 'copy-phone') return 'call';
+    if (act === 'request') return 'request';
+    if (act === 'slot' || act === 'win') {
+      return (/\bcta\b/.test(String(className || ''))) ? 'book' : 'slot';
+    }
+    return null;
+  }
+
+  /** Первое касание после регистрации по ссылке тренера: хаб, карточка или слот. */
+  function classifyFirstTap(act, href) {
+    act = String(act || '');
+    href = String(href || '');
+    if (act === 'slot' || act === 'win' || /(?:^|[?&])slot_id=/.test(href) || /\/book(?:[.?#]|$)/.test(href)) {
+      return 'slot';
+    }
+    if (act === 'trainer' || /(?:^|[?&])trainer_id=/.test(href) || /\/trainers(?:[.?#]|$)/.test(href)) {
+      return 'card';
+    }
+    return 'hub';
+  }
+
+  function postCardEvent(ctx, body) {
+    try {
+      var tg = (ctx.Telegram && ctx.Telegram.WebApp) || null;
+      var init = tg && tg.initData;
+      if (!init || typeof ctx.fetch !== 'function') return;
+      ctx.fetch('/api/webapp/client/trainer-card-event', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': init },
+        body: JSON.stringify(body),
+      }).catch(function () { /* учёт не мешает экрану */ });
+    } catch (e) { /* */ }
+  }
+
+  function installMeasure(ctx) {
+    var doc = ctx && ctx.document;
+    if (!doc || doc.__glideCardMeasure) return;
+    doc.__glideCardMeasure = true;
+    var pinned = 0;
+    function tidFromUrl() {
+      try {
+        var n = parseInt(new URLSearchParams(ctx.location.search || '').get('trainer_id'), 10);
+        return n > 0 ? n : 0;
+      } catch (e) { return 0; }
+    }
+    pinned = tidFromUrl();
+    function viaNow() {
+      try { return new URLSearchParams(ctx.location.search || '').get('via') || ''; }
+      catch (e) { return ''; }
+    }
+    function signedVia() {
+      var src = fromStartParam(startParam(ctx));
+      if (!src) return '';
+      if (src.source === 'link' || src.source === 'share') return src.source;
+      if (src.source === 'site_place' && src.source_arena_id) return 'p' + src.source_arena_id;
+      if (src.source === 'site_city' && src.source_city_id) return 'c' + src.source_city_id;
+      if (src.source === 'site_catalog' && src.source_city_id) return 'k' + src.source_city_id;
+      return '';
+    }
+    function attr() {
+      return signedVia() || viaNow();
+    }
+    var seenCard = 0;
+    var seenForm = 0;
+    function onClick(ev) {
+      var node = ev.target;
+      if (node && node.nodeType !== 1) node = node.parentElement;
+      while (node && node !== doc) {
+        if (node.getAttribute) break;
+        node = node.parentElement;
+      }
+      var actNode = node;
+      while (actNode && actNode !== doc && !(actNode.getAttribute && actNode.getAttribute('data-act'))) {
+        actNode = actNode.parentElement;
+      }
+      var act = actNode && actNode.getAttribute ? (actNode.getAttribute('data-act') || '') : '';
+      var tidAttr = actNode && actNode.getAttribute ? parseInt(actNode.getAttribute('data-tid'), 10) : 0;
+      if (tidAttr > 0) pinned = tidAttr;
+      var tid = pinned || tidFromUrl();
+      if (tid > 0 && act) {
+        var action = ctaAction(act, actNode.className);
+        if (action) {
+          postCardEvent(ctx, { event: 'card_cta_tap', trainer_id: tid, action: action, via: attr() });
+        }
+      }
+      try {
+        var path = (ctx.location && ctx.location.pathname) || '';
+        if (path.indexOf('client-register') !== -1) return;
+        var store = storage(ctx);
+        if (!store || store.getItem(FIRST_TAP_KEY)) return;
+        var regTid = parseInt(store.getItem(REG_TID_KEY) || '', 10);
+        if (!(regTid > 0)) return;
+        var link = '';
+        var hop = node;
+        while (hop && hop !== doc) {
+          if (hop.getAttribute && hop.getAttribute('href')) { link = hop.getAttribute('href'); break; }
+          hop = hop.parentElement;
+        }
+        if (!act && !link) return;
+        var target = classifyFirstTap(act, link);
+        store.setItem(FIRST_TAP_KEY, '1');
+        postCardEvent(ctx, { event: 'link_reg_first_tap', trainer_id: regTid, target: target, via: attr() });
+      } catch (e) { /* */ }
+    }
+    doc.addEventListener('click', onClick, true);
+    if (typeof ctx.MutationObserver !== 'function') return;
+    var root = doc.body || doc.documentElement;
+    if (!root) return;
+    var observer = new ctx.MutationObserver(function () {
+      var scope = doc.getElementById ? (doc.getElementById('app') || root) : root;
+      var tid = pinned || tidFromUrl();
+      if (tid > 0 && scope.querySelector && scope.querySelector('.hro, .noph') && seenCard !== tid) {
+        seenCard = tid;
+        postCardEvent(ctx, { event: 'trainer_card_view', trainer_id: tid, via: attr() });
+      }
+      var form = scope.querySelector && scope.querySelector('[data-act="submit"]');
+      if (!form && doc.getElementById) {
+        var screen = doc.getElementById('screenForm');
+        if (screen && screen.classList && screen.classList.contains('book-form-ready')) form = screen;
+      }
+      if (tid > 0 && form && seenForm !== tid) {
+        seenForm = tid;
+        postCardEvent(ctx, { event: 'booking_form_open', trainer_id: tid, via: attr() });
+      }
+    });
+    observer.observe(root, { childList: true, subtree: true });
+  }
+
   try {
     if (global && global.location) capture(global);
+    if (global && global.document) installMeasure(global);
   } catch (e) { /* учёт не мешает загрузке */ }
 
   return {
@@ -132,5 +272,7 @@
     capture: capture,
     noteInApp: noteInApp,
     current: current,
+    ctaAction: ctaAction,
+    classifyFirstTap: classifyFirstTap,
   };
 });

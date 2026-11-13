@@ -84,6 +84,22 @@ def public_outbound_url(
     return None
 
 
+# Только id из /t/<id>-… и метка via. Хвост с именем в запрос не попадает.
+_TRAINER_CARD_VIEW_BEACON = r"""<script>
+(function (r) {
+  try {
+    var path = (r.location && r.location.pathname) || '';
+    var m = /^\/t\/([1-9][0-9]*)(?:-|[/?#]|$)/.exec(path);
+    if (!m || !r.navigator || typeof r.navigator.sendBeacon !== 'function') return;
+    var q = new URLSearchParams();
+    q.set('trainer_id', m[1]);
+    var via = new URLSearchParams((r.location && r.location.search) || '').get('via');
+    if (via) q.set('via', via.slice(0, 24));
+    r.navigator.sendBeacon('/api/webapp/public/trainer-card-view?' + q.toString());
+  } catch (e) { /* учёт не мешает странице */ }
+})(typeof globalThis !== 'undefined' ? globalThis : window);
+</script>"""
+
 PAGE_VIEW_BEACON_VERSION = "2"
 
 
@@ -99,10 +115,15 @@ def public_page_view_beacon_script(
         attrs.append(f'data-city-id="{int(city_id)}"')
     if arena_id is not None and int(arena_id) > 0:
         attrs.append(f'data-arena-id="{int(arena_id)}"')
-    return (
+    html = (
         f'<script defer src="/static/shared/public-page-view-beacon.js?v={PAGE_VIEW_BEACON_VERSION}" '
         f'{" ".join(attrs)}></script>'
     )
+    # TASK-397: страница /t/ в общий маяк не попадает (путь отбрасывается). Свой маяк — только
+    # id тренера и via, без хвоста имени в адресе.
+    if (surface or "").strip().lower() == "trainer_page":
+        html += _TRAINER_CARD_VIEW_BEACON
+    return html
 
 
 def contact_click_beacon_url(
