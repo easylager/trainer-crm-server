@@ -1322,7 +1322,7 @@ def _week_html(page: Mapping[str, Any], app: str | None, via: str | None) -> str
     if page.get("contact_url"):
         body += (
             '<div class="tp-request"><div><b>Не подходит время?</b>'
-            "<span>Напишите тренеру — он предложит своё.</span></div>"
+            "<span>Напишите тренеру, чтобы предложить своё время</span></div>"
             f'<a class="tp-btn tp-btn--ghost" href="{esc(page["contact_url"])}"{_write_attrs(page, via)}>Написать</a></div>'
         )
     return _sec("Всё время на неделю", body, sec_id="time", nosnippet=True)

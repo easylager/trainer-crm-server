@@ -340,7 +340,7 @@ async def test_two_directions_tabs_week_prices_and_also_teaches(app_use_test_db,
     assert "На коньках больше 20 лет.\nРаботал инструктором." in html
     # «Написать» в карточке и под неделей — с учётом клика.
     assert html.count("data-catalog-phone-beacon=") == 2
-    assert "Напишите тренеру — он предложит своё." in html
+    assert "Напишите тренеру, чтобы предложить своё время" in html
     # Перед первым занятием — вопросы направления «С нуля», ссылка — на каталог направления.
     assert "Перед первым занятием" in html and "Мне 35 — не поздно начинать?" in html
     assert "/trenery/s-nulya" in html

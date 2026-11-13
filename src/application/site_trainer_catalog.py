@@ -1047,7 +1047,7 @@ def render_catalog_page(
         )
         grid += (
             '<div class="tcat-request"><b>Не подошло время?</b>'
-            "<span>Напишите тренеру — он предложит своё.</span></div>"
+            "<span>Напишите тренеру, чтобы предложить своё время</span></div>"
         )
     elif arena_id is not None:
         aname = str(arenas[arena_id]["name"])
