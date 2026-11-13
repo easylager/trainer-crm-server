@@ -92,8 +92,6 @@
     layer.appendChild(backdrop);
     layer.appendChild(sheet);
     document.body.appendChild(layer);
-    var scrollers = body.querySelectorAll('.cs-scroll');
-    for (var s = 0; s < scrollers.length; s++) watchScroll(scrollers[s]);
 
     var record = { el: sheet, close: null };
     var state = 'open';
@@ -228,16 +226,6 @@
       var list = scrollOf(target);
       if (list) return list.scrollTop > 1;
       return !!target.closest('button, a, input, textarea, select, label');
-    }
-
-    function watchScroll(list) {
-      function sync() {
-        /* pan-y на верху списка: браузер забирает вертикальный жест и не даёт его отменить.
-           Пока прокрутка в начале — жест наш (шторка). Ниже — снова прокрутка списка. */
-        list.style.touchAction = list.scrollTop > 1 ? 'pan-y' : 'none';
-      }
-      sync();
-      list.addEventListener('scroll', sync);
     }
 
     function onPointerDown(event) {
