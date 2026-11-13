@@ -753,12 +753,21 @@
     return parts.length ? '<p class="tc-hero-meta">' + parts.join(' · ') + '</p>' : '';
   }
 
-  /** «направления · город». Города нет — хвоста нет (SPEC §3.1, решение по эскалации). */
+  /** «{вид} · {город}», если сервер прислал один вид. Иначе «направления · город». Города нет — хвоста нет. */
   function tcDirLine(t) {
-    var titles = M.trainerDirections(t).map(function (d) { return d.title; }).filter(Boolean);
+    var sport = String((t && t.sport_name) || '').trim();
     var city = String((t && t.city_name) || '').trim();
+    if (sport) return city ? sport + ' · ' + city : sport;
+    var titles = M.trainerDirections(t).map(function (d) { return d.title; }).filter(Boolean);
     if (city) titles.push(city);
     return titles.join(' · ');
+  }
+
+  /** Фото 400px, когда записаться нельзя или в выдаче нет окон. Слоты вкладки высоту не меняют. */
+  function tcHeroTall(t) {
+    if (!t || !t.photo_url) return false;
+    if (!t.can_book) return true;
+    return !(t.windows && t.windows.length);
   }
 
   /** Без фото под именем: «город · каток» (SPEC §6.2). Нет части — её нет в строке. */
@@ -782,10 +791,13 @@
     }
     var meta = tcMetaLine(t);
     if (t.photo_url) {
-      return '<header class="tc-hero tc-hero--photo"><img src="' + esc(t.photo_url) + '" alt="">' + btns +
+      var tall = tcHeroTall(t) ? ' tc-hero--tall' : '';
+      return '<header class="tc-hero tc-hero--photo' + tall + '"><img src="' + esc(t.photo_url) + '" alt="">' + btns +
         '<div class="tc-hero-t"><h1>' + esc(t.name) + '</h1>' + (dirLine ? '<p class="tc-hero-sub">' + esc(dirLine) + '</p>' : '') + meta + '</div></header>';
     }
-    // Без фото — типографский герой (SPEC §6.2): капсула направления, крупное имя, «город · каток».
+    // Без фото — типографский герой (SPEC §6.2): капсула вида, крупное имя, «город · каток».
+    var sport = String((t && t.sport_name) || '').trim();
+    if (sport) capLine = sport;
     var hockey = dirs.length > 0 && dirs.every(function (d) { return d.key === 's-klyushkoy'; });
     var place = tcPlaceLine(t);
     return '<header class="tc-hero tc-hero--noph' + (hockey ? ' tc-hero--hockey' : '') + '">' +
@@ -898,6 +910,16 @@
       '<ul class="tc-list"><li><span class="tc-ic tc-ic--sm">' + TC_ICON.cap + '</span><b>' + esc(e) + '</b></li></ul></section>';
   }
 
+  /** Короткое публичное имя площадки. Нет его в данных — сырое имя, не выдумываем. */
+  function tcArenaLabel(t, a) {
+    var pub = String((a && a.public_name) || '').trim();
+    if (pub) return pub;
+    var list = (t && t.arenas) || [];
+    var primary = String((t && t.primary_arena_name) || '').trim();
+    if (list.length === 1 && primary) return primary;
+    return (a && a.name) || '';
+  }
+
   /** «Где проходят занятия»: каток, адрес, прокат — до записи. Онлайн — формат в карточке цены (M4). */
   function tcWhere(t, svc) {
     if (svc && svc.is_online) return '';
@@ -905,7 +927,8 @@
     if (!arenas.length) return '';
     var rows = arenas.map(function (a) {
       var sub = [a.address || '', a.rental_cents ? 'прокат ' + M.formatMoney(a.rental_cents, a.rental_currency) : ''].filter(Boolean).join(' · ');
-      var inner = '<span class="tc-ic">' + TC_ICON.pin + '</span><span class="tc-where-t"><b>' + esc(a.name) + '</b>' +
+      var label = tcArenaLabel(t, a);
+      var inner = '<span class="tc-ic">' + TC_ICON.pin + '</span><span class="tc-where-t"><b>' + esc(label) + '</b>' +
         (sub ? '<span>' + esc(sub) + '</span>' : '') + '</span>';
       return a.map_link
         ? '<button type="button" class="tc-where-row" data-act="map" data-href="' + esc(a.map_link) + '">' + inner + TC_ICON.chevron + '</button>'
