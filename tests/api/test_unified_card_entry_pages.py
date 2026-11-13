@@ -40,7 +40,14 @@ def test_page_carries_flag_before_shim_when_on(monkeypatch, name) -> None:
     assert "window.__UNIFIED_TRAINER_CARD__=true;" in body
 
 
-def test_shim_source_keeps_exclusions() -> None:
+def test_shim_guards_exclusions_inside_the_builder() -> None:
+    """Подстрока в комментарии не считается: исключения — условия в buildUnifiedCardPath."""
     src = (WEBAPP / "booking-deeplink.js").read_text(encoding="utf-8")
-    for needle in ("collective", "group_id", "request_id", "__UNIFIED_TRAINER_CARD__"):
-        assert needle in src
+    fn = src.split("function buildUnifiedCardPath", 1)[1].split("function maybeRedirectToUnifiedCard", 1)[0]
+    for guard in ("qp.has('collective')", "qp.has('group_id')", "qp.has('request_id')", "return null"):
+        assert guard in fn
+    assert "tab" not in fn
+    assert "trainer_id=" in fn
+    redirect = src.split("function maybeRedirectToUnifiedCard", 1)[1].split("function buildHubBookingPath", 1)[0]
+    assert "global.__UNIFIED_TRAINER_CARD__ !== true" in redirect
+    assert "location.replace" in redirect

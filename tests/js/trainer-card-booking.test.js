@@ -51,7 +51,7 @@ function openBook(opts = {}) {
 }
 
 describe('флаг выключен — запись как раньше', () => {
-  it('D, D2, E, «Назад» с E, L1, L2, L3, listed=1, ссылка со слотом — побайтно как на базе d4419b77', async () => {
+  it('D, D2, E, «Назад» с E, L1, L2, L3, заявка, listed=1, ссылка со слотом — побайтно как на 161bd810', async () => {
     const now = await capture();
     assert.deepEqual(Object.keys(now), Object.keys(FLAG_OFF));
     for (const k of Object.keys(FLAG_OFF)) assert.deepEqual(now[k], FLAG_OFF[k], k);

@@ -30,10 +30,15 @@ from src.application.place_links import (
     is_valid_start_param,
     parse_catalog_start_param,
     parse_place_deep_link,
+    parse_trainer_start_param,
     place_start_param,
 )
 
 CASES: list[dict[str, Any]] = json.loads((Path(__file__).parent / "deeplink_cases.json").read_text(encoding="utf-8"))
+TRAINER_CASES: list[dict[str, Any]] = json.loads(
+    (Path(__file__).parent / "trainer_deeplink_cases.json").read_text(encoding="utf-8")
+)
+_TRAINER_FIELDS = ("trainer_id", "arena_id", "slot_id", "via", "intent")
 _FIELDS = ("kind", "arena_id", "session_id", "city_id", "intent", "when")
 
 
@@ -93,6 +98,38 @@ def test_python_parser_matches_contract(case: dict[str, Any]) -> None:
 @pytest.mark.parametrize("case", CASES, ids=_id)
 def test_start_param_validity_matches_telegram_rules(case: dict[str, Any]) -> None:
     assert is_valid_start_param(case["start_param"]) is case["valid_start_param"]
+
+
+def _trainer_norm(parsed: dict[str, Any] | None) -> dict[str, Any] | None:
+    if parsed is None:
+        return None
+    return {f: None if parsed[f] is None else str(parsed[f]) for f in _TRAINER_FIELDS}
+
+
+def _trainer_path(parsed: dict[str, Any]) -> str:
+    parts = [f"trainer_id={parsed['trainer_id']}"]
+    if parsed["slot_id"]:
+        parts.append(f"slot_id={parsed['slot_id']}")
+    if parsed["arena_id"]:
+        parts.append(f"arena_id={parsed['arena_id']}")
+    if parsed["via"]:
+        parts.append(f"via={parsed['via']}")
+    if parsed["intent"]:
+        parts.append(f"intent={parsed['intent']}")
+    path = "trainers?" + "&".join(parts)
+    assert path.count("?") == 1
+    assert "service_id" not in path
+    return path
+
+
+@pytest.mark.parametrize("case", TRAINER_CASES, ids=_id)
+def test_trainer_start_param_matches_js_contract(case: dict[str, Any]) -> None:
+    if case.get("skip"):
+        pytest.skip(case["skip"])
+    got = _trainer_norm(parse_trainer_start_param(case["start_param"]))
+    assert got == case["expect"], case.get("note")
+    if case["expect"] is not None:
+        assert _trainer_path(got) == case["path"]
 
 
 @pytest.mark.parametrize("case", [c for c in CASES if "build" in c], ids=_id)

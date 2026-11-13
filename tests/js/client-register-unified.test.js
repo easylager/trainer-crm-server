@@ -17,7 +17,7 @@ const selfRegister = (reply) => ({ match: (u) => u.includes('/client/self-regist
 const texts = (h, id) => (h.ids[id] ? h.ids[id].textContent : undefined);
 
 describe('форма регистрации: флаг выключен', () => {
-  it('дерево, запросы, таймеры и переходы побайтно как на базе d4419b77', async () => {
+  it('дерево, запросы, таймеры и переходы побайтно как на 161bd810', async () => {
     const now = await capture({ withRuName: true });
     assert.deepEqual(Object.keys(now), Object.keys(SNAPSHOT));
     for (const k of Object.keys(SNAPSHOT)) assert.deepEqual(now[k], SNAPSHOT[k], k);
