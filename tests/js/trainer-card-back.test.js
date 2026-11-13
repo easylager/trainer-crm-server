@@ -185,6 +185,31 @@ describe('CAME_FROM: Navigation API вместо history.length (iframe Telegram
     assert.equal(h.ctx.history.left, 1);
   });
 
+  it('свой referrer всё равно снимает метку оболочки', async () => {
+    const h = open({
+      historyLength: 1,
+      referrer: SAME_ORIGIN,
+      sessionStore: { trainer_crm_showcase_from_app: '1' },
+    });
+    await tick(60);
+    assert.equal(h.ctx.sessionStorage.getItem('trainer_crm_showcase_from_app'), null);
+  });
+
+  it('холодный replace: свой referrer не делает карточку «из приложения»', async () => {
+    const back = nativeBack();
+    const h = open({
+      historyLength: 2,
+      referrer: SAME_ORIGIN,
+      sessionStore: { trainer_crm_showcase_cold: '1', trainer_crm_showcase_from_app: '1' },
+      miniAppBack: back,
+    });
+    await tick(60);
+    assert.equal(back.shown, false);
+    assert.match(h.app.innerHTML, OTHERS);
+    assert.equal(h.ctx.sessionStorage.getItem('trainer_crm_showcase_cold'), null);
+    assert.equal(h.ctx.sessionStorage.getItem('trainer_crm_showcase_from_app'), null);
+  });
+
   it('API есть — referrer его не перебивает', async () => {
     const cold = nativeBack();
     const h = open({ historyLength: 1, referrer: SAME_ORIGIN, navigation: { canGoBack: false }, miniAppBack: cold });

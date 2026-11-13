@@ -27,9 +27,11 @@
   // Под флагом единой карточки (TASK-403/418): где есть Navigation API, верим ему — он видит только записи этой
   // страницы и её фрейма. history.length в iframe (Telegram Web) считает и историю родителя и на холодной
   // ссылке врёт. API нет — same-origin document.referrer; в WebView он часто пуст, тогда метка, которую
-  // ClientShell.navigate кладёт перед переходом на витрину. Чужой или пустой referrer без метки — корень.
-  // Флаг выключен — по-прежнему history.length > 1.
+  // ClientShell.navigate кладёт перед обычным переходом на витрину. replace диплинка кладёт другую
+  // метку: referrer тогда свой (страница оболочки), но назад идти некуда — карточка корень.
+  // Чужой или пустой referrer без метки — тоже корень. Флаг выключен — history.length > 1.
   var CAME_FROM_APP_KEY = 'trainer_crm_showcase_from_app';
+  var CAME_FROM_COLD_KEY = 'trainer_crm_showcase_cold';
   function sameOriginReferrer() {
     try {
       var ref = document.referrer;
@@ -37,10 +39,10 @@
       return new URL(ref).origin === new URL(location.href).origin;
     } catch (e) { return false; }
   }
-  function consumeCameFromApp() {
+  function consumeFlag(key) {
     try {
-      var hit = window.sessionStorage.getItem(CAME_FROM_APP_KEY) === '1';
-      window.sessionStorage.removeItem(CAME_FROM_APP_KEY);
+      var hit = window.sessionStorage.getItem(key) === '1';
+      window.sessionStorage.removeItem(key);
       return hit;
     } catch (e) { return false; }
   }
@@ -48,10 +50,16 @@
     try {
       var nav = window.navigation;
       if (unifiedCard() && nav && typeof nav.canGoBack === 'boolean') {
-        consumeCameFromApp();
+        consumeFlag(CAME_FROM_APP_KEY);
+        consumeFlag(CAME_FROM_COLD_KEY);
         return nav.canGoBack;
       }
-      if (unifiedCard()) return sameOriginReferrer() || consumeCameFromApp();
+      if (unifiedCard()) {
+        var cold = consumeFlag(CAME_FROM_COLD_KEY);
+        var marked = consumeFlag(CAME_FROM_APP_KEY);
+        if (cold) return false;
+        return sameOriginReferrer() || marked;
+      }
       return Number(history.length) > 1;
     } catch (e) { return false; }
   })();
@@ -877,7 +885,7 @@
   function tcChip(t, slot, i, many) {
     var small = [];
     var place = many ? tcSlotPlace(t, slot) : '';
-    if (place && place !== 'онлайн') small.push(place);
+    if (place) small.push(place);
     if (slot.capacity > 1 && slot.spots_left != null) small.push('осталось ' + M.word(slot.spots_left, 'место', 'места', 'мест'));
     return '<button type="button" class="tc-chip' + (i === 0 ? ' is-first' : '') + (small.length ? ' tc-chip--2' : '') + '" data-act="slot" data-slot="' + esc(slot.id) + '">' +
       esc(tcWhen(slot)) + (small.length ? '<small>' + esc(small.join(' · ')) + '</small>' : '') + '</button>';
@@ -1462,10 +1470,8 @@
     }
     h += '<div class="tc-g-when">' + esc(screenL_slotTitle(first)) + '</div>';
     var bits = [];
-    if (!first.is_online) {
-      var place = tcSlotPlace(t, first);
-      if (place) bits.push(place);
-    } else if (first.arena_name) bits.push(first.arena_name);
+    var place = tcSlotPlace(t, first);
+    if (place) bits.push(place);
     var fmt = svc && (svc.title || svc.service_name);
     if (fmt) bits.push(fmt);
     if (t.session_duration_minutes) bits.push(t.session_duration_minutes + ' мин');
@@ -1529,7 +1535,7 @@
     if (rows.length) {
       h += '<div class="tc-h-grid">' + rows.map(function (s) {
         var on = picked && String(picked.id) === String(s.id);
-        var p = s.is_online ? (s.arena_name || '') : tcSlotPlace(t, s);
+        var p = tcSlotPlace(t, s);
         return '<button type="button" class="tc-h-tile" data-act="week-slot" data-slot="' + esc(s.id) + '" aria-pressed="' + !!on + '"><b>' +
           esc(String(s.start_time || '').slice(0, 5).replace(/^0(\d)/, '$1')) + '</b>' +
           (p ? '<span>' + esc(p) + '</span>' : '') + '</button>';

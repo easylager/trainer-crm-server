@@ -104,6 +104,28 @@ describe('Mini App shell navigation boundaries', () => {
     assert.equal(toIce.data.trainer_crm_showcase_from_app, undefined);
   });
 
+  it('replace на витрину — холодный диплинк, не «пришли из приложения»', () => {
+    const data = {};
+    const store = {
+      data,
+      getItem(k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem(k, v) { data[k] = String(v); },
+      removeItem(k) { delete data[k]; },
+    };
+    let replaced;
+    const loc = {
+      pathname: '/webapp/client-home',
+      search: '',
+      href: 'https://test/webapp/client-home',
+      replace(value) { replaced = value; },
+    };
+    const ctx = runShellOnPlace('signed', { delayBoot: true, store, location: loc });
+    ctx.window.ClientShell.navigate('trainers?trainer_id=7', { replace: true });
+    assert.equal(replaced, '/webapp/trainers?trainer_id=7&init_data=signed');
+    assert.equal(data.trainer_crm_showcase_cold, '1');
+    assert.equal(data.trainer_crm_showcase_from_app, undefined);
+  });
+
   it('startup navigation replaces the entry rather than assigning href', () => {
     let replaced;
     const loc = { pathname: '/webapp/client-home', search: '', href: 'https://test/webapp/client-home', replace(value) { replaced = value; } };

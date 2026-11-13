@@ -1020,11 +1020,22 @@
   var TAB_ORDER_SEASON = { home: 0, catalog: 1, bookings: 2, kk: 3, me: 4 };
 
   var SHOWCASE_FROM_APP_KEY = 'trainer_crm_showcase_from_app';
+  var SHOWCASE_COLD_KEY = 'trainer_crm_showcase_cold';
 
-  function rememberShowcaseFromApp(path) {
+  function rememberShowcaseFromApp(path, opts) {
     var key = normalizeRoutePath(path).split('?')[0].replace(/\.html$/, '').replace(/^.*\//, '');
     if (key !== 'trainers') return;
-    try { global.sessionStorage.setItem(SHOWCASE_FROM_APP_KEY, '1'); } catch (e) { /* приватный режим */ }
+    try {
+      // replace — холодный диплинк (trainer_*): историю оболочки подменяем, назад идти некуда.
+      // Обычный переход — человек пришёл из приложения, даже если WebView не отдал referrer.
+      if (opts && opts.replace) {
+        global.sessionStorage.setItem(SHOWCASE_COLD_KEY, '1');
+        global.sessionStorage.removeItem(SHOWCASE_FROM_APP_KEY);
+      } else {
+        global.sessionStorage.setItem(SHOWCASE_FROM_APP_KEY, '1');
+        global.sessionStorage.removeItem(SHOWCASE_COLD_KEY);
+      }
+    } catch (e) { /* приватный режим */ }
   }
 
   function rememberNavDirection(path) {
@@ -1121,7 +1132,7 @@
     rememberNavDirection(path);
     // Витрина без Navigation API не верит history.length. WebView часто не отдаёт referrer
     // на внутреннем переходе — метка доказывает, что страницу открыла оболочка, не холодная ссылка.
-    rememberShowcaseFromApp(path);
+    rememberShowcaseFromApp(path, opts);
     /* /p/… — публичная страница места, не файл внутри /static/webapp/. */
     var raw = String(path || '');
     var url = raw.charAt(0) === '/' ? withInit(raw) : withInit(webappBasePath() + raw);
