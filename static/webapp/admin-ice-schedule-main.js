@@ -34,6 +34,7 @@
     weekStart: null,
     selectedDate: null,
     grid: null,
+    halls: { arenaId: null, names: [] },
     editingSessionId: null,
     priceHints: {},
     activeKind: 'public_skate',
@@ -413,6 +414,7 @@
       encodeURIComponent(state.weekStart) + '&include_cancelled=true'
     ).then(function(data) {
       state.grid = data;
+      collectHalls(data);
       state.weekStart = data.week_start;
       if (!state.selectedDate || !data.days.some(function(d) { return d.local_date === state.selectedDate; })) {
         var today = todayIso();
@@ -426,6 +428,35 @@
       applyComposerPrices(state.activeKind);
       refreshPriceHintsFromHistory();
     }).catch(function(err) { showAlert(err.message || String(err)); });
+  }
+
+  /* Залы арены (СДЮШОР: «Главная» и «Тренировочная») берём из загруженных недель: пока видна
+     хотя бы одна неделя с двумя залами, выбор зала показывается в форме. */
+  function collectHalls(data) {
+    if (state.halls.arenaId !== state.arenaId) state.halls = { arenaId: state.arenaId, names: [] };
+    (data.days || []).forEach(function(day) {
+      (day.sessions || []).forEach(function(s) {
+        var name = s.hall && String(s.hall).trim();
+        if (name && state.halls.names.indexOf(name) === -1) state.halls.names.push(name);
+      });
+    });
+    renderHallSelect();
+  }
+
+  function renderHallSelect() {
+    var sel = document.getElementById('addHall');
+    if (!sel) return;
+    var names = state.halls.names;
+    sel.hidden = names.length < 2;
+    var keep = sel.value;
+    sel.innerHTML = '<option value="">Зал: не указан</option>';
+    names.forEach(function(n) {
+      var opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      sel.appendChild(opt);
+    });
+    if (keep && names.indexOf(keep) !== -1) sel.value = keep;
   }
 
   function sessionsForSelectedDay() {
@@ -473,6 +504,7 @@
       if (s.price_child_minor != null) prices.push('дет. ' + minorToDisplay(s.price_child_minor));
       if (s.price_rental_minor != null) prices.push('прокат ' + minorToDisplay(s.price_rental_minor));
       var meta = prices.join(' · ');
+      if (s.hall && state.halls.names.length > 1) meta += (meta ? ' · ' : '') + s.hall;
       if (s.recurrence_key) meta += (meta ? ' · ' : '') + 'повтор';
       if (s.status === 'cancelled') meta = (meta ? meta + ' · ' : '') + 'отменён';
       card.innerHTML =
@@ -508,7 +540,10 @@
   function buildCreatePayload(kind) {
     var duration = Number(document.getElementById('addDuration').value || 45);
     if (kind === 'hockey_practice' && duration === 45) duration = 60;
+    var hallSel = document.getElementById('addHall');
+    var hall = hallSel && !hallSel.hidden ? hallSel.value : '';
     return {
+      hall: hall || null,
       local_date: state.selectedDate,
       starts_at_local: document.getElementById('addTime').value || '11:00',
       duration_minutes: duration,
