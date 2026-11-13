@@ -219,6 +219,8 @@ body.tsw.client-shell-body.client-shell-tabs-hidden { padding-bottom: env(safe-a
    градиенты героя), — локальные --tc-*, как разрешает SPEC §11. Радиусы — шкала 12/14/16/18/20. */
 body.tsw {
   --tc-star: #f0c36d;
+  /* Звезда на светлой подложке (отзывы, TASK-416): #B7791F доски A; --tc-star на белом ~1,7:1. Тёмная — --tc-star. */
+  --tc-star-ink: #B7791F;
   --tc-on-photo-2: #dbe7ee;
   --tc-on-photo-wash: rgba(255, 255, 255, .12);
   --tc-photo-btn: rgba(13, 27, 38, .55);
@@ -329,6 +331,31 @@ button.tc-where-row { cursor: pointer; }
 .tc-sec { all: unset; box-sizing: border-box; cursor: pointer; min-height: 48px; padding: 0 14px; border-radius: var(--g-r-btn); border: 1px solid var(--g-line); background: var(--g-surface); color: var(--g-accent-ink); font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; text-align: center; }
 .tc-sec[disabled] { cursor: default; color: var(--g-muted); }
 .tc-sec--in { width: 100%; margin-top: 12px; }
+
+/* «Отзывы» и «На занятиях» (TASK-416, доска A и тёмная A): ленты вбок со snap. Звезда на светлой карточке —
+   --tc-star-ink (цвет доски), в тёмной — та же, что в герое. */
+body.tsw.tg-dark { --tc-star-ink: var(--tc-star); }
+.tc-lane { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; }
+.tc-lane:focus-visible { outline-offset: -2px; }
+.tc-card.tc-revs { padding: 16px 0 16px 16px; overflow: hidden; }
+.tc-rev-sum { margin-top: 10px; display: flex; align-items: center; gap: 12px; }
+.tc-rev-sum > b { font: 400 28px/1 var(--g-font-display); }
+.tc-rev-sum div { display: grid; }
+.tc-rev-sum div span + span { font-size: 13px; color: var(--g-muted); }
+.tc-rev-stars { color: var(--tc-star-ink); letter-spacing: 2px; white-space: nowrap; }
+.tc-rev-lane { margin-top: 12px; padding-right: 16px; }
+.tc-rev { flex: none; width: 260px; box-sizing: border-box; padding: 14px; border-radius: var(--g-r); background: var(--g-bg); scroll-snap-align: start; display: flex; flex-direction: column; }
+.tc-rev header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tc-rev header b { min-width: 0; overflow-wrap: anywhere; }
+.tc-rev header .tc-rev-stars { flex: none; letter-spacing: 0; }
+.tc-rev p { margin: 8px 0 0; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
+.tc-rev .tc-link { align-self: flex-start; margin-top: 0; }
+.tc-rev time { margin-top: 8px; font-size: 12px; color: var(--g-muted); }
+.tc-rev-note { margin: 10px 16px 0 0; font-size: 12px; }
+.tc-gal .tc-h2 { margin: 4px 0 8px; }
+.tc-gal-lane { list-style: none; margin: 0; padding: 0; }
+.tc-gal-lane li { flex: none; scroll-snap-align: start; }
+.tc-gal-lane img { display: block; width: 148px; height: 110px; object-fit: cover; border-radius: var(--g-r); background: var(--g-chip); }
 
 /* Закреплённая кнопка: «Записаться на сб, 10:00» + «Написать», подпись под ней (SPEC §5.3). */
 .ft.tc-ft { gap: 8px; width: auto; max-width: none; margin-inline: max(-12px, (100% - 560px) / 2); }

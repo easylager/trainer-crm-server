@@ -345,6 +345,44 @@
     return 'В Glide с ' + MONTHS_GEN[mi] + ' ' + m[1];
   }
 
+  /** Лента отзывов — от трёх подтверждённых текстов, как на сайте (REVIEWS_MIN_SHOWN, SPEC §3.1 №8). */
+  var REVIEWS_MIN_SHOWN = 3;
+  /** Карточка отзыва: до 220 знаков, дальше «Читать полностью» (доска A). */
+  var REVIEW_PREVIEW_CHARS = 220;
+
+  /** Отзывы для блока: только с текстом; меньше трёх — пусто (блока нет, оценка остаётся в герое). */
+  function reviewsShown(list) {
+    var rows = (Array.isArray(list) ? list : []).filter(function (r) {
+      return r && String(r.text || '').trim();
+    });
+    return rows.length >= REVIEWS_MIN_SHOWN ? rows : [];
+  }
+
+  /** «2 ноября 2026» из «2026-11-02». Нет даты — пусто. */
+  function reviewDate(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    if (!m) return '';
+    var mi = Number(m[2]) - 1;
+    if (mi < 0 || mi > 11) return '';
+    return Number(m[3]) + ' ' + MONTHS_GEN[mi] + ' ' + m[1];
+  }
+
+  /** «★★★★☆» — оценка 1…5 закрашенными, остаток пустыми (доска A). */
+  function reviewStars(n) {
+    var k = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
+    return new Array(k + 1).join('★') + new Array(6 - k).join('☆');
+  }
+
+  /** Начало длинного отзыва: до 220 знаков по границе слова и «…». Короткий — как есть, ``cut=false``. */
+  function reviewPreview(text) {
+    var s = String(text || '').trim();
+    if (s.length <= REVIEW_PREVIEW_CHARS) return { text: s, cut: false };
+    var head = s.slice(0, REVIEW_PREVIEW_CHARS);
+    var sp = head.lastIndexOf(' ');
+    if (sp > REVIEW_PREVIEW_CHARS * 0.6) head = head.slice(0, sp);
+    return { text: head.replace(/[\s,.;:!?—–-]+$/, '') + '…', cut: true };
+  }
+
   function whereLine(arenas) {
     var list = arenas || [];
     if (!list.length) return '';
@@ -876,6 +914,11 @@
     experienceBadge: experienceBadge,
     ratingLine: ratingLine,
     glideSince: glideSince,
+    REVIEWS_MIN_SHOWN: REVIEWS_MIN_SHOWN,
+    reviewsShown: reviewsShown,
+    reviewDate: reviewDate,
+    reviewStars: reviewStars,
+    reviewPreview: reviewPreview,
     cardFacts: cardFacts,
     whoOptions: whoOptions,
     priceRows: priceRows,
