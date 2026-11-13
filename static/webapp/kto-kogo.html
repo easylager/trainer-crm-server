@@ -7,13 +7,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Кто кого</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/webapp/mini-app-telegram-chrome.js?v=202611131"></script>
+  <script src="/static/webapp/mini-app-telegram-chrome.js?v=202611132"></script>
   <!-- TASK-388: свои шрифты, как на главной (те же Dela Gothic One и Golos Text 400–700), вместо Google Fonts:
        внешний CSS (30 КБ) и шрифты с gstatic держали load на ~0,9 с; теперь общий кэш с другими вкладками. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611131">
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611131">
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611132">
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611132">
   <!-- TASK-374: оболочка (бар вкладок) грузится ТОЛЬКО при season_ui из кэша флагов оболочки (cw_ui_flags_v1, привязан к id
        пользователя Telegram). Флаг выключен, кэша нет, кэш битый, чужой или старше суток — оболочки на странице нет вовсе: ни запросов
        client/session и ui-flags, ни событий, ни переадресаций, игра как раньше. При флаге — синхронно (document.write),
@@ -31,27 +31,27 @@
       on = !!c && String(c.u) === uid && c.season_ui === true && typeof c.at === 'number' && age >= 0 && age < 86400000;
     } catch (e) { on = false; }
     if (!on) return;
-    document.write('<link rel="stylesheet" href="/static/webapp/mini-app-client-shell.css?v=202611131">'
-      + '<script src="/static/webapp/mini-app-client-shell.js?v=202611131"><\/script>');
+    document.write('<link rel="stylesheet" href="/static/webapp/mini-app-client-shell.css?v=202611132">'
+      + '<script src="/static/webapp/mini-app-client-shell.js?v=202611132"><\/script>');
   })();
   </script>
-  <link rel="stylesheet" href="/static/webapp/kto-kogo.css?v=202611131">
-  <script defer src="/static/webapp/ga-press.js?v=202611131"></script>
+  <link rel="stylesheet" href="/static/webapp/kto-kogo.css?v=202611132">
+  <script defer src="/static/webapp/ga-press.js?v=202611132"></script>
 </head>
 <body>
   <div class="kk" id="kk"></div>
-  <script src="/static/webapp/kto-kogo-model.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-screens-model.js?v=202611131"></script>
-  <script src="/static/webapp/write-access.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-views.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-hub-cards.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-board.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-leagues.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-coin-model.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-coin.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-matches.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-league-identity.js?v=202611131"></script>
-  <script src="/static/webapp/kto-kogo-boot.js?v=202611131"></script>
+  <script src="/static/webapp/kto-kogo-model.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-screens-model.js?v=202611132"></script>
+  <script src="/static/webapp/write-access.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-views.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-hub-cards.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-board.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-leagues.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-coin-model.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-coin.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-matches.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-league-identity.js?v=202611132"></script>
+  <script src="/static/webapp/kto-kogo-boot.js?v=202611132"></script>
 </body>
 </html>
