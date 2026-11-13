@@ -404,7 +404,7 @@ button.tc-where-row { cursor: pointer; }
 .tc-g-pad { padding: 0 16px 8px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .tc-g-who { display: flex; gap: 14px; align-items: center; min-width: 0; }
 .tc-g-ava { flex: none; width: 64px; height: 64px; border-radius: var(--g-r-lg); object-fit: cover; display: block; }
-.tc-g-ava--i { display: grid; place-items: center; background: var(--g-ink); color: var(--g-accent); font: 400 22px/1 var(--g-font-display); }
+.tc-g-ava--i { display: grid; place-items: center; background: var(--g-ink); color: var(--g-surface); font: 400 22px/1 var(--g-font-display); }
 .tc-g-id { min-width: 0; }
 .tc-g-id h1 { margin: 0; font: 400 22px/1.1 var(--g-font-display); overflow-wrap: anywhere; }
 .tc-g-id p { margin: 4px 0 0; color: var(--g-muted); font-size: 13px; overflow-wrap: anywhere; }
@@ -441,7 +441,7 @@ button.tc-g-rink { cursor: pointer; }
 .tc-h-day[aria-selected="true"] { background: var(--g-ink); border-color: var(--g-ink); color: var(--g-surface); }
 .tc-h-day[aria-selected="true"] span { color: inherit; opacity: .7; }
 .tc-h-day[aria-selected="true"] b { color: inherit; }
-.tc-h-day[aria-selected="true"] small { color: var(--g-accent); opacity: 1; }
+.tc-h-day[aria-selected="true"] small { color: var(--g-surface); opacity: 1; }
 .tc-h-day--empty { cursor: default; background: transparent; border: 1px dashed var(--g-line-strong); color: var(--g-muted); }
 .tc-h-day--empty b, .tc-h-day--empty small { color: var(--g-muted); font-weight: 700; }
 .tc-h-daytitle { margin: 0 0 8px; font-size: 15px; font-weight: 800; }

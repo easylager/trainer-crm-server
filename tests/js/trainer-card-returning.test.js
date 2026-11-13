@@ -103,7 +103,7 @@ describe('G · карточка вернувшегося', () => {
     assert.match(html, /class="tc tc-g"/);
     assert.match(html, /<h1>Анна Соколова<\/h1>/);
     assert.match(html, /Фигурное катание|С нуля|Взрослое|Минск/);
-    assert.match(html, /Последнее занятие — 2 ноября/);
+    assert.doesNotMatch(html, /Последнее занятие/);
     assert.match(html, /Записаться снова/);
     assert.match(html, /Записаться снова на .*10:00/);
     assert.match(html, /Взрослый/);
@@ -176,7 +176,8 @@ describe('H · время на две недели', () => {
     assert.match(html, />нет</);
     assert.match(html, /10:00/);
     assert.match(html, /Чижовка/);
-    assert.match(html, /Не подходит время\?/);
+    assert.match(html, /Напишите тренеру, чтобы предложить своё время/);
+    assert.doesNotMatch(html, /он предложит/);
     assert.match(html, /Записаться на .*10:00/);
     assert.doesNotMatch(html, /class="wk"/);
     const days = html.match(/class="tc-h-day/g) || [];
@@ -203,6 +204,48 @@ describe('H · время на две недели', () => {
     assert.equal(h.S.stack.length, 0);
     h.click({ 'data-act': 'back' });
     assert.equal(h.ctx.history.left, 1);
+  });
+});
+
+describe('доработка ревью', () => {
+  it('№37 entry=rebook открывает G, а не неделю', async () => {
+    const h = await open('?trainer_id=7&service_id=3&arena_id=9&action=book&entry=rebook&from=hub');
+    assert.equal(h.S.view, 'trainer');
+    assert.match(h.app.innerHTML, /class="tc tc-g"/);
+    assert.doesNotMatch(h.app.innerHTML, /Время на две недели/);
+  });
+
+  it('занятый слот с хаба оставляет карточку тренера, не список', async () => {
+    const h = await open('?trainer_id=7&slot_id=99&service_id=3&from=hub', {
+      slots: [],
+      routes: [{
+        match: (c) => c.url.split('?')[0] === '/api/webapp/client/slot/99',
+        reply: (c) => {
+          assert.equal(c.url.split('?')[0], '/api/webapp/client/slot/99');
+          return resp(200, { available: false });
+        },
+      }],
+    });
+    assert.equal(h.S.view, 'trainer');
+    assert.match(h.app.innerHTML, /<h1>Анна Соколова<\/h1>/);
+    assert.match(h.app.innerHTML, /class="tc"/);
+  });
+
+  it('нет окон на H — нет пустого tablist, есть «Назад к тренеру»', async () => {
+    const h = await open('?trainer_id=7&action=book&service_id=3&from=hub', { slots: [] });
+    assert.equal(h.S.view, 'week');
+    assert.doesNotMatch(h.app.innerHTML, /role="tablist"/);
+    assert.doesNotMatch(h.app.innerHTML, /tc-h-daytitle/);
+    assert.match(h.app.innerHTML, /Назад к тренеру/);
+  });
+
+  it('нельзя записаться — «Оставить заявку», без полосы дней', async () => {
+    const h = await open('?trainer_id=7&action=book&from=hub', {
+      trainer: trainer({ can_book: false }),
+      slots: [],
+    });
+    assert.match(h.app.innerHTML, /Оставить заявку/);
+    assert.doesNotMatch(h.app.innerHTML, /role="tablist"/);
   });
 });
 
