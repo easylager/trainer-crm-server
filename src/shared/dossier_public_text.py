@@ -5,11 +5,28 @@ import re
 from typing import Any, Mapping
 
 # AC-1 script checks these substrings in public payloads.
-DOSSIER_LEAK_NEEDLES: tuple[str, ...] = ("unknown", "Conflicts", "склеивать")
+# Parser/ops notes (HTML-таблица, «не парсится», …) тоже не для витрины — Лида и др.
+DOSSIER_LEAK_NEEDLES: tuple[str, ...] = (
+    "unknown",
+    "Conflicts",
+    "склеивать",
+    "HTML-таблиц",
+    "html-таблиц",
+    "не парсится",
+    "фотографией на странице",
+    "фотографией листа",
+    "сетки в HTML",
+    "сетки в html",
+)
 
 # Clause ends at «;» or at a sentence dot (not «16:45» and not «т.ч.»).
 _CLAUSE_DELIM_RE = re.compile(r"\s*;\s*|(?<![0-9A-Za-zА-Яа-яЁё])\.(?!\d)\s*|(?<=\d)\.(?!\d)\s*")
-_LEAK_RE = re.compile(r"\bunknown\b|conflicts|склеивать|см\.", re.I)
+_LEAK_RE = re.compile(
+    r"\bunknown\b|conflicts|склеивать|см\.|"
+    r"html[\s\-–—]*таблиц|не\s+html|сетк\w*\s+в\s+html|html\s*/\s*json|"
+    r"не\s+парсит|фотографией\s+(?:на\s+странице|листа)",
+    re.I,
+)
 _SLASH_LABEL_RE = re.compile(r"^(\S+)\s*/\s*\S+\s*:\s*")
 _SPACED_DASH_RE = re.compile(r"\s+[—–-]\s+")
 _MULTI_SPACE_RE = re.compile(r"\s{2,}")
@@ -34,13 +51,10 @@ def text_contains_dossier_leak(value: str | None) -> bool:
         return False
     hay = str(value)
     low = hay.casefold()
-    if "unknown" in low:
-        return True
-    if "conflicts" in low:
-        return True
-    if "склеивать" in low:
-        return True
-    return False
+    for needle in DOSSIER_LEAK_NEEDLES:
+        if needle.casefold() in low:
+            return True
+    return bool(_LEAK_RE.search(hay))
 
 
 def _split_clauses(text: str) -> list[str]:

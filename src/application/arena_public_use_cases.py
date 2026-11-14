@@ -818,6 +818,10 @@ def _sanitize_public_profile_fields(data: dict[str, Any]) -> None:
     data["district"] = sanitize_public_district(data.get("district"))
     data["opening_hours"] = sanitize_opening_hours_for_public(_as_mapping(data.get("opening_hours")))
     data["schedule_mode_note"] = scrub_dossier_leaks_from_public_text(str(data.get("schedule_mode_note") or ""))
+    # «О катке» на place page — short_description целиком; ops-фразы (HTML-таблица…) вырезаем.
+    data["short_description"] = scrub_dossier_leaks_from_public_text(
+        str(data.get("short_description") or "") or None
+    )
 
 
 def _row_to_arena_dict(row: Mapping[str, Any]) -> dict[str, Any]:

@@ -15,7 +15,7 @@
 | opening_hours | unknown | явный общий график не найден; расписание МК — по недельным таблицам на странице катания | 2026-09-07 |
 | season | unknown | явных месяцев сезона МК на сайте нет | 2026-09-07 |
 | amenities | skate_rental: true («Услуга предоставления коньков», Перечень №8 п.1.8); skate_sharpening: true (п.1.9 прейскуранта); parking: unknown; locker_rooms: unknown; cafe: unknown; accessibility: unknown | https://sdushor-ostrovets.by/prejskurant-cen/ | 2026-09-07 |
-| short_description | Ледовая площадка при СДЮШОР; расписание массового катания — две еженедельные HTML-таблицы, «нет катаний» = сеанса нет в этот день. | https://sdushor-ostrovets.by/katanie-na-konkah/ | 2026-09-07 |
+| short_description | Ледовая площадка при СДЮШОР. Расписание массового катания обновляется еженедельно на сайте. | https://sdushor-ostrovets.by/katanie-na-konkah/ | 2026-11-15 |
 | socials | Instagram https://www.instagram.com/ostrovets_arena/ (и школьный https://www.instagram.com/sdushor_ostrovets/) ; VK https://vk.com/public221636126 | https://sdushor-ostrovets.by/katanie-na-konkah/ ; https://sdushor-ostrovets.by/o-nas/ | 2026-09-07 |
 
 unknown явно писать `unknown`, не выдумывать.
