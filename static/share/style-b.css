@@ -557,16 +557,14 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 }
 .b-sched::-webkit-scrollbar { display: none; }
 .b-sched > .b-day { grid-row: 1; width: 64px; }
-.b-sched > .b-watch {
-  grid-row: 2;
-  grid-column: 1 / span 7;
-  position: sticky;
-  left: 0;
+/* Подписка на расписание — под билетами выбранного дня, не между днями и сеансами. */
+a.b-watch {
   display: flex;
   align-items: center;
   gap: 10px;
   box-sizing: border-box;
-  width: 100cqi;
+  width: 100%;
+  margin-top: 12px;
   padding: 14px 16px;
   border: 1px solid color-mix(in srgb, #2AABEE 28%, var(--g-line));
   border-radius: 18px;
@@ -585,15 +583,13 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
   animation: b-watch-breath 2.8s ease-in-out infinite;
 }
 body.b a.b-watch { color: var(--g-ink); }
-.b-sched > .b-watch span { flex: 1; min-width: 0; }
-.b-sched > .b-watch .b-watch__arrow { flex: none; color: color-mix(in srgb, #2AABEE 45%, #8396a4); }
-.b-sched > .b-watch .b-watch__tg {
+a.b-watch span { flex: 1; min-width: 0; }
+a.b-watch .b-watch__arrow { flex: none; color: color-mix(in srgb, #2AABEE 45%, #8396a4); }
+a.b-watch .b-watch__tg {
   flex: none;
   color: #2AABEE;
-  filter: drop-shadow(0 0 0 transparent);
   animation: b-watch-tg 2.8s ease-in-out infinite;
 }
-.b-sched:has(> .b-watch) > .b-daypane { grid-row: 3; }
 @keyframes b-watch-breath {
   0%, 100% { box-shadow: 0 1px 0 color-mix(in srgb, #2AABEE 12%, transparent); }
   50% { box-shadow: 0 0 0 3px color-mix(in srgb, #2AABEE 16%, transparent); }
@@ -603,8 +599,8 @@ body.b a.b-watch { color: var(--g-ink); }
   50% { transform: translateX(2px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .b-sched > .b-watch,
-  .b-sched > .b-watch .b-watch__tg { animation: none; }
+  a.b-watch,
+  a.b-watch .b-watch__tg { animation: none; }
 }
 .b-sched > .b-daypane {
   grid-row: 2;

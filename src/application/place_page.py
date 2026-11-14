@@ -1627,7 +1627,6 @@ def _b_day_strip(
     invite: bool,
     common: str,
     dark: bool = False,
-    tail: str = "",
 ) -> str:
     """Полоса дней недели и билеты дня — без JS (#якорь + :target), как в Mini App.
 
@@ -1709,7 +1708,7 @@ def _b_day_strip(
             day_klass += " b-day--current"
         sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
         sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
-    return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}{tail}</nav>'
+    return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>'
 
 
 def _place_currency(card: Mapping[str, Any], slots: Sequence[Mapping[str, Any]] | None = None) -> str:
@@ -1827,9 +1826,7 @@ def _b_schedule_parts(
     href = links.get("watch")
     if href and schedule_strip_has_gap(view["today"], by_date, view.get("matches_by_day")):
         watch = _b_schedule_watch(str(href))
-    strip = _b_day_strip(
-        view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common, tail=watch
-    )
+    strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
     currency = _place_currency(card, all_slots)
     prices = prices_html(all_slots, vv, currency=currency)
     foot: list[str] = []
@@ -1837,7 +1834,8 @@ def _b_schedule_parts(
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = f"{prices}{line}<div data-glide-session-list-root>{strip}{links_row}</div>"
+    # Подписка под билетами дня: не встаёт между выбором дня и сеансами.
+    body = f"{prices}{line}<div data-glide-session-list-root>{strip}{watch}{links_row}</div>"
     return title, body, _b_buy_pill(view, links, vv)
 
 

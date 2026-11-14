@@ -976,7 +976,7 @@ async def test_partial_week_offers_schedule_watch_under_the_days(app_use_test_db
     assert "сообщать о новом расписании" in schedule
     assert "b-watch__arrow" in schedule and "b-watch__tg" in schedule
     assert f"start=watch_{place['arena_id']}" in schedule
-    assert schedule.index('class="b-sched"') < schedule.index('class="b-watch"')
+    assert schedule.index('class="b-sched"') < schedule.index('class="b-tickets"') < schedule.index('class="b-watch"')
     assert "Позвать" in resp.text
 
 
