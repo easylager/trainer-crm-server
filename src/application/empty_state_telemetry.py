@@ -19,6 +19,7 @@ from src.shared.arena_schedule_mode import (
     normalize_schedule_mode,
 )
 from src.shared.config import get_settings
+from src.shared.public_display import format_public_name
 from src.shared.venue_types import has_public_skating
 
 # Согласовано с public_web_cta / catalog_consumer_events.
@@ -140,7 +141,7 @@ def classify_place_state(view: Mapping[str, Any]) -> str:
 def place_track_context(view: Mapping[str, Any], *, state: str | None = None) -> dict[str, Any]:
     card = view.get("card") if isinstance(view.get("card"), Mapping) else {}
     st = state or classify_place_state(view)
-    city = str(card.get("city_name") or card.get("city") or "").strip()
+    city = format_public_name(str(card.get("city_name") or card.get("city") or "").strip())
     ctx: dict[str, Any] = {
         "state": st,
         "page_type": PLACE_PAGE_TYPE,
@@ -185,7 +186,7 @@ def classify_city_state(view: Mapping[str, Any]) -> str:
 def city_track_context(view: Mapping[str, Any], *, state: str | None = None) -> dict[str, Any]:
     city = view.get("city") if isinstance(view.get("city"), Mapping) else {}
     st = state or classify_city_state(view)
-    name = str(city.get("name") or "").strip()
+    name = format_public_name(str(city.get("name") or "").strip())
     ctx: dict[str, Any] = {
         "state": st,
         "page_type": CITY_PAGE_TYPE,
@@ -213,10 +214,11 @@ def classify_home_state(view: Mapping[str, Any]) -> str:
 def home_track_context(view: Mapping[str, Any], *, state: str | None = None) -> dict[str, Any]:
     st = state or classify_home_state(view)
     user_city = view.get("user_city") if isinstance(view.get("user_city"), Mapping) else None
+    raw = str(user_city.get("name") or "").strip() if user_city else ""
     ctx: dict[str, Any] = {
         "state": st,
         "page_type": HOME_PAGE_TYPE,
-        "city": str(user_city.get("name") or "").strip() or None if user_city else None,
+        "city": format_public_name(raw) if raw else None,
         "city_id": int(user_city["id"]) if user_city and user_city.get("id") is not None else None,
     }
     return {k: v for k, v in ctx.items() if v is not None and v != ""}

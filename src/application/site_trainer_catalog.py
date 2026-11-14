@@ -1227,11 +1227,13 @@ def render_catalog_page(
 
 def _trainers_glide_track_html(data: Mapping[str, Any], pool: list[Any]) -> str:
     from src.application.empty_state_telemetry import glide_track_boot_html
+    from src.shared.public_display import format_public_name
 
     city = data.get("city") if isinstance(data.get("city"), Mapping) else {}
+    raw_name = str(city.get("name") or "").strip()
     ctx: dict[str, Any] = {
         "page_type": "trainers",
-        "city": str(city.get("name") or "").strip() or None,
+        "city": format_public_name(raw_name) if raw_name else None,
         "city_id": int(city["id"]) if city.get("id") is not None else None,
     }
     if not pool:
