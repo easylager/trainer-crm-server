@@ -38,7 +38,7 @@ def public_analytics_head_html(
     yandex_metrika_counter_id: int | None = None,
     google_analytics_measurement_id: str | None = None,
 ) -> str:
-    """HTML для <head>: async-теги Метрики и GA4. Вебвизор выключен."""
+    """HTML для <head>: async-теги Метрики и GA4. Вебвизор включён."""
     parts: list[str] = []
     counter = _normalize_metrika_id(yandex_metrika_counter_id)
     if counter is not None:
@@ -51,7 +51,7 @@ def public_analytics_head_html(
             f"    window.ym = window.ym || function() {{ (window.ym.a = window.ym.a || []).push(arguments); }};\n"
             f"    window.ym.l = window.ym.l || 1 * new Date();\n"
             f"    ym({cid}, \"init\", {{"
-            f"ssr:true, clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:false"
+            f"ssr:true, clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:true"
             f"}});\n"
             f"  </script>\n"
             f'  <noscript><div><img src="https://mc.yandex.ru/watch/{cid}" '
