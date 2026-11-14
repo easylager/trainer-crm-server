@@ -14,6 +14,7 @@ from src.application.ice_watch_message import (
     compose_watch_subscribed_reply,
     format_dates_range,
     format_nearest,
+    open_ice_in_city_button,
     place_name,
 )
 
@@ -109,12 +110,17 @@ def test_real_names_as_on_site_header(raw: str, shown: str) -> None:
     )
     assert msg.startswith(f"<b>{shown}: новое расписание</b>\n")
     assert "„" not in msg and "“" not in msg and "««" not in msg
+    shown_q = shown if shown.startswith("«") and shown.endswith("»") else f"«{shown}»"
     assert _plain(compose_watch_subscribed_reply(raw)) == (
-        f"<b>Готово: {shown}</b>\n"
-        "Будем писать сюда, пока подписка включена.\n"
-        "Добавят сеанс или снимут уже объявленный. Сообщение придёт сразу.\n"
-        "То, что уже стоит на странице, отдельно не присылаем."
+        f"<b>Следим за {shown_q}</b>\nНапишем, когда расписание обновится."
     )
+
+
+def test_open_ice_in_city_button_uses_locative() -> None:
+    assert open_ice_in_city_button("Минск").replace(NBSP, " ") == "Лёд в Минске"
+    assert open_ice_in_city_button("Гомель").replace(NBSP, " ") == "Лёд в Гомеле"
+    assert open_ice_in_city_button("Превьюск").replace(NBSP, " ") == "Лёд в городе Превьюск"
+    assert open_ice_in_city_button("") == "Открыть расписание"
 
 
 def test_schedule_change_lists_added_and_removed() -> None:

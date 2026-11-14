@@ -43,6 +43,23 @@ _WEEKDAYS_ACC = (
 OPEN_SCHEDULE_BUTTON = "Открыть расписание"
 
 
+def open_ice_in_city_button(city_name: str | None) -> str:
+    """Кнопка к ответу на подписку: «Лёд в Минске».
+
+    Падеж — из ``city_locative``. Нет формы — «Лёд в городе …», без кривого склонения.
+    """
+    from src.shared.city_locative import city_locative
+
+    raw = (city_name or "").strip()
+    public = format_public_name(raw) if raw else ""
+    loc = (city_locative(public) or city_locative(raw)) if raw else None
+    if loc:
+        return f"Лёд в{NBSP}{loc}"
+    if public:
+        return f"Лёд в городе{NBSP}{public}"
+    return OPEN_SCHEDULE_BUTTON
+
+
 def place_name(raw_name: str) -> str:
     """Имя места как в заголовке страницы места на сайте; HTML-экранировано.
 
@@ -96,17 +113,10 @@ def compose_new_schedule_message(
 
 
 def compose_watch_subscribed_reply(arena_name: str) -> str:
-    """Ответ бота на ``/start watch_<arena_id>``; кнопка к нему — ``OPEN_SCHEDULE_BUTTON``.
-
-    Подписка живёт, пока её не выключат: не одно сообщение «когда появится», а каждое изменение.
-    """
+    """Ответ бота на ``/start watch_<arena_id>``; кнопка — ``open_ice_in_city_button``."""
     name = place_name(arena_name)
-    return (
-        f"<b>Готово: {name}</b>\n"
-        "Будем писать сюда, пока подписка включена.\n"
-        "Добавят сеанс или снимут уже объявленный. Сообщение придёт сразу.\n"
-        "То, что уже стоит на странице, отдельно не присылаем."
-    )
+    shown = name if name.startswith("«") and name.endswith("»") else f"«{name}»"
+    return f"<b>Следим за {shown}</b>\nНапишем, когда расписание обновится."
 
 
 def compose_schedule_change_message(
