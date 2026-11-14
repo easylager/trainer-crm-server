@@ -115,10 +115,13 @@ def compose_new_schedule_message(
 
 
 def compose_watch_subscribed_reply(arena_name: str) -> str:
-    """Ответ бота на ``/start watch_<arena_id>``; кнопка — ``open_ice_in_city_button``."""
+    """Ответ бота на ``/start watch_<arena_id>``; кнопка — ``open_ice_in_city_button``.
+
+    Имя в именительном (как «…: новое расписание»): без «за» и кривого склонения катка.
+    """
     name = place_name(arena_name)
     shown = name if name.startswith("«") and name.endswith("»") else f"«{name}»"
-    return f"<b>Следим за {shown}</b>\nНапишем, когда расписание обновится."
+    return f"<b>{shown}: следим</b>\nНапишем, когда расписание обновится."
 
 
 def compose_schedule_change_message(

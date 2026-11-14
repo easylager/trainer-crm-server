@@ -112,7 +112,7 @@ def test_real_names_as_on_site_header(raw: str, shown: str) -> None:
     assert "„" not in msg and "“" not in msg and "««" not in msg
     shown_q = shown if shown.startswith("«") and shown.endswith("»") else f"«{shown}»"
     assert _plain(compose_watch_subscribed_reply(raw)) == (
-        f"<b>Следим за {shown_q}</b>\nНапишем, когда расписание обновится."
+        f"<b>{shown_q}: следим</b>\nНапишем, когда расписание обновится."
     )
 
 
