@@ -140,6 +140,14 @@ describe('S2: бар оболочки на странице игры', () => {
   const css = fs.readFileSync(path.join(__dirname, '../../static/webapp/kto-kogo.css'), 'utf8');
   const tokens = fs.readFileSync(path.join(__dirname, '../../static/shared/glide-tokens.css'), 'utf8');
 
+  it('TASK-391: инлайн opt-in view-transition — иначе уход с Главной/Я обрывает первый тап', () => {
+    assert.match(html, /id="kk-vt-opt-in"/);
+    const style = /<style id="kk-vt-opt-in">([\s\S]*?)<\/style>/.exec(html);
+    assert.ok(style, 'opt-in в <head> до внешних CSS');
+    assert.match(style[1], /@view-transition\s*\{\s*navigation:\s*auto/);
+    assert.ok(html.indexOf('id="kk-vt-opt-in"') < html.indexOf('telegram-web-app.js'));
+  });
+
   it('тег оболочки подключается только за проверкой кэша флага', () => {
     const head = html.slice(0, html.indexOf('</head>'));
     const outside = html.replace(/<script id="kk-shell-gate">[\s\S]*?<\/script>/, '');

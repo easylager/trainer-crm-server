@@ -557,6 +557,51 @@ details.b-invite > summary::-webkit-details-marker { display: none; }
 }
 .b-sched::-webkit-scrollbar { display: none; }
 .b-sched > .b-day { grid-row: 1; width: 64px; }
+/* Подписка на расписание — под билетами выбранного дня, не между днями и сеансами. */
+a.b-watch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, #2AABEE 28%, var(--g-line));
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      105deg,
+      color-mix(in srgb, #2AABEE 14%, var(--g-surface)) 0%,
+      var(--g-surface) 58%
+    );
+  color: var(--g-ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-decoration: none;
+  box-shadow: 0 1px 0 color-mix(in srgb, #2AABEE 12%, transparent);
+  animation: b-watch-breath 2.8s ease-in-out infinite;
+}
+body.b a.b-watch { color: var(--g-ink); }
+a.b-watch span { flex: 1; min-width: 0; }
+a.b-watch .b-watch__arrow { flex: none; color: color-mix(in srgb, #2AABEE 45%, #8396a4); }
+a.b-watch .b-watch__tg {
+  flex: none;
+  color: #2AABEE;
+  animation: b-watch-tg 2.8s ease-in-out infinite;
+}
+@keyframes b-watch-breath {
+  0%, 100% { box-shadow: 0 1px 0 color-mix(in srgb, #2AABEE 12%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, #2AABEE 16%, transparent); }
+}
+@keyframes b-watch-tg {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  a.b-watch,
+  a.b-watch .b-watch__tg { animation: none; }
+}
 .b-sched > .b-daypane {
   grid-row: 2;
   grid-column: 1;
@@ -1077,6 +1122,11 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-price__k, .b-price__s { font-size: 12px; color: var(--g-muted); line-height: 1.25; }
 .b-price__v { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .b-price-sum { margin: -4px 0 0; font-size: 14px; color: var(--g-ink-2); }
+/* Карточка слота уже показывает те же цены — этаж под заголовком прячем, пока план виден. */
+body:has(#plan:not([hidden]) .b-plan__prices:not([hidden])) .b-prices,
+body:has(#plan:not([hidden]) .b-plan__prices:not([hidden])) .b-price-sum {
+  display: none;
+}
 
 .b-buyline {
   display: flex; align-items: flex-start; gap: 10px; margin: 0;
@@ -1203,6 +1253,7 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-wait__sub { margin: 0 0 6px; font-size: 15px; line-height: 1.4; color: var(--g-muted); }
 .b-wait__cta { gap: 10px; }
 .b-wait__note { margin: 0; font-size: 13px; line-height: 1.4; text-align: center; color: var(--g-muted); }
+.b-wait > a.b-watch { margin-top: 4px; }
 
 /* ── Календарь «Когда» (TASK-337): значок рядом с полосой и лист с семью днями ───────── */
 .b-whenrow { display: flex; align-items: stretch; gap: 8px; }

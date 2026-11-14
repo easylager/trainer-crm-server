@@ -193,10 +193,10 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     by_player = {n.player_key: n for n in await due_notices(db_session, now=done)}
     sasha = by_player[SASHA]
     assert sasha.kind == "result"
-    assert sasha.text.startswith("<b>Юность — Шахтёр 3:2.</b> В точку! +50.\nТвоё место в «")
+    assert sasha.text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход 3:2. В точку! +50.\nТвоё место в «")
     assert sasha.text.endswith("»: 1-е из 4.")
-    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Угадал победителя: +20.")
-    assert by_player[VOVA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Мимо. Бывает.")
+    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход — Юность. Угадал победителя: +20.")
+    assert by_player[VOVA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход — Шахтёр. Мимо. Бывает.")
     labels = [b["text"] for row in sasha.buttons for b in row]
     assert "Следующий ход" in labels and "Таблица" in labels
     assert sasha.buttons[0][0]["callback_data"] == "kk:n"
@@ -219,8 +219,13 @@ async def test_two_results_at_once_go_as_one_summary_and_are_not_counted_in_budg
     await _finish(db_session, second, 0, 1, at(17, 30))
     notices = await due_notices(db_session, now=at(17, 40))
     assert len(notices) == 1
-    assert notices[0].text.startswith("<b>Итоги твоих ходов</b>\n")
-    assert notices[0].text.count("\n") == 2
+    text = notices[0].text
+    assert text.startswith("<b>Итоги твоих ходов</b>\n")
+    assert "Юность — Шахтёр 2:1.</b> Твой ход — Юность. Угадал победителя: +20." in text
+    assert "Неман — Юность 0:1.</b> Твой ход — Неман. Мимо. Бывает." in text
+    assert text.count("Твоё место") <= 1
+    if "Твоё место" in text:
+        assert text.rstrip().endswith(text[text.rfind("Твоё место") :])
     out = Outbox()
     await deliver(factory, now=at(17, 40), send=out)
     assert len(out.sent) == 1

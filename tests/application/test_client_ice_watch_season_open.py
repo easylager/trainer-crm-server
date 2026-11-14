@@ -267,7 +267,7 @@ async def test_sessions_notify_clears_season_open(db_session) -> None:
     stats = await deliver_ice_watch_reminders(db_session, send_fn=send)
     assert stats.sent == 1
     assert send.await_count == 1
-    assert "новое расписание" in send.await_args.args[1]
+    assert "Появились сеансы:" in send.await_args.args[1]
 
     season_active = await db_session.execute(
         text("SELECT active FROM client_ice_watches WHERE arena_id = :aid AND watch_kind = :k"),

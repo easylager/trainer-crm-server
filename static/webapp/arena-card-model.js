@@ -781,9 +781,9 @@
     return {
       habit: habitLine,
       title: copyLine('schedule.wait_none', 'Ждём новое расписание'),
-      sub: copyLine('schedule.wait_sub', 'Сообщим в\u00a0Telegram, как только появится.'),
+      sub: copyLine('schedule.wait_sub', 'Будем писать в\u00a0Telegram, пока подписка включена.'),
       cta: copyLine('schedule.bell_cta', 'Сообщить, когда появится'),
-      note: copyLine('schedule.bell_note', 'Одно сообщение, потом колокольчик сам выключится.'),
+      note: copyLine('schedule.bell_note', 'Добавят сеанс или снимут уже объявленный — напишем сразу.'),
       on: copyLine('schedule.bell_on', 'Напоминание включено'),
       off: copyLine('schedule.bell_off', 'Выключить'),
     };

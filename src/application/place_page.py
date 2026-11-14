@@ -1537,22 +1537,56 @@ def _schedule_waits(card: Mapping[str, Any]) -> bool:
 
 
 def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
-    """TASK-330: «расписания пока нет» и колокольчик в Telegram (бот ставит его по /start watch_<id>)."""
-    from src.application.catalog_icons import icon_svg
-
+    """TASK-330: «расписания пока нет» и подписка в Telegram (бот ставит её по /start watch_<id>)."""
     headline = t("schedule.wait_none")
     habit = schedule_wait_habit(card)
     habit_html = f'<p class="b-wait__sub">{_esc(habit)}</p>' if habit else ""
     watch = links.get("watch")
-    bell = ""
+    cta = ""
     if watch:
-        bell = (
+        # Тот же пульс, что у CTA под билетами; копирайт — про появление расписания.
+        cta = (
             f'<p class="b-wait__sub">{_esc(t("schedule.wait_sub"))}</p>'
-            f'<a class="b-btn b-btn--accent b-btn--wide b-wait__cta" href="{_esc(watch)}" rel="nofollow">'
-            f'{icon_svg("bell")}{_esc(t("schedule.bell_site_cta"))}</a>'
-            f'<p class="b-wait__note">{_esc(t("schedule.bell_note"))}</p>'
+            f'{_b_schedule_watch(str(watch), label=t("schedule.bell_cta"))}'
         )
-    return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{habit_html}{bell}</div>'
+    return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{habit_html}{cta}</div>'
+
+
+def schedule_strip_has_gap(
+    today: date,
+    by_date: Mapping[date, Sequence[Mapping[str, Any]]],
+    matches_by_day: Mapping[date, Sequence[Any]] | None = None,
+) -> bool:
+    """В окне недели есть и день с сеансом, и день с прочерком. Полная неделя и пустая — нет."""
+    matches_by_day = matches_by_day or {}
+    filled = False
+    empty = False
+    for offset in range(SCHEDULE_DAYS):
+        d = today + timedelta(days=offset)
+        has = bool(by_date.get(d)) or bool(matches_by_day.get(d))
+        filled = filled or has
+        empty = empty or not has
+    return filled and empty
+
+
+def _b_schedule_watch(href: str, *, label: str | None = None) -> str:
+    """CTA подписки на расписание: пульс Telegram, стрелка и иконка в самой кнопке."""
+    arrow = (
+        '<svg class="b-watch__arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+        'aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
+    )
+    telegram = (
+        '<svg class="b-watch__tg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        '<path fill="currentColor" d="M21.5 4.3 2.7 11.5c-1.3.5-1.3 1.2-.2 1.5l4.8 1.5 1.9 5.7c.2.7.1.9.8.9.5 0 '
+        ".7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.2-.5-1.8-1.4-1.4zM8.8 14.6l9.4-5.9c.5-.3.9-.1.5.2"
+        'l-7.8 7-.3 3.2-1.8-4.5z"/></svg>'
+    )
+    text = (label or "").strip() or "сообщать о новом расписании"
+    return (
+        f'<a class="b-watch" href="{_esc(href)}" rel="nofollow">'
+        f"<span>{_esc(text)}</span>{arrow}{telegram}</a>"
+    )
 
 
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
@@ -1786,6 +1820,10 @@ def _b_schedule_parts(
         return title, line + _b_schedule_when_empty(card, links, title=title), ""
     all_slots = [s for slots in by_date.values() for s in slots]
     _aside_price, common = _b_price_floor(all_slots)
+    watch = ""
+    href = links.get("watch")
+    if href and schedule_strip_has_gap(view["today"], by_date, view.get("matches_by_day")):
+        watch = _b_schedule_watch(str(href))
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
     currency = _place_currency(card, all_slots)
     prices = prices_html(all_slots, vv, currency=currency)
@@ -1794,7 +1832,8 @@ def _b_schedule_parts(
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
-    body = f"{prices}{line}<div data-glide-session-list-root>{strip}{links_row}</div>"
+    # Подписка под билетами дня: не встаёт между выбором дня и сеансами.
+    body = f"{prices}{line}<div data-glide-session-list-root>{strip}{watch}{links_row}</div>"
     return title, body, _b_buy_pill(view, links, vv)
 
 

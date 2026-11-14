@@ -343,11 +343,13 @@ async def test_session_inserted_in_tick_is_sent_by_the_same_pass_after_commit() 
         assert seen_inside_tick == [0], "inside the tick the new session must be invisible"
         send.assert_awaited_once()
         assert send.await_args.args[0] == seed["tid"]
-        assert "новое расписание" in send.await_args.args[1]
+        assert "Появились сеансы:" in send.await_args.args[1]
         async with factory() as s:
             row = (
                 await s.execute(
-                    text("SELECT active, last_notified_at FROM client_ice_watches WHERE arena_id = :aid"),
+                    text(
+                        "SELECT active, last_notified_at, known_sessions FROM client_ice_watches WHERE arena_id = :aid"
+                    ),
                     {"aid": seed["arena_id"]},
                 )
             ).one()
@@ -364,7 +366,7 @@ async def test_session_inserted_in_tick_is_sent_by_the_same_pass_after_commit() 
                 .scalars()
                 .all()
             )
-        assert row.active is False and row.last_notified_at is not None
+        assert row.active is True and row.last_notified_at is not None and row.known_sessions
         assert journal == [True]
     finally:
         await _cleanup(factory, seed)

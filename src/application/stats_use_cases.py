@@ -1693,14 +1693,17 @@ async def get_platform_stats(session: AsyncSession) -> dict:
 
     catalog_demand_pulse = await get_catalog_demand_pulse(session)
     from src.application.booking_source import get_booking_source_breakdown
+    from src.application.client_ice_watch_use_cases import get_ice_watch_admin_pulse
 
     booking_sources = await get_booking_source_breakdown(session)
+    ice_watch_pulse = await get_ice_watch_admin_pulse(session)
     from src.application.hockey_promo import promo_report
 
     kk_promo = await promo_report(session)
 
     return {
         "catalog_demand_pulse": catalog_demand_pulse,
+        "ice_watch_pulse": ice_watch_pulse,
         "booking_sources": booking_sources,
         "kk_promo": kk_promo,
         "trainers_by_status": trainers_by_status,

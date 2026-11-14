@@ -23,6 +23,7 @@ _ROW_KEYS = (
     "baseline_horizon_date",
     "failed_attempts",
     "deactivated_reason",
+    "known_sessions",
 )
 _COLS = ", ".join(_ROW_KEYS)
 
@@ -32,6 +33,9 @@ def _row_to_dict(row) -> dict[str, Any]:
     fj = d.get("filter_json")
     if isinstance(fj, str):
         d["filter_json"] = json.loads(fj)
+    known = d.get("known_sessions")
+    if isinstance(known, str):
+        d["known_sessions"] = json.loads(known)
     return d
 
 
@@ -81,6 +85,10 @@ class ClientIceWatchRepository:
                         WHEN client_ice_watches.active = false THEN EXCLUDED.baseline_horizon_date
                         ELSE client_ice_watches.baseline_horizon_date
                     END,
+                    known_sessions = CASE
+                        WHEN client_ice_watches.active = false THEN NULL
+                        ELSE client_ice_watches.known_sessions
+                    END,
                     failed_attempts = CASE
                         WHEN client_ice_watches.active = false THEN 0
                         ELSE client_ice_watches.failed_attempts
@@ -116,6 +124,21 @@ class ClientIceWatchRepository:
         )
         row = r.fetchone()
         return _row_to_dict(row) if row else None
+
+    async def deactivate_by_telegram(self, telegram_id: int, watch_id: int) -> bool:
+        """Отписка из бота по кнопке: только своя активная строка."""
+        r = await self._s.execute(
+            text(
+                """
+                UPDATE client_ice_watches
+                SET active = false
+                WHERE id = :wid AND telegram_id = :tid AND active = true
+                RETURNING id
+                """
+            ),
+            {"wid": watch_id, "tid": telegram_id},
+        )
+        return r.fetchone() is not None
 
     async def list_active_for_client(self, client_id: int) -> list[dict[str, Any]]:
         r = await self._s.execute(
@@ -208,6 +231,33 @@ class ClientIceWatchRepository:
         )
         row = r.fetchone()
         return _row_to_dict(row) if row else None
+
+    async def keep_after_notify(self, watch_id: int, known_sessions: list) -> None:
+        """Подписка остаётся. ``known_sessions`` — сеансы, о которых уже сказано."""
+        now = datetime.now(timezone.utc)
+        await self._s.execute(
+            text(
+                """
+                UPDATE client_ice_watches
+                SET last_notified_at = :now, known_sessions = CAST(:known AS jsonb), failed_attempts = 0
+                WHERE id = :wid
+                """
+            ),
+            {"wid": watch_id, "now": now, "known": json.dumps(known_sessions)},
+        )
+
+    async def remember_sessions(self, watch_id: int, known_sessions: list) -> None:
+        """Запомнить текущие сеансы без сообщения: это то, что уже было на странице."""
+        await self._s.execute(
+            text(
+                """
+                UPDATE client_ice_watches
+                SET known_sessions = CAST(:known AS jsonb)
+                WHERE id = :wid
+                """
+            ),
+            {"wid": watch_id, "known": json.dumps(known_sessions)},
+        )
 
     async def mark_notified_and_deactivate(self, watch_id: int) -> None:
         now = datetime.now(timezone.utc)

@@ -3718,6 +3718,29 @@ async def match_bell_off_callback(callback: CallbackQuery) -> None:
             pass
 
 
+@router.callback_query(lambda c: c.data and c.data.startswith("iwatch_off:"))
+async def ice_watch_off_callback(callback: CallbackQuery) -> None:
+    """«Отменить рассылку» под уведомлением о смене расписания катка."""
+    from src.application.client_ice_watch_use_cases import unsubscribe_ice_watch_by_telegram
+    from src.application.ice_watch_message import parse_watch_off_callback
+
+    watch_id = parse_watch_off_callback(callback.data)
+    if watch_id is None or callback.from_user is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as db_session:
+        changed = await unsubscribe_ice_watch_by_telegram(
+            db_session, telegram_id=callback.from_user.id, watch_id=watch_id
+        )
+        await db_session.commit()
+    await callback.answer("Рассылку отключили" if changed else "Уже отключено")
+    if callback.message:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:  # noqa: BLE001 — сообщение могло устареть; тост уже показан
+            pass
+
+
 @router.callback_query(lambda c: c.data == "ice_forecast:optout")
 async def ice_forecast_optout_callback(callback: CallbackQuery) -> None:
     """Отписка от «Лёд на выходные»: тост и кнопка исчезает из этого сообщения."""

@@ -55,9 +55,10 @@ async def test_empty_tracked_rink_shows_habit_and_bell(app_use_test_db, db_sessi
     assert f"Каток обычно выкладывает расписание по{NB}пятницам" in html  # про публикацию, не про сеансы
     # Кнопка в блоке и колокольчик на обложке — одна и та же подписка.
     assert html.count(f"startapp={watch_start_param(place['arena_id'])}") == 2
-    assert f"Сообщить в{NB}Telegram" in html
-    assert "Одно сообщение, потом колокольчик сам выключится." in html
-    # Телефон остаётся под колокольчиком.
+    assert 'class="b-watch"' in html
+    assert "Сообщить, когда появится" in html
+    assert "Будем писать в" in html and "Telegram" in html
+    # Телефон остаётся под CTA.
     assert "b-call" in html
 
 

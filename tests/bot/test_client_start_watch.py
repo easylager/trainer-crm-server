@@ -67,15 +67,17 @@ def test_parse_watch_start() -> None:
 
 @pytest.mark.asyncio
 async def test_start_watch_creates_subscription_with_baseline(app_use_test_db, db_session) -> None:
-    city_id = await _insert_city(db_session, name=f"Колокольск {uuid.uuid4().hex[:6]}")
+    city_id = await _insert_city(db_session, name="Минск")
     arena_id = await _insert_arena(db_session, city_id, name="Юность")
     horizon = await _future_session(db_session, arena_id, days=2)
     tid = _tid()
 
     reply = await subscribe_from_bot_start(db_session, telegram_id=tid, arena_id=arena_id, webapp_base_url=BASE)
     assert reply is not None
-    assert reply["text"].replace(NBSP, " ") == ("Готово: Юность. Напишем один раз, когда появится новое расписание.")
-    assert reply["button_text"] == "Открыть расписание"
+    assert reply["text"].replace(NBSP, " ") == (
+        "<b>Следим за «Юность»</b>\nНапишем, когда расписание обновится."
+    )
+    assert reply["button_text"].replace(NBSP, " ") == "Лёд в Минске"
     assert reply["url"] == f"{BASE}/webapp/arena?arena_id={arena_id}"
 
     rows = await _watches(db_session, arena_id)
@@ -136,7 +138,7 @@ def _message(payload: str, tid: int) -> MagicMock:
 async def test_bot_start_watch_answers_with_open_button(
     app_use_test_db, db_session, _test_db_core, monkeypatch
 ) -> None:
-    city_id = await _insert_city(db_session, name=f"Колокольск {uuid.uuid4().hex[:6]}")
+    city_id = await _insert_city(db_session, name="Минск")
     arena_id = await _insert_arena(db_session, city_id, name="Юность")
     await db_session.commit()
     monkeypatch.setattr(client_handlers, "async_session_factory", _test_db_core["factory"])
@@ -147,10 +149,10 @@ async def test_bot_start_watch_answers_with_open_button(
     await client_handlers.cmd_start(message)
     message.answer.assert_awaited_once()
     body = message.answer.await_args.args[0]
-    assert body.replace(NBSP, " ").startswith("Готово: Юность. Напишем один раз")
+    assert body.replace(NBSP, " ").startswith("<b>Следим за «Юность»</b>\nНапишем, когда расписание обновится")
     markup = message.answer.await_args.kwargs["reply_markup"]
     button = markup.inline_keyboard[0][0]
-    assert button.text == "Открыть расписание"
+    assert button.text.replace(NBSP, " ") == "Лёд в Минске"
     assert button.web_app.url == f"{BASE}/webapp/arena?arena_id={arena_id}"
 
     # Повторный старт — тот же ответ, без дубля.

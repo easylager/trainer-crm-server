@@ -448,6 +448,17 @@ def nomove_text(*, home: str, away: str, starts_at: datetime, now: datetime) -> 
     )
 
 
+def _your_move(home: str, away: str, side: str | None, pick_home: int | None, pick_away: int | None) -> str:
+    """Счёт хода, если игрок его назвал; иначе сторона, за которую он ходил."""
+    if pick_home is not None and pick_away is not None:
+        return f"Твой ход {pick_home}:{pick_away}."
+    if side == "home":
+        return f"Твой ход — {html.escape(club_name(home))}."
+    if side == "away":
+        return f"Твой ход — {html.escape(club_name(away))}."
+    return ""
+
+
 def result_text(
     *,
     home: str,
@@ -456,9 +467,11 @@ def result_text(
     final_away: int,
     points: int,
     doubled: bool,
-    place: str | None,
+    side: str | None = None,
+    pick_home: int | None = None,
+    pick_away: int | None = None,
 ) -> str:
-    """``points`` — базовые очки хода; ``place`` — готовая строка про место, если есть где его назвать."""
+    """Строка одного итога без места: счёт матча, ход игрока, вердикт и очки."""
     total = points * (2 if doubled else 1)
     x2 = " с козырем" if doubled else ""
     # Слова вердикта те же, что ``verdict`` в kto-kogo-model.js: бот и Mini App называют исход одинаково.
@@ -469,8 +482,11 @@ def result_text(
         verdict = f"{head} +{total}{x2}."
     else:
         verdict = f"{head}: +{total}{x2}."
-    out = f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))} {final_home}:{final_away}.</b> {verdict}"
-    return out + ("\n" + place if place else "")
+    head_line = (
+        f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))} {final_home}:{final_away}.</b>"
+    )
+    move = _your_move(home, away, side, pick_home, pick_away)
+    return " ".join(part for part in (head_line, move, verdict) if part)
 
 
 def summary_text(lines: list[str]) -> str:
@@ -490,26 +506,28 @@ async def _rows_cached(session: AsyncSession, cache: dict, club: str | None, per
     return cache[key]
 
 
-async def best_place_line(
+def _place_line(rank: int, size: int, title: str) -> str:
+    return f"Твоё место в «{title}»: {_ordinal(rank)} из {size}."
+
+
+async def best_place(
     session: AsyncSession, *, player_key: int, home: str, away: str, starts_at: datetime, cache: dict
-) -> str | None:
-    """Лучшее место игрока среди срезов матча (команды и «все», месяц и сезон), где есть с кем сравнивать."""
+) -> tuple[tuple, str] | None:
+    """Лучший срез матча и готовая строка места. Ключ сравнивается между матчами одной пачки."""
     month = month_period(_local(starts_at).date())
     season = season_period(starts_at)
-    best: tuple[float, int, int, str] | None = None
+    best: tuple[tuple, str] | None = None
     for club in (home, away, None):
         for period in (month, season):
             rows = await _rows_cached(session, cache, club, period)
             mine = next((r for r in rows if r.player_key == player_key), None)
             if mine is None or not crown_eligible(rows):
                 continue
-            key = (mine.rank / len(rows), -len(rows), mine.rank, _slice_title(club, period))
-            if best is None or key < best:
-                best = key
-    if best is None:
-        return None
-    _, neg_size, rank, title = best
-    return f"Твоё место в «{title}»: {_ordinal(rank)} из {-neg_size}."
+            title = _slice_title(club, period)
+            key = (mine.rank / len(rows), -len(rows), mine.rank, title)
+            if best is None or key < best[0]:
+                best = (key, _place_line(mine.rank, len(rows), title))
+    return best
 
 
 async def _next_for(session: AsyncSession, player_key: int, *, now: datetime, club: str | None) -> dict | None:
@@ -691,10 +709,13 @@ async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) 
     out: list[Notice] = []
     for player_key, rows in by_player.items():
         texts: list[str] = []
+        places: list[tuple[tuple, str]] = []
         for r in rows:
-            place = await best_place_line(
+            found = await best_place(
                 session, player_key=player_key, home=r.home_team, away=r.away_team, starts_at=r.starts_at, cache=cache
             )
+            if found is not None:
+                places.append(found)
             texts.append(
                 result_text(
                     home=r.home_team,
@@ -703,13 +724,19 @@ async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) 
                     final_away=r.final_away,
                     points=r.points,
                     doubled=bool(r.doubled),
-                    place=place,
+                    side=r.side,
+                    pick_home=r.home_score,
+                    pick_away=r.away_score,
                 )
             )
+        # В пачке место одно: лучший срез среди этих матчей, уже после всех ходов.
+        place = min(places)[1] if places else None
         if len(rows) == 1:
             body = texts[0]
         else:
-            body = summary_text([t.replace("\n", " ") for t in texts])
+            body = summary_text(texts)
+        if place:
+            body += "\n" + place
         buttons = _rows(
             [
                 {"text": "Следующий ход", "callback_data": CB_NEXT},

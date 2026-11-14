@@ -6,6 +6,17 @@
        и бар оболочки здесь вставал на ~34 px выше, чем на соседних вкладках (прыгал при переключении). -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Кто кого</title>
+  <!--
+    TASK-391: соседние вкладки (Главная, Я, …) включают cross-document view transitions.
+    Без opt-in здесь Chrome/Telegram WebView на первом уходе стартует переход и обрывает его
+    (InvalidStateError / «не переходит»); со второго раза, когда кэш тёплый, маскируется.
+    Инлайн в <head> — надёжнее внешнего CSS (проверка opt-in до первого кадра).
+    Оболочка по возможности глушит уход (cw-vt-off / pageswap) — тогда анимации нет.
+  -->
+  <style id="kk-vt-opt-in">
+    @view-transition { navigation: auto; }
+    @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="/static/webapp/mini-app-telegram-chrome.js?v=202611133"></script>
   <!-- TASK-388: свои шрифты, как на главной (те же Dela Gothic One и Golos Text 400–700), вместо Google Fonts:

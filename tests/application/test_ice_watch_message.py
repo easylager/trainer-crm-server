@@ -10,9 +10,11 @@ import pytest
 from src.application.ice_watch_message import (
     NBSP,
     compose_new_schedule_message,
+    compose_schedule_change_message,
     compose_watch_subscribed_reply,
     format_dates_range,
     format_nearest,
+    open_ice_in_city_button,
     place_name,
 )
 
@@ -108,8 +110,31 @@ def test_real_names_as_on_site_header(raw: str, shown: str) -> None:
     )
     assert msg.startswith(f"<b>{shown}: новое расписание</b>\n")
     assert "„" not in msg and "“" not in msg and "««" not in msg
+    shown_q = shown if shown.startswith("«") and shown.endswith("»") else f"«{shown}»"
     assert _plain(compose_watch_subscribed_reply(raw)) == (
-        f"Готово: {shown}. Напишем один раз, когда появится новое расписание."
+        f"<b>Следим за {shown_q}</b>\nНапишем, когда расписание обновится."
+    )
+
+
+def test_open_ice_in_city_button_uses_locative() -> None:
+    assert open_ice_in_city_button("Минск").replace(NBSP, " ") == "Лёд в Минске"
+    assert open_ice_in_city_button("Гомель").replace(NBSP, " ") == "Лёд в Гомеле"
+    assert open_ice_in_city_button("Превьюск").replace(NBSP, " ") == "Лёд в городе Превьюск"
+    assert open_ice_in_city_button("") == "Открыть расписание"
+
+
+def test_schedule_change_lists_added_and_removed() -> None:
+    msg = compose_schedule_change_message(
+        arena_name="Юность",
+        added=["завтра в 17:00"],
+        removed=["сегодня в 12:00"],
+    )
+    assert msg == (
+        "<b>Юность</b>\n"
+        "Появились сеансы:\n"
+        "• завтра в 17:00\n"
+        "Сняли сеансы:\n"
+        "• сегодня в 12:00"
     )
 
 
