@@ -41,8 +41,8 @@ _WEEKDAYS_ACC = (
 )
 
 OPEN_SCHEDULE_BUTTON = "Открыть расписание"
-# Кнопка у уведомления об изменении: «Я» → Сохранённые, там можно отписаться.
-MANAGE_WATCH_BUTTON = "Сохранённые"
+CANCEL_WATCH_BUTTON = "Отменить рассылку"
+WATCH_OFF_PREFIX = "iwatch_off:"
 
 
 def open_ice_in_city_button(city_name: str | None) -> str:
@@ -129,7 +129,7 @@ def compose_schedule_change_message(
 ) -> str:
     """Одно сообщение про изменение расписания. Строки ``added``/``removed`` уже готовые, без HTML.
 
-    Кнопка к сообщению — ``MANAGE_WATCH_BUTTON`` → Сохранённые (отписка).
+    Кнопки к сообщению: ``OPEN_SCHEDULE_BUTTON`` и ``CANCEL_WATCH_BUTTON`` (callback).
     """
     parts = [f"<b>{place_name(arena_name)}</b>"]
     if added:
@@ -139,3 +139,15 @@ def compose_schedule_change_message(
         parts.append("Сняли сеансы:")
         parts.extend(f"• {line}" for line in removed)
     return "\n".join(parts)
+
+
+def watch_off_callback_data(watch_id: int) -> str:
+    return f"{WATCH_OFF_PREFIX}{int(watch_id)}"
+
+
+def parse_watch_off_callback(data: str | None) -> int | None:
+    raw = data or ""
+    if not raw.startswith(WATCH_OFF_PREFIX):
+        return None
+    tail = raw[len(WATCH_OFF_PREFIX) :]
+    return int(tail) if tail.isdigit() and 0 < int(tail) < 2**31 else None

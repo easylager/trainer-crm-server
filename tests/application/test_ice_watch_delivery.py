@@ -232,6 +232,23 @@ async def test_new_dates_past_baseline_fire_once_with_new_range(db_session) -> N
 
 
 @pytest.mark.asyncio
+async def test_sessions_change_attaches_open_and_cancel_buttons(db_session) -> None:
+    city_id, arena_id, tid, client_id = await _setup(db_session)
+    watch = await _subscribe(db_session, client_id=client_id, tid=tid, arena_id=arena_id, city_id=city_id)
+    await _session(db_session, arena_id, days=2)
+    send = AsyncMock()
+    factory = uc._change_notice_markup_factory("https://app.example")
+    await deliver_ice_watch_reminders(
+        db_session, now=datetime.now(timezone.utc), send_fn=send, reply_markup_factory=factory
+    )
+    send.assert_awaited_once()
+    markup = send.await_args.args[2]
+    texts = [b.text for row in markup.inline_keyboard for b in row]
+    assert texts == ["Открыть расписание", "Отменить рассылку"]
+    assert markup.inline_keyboard[1][0].callback_data == f"iwatch_off:{watch['id']}"
+
+
+@pytest.mark.asyncio
 async def test_empty_card_fires_on_any_future_session(db_session) -> None:
     city_id, arena_id, tid, client_id = await _setup(db_session)
     watch = await _subscribe(db_session, client_id=client_id, tid=tid, arena_id=arena_id, city_id=city_id)

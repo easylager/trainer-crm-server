@@ -24,10 +24,12 @@ from src.application.arena_profile import is_in_season
 from src.application.client_ice_watch_filters import filter_label, session_matches_filter
 from src.application.ice_session_use_cases import STATUS_ACTIVE
 from src.application.ice_watch_message import (
-    MANAGE_WATCH_BUTTON,
+    CANCEL_WATCH_BUTTON,
+    OPEN_SCHEDULE_BUTTON,
     compose_new_schedule_message,
     compose_schedule_change_message,
     format_nearest,
+    watch_off_callback_data,
 )
 from src.infrastructure.db.models import (
     ICE_WATCH_DEACTIVATED_FAILED,
@@ -74,6 +76,8 @@ _MONTHS_PREP = (
 )
 
 SendFn = Callable[[int, str, Any], Awaitable[None]]
+# Кнопки у напоминания: arena_id (открыть расписание) + watch_id (отменить рассылку).
+SessionsMarkupFactory = Callable[[int, int], Any]
 
 # «на площадь» не склоняется. Префикс адреса → предложный падеж.
 _ON_PLACE = (
@@ -140,6 +144,17 @@ async def unsubscribe_ice_watch(
     row = await repo.deactivate(client_id, watch_id)
     await session.commit()
     return await enrich_watch_row(session, row) if row else None
+
+
+async def unsubscribe_ice_watch_by_telegram(
+    session: AsyncSession,
+    *,
+    telegram_id: int,
+    watch_id: int,
+) -> bool:
+    """Кнопка «Отменить рассылку» в боте. ``True`` — только что сняли."""
+    repo = ClientIceWatchRepository(session)
+    return await repo.deactivate_by_telegram(int(telegram_id), int(watch_id))
 
 
 async def list_ice_watches_for_client(session: AsyncSession, client_id: int) -> list[dict[str, Any]]:
@@ -623,7 +638,7 @@ async def deliver_ice_watch_reminders(
     *,
     now: datetime | None = None,
     send_fn: SendFn,
-    reply_markup_factory: Callable[[int], Any] | None = None,
+    reply_markup_factory: SessionsMarkupFactory | None = None,
 ) -> IceWatchPassStats:
     """Один проход по всем активным подпискам на новое расписание (TASK-328).
 
@@ -713,7 +728,7 @@ async def _deliver_sessions_watch(
     *,
     now: datetime,
     send_fn: SendFn,
-    reply_markup_factory: Callable[[int], Any] | None,
+    reply_markup_factory: SessionsMarkupFactory | None,
     stats: IceWatchPassStats,
     arena_info: dict[int, tuple[str, ZoneInfo]],
 ) -> None:
@@ -765,7 +780,7 @@ async def _deliver_one(
     *,
     text_msg: str,
     send_fn: SendFn,
-    reply_markup_factory: Callable[[int], Any] | None,
+    reply_markup_factory: SessionsMarkupFactory | None,
     stats: IceWatchPassStats,
     deactivate: bool = True,
     known_after: list | None = None,
@@ -795,7 +810,7 @@ async def _deliver_one(
         stats.unreachable += 1
         return
 
-    markup = reply_markup_factory(arena_id) if reply_markup_factory else None
+    markup = reply_markup_factory(arena_id, watch_id) if reply_markup_factory else None
     attempted_at = datetime.now(timezone.utc)
     try:
         async with asyncio.timeout(SEND_TIMEOUT_S):
@@ -857,19 +872,32 @@ async def _deliver_one(
     stats.sent += 1
 
 
-def _manage_watch_markup_factory(base_url: str) -> Callable[[int], Any] | None:
-    """Кнопка «Сохранённые» → раздел Я, где отключают рассылку. Без HTTPS Mini App не откроется."""
+def _change_notice_markup_factory(base_url: str) -> SessionsMarkupFactory:
+    """«Открыть расписание» (HTTPS) + «Отменить рассылку» (callback)."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
     base = (base_url or "").strip().rstrip("/")
-    if not base.lower().startswith("https://"):
-        return None
 
-    def _markup(_arena_id: int) -> InlineKeyboardMarkup:
-        url = f"{base}/webapp/client-saved-trainers"
-        return InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text=MANAGE_WATCH_BUTTON, web_app=WebAppInfo(url=url))]]
+    def _markup(arena_id: int, watch_id: int) -> InlineKeyboardMarkup:
+        rows: list[list[InlineKeyboardButton]] = []
+        if base.lower().startswith("https://"):
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=OPEN_SCHEDULE_BUTTON,
+                        web_app=WebAppInfo(url=f"{base}/webapp/arena?arena_id={int(arena_id)}"),
+                    )
+                ]
+            )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=CANCEL_WATCH_BUTTON,
+                    callback_data=watch_off_callback_data(watch_id),
+                )
+            ]
         )
+        return InlineKeyboardMarkup(inline_keyboard=rows)
 
     return _markup
 
@@ -901,7 +929,7 @@ async def run_ice_watch_delivery_pass(*, now: datetime | None = None) -> IceWatc
                 session,
                 now=now,
                 send_fn=_send,
-                reply_markup_factory=_manage_watch_markup_factory(settings.webapp_base_url or ""),
+                reply_markup_factory=_change_notice_markup_factory(settings.webapp_base_url or ""),
             )
     finally:
         if bot is not None:

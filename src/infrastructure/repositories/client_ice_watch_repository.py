@@ -125,6 +125,21 @@ class ClientIceWatchRepository:
         row = r.fetchone()
         return _row_to_dict(row) if row else None
 
+    async def deactivate_by_telegram(self, telegram_id: int, watch_id: int) -> bool:
+        """Отписка из бота по кнопке: только своя активная строка."""
+        r = await self._s.execute(
+            text(
+                """
+                UPDATE client_ice_watches
+                SET active = false
+                WHERE id = :wid AND telegram_id = :tid AND active = true
+                RETURNING id
+                """
+            ),
+            {"wid": watch_id, "tid": telegram_id},
+        )
+        return r.fetchone() is not None
+
     async def list_active_for_client(self, client_id: int) -> list[dict[str, Any]]:
         r = await self._s.execute(
             text(
