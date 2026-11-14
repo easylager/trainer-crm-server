@@ -992,3 +992,46 @@ async def test_empty_schedule_keeps_the_wait_block_without_the_day_button(app_us
         resp = await client.get(place["path"])
     assert resp.status_code == 200, resp.text
     assert 'class="b-watch"' not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_place_page_shows_nearby_cities_block_at_the_bottom(app_use_test_db, db_session) -> None:
+    """Внизу страницы катка — тот же «Лёд рядом», что на /c/: соседние города с сеансом."""
+    here = await _place(db_session, name=f"Каток здесь {uuid.uuid4().hex[:6]}")
+    await db_session.execute(
+        text("UPDATE arenas SET latitude = 53.90, longitude = 27.56 WHERE id = :id"),
+        {"id": here["arena_id"]},
+    )
+    near_city = f"Рядомск {uuid.uuid4().hex[:6]}"
+    near_city_id = await _insert_city(db_session, name=near_city)
+    near_arena = await _insert_arena(
+        db_session,
+        near_city_id,
+        name=f"Каток рядом {uuid.uuid4().hex[:6]}",
+        latitude=54.00,
+        longitude=27.70,
+    )
+    await _add_future_session(db_session, near_arena, days_ahead=0, starts_at_local="15:45")
+    far_city = f"Далёск {uuid.uuid4().hex[:6]}"
+    far_city_id = await _insert_city(db_session, name=far_city)
+    far_arena = await _insert_arena(
+        db_session,
+        far_city_id,
+        name=f"Каток далеко {uuid.uuid4().hex[:6]}",
+        latitude=55.20,
+        longitude=30.20,
+    )
+    await _add_future_session(db_session, far_arena, days_ahead=0, starts_at_local="18:00")
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(here["path"])
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    assert "Лёд рядом" in html
+    assert near_city in html
+    assert "Все города" in html
+    assert 'href="/#cities"' in html
+    # Блок в самом низу тела: после контактов / about.
+    assert html.rfind("Лёд рядом") > html.rfind('class="b-sec')
+    assert f'/c/{city_slug(near_city)}' in html

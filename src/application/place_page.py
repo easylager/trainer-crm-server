@@ -449,6 +449,23 @@ async def load_place_view(
 
         trainers, _total = await load_site_trainers(session, arena_id=int(card["id"]))
     matches = await _arena_matches(session, card, now=now)
+    nearby: list[dict[str, Any]] = []
+    # Тот же блок «Лёд рядом», что на странице города: города вокруг этого катка.
+    if (
+        _skating(card)
+        and card.get("city_id") is not None
+        and card.get("latitude") is not None
+        and card.get("longitude") is not None
+    ):
+        from src.application.city_style_b import load_nearby
+
+        nearby = await load_nearby(
+            session,
+            city_id=int(card["city_id"]),
+            origin=(float(card["latitude"]), float(card["longitude"])),
+            today=today,
+            now=now,
+        )
     return {
         "card": card,
         "matches": matches,
@@ -464,6 +481,7 @@ async def load_place_view(
         "session_count": len(all_slots),
         "schedule_note": schedule_note,
         "alternatives": alternatives,
+        "nearby": nearby,
         "today": today,
         "now": now,
     }
@@ -2303,6 +2321,22 @@ def _b_about(card: Mapping[str, Any]) -> str:
     return f'<section class="b-sec b-sec--place" data-nosnippet><p class="b-text">{_esc(text)}</p></section>'
 
 
+def _b_nearby(view: Mapping[str, Any]) -> str:
+    """«Лёд рядом» внизу страницы катка — тот же блок, что на /c/…."""
+    from src.application.city_style_b import nearby_section_html
+
+    items = view.get("nearby") or []
+    if not items:
+        return ""
+    card = view.get("card") if isinstance(view.get("card"), Mapping) else {}
+    title_key = (
+        "hub.nearby_scheduled"
+        if normalize_schedule_mode(card.get("schedule_mode")) == SCHEDULE_MODE_PHONE
+        else "hub.nearby"
+    )
+    return nearby_section_html(items, title=t(title_key))
+
+
 def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
     """Тёмный билет «Выбранный сеанс» над расписанием.
 
@@ -2472,6 +2506,7 @@ def render_place_body_b(
     )
     ice_and_trainers = ice_html + trainers_html
     # Порядок блоков — arena_visit_info.PLACE_BLOCKS: cover, ice, facts, services, trainers, partners, more.
+    # «Лёд рядом» — после контактов, в самом низу тела (как на /c/ у однокатковых городов).
     parts = [
         _b_hero(card, status_html=_b_status(view), chips_html=_b_hero_chips(card, links)),
         _b_plan(view, invite=invite),
@@ -2484,6 +2519,7 @@ def render_place_body_b(
         more_html(vv, coach_html=coach_in_more, tel_href=str(links.get("tel") or "")),
         _b_about(card),
         _b_contacts(card, links),
+        _b_nearby(view),
     ]
     body = "".join(parts)
     return body + phone_beacon_script(body)

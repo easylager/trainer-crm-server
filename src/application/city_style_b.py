@@ -14,12 +14,12 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.ice_city_day import DEFAULT_TIMEZONE
-from src.application.style_b import b_photo_url
+from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, plural_ru
+from src.application.style_b import b_photo_url, section, tile_html
 from src.application.week_grid import collapse_even_grid
 from src.shared.currency import currency_label_ru
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
-from src.shared.public_display import format_clock
+from src.shared.public_display import format_clock, format_public_name
 
 VARIANT_MANY = "many"
 VARIANT_ONE = "one"
@@ -232,6 +232,31 @@ async def load_week(
         .all()
     )
     return [dict(row) for row in rows]
+
+
+def nearby_section_html(items: list[Mapping[str, Any]] | None, *, title: str) -> str:
+    """Блок «Лёд рядом» — карточки городов. Пустой список → пустая строка (блока нет)."""
+    rows = list(items or [])
+    if not rows:
+        return ""
+    tiles: list[str] = []
+    for item in rows:
+        n = int(item.get("rink_count") or 0)
+        name = format_public_name(str(item.get("name") or ""))
+        line = f"{n}\u00a0{plural_ru(n, 'каток', 'катка', 'катков')} · {item.get('when')} в\u00a0{item.get('time')}"
+        tiles.append(
+            tile_html(
+                href=f"/c/{city_slug(str(item.get('name') or ''))}",
+                name=name,
+                line=line,
+                photo_url=item.get("photo_url"),
+                photo_alt=name,
+                toned=bool(item.get("display_tone")),
+                badge=str(item.get("distance") or ""),
+            )
+        )
+    more = f'<a class="b-more" href="/#cities">{_esc("Все города")}</a>'
+    return section(title, f'<div class="b-scroll">{"".join(tiles)}</div>', aside_html=more, klass="b-sec--flush")
 
 
 async def load_nearby(

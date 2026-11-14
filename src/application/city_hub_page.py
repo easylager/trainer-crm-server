@@ -66,6 +66,7 @@ from src.application.city_style_b import (
     VARIANT_PHONE,
     choose_city_variant,
     load_nearby,
+    nearby_section_html,
     city_origin,
     load_week,
     price_sentence,
@@ -1277,29 +1278,7 @@ def _b_for_you(view: Mapping[str, Any]) -> str:
 
 
 def _b_nearby(view: Mapping[str, Any], *, title: str) -> str:
-    from src.application.style_b import section, tile_html
-
-    items = list(view.get("nearby") or [])
-    if not items:
-        return ""
-    tiles = []
-    for item in items:
-        n = int(item.get("rink_count") or 0)
-        name = format_public_name(str(item.get("name") or ""))
-        line = f"{n} {plural_ru(n, 'каток', 'катка', 'катков')} · {item.get('when')} в {item.get('time')}"
-        tiles.append(
-            tile_html(
-                href=f"/c/{city_slug(str(item.get('name') or ''))}",
-                name=name,
-                line=line,
-                photo_url=item.get("photo_url"),
-                photo_alt=name,
-                toned=bool(item.get("display_tone")),
-                badge=str(item.get("distance") or ""),
-            )
-        )
-    more = f'<a class="b-more" href="/#cities">{_esc("Все города")}</a>'
-    return section(title, f'<div class="b-scroll">{"".join(tiles)}</div>', aside_html=more, klass="b-sec--flush")
+    return nearby_section_html(view.get("nearby"), title=title)
 
 
 def _b_minutes_until(hhmm: str, now_local: datetime) -> int | None:
