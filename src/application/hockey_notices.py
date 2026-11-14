@@ -452,8 +452,11 @@ def _your_move(home: str, away: str, side: str | None, pick_home: int | None, pi
     """Счёт хода, если игрок его назвал; иначе сторона, за которую он ходил."""
     if pick_home is not None and pick_away is not None:
         return f"Твой ход {pick_home}:{pick_away}."
-    club = home if side == "home" else away
-    return f"Твой ход — {html.escape(club_name(club))}."
+    if side == "home":
+        return f"Твой ход — {html.escape(club_name(home))}."
+    if side == "away":
+        return f"Твой ход — {html.escape(club_name(away))}."
+    return ""
 
 
 def result_text(
@@ -479,11 +482,11 @@ def result_text(
         verdict = f"{head} +{total}{x2}."
     else:
         verdict = f"{head}: +{total}{x2}."
-    move = _your_move(home, away, side, pick_home, pick_away)
-    return (
-        f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))} {final_home}:{final_away}.</b> "
-        f"{move} {verdict}"
+    head_line = (
+        f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))} {final_home}:{final_away}.</b>"
     )
+    move = _your_move(home, away, side, pick_home, pick_away)
+    return " ".join(part for part in (head_line, move, verdict) if part)
 
 
 def summary_text(lines: list[str]) -> str:

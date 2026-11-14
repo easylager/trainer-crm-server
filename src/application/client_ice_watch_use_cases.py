@@ -639,6 +639,7 @@ async def deliver_ice_watch_reminders(
     now: datetime | None = None,
     send_fn: SendFn,
     reply_markup_factory: SessionsMarkupFactory | None = None,
+    schedule_fresh_markup_factory: SessionsMarkupFactory | None = None,
 ) -> IceWatchPassStats:
     """Один проход по всем активным подпискам на новое расписание (TASK-328).
 
@@ -660,6 +661,10 @@ async def deliver_ice_watch_reminders(
     watches = await repo.list_active_by_kinds(_DELIVERY_KINDS)
     sessions_by_arena: dict[int, list[dict[str, Any]]] = {}
     arena_info: dict[int, tuple[str, ZoneInfo]] = {}
+    # One-shot: только «Открыть расписание», без «Отменить» — подписка гаснет сама.
+    fresh_markup = (
+        schedule_fresh_markup_factory if schedule_fresh_markup_factory is not None else reply_markup_factory
+    )
     for watch in watches:
         arena_id = int(watch["arena_id"])
         if arena_id not in sessions_by_arena:
@@ -702,7 +707,7 @@ async def deliver_ice_watch_reminders(
                 watch,
                 text_msg=_compose_for_new_sessions(name, tz, new_sessions, now=now),
                 send_fn=send_fn,
-                reply_markup_factory=reply_markup_factory,
+                reply_markup_factory=fresh_markup,
                 stats=stats,
             )
         except _FloodLimited:
@@ -872,8 +877,8 @@ async def _deliver_one(
     stats.sent += 1
 
 
-def _change_notice_markup_factory(base_url: str) -> SessionsMarkupFactory:
-    """«Открыть расписание» (HTTPS) + «Отменить рассылку» (callback)."""
+def _change_notice_markup_factory(base_url: str, *, cancel: bool = True) -> SessionsMarkupFactory:
+    """«Открыть расписание» (HTTPS); для живой подписки ещё «Отменить рассылку» (callback)."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
     base = (base_url or "").strip().rstrip("/")
@@ -889,14 +894,15 @@ def _change_notice_markup_factory(base_url: str) -> SessionsMarkupFactory:
                     )
                 ]
             )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=CANCEL_WATCH_BUTTON,
-                    callback_data=watch_off_callback_data(watch_id),
-                )
-            ]
-        )
+        if cancel:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=CANCEL_WATCH_BUTTON,
+                        callback_data=watch_off_callback_data(watch_id),
+                    )
+                ]
+            )
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
     return _markup
@@ -913,6 +919,7 @@ async def run_ice_watch_delivery_pass(*, now: datetime | None = None) -> IceWatc
 
     settings = Settings()
     bot: Bot | None = None
+    base = settings.webapp_base_url or ""
 
     async def _send(tg_id: int, txt: str, markup=None) -> None:
         nonlocal bot
@@ -929,7 +936,8 @@ async def run_ice_watch_delivery_pass(*, now: datetime | None = None) -> IceWatc
                 session,
                 now=now,
                 send_fn=_send,
-                reply_markup_factory=_change_notice_markup_factory(settings.webapp_base_url or ""),
+                reply_markup_factory=_change_notice_markup_factory(base, cancel=True),
+                schedule_fresh_markup_factory=_change_notice_markup_factory(base, cancel=False),
             )
     finally:
         if bot is not None:

@@ -29,6 +29,10 @@ async def test_change_notice_markup_has_open_and_cancel() -> None:
     kb2 = http_only(9, 42)
     assert [b.text for row in kb2.inline_keyboard for b in row] == [CANCEL_WATCH_BUTTON]
 
+    # One-shot schedule_fresh: открыть расписание без «Отменить» — подписка гаснет сама.
+    fresh = _change_notice_markup_factory("https://app.example", cancel=False)
+    assert [b.text for row in fresh(9, 42).inline_keyboard for b in row] == [OPEN_SCHEDULE_BUTTON]
+
 
 @pytest.mark.asyncio
 async def test_ice_watch_off_callback_deactivates(
