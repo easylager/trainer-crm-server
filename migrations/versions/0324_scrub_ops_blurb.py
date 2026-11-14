@@ -4,7 +4,7 @@
 её видели все на place page. Чистим строки в БД; runtime-скруббер режет такие
 фразы и на старых копиях.
 
-Revision ID: 0324_scrub_ops_short_descriptions
+Revision ID: 0324_scrub_ops_blurb
 Revises: 0323_watch_stays_on
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 from alembic import op
 from sqlalchemy import text
 
-revision = "0324_scrub_ops_short_descriptions"
+revision = "0324_scrub_ops_blurb"
 down_revision = "0323_watch_stays_on"
 branch_labels = None
 depends_on = None
