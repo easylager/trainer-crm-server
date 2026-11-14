@@ -549,35 +549,35 @@ describe('п. 5: предзагрузка на pointerdown', () => {
   /* TASK-395: подгрузка идёт через fetch (а не <link rel=prefetch>), ассеты — всё, что не /api/. */
   const prefetched = (t) => t.fetches.filter((u) => !u.startsWith('/api/')).map((n) => n.replace(/^.*\//, '').replace(/\?.*$/, ''));
 
-  it('kk — css и все kto-kogo*.js из kto-kogo.html', () => {
-    const html = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/kto-kogo.html'), 'utf8');
-    const expected = [...html.matchAll(/\/static\/webapp\/(kto-kogo[\w-]*\.(?:js|css))/g)].map((m) => m[1]);
-    assert.ok(expected.length >= 10);
+  it('kk — на pointerdown ассеты не качаем (конкурировали с переходом на холодном кэше)', () => {
     const t = bootShell({ flags: SEASON });
     t.btn('kk').fire('pointerdown');
-    const got = prefetched(t);
-    for (const f of expected) assert.ok(got.includes(f), 'не предзагружен ' + f);
     t.btn('kk').fire('pointerdown');
-    assert.equal(prefetched(t).length, got.length, 'повторный pointerdown не дублирует запросы');
+    assert.deepEqual(prefetched(t), []);
   });
 
-  it('kk — адрес и ?v= предзагрузки те же, что у ссылок на странице игры, и это /static/webapp/', () => {
+  it('kk — фоном адрес и ?v= те же, что у ссылок на странице игры, и это /static/webapp/', async () => {
     const html = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/kto-kogo.html'), 'utf8');
     const page = [...html.matchAll(/(?:href|src)="(\/static\/webapp\/kto-kogo[\w-]*\.(?:js|css)\?v=\d+)"/g)].map((m) => m[1]).sort();
     assert.ok(page.length >= 10);
-    const t = bootShell({ flags: SEASON });
-    t.btn('kk').fire('pointerdown');
-    const hrefs = t.fetches.filter((u) => !u.startsWith('/api/')).sort();
+    const t = bootShell({ flags: SEASON, fetchAll: true });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    for (let i = 0; i < 40; i++) await t.flush();
+    const hrefs = t.fetches.filter((u) => u.includes('/static/webapp/kto-kogo')).sort();
     assert.deepEqual(hrefs, page);
-    assert.ok(hrefs.every((h) => h.startsWith('/static/webapp/')), 'ни одного /webapp/kto-kogo*');
   });
 
-  it('kk — версия берётся у самой оболочки: сервер штампует ?v= во всех страницах одной меткой', () => {
-    const t = bootShell({ flags: SEASON, scriptSrc: 'https://test/webapp/mini-app-client-shell.js?v=128573828630199' });
-    t.btn('kk').fire('pointerdown');
-    const hrefs = t.fetches.filter((u) => !u.startsWith('/api/'));
+  it('kk — версия фоновой подгрузки берётся у оболочки', async () => {
+    const t = bootShell({
+      flags: SEASON,
+      fetchAll: true,
+      scriptSrc: 'https://test/webapp/mini-app-client-shell.js?v=128573828630199',
+    });
+    t.win.ClientShell.scheduleCatalogNavigationPrefetch();
+    for (let i = 0; i < 40; i++) await t.flush();
+    const hrefs = t.fetches.filter((u) => u.includes('/static/webapp/kto-kogo'));
     assert.ok(hrefs.length >= 10);
-    assert.ok(hrefs.every((h) => h.startsWith('/static/webapp/kto-kogo') && h.endsWith('?v=128573828630199')), hrefs.join());
+    assert.ok(hrefs.every((h) => h.endsWith('?v=128573828630199')), hrefs.join());
   });
 
   it('me — client-me.css, client-me.js и тёплый кэш', async () => {
@@ -915,6 +915,20 @@ describe('направление view transition в season', () => {
     assert.equal(swap('https://test/webapp/trainers?trainer_id=3'), 1);
     assert.equal(swap('https://test/webapp/client-me?init_data=x'), 0);
     assert.equal(swap('https://test/webapp/ice'), 0);
+  });
+  it('TASK-391: клик на Кто кого глушит @view-transition до ухода (без pageswap на мобильном WebView)', () => {
+    const t = bootShell({ flags: SEASON });
+    t.btn('kk').fire('click');
+    const style = t.doc.head.descendants().find((n) => n.id === 'cw-vt-off');
+    assert.ok(style, 'стиль cw-vt-off в head');
+    assert.match(style.textContent, /@view-transition\s*\{\s*navigation:\s*none/);
+    assert.match(t.navigations[0], /kto-kogo/);
+  });
+  it('TASK-391: переход на client-me view-transition не глушит', () => {
+    const t = bootShell({ flags: SEASON });
+    t.btn('me').fire('click');
+    assert.equal(t.doc.head.descendants().find((n) => n.id === 'cw-vt-off'), undefined);
+    assert.match(t.navigations[0], /client-me/);
   });
   it('флаг выключен: порядок прежний (kto-kogo не вкладка — всегда forward)', () => {
     const t = bootShell({ pathname: '/webapp/client-bookings' });

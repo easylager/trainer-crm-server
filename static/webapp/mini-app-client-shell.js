@@ -407,6 +407,8 @@
       prefetchShellTab(tabId);
       return;
     }
+    /* kk намеренно без prefetch здесь: ~12 kto-kogo* на pointerdown конкурировали с document
+       на click (холодный кэш / мобилка) — первый тап «не уходил». Фон schedule* хватает. */
     if (tabId === 'catalog') {
       prefetchIceAssets();
       prefetchCatalogAssets();
@@ -414,8 +416,6 @@
     } else if (tabId === 'bookings') {
       prefetchBookingsAssets();
       prefetchBookingsWarmCache();
-    } else if (tabId === 'kk') {
-      prefetchKkAssets();
     } else if (tabId === 'me') {
       prefetchMeAssets();
       /* Повторный тап по «Я» на самой «Я»: страницу перезапросит client-shell:retap, второй GET не нужен. */
@@ -1074,8 +1074,37 @@
    * включают переходы. Уходящая страница их включила — Chrome начинал переход и обрывал его на новой
    * странице (InvalidStateError «ViewTransition opt-in disabled» в консоли). Переход туда не
    * начинаем вовсе: на экране то же самое, что было (обрыв), без ошибки.
+   *
+   * На части мобильных WebView (Telegram) pageswap нет или срабатывает поздно: первый тап на
+   * «Кто кого» начинал VT и обрывал навигацию, второй уже проходил. Поэтому до location.href
+   * глушим @view-transition на уходящей странице — работает и без pageswap.
    */
   var NO_VIEW_TRANSITION_PAGE = /\/(kto-kogo|trainers)(\.html)?$/;
+  var vtOffInjected = false;
+
+  function targetsPageWithoutViewTransition(pathOrUrl) {
+    var raw = String(pathOrUrl || '');
+    var path = raw;
+    try {
+      if (/^https?:/i.test(raw)) path = new URL(raw).pathname;
+      else if (raw.charAt(0) === '/') path = raw.split('?')[0];
+      else path = '/' + raw.split('?')[0];
+    } catch (e) {
+      path = raw;
+    }
+    return NO_VIEW_TRANSITION_PAGE.test(path);
+  }
+
+  function disableOutgoingViewTransitions() {
+    if (vtOffInjected) return;
+    try {
+      var s = document.createElement('style');
+      s.id = 'cw-vt-off';
+      s.textContent = '@view-transition { navigation: none; }';
+      (document.head || document.documentElement).appendChild(s);
+      vtOffInjected = true;
+    } catch (e) { /* */ }
+  }
 
   function skipTransitionToPagesWithoutOptIn(ev) {
     var vt = ev && ev.viewTransition;
@@ -1137,6 +1166,10 @@
     var raw = String(path || '');
     var url = raw.charAt(0) === '/' ? withInit(raw) : withInit(webappBasePath() + raw);
     // Full page loads in Telegram WebView: View Transitions delay navigation until snapshot capture.
+    // Страницы без opt-in: глушим VT до ухода (см. TASK-391 / cw-vt-off).
+    if (targetsPageWithoutViewTransition(raw) || targetsPageWithoutViewTransition(url)) {
+      disableOutgoingViewTransitions();
+    }
     if (opts && opts.replace) global.location.replace(url);
     else global.location.href = url;
   }
