@@ -803,6 +803,12 @@ def share_payload(view: Mapping[str, Any], *, page_url: str, invite: bool = Fals
 # ---------------------------------------------------------------------------
 
 
+def _place_glide_track_html(view: Mapping[str, Any]) -> str:
+    from src.application.empty_state_telemetry import glide_track_boot_html, place_track_context
+
+    return glide_track_boot_html(place_track_context(view))
+
+
 def _esc(value: Any) -> str:
     return html_lib.escape(str(value if value is not None else ""), quote=True)
 
@@ -1142,14 +1148,20 @@ def _place_share_bar_html(view: Mapping[str, Any], *, invite: bool, telegram_url
         today=view["today"],
     )
     label = f"Позвать на {when}" if when else "Позвать с собой"
-    tg = app_button_html(telegram_url, floating=False) if telegram_url else ""
+    from src.application.empty_state_telemetry import GOAL_TELEGRAM_CTA, SURFACE_PLACE, track_attrs
+
+    tg_track = track_attrs(GOAL_TELEGRAM_CTA, surface=SURFACE_PLACE, action="open_app")
+    tg = app_button_html(telegram_url, floating=False, extra_attrs=tg_track) if telegram_url else ""
     # Без Telegram-ссылки панели без JS показывать нечего — как раньше, ждёт скрипт.
     dock_hidden = "" if tg else " hidden"
     return (
         f'<div class="place-share-dock" id="placeShareDock"{dock_hidden}>'
         '<div class="place-share-dock__inner"><div class="place-share-dock__row">'
         # «Позвать» hidden до скрипта: без JS ей нечего открыть — под выбранным сеансом свои ссылки.
-        f'<button type="button" class="place-share-dock__btn" id="placeShareBtn" hidden>{_esc(label)}</button>'
+        # Клиентский telegram_cta на кнопке — через place-share.js (data-glide-track на самом share).
+        f'<button type="button" class="place-share-dock__btn" id="placeShareBtn" hidden '
+        f'data-glide-track="{GOAL_TELEGRAM_CTA}" data-glide-action="invite" '
+        f'data-glide-surface="{SURFACE_PLACE}">{_esc(label)}</button>'
         f"{tg}</div></div></div>"
     )
 
@@ -1300,6 +1312,7 @@ def render_place_page(
             city_id=int(card.get("city_id") or 0) or None,
             arena_id=int(card.get("id") or card.get("arena_id") or 0) or None,
         ),
+        "__GLIDE_TRACK__": _place_glide_track_html(view),
         "__GLIDE_CITY_PIN__": glide_city_pin_script(city_slug(city) if city else ""),
     }
     from src.application.style_b import b_press_script_html, telegram_dock_script_html
@@ -1388,9 +1401,25 @@ def _b_hero_chips(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
     # через бота (/start watch_<id>); без неё — прежняя ссылка в мини-апп.
     bell_href = links.get("watch") or links.get("bell")
     if bell_href:
+        from src.application.empty_state_telemetry import (
+            GOAL_ES_WATCH_START,
+            GOAL_TELEGRAM_CTA,
+            SURFACE_PLACE,
+            track_attrs,
+        )
+
+        arena_id = int(card["id"]) if card.get("id") is not None else None
+        if links.get("watch") and bell_href == links.get("watch"):
+            track = track_attrs(
+                GOAL_ES_WATCH_START, surface=SURFACE_PLACE, arena_id=arena_id, action="watch"
+            )
+        else:
+            track = track_attrs(
+                GOAL_TELEGRAM_CTA, surface=SURFACE_PLACE, arena_id=arena_id, action="open_app"
+            )
         chips.append(
             f'<a class="b-pill b-pill--icon b-pill--chip tg-out" href="{_esc(bell_href)}" rel="nofollow" '
-            f'aria-label="{_esc(t("schedule.bell_hint"))} в\u00a0Telegram">{icon_svg("bell")}</a>'
+            f'{track} aria-label="{_esc(t("schedule.bell_hint"))} в\u00a0Telegram">{icon_svg("bell")}</a>'
         )
     return f'<div class="b-hero__chips">{"".join(chips)}</div>' if chips else ""
 
@@ -1524,9 +1553,12 @@ def _b_buy(links: Mapping[str, Any]) -> str:
     from src.application.catalog_icons import icon_svg
 
     href, blank = pair
-    attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+    from src.application.empty_state_telemetry import GOAL_TICKET_BUY, SURFACE_PLACE, track_attrs
+
+    blank_attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+    track = track_attrs(GOAL_TICKET_BUY, surface=SURFACE_PLACE, action="tickets")
     return (
-        f'<a class="b-btn b-btn--wide b-buy" href="{_esc(href)}"{attrs}>'
+        f'<a class="b-btn b-btn--wide b-buy" href="{_esc(href)}"{blank_attrs} {track}>'
         f'{_esc(t("place.tickets_buy"))}{icon_svg("external")}</a>'
     )
 
@@ -1587,8 +1619,10 @@ def schedule_strip_has_gap(
     return filled and empty
 
 
-def _b_schedule_watch(href: str, *, label: str | None = None) -> str:
+def _b_schedule_watch(href: str, *, label: str | None = None, arena_id: int | None = None) -> str:
     """CTA подписки на расписание: пульс Telegram, стрелка и иконка в самой кнопке."""
+    from src.application.empty_state_telemetry import GOAL_ES_WATCH_START, SURFACE_PLACE, track_attrs
+
     arrow = (
         '<svg class="b-watch__arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" '
         'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
@@ -1601,8 +1635,16 @@ def _b_schedule_watch(href: str, *, label: str | None = None) -> str:
         'l-7.8 7-.3 3.2-1.8-4.5z"/></svg>'
     )
     text = (label or "").strip() or "сообщать о новом расписании"
+    aid = arena_id
+    if aid is None:
+        import re
+
+        m = re.search(r"(?:startapp|start)=watch_(\d+)", href or "", re.I)
+        if m:
+            aid = int(m.group(1))
+    track = track_attrs(GOAL_ES_WATCH_START, surface=SURFACE_PLACE, arena_id=aid, action="watch")
     return (
-        f'<a class="b-watch" href="{_esc(href)}" rel="nofollow">'
+        f'<a class="b-watch" href="{_esc(href)}" rel="nofollow" {track}>'
         f"<span>{_esc(text)}</span>{arrow}{telegram}</a>"
     )
 
@@ -1763,24 +1805,40 @@ def _b_buy_pill(view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[s
     if not pair or mode not in ("online", "same_day"):
         return ""
     href, blank = pair
-    attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+    from src.application.empty_state_telemetry import (
+        GOAL_TELEGRAM_CTA,
+        GOAL_TICKET_BUY,
+        SURFACE_PLACE,
+        track_attrs,
+    )
+
+    blank_attrs = ' rel="noopener nofollow" target="_blank"' if blank else ' rel="nofollow"'
+    buy_track = track_attrs(GOAL_TICKET_BUY, surface=SURFACE_PLACE, action="tickets")
     label = "Билеты онлайн"
     today_slots = [
         s for d in view.get("days") or [] if _parse_iso_date(d.get("local_date")) == view.get("today")
         for s in d.get("sessions") or []
     ]
     if mode != "same_day" or today_slots:
-        return f'<a class="b-buypill" href="{_esc(href)}"{attrs}>{label}{icon_svg("external")}</a>'
+        return (
+            f'<a class="b-buypill" href="{_esc(href)}"{blank_attrs} {buy_track}>'
+            f"{label}{icon_svg('external')}</a>"
+        )
     card = view["card"]
     name = format_public_name(str(card.get("name") or ""))
     nxt = view.get("next_slot")
     when = f" Ближайший сеанс — {_esc(slot_when(nxt, today=view['today']))}." if nxt is not None else ""
     bell = links.get("bell")
+    remind_track = track_attrs(GOAL_TELEGRAM_CTA, surface=SURFACE_PLACE, action="remind_session")
     remind = (
-        f'<a class="b-sheet__main" href="{_esc(bell)}">{icon_svg("bell")}Напомнить в Telegram</a>' if bell else ""
+        f'<a class="b-sheet__main" href="{_esc(bell)}" {remind_track}>'
+        f'{icon_svg("bell")}Напомнить в Telegram</a>'
+        if bell
+        else ""
     )
     return (
-        f'<a class="b-buypill" href="{_esc(href)}"{attrs} data-sameday-open>{label}{icon_svg("external")}</a>'
+        f'<a class="b-buypill" href="{_esc(href)}"{blank_attrs} {buy_track} data-sameday-open>'
+        f"{label}{icon_svg('external')}</a>"
         '<dialog class="b-sheet" id="sameDaySheet" aria-labelledby="sameDayTitle">'
         '<div class="b-sheet__in" tabindex="-1" autofocus>'
         '<button type="button" class="b-sheet__x" data-sheet-close aria-label="Закрыть">'
@@ -1789,7 +1847,7 @@ def _b_buy_pill(view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[s
         f'<p class="b-sheet__text">{_esc(name)} продаёт онлайн только на сегодняшние сеансы. '
         f"Заранее билет можно купить в кассе.{when}</p>"
         f"{remind}"
-        f'<a class="b-sheet__alt" href="{_esc(href)}"{attrs}>Всё равно открыть сайт кассы</a>'
+        f'<a class="b-sheet__alt" href="{_esc(href)}"{blank_attrs} {buy_track}>Всё равно открыть сайт кассы</a>'
         "</div></dialog>"
         "<script>(function(){var d=document.getElementById('sameDaySheet');"
         "var a=document.querySelector('[data-sameday-open]');if(!d||!a||!d.showModal)return;"
@@ -2004,16 +2062,32 @@ def _b_no_public_skate(view: Mapping[str, Any]) -> str:
     from src.application.city_style_b import _km
     from src.application.place_links import place_query
 
+    from src.application.empty_state_telemetry import (
+        FALLBACK_OTHER_RINK,
+        GOAL_ES_FALLBACK_CLICK,
+        SURFACE_PLACE,
+        track_attrs,
+    )
+
     head = f'<p class="b-text">{_esc(t("place.no_public_skate"))}</p>'
     rows = []
-    for alt in view.get("alternatives") or []:
+    for pos, alt in enumerate(view.get("alternatives") or [], start=1):
         when = " ".join(x for x in (alt.get("day_label"), alt.get("starts_at_local")) if x)
         dist = alt.get("distance_km")
         if dist is not None:
             when = f"{when} · {_km(float(dist))}"
         href = f'{alt["path"]}{place_query(session_id=int(alt["session_id"]))}'
+        track = track_attrs(
+            GOAL_ES_FALLBACK_CLICK,
+            fallback=FALLBACK_OTHER_RINK,
+            target=href,
+            pos=pos,
+            surface=SURFACE_PLACE,
+            arena_id=int(alt["arena_id"]) if alt.get("arena_id") is not None else None,
+        )
         rows.append(
-            f'<a class="b-info__row" href="{_esc(href)}"><span class="b-info__key">{_esc(alt["arena_name"])}</span>'
+            f'<a class="b-info__row" href="{_esc(href)}" {track}>'
+            f'<span class="b-info__key">{_esc(alt["arena_name"])}</span>'
             f'<span class="b-info__val">{_esc(when)}</span></a>'
         )
     if not rows:
@@ -2141,11 +2215,24 @@ def _b_trainers(view: Mapping[str, Any], *, school_html: str = "", learn_line: s
     else:
         link_text = "Все тренеры города"
 
+    from src.application.empty_state_telemetry import GOAL_TRAINER_CLICK, SURFACE_PLACE, track_attrs
+
     def href_for(trainer: Mapping[str, Any]) -> str:
         return f"{trainer_path(int(trainer['id']), str(trainer['name']))}?via=p{arena_id}"
 
+    def link_attrs_for(trainer: Mapping[str, Any]) -> str:
+        return track_attrs(
+            GOAL_TRAINER_CLICK,
+            surface=SURFACE_PLACE,
+            arena_id=arena_id,
+            target=href_for(trainer),
+            action="trainer_profile",
+        )
+
     soon = f'<p class="b-learn__line">{_esc(learn_line)}</p>' if learn_line else ""
-    body = soon + school_html + trainer_rows_html(trainers, href_for=href_for, cta=t("cta.go"))
+    body = soon + school_html + trainer_rows_html(
+        trainers, href_for=href_for, cta=t("cta.go"), link_attrs_for=link_attrs_for
+    )
     body += f'<p class="b-trainer-catalog"><a href="{_esc(catalog_href)}">{_esc(link_text)}</a></p>'
     return section(t("place.trainers"), body + coach, klass="b-sec--place", sec_id="trainers")
 
@@ -2324,6 +2411,12 @@ def _b_about(card: Mapping[str, Any]) -> str:
 def _b_nearby(view: Mapping[str, Any]) -> str:
     """«Лёд рядом» внизу страницы катка — тот же блок, что на /c/…."""
     from src.application.city_style_b import nearby_section_html
+    from src.application.empty_state_telemetry import (
+        FALLBACK_NEARBY_CITY,
+        GOAL_ES_FALLBACK_CLICK,
+        SURFACE_PLACE,
+        track_attrs,
+    )
 
     items = view.get("nearby") or []
     if not items:
@@ -2334,7 +2427,17 @@ def _b_nearby(view: Mapping[str, Any]) -> str:
         if normalize_schedule_mode(card.get("schedule_mode")) == SCHEDULE_MODE_PHONE
         else "hub.nearby"
     )
-    return nearby_section_html(items, title=t(title_key))
+    return nearby_section_html(
+        items,
+        title=t(title_key),
+        track_attrs_for=lambda item, pos, href: track_attrs(
+            GOAL_ES_FALLBACK_CLICK,
+            fallback=FALLBACK_NEARBY_CITY,
+            target=href,
+            pos=pos,
+            surface=SURFACE_PLACE,
+        ),
+    )
 
 
 def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
@@ -2434,7 +2537,10 @@ def _company_link(view: Mapping[str, Any]) -> str:
     )
     if not url:
         return ""
-    return f'<a class="b-plan__company" href="{_esc(url)}">Собрать компанию</a>'
+    from src.application.empty_state_telemetry import GOAL_TELEGRAM_CTA, SURFACE_PLACE, track_attrs
+
+    track = track_attrs(GOAL_TELEGRAM_CTA, surface=SURFACE_PLACE, action="company", arena_id=int(card.get("id") or 0) or None)
+    return f'<a class="b-plan__company" href="{_esc(url)}" {track}>Собрать компанию</a>'
 
 
 def _b_matches_here(view: Mapping[str, Any]) -> str:

@@ -73,11 +73,14 @@ def render_site_footer_html(
         f'<a class="b-site-foot__link" href="{_esc(schedule_error_mailto())}">{_esc(report_label)}</a>',
     ]
 
+    from src.application.empty_state_telemetry import GOAL_TELEGRAM_CTA, track_attrs
+
+    tg_track = track_attrs(GOAL_TELEGRAM_CTA, action="open_app", surface="site_footer")
     app = ""
     if button_href and show_telegram_button and show_app_button:
         from src.application.style_b import app_button_html, app_button_script_html
 
-        app = app_button_html(button_href) + app_button_script_html()
+        app = app_button_html(button_href, extra_attrs=tg_track) + app_button_script_html()
 
     ctx = ""
     if context_html.strip():
@@ -86,7 +89,8 @@ def render_site_footer_html(
     button = ""
     if button_href and show_telegram_button:
         button = (
-            f'<a class="b-site-foot__tg tg-out" href="{_esc(button_href)}">{_esc(open_label)}</a>'
+            f'<a class="b-site-foot__tg tg-out" href="{_esc(button_href)}" {tg_track}>'
+            f"{_esc(open_label)}</a>"
         )
 
     return (

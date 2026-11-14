@@ -234,25 +234,35 @@ async def load_week(
     return [dict(row) for row in rows]
 
 
-def nearby_section_html(items: list[Mapping[str, Any]] | None, *, title: str) -> str:
+def nearby_section_html(
+    items: list[Mapping[str, Any]] | None,
+    *,
+    title: str,
+    track_attrs_for: Any = None,
+) -> str:
     """Блок «Лёд рядом» — карточки городов. Пустой список → пустая строка (блока нет)."""
     rows = list(items or [])
     if not rows:
         return ""
     tiles: list[str] = []
-    for item in rows:
+    for pos, item in enumerate(rows, start=1):
         n = int(item.get("rink_count") or 0)
         name = format_public_name(str(item.get("name") or ""))
         line = f"{n}\u00a0{plural_ru(n, 'каток', 'катка', 'катков')} · {item.get('when')} в\u00a0{item.get('time')}"
+        href = f"/c/{city_slug(str(item.get('name') or ''))}"
+        extra = ""
+        if callable(track_attrs_for):
+            extra = str(track_attrs_for(item, pos, href) or "").strip()
         tiles.append(
             tile_html(
-                href=f"/c/{city_slug(str(item.get('name') or ''))}",
+                href=href,
                 name=name,
                 line=line,
                 photo_url=item.get("photo_url"),
                 photo_alt=name,
                 toned=bool(item.get("display_tone")),
                 badge=str(item.get("distance") or ""),
+                extra_attrs=extra,
             )
         )
     more = f'<a class="b-more" href="/#cities">{_esc("Все города")}</a>'

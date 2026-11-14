@@ -25,7 +25,11 @@ PUBLIC_ICON_LINKS = (
 
 #: Значения, с которыми страница живёт, если вызывающий их не задал: ``og:type`` в ``b.html`` есть у каждой
 #: страницы шаблона, а своё значение (``profile``, ``place``) нужно только некоторым. Сырая метка в HTML не уходит.
-DEFAULT_VALUES: Mapping[str, str] = {"__OG_TYPE__": "website"}
+DEFAULT_VALUES: Mapping[str, str] = {
+    "__OG_TYPE__": "website",
+    # Волна 0: страницы без контекста es_* не подключают скрипт (пусто).
+    "__GLIDE_TRACK__": "",
+}
 
 
 def fill_placeholders(template: str, values: Mapping[str, str]) -> str:

@@ -739,6 +739,12 @@ def _matches_head(view: Mapping[str, Any]) -> str:
     return head_extra()
 
 
+def _city_glide_track_html(view: Mapping[str, Any]) -> str:
+    from src.application.empty_state_telemetry import city_track_context, glide_track_boot_html
+
+    return glide_track_boot_html(city_track_context(view))
+
+
 def render_city_hub_page(
     view: Mapping[str, Any],
     *,
@@ -839,6 +845,7 @@ def render_city_hub_page(
                 surface="selection_page",
                 city_id=int(city["id"]),
             ),
+            "__GLIDE_TRACK__": _city_glide_track_html(view),
             "__GLIDE_CITY_PIN__": glide_city_pin_script(city_slug(city_name)),
             **share_tail,
         },
@@ -972,10 +979,25 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
                 (d for d in sorted(view.get("day_counts") or {}) if d > chosen and view["day_counts"][d] > 0), None
             )
             if nearest is not None:
+                from src.application.empty_state_telemetry import (
+                    FALLBACK_SAME_RINK_DAY,
+                    GOAL_ES_FALLBACK_CLICK,
+                    SURFACE_CITY,
+                    track_attrs,
+                )
+
                 key = parse_hub_window(nearest.isoformat(), view["now"]) or nearest.isoformat()
+                day_href = _list_href(slug, w=key)
+                day_track = track_attrs(
+                    GOAL_ES_FALLBACK_CLICK,
+                    fallback=FALLBACK_SAME_RINK_DAY,
+                    target=day_href,
+                    surface=SURFACE_CITY,
+                    pos=1,
+                )
                 body += (
                     f'<p class="b-text">Ближайший день с сеансами: '
-                    f'<a href="{_esc(_list_href(slug, w=key))}">{_esc(_day_label(nearest))}</a>, '
+                    f'<a href="{_esc(day_href)}" {day_track}>{_esc(_day_label(nearest))}</a>, '
                     f'{view["day_counts"][nearest]}\u00a0{plural_ru(view["day_counts"][nearest], "сеанс", "сеанса", "сеансов")}.</p>'
                 )
         more = f'<a class="b-more" href="{_esc(_list_href(slug, t="ice"))}">Все сеансы</a>'
@@ -1278,7 +1300,24 @@ def _b_for_you(view: Mapping[str, Any]) -> str:
 
 
 def _b_nearby(view: Mapping[str, Any], *, title: str) -> str:
-    return nearby_section_html(view.get("nearby"), title=title)
+    from src.application.empty_state_telemetry import (
+        FALLBACK_NEARBY_CITY,
+        GOAL_ES_FALLBACK_CLICK,
+        SURFACE_CITY,
+        track_attrs,
+    )
+
+    return nearby_section_html(
+        view.get("nearby"),
+        title=title,
+        track_attrs_for=lambda item, pos, href: track_attrs(
+            GOAL_ES_FALLBACK_CLICK,
+            fallback=FALLBACK_NEARBY_CITY,
+            target=href,
+            pos=pos,
+            surface=SURFACE_CITY,
+        ),
+    )
 
 
 def _b_minutes_until(hhmm: str, now_local: datetime) -> int | None:

@@ -249,6 +249,7 @@ def tile_html(
     badge_kind: str = "",
     photo_variants: Mapping[str, Any] | None = None,
     vt_name: str = "",
+    extra_attrs: str = "",
 ) -> str:
     """Карточка с фото (или разметкой катка) и двумя строками — для сеток и каруселей."""
     src = photo_url
@@ -278,8 +279,9 @@ def tile_html(
         media += f'<span class="b-badge{kind}">{inner}</span>'
     media += "</span>"
     vt = f' data-place-vt="{esc(vt_name)}"' if vt_name else ""
+    extra = f" {extra_attrs.strip()}" if extra_attrs and extra_attrs.strip() else ""
     return (
-        f'<a class="b-tile" href="{esc(href)}"{vt}>{media}'
+        f'<a class="b-tile" href="{esc(href)}"{vt}{extra}>{media}'
         f'<span class="b-tile__body"><span class="b-tile__name">{esc(name)}</span>'
         f'<span class="b-tile__line">{esc(line)}</span></span></a>'
     )
@@ -349,6 +351,7 @@ def trainer_rows_html(
     *,
     href_for: Any,
     cta: str | None = None,
+    link_attrs_for: Any = None,
 ) -> str:
     """Тренеры строками (TASK-265): лицо, имя, занятие и цена «от», справа — CTA.
 
@@ -374,9 +377,15 @@ def trainer_rows_html(
         line = str(trainer.get("line") or "")
         line_html = f'<span class="b-row__line">{esc(line)}</span>' if line else ""
         row_cta = cta if cta else (t("cta.enroll") if trainer.get("can_book") else t("cta.write"))
+        extra = ""
+        if callable(link_attrs_for):
+            attrs = str(link_attrs_for(trainer) or "").strip()
+            if attrs:
+                extra = f" {attrs}"
         rows.append(
             f'<div class="b-row b-row--coach">{ava}'
-            f'<span class="b-row__body"><a class="b-row__title b-row__link" href="{esc(href)}">{esc(trainer.get("name"))}</a>'
+            f'<span class="b-row__body"><a class="b-row__title b-row__link" href="{esc(href)}"{extra}>'
+            f'{esc(trainer.get("name"))}</a>'
             f"{line_html}</span>"
             f'<span class="b-row__cta">{esc(row_cta)}</span></div>'
         )
@@ -419,7 +428,7 @@ def app_button_href(href: str) -> str:
     return f"{href}&via=app_button"
 
 
-def app_button_html(href: str | None, *, floating: bool = True) -> str:
+def app_button_html(href: str | None, *, floating: bool = True, extra_attrs: str = "") -> str:
     """Кнопка «Приложение»: знак Glide и слово, ведёт в то же место внутри Mini App.
 
     ``floating`` — закреплённая внизу экрана (app-button.js прячет её у подвала и
@@ -431,8 +440,10 @@ def app_button_html(href: str | None, *, floating: bool = True) -> str:
     sub = (
         f'<small class="b-appbtn__sub" hidden>{esc(t("app.button_sub"))}</small>' if floating else ""
     )
+    extra = f" {extra_attrs.strip()}" if extra_attrs and extra_attrs.strip() else ""
     link = (
-        f'<a class="b-appbtn tg-out" href="{esc(app_button_href(href))}" aria-label="{esc(t("app.button_aria"))}">'
+        f'<a class="b-appbtn tg-out" href="{esc(app_button_href(href))}"{extra} '
+        f'aria-label="{esc(t("app.button_aria"))}">'
         f'<img class="b-appbtn__mark" src="{APP_MARK_SRC}" width="28" height="28" alt="">'
         f'<span class="b-appbtn__t"><span class="b-appbtn__label">{esc(t("app.button"))}</span>{sub}</span></a>'
     )

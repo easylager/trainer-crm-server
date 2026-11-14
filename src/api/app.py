@@ -2931,6 +2931,19 @@ def shared_public_page_view_beacon_js(request: Request):
     )
 
 
+@app.get("/static/shared/glide-track.js")
+def shared_glide_track_js(request: Request):
+    """Волна 0: клиентские цели Метрики/GA4 на публичных SSR-страницах."""
+    path = _SHARED_DIR / "glide-track.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/static/shared/list-scroll-restore.js")
 def shared_list_scroll_restore_js(request: Request):
     """Запасное восстановление скролла списка /c/ если bfcache недоступен."""

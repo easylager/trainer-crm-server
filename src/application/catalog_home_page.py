@@ -1540,8 +1540,15 @@ def render_catalog_home_page(
         "__TG_DOCK_SCRIPT__": "",
         "__SITE_FOOTER__": _catalog_site_footer(cities, trainers_url=trainers_url, telegram_href=cta_url),
         "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(surface="catalog_home"),
+        "__GLIDE_TRACK__": _home_glide_track_html(view),
     }
     return fill_placeholders(template, values)
+
+
+def _home_glide_track_html(view: Mapping[str, Any]) -> str:
+    from src.application.empty_state_telemetry import glide_track_boot_html, home_track_context
+
+    return glide_track_boot_html(home_track_context(view))
 
 
 def _catalog_site_footer(

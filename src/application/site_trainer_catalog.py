@@ -1218,10 +1218,25 @@ def render_catalog_page(
             ),
             "__BODY__": body,
             "__PAGE_VIEW_BEACON__": public_page_view_beacon_script(surface=CATALOG_SURFACE, city_id=city_id),
+            "__GLIDE_TRACK__": _trainers_glide_track_html(data, pool),
             "__GLIDE_CITY_PIN__": "",
             **tail,
         },
     )
+
+
+def _trainers_glide_track_html(data: Mapping[str, Any], pool: list[Any]) -> str:
+    from src.application.empty_state_telemetry import glide_track_boot_html
+
+    city = data.get("city") if isinstance(data.get("city"), Mapping) else {}
+    ctx: dict[str, Any] = {
+        "page_type": "trainers",
+        "city": str(city.get("name") or "").strip() or None,
+        "city_id": int(city["id"]) if city.get("id") is not None else None,
+    }
+    if not pool:
+        ctx["state"] = "TR1"
+    return glide_track_boot_html({k: v for k, v in ctx.items() if v is not None and v != ""})
 
 
 def parse_arena_param(raw: str | None) -> int | None:

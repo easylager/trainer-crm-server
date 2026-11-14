@@ -146,10 +146,13 @@ def assets_tail() -> str:
 
 
 def _bell_attrs(card: Mapping[str, Any]) -> str:
+    from src.application.empty_state_telemetry import GOAL_TELEGRAM_CTA, track_attrs
+
+    track = track_attrs(GOAL_TELEGRAM_CTA, action="remind_match", surface="match")
     return (
         f' data-m-sheet="bell" data-m-name="{_e(card["title"])}"'
         f' data-m-when="{_e(_when_label(card))}"'
-        f' data-m-ics="{_e(ics_path(card))}"'
+        f' data-m-ics="{_e(ics_path(card))}" {track}'
     )
 
 
