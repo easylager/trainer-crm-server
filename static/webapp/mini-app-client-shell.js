@@ -1070,14 +1070,10 @@
   }
 
   /*
-   * TASK-391: «Кто кого» и витрина тренеров не подключают mini-app-client-theme.css, то есть не
-   * включают переходы. Уходящая страница их включила — Chrome начинал переход и обрывал его на новой
-   * странице (InvalidStateError «ViewTransition opt-in disabled» в консоли). Переход туда не
-   * начинаем вовсе: на экране то же самое, что было (обрыв), без ошибки.
-   *
-   * На части мобильных WebView (Telegram) pageswap нет или срабатывает поздно: первый тап на
-   * «Кто кого» начинал VT и обрывал навигацию, второй уже проходил. Поэтому до location.href
-   * глушим @view-transition на уходящей странице — работает и без pageswap.
+   * TASK-391: уход на «Кто кого» / витрину с любой вкладки с theme.css (Главная, Я, Поиск, …).
+   * Раньше цель без opt-in → VT стартовал и обрывался (первый тап «не уходит», второй ок).
+   * Сейчас: (1) kto-kogo.html сам opt-in инлайном; (2) до location.href глушим VT на уходе
+   * (pageswap часто нет в Telegram WebView) + принудительный reflow, чтобы правило успело примениться.
    */
   var NO_VIEW_TRANSITION_PAGE = /\/(kto-kogo|trainers)(\.html)?$/;
   var vtOffInjected = false;
@@ -1103,6 +1099,8 @@
       s.textContent = '@view-transition { navigation: none; }';
       (document.head || document.documentElement).appendChild(s);
       vtOffInjected = true;
+      /* Синхронный reflow: иначе часть WebView читает старый opt-in до применения стиля. */
+      if (document.documentElement) void document.documentElement.offsetHeight;
     } catch (e) { /* */ }
   }
 
