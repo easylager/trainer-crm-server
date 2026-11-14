@@ -12,7 +12,7 @@ import logging
 import html
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
@@ -199,6 +199,75 @@ async def client_watches_hub_payload(session: AsyncSession, client_id: int) -> d
         **summary,
         "trainer_notifications": trainer_rows,
         "ice_watch_items": ice,
+    }
+
+
+async def get_ice_watch_admin_pulse(
+    session: AsyncSession,
+    *,
+    as_of: datetime | None = None,
+) -> dict[str, Any]:
+    """Пульс подписок на расписание для админского «Сейчас».
+
+    Клики — ``public_telegram_cta`` с ``start_param`` вида ``watch_%`` (пустая карточка и
+    CTA под билетами). Подписки — ``sessions`` и legacy ``schedule_fresh``.
+    """
+    from src.application.catalog_consumer_events import KIND_PUBLIC_TELEGRAM_CTA
+
+    now = as_of or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    day_ago = now - timedelta(days=1)
+    week_ago = now - timedelta(days=7)
+    kinds = (ICE_WATCH_KIND_SESSIONS, ICE_WATCH_KIND_SCHEDULE_FRESH)
+
+    clicks = (
+        await session.execute(
+            text(
+                """
+                SELECT
+                  COUNT(*) FILTER (WHERE e.occurred_at >= :day)::int AS clicks_1d,
+                  COUNT(*) FILTER (WHERE e.occurred_at >= :week)::int AS clicks_7d,
+                  COUNT(DISTINCT e.actor_hash) FILTER (
+                    WHERE e.occurred_at >= :week AND e.actor_hash IS NOT NULL
+                  )::int AS clickers_7d
+                FROM catalog_consumer_events e
+                WHERE e.kind = :kind
+                  AND e.occurred_at >= :week
+                  AND e.occurred_at < :as_of
+                  AND e.start_param LIKE 'watch\\_%' ESCAPE '\\'
+                """
+            ),
+            {"kind": KIND_PUBLIC_TELEGRAM_CTA, "day": day_ago, "week": week_ago, "as_of": now},
+        )
+    ).mappings().one()
+
+    watches = (
+        await session.execute(
+            text(
+                """
+                SELECT
+                  COUNT(*) FILTER (WHERE active)::int AS active,
+                  COUNT(*) FILTER (WHERE NOT active)::int AS cancelled,
+                  COUNT(*) FILTER (
+                    WHERE active AND created_at >= :week
+                  )::int AS new_active_7d
+                FROM client_ice_watches
+                WHERE watch_kind = ANY(:kinds)
+                """
+            ),
+            {"kinds": list(kinds), "week": week_ago},
+        )
+    ).mappings().one()
+
+    return {
+        "metric": "ice_watch_pulse",
+        "clicks_1d": int(clicks["clicks_1d"] or 0),
+        "clicks_7d": int(clicks["clicks_7d"] or 0),
+        "clickers_7d": int(clicks["clickers_7d"] or 0),
+        "active": int(watches["active"] or 0),
+        "cancelled": int(watches["cancelled"] or 0),
+        "new_active_7d": int(watches["new_active_7d"] or 0),
     }
 
 

@@ -1253,6 +1253,7 @@ body:has(#plan:not([hidden]) .b-plan__prices:not([hidden])) .b-price-sum {
 .b-wait__sub { margin: 0 0 6px; font-size: 15px; line-height: 1.4; color: var(--g-muted); }
 .b-wait__cta { gap: 10px; }
 .b-wait__note { margin: 0; font-size: 13px; line-height: 1.4; text-align: center; color: var(--g-muted); }
+.b-wait > a.b-watch { margin-top: 4px; }
 
 /* ── Календарь «Когда» (TASK-337): значок рядом с полосой и лист с семью днями ───────── */
 .b-whenrow { display: flex; align-items: stretch; gap: 8px; }

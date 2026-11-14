@@ -1537,22 +1537,19 @@ def _schedule_waits(card: Mapping[str, Any]) -> bool:
 
 
 def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
-    """TASK-330: «расписания пока нет» и колокольчик в Telegram (бот ставит его по /start watch_<id>)."""
-    from src.application.catalog_icons import icon_svg
-
+    """TASK-330: «расписания пока нет» и подписка в Telegram (бот ставит её по /start watch_<id>)."""
     headline = t("schedule.wait_none")
     habit = schedule_wait_habit(card)
     habit_html = f'<p class="b-wait__sub">{_esc(habit)}</p>' if habit else ""
     watch = links.get("watch")
-    bell = ""
+    cta = ""
     if watch:
-        bell = (
+        # Тот же пульс, что у CTA под билетами; копирайт — про появление расписания.
+        cta = (
             f'<p class="b-wait__sub">{_esc(t("schedule.wait_sub"))}</p>'
-            f'<a class="b-btn b-btn--accent b-btn--wide b-wait__cta" href="{_esc(watch)}" rel="nofollow">'
-            f'{icon_svg("bell")}{_esc(t("schedule.bell_site_cta"))}</a>'
-            f'<p class="b-wait__note">{_esc(t("schedule.bell_note"))}</p>'
+            f'{_b_schedule_watch(str(watch), label=t("schedule.bell_cta"))}'
         )
-    return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{habit_html}{bell}</div>'
+    return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{habit_html}{cta}</div>'
 
 
 def schedule_strip_has_gap(
@@ -1572,8 +1569,8 @@ def schedule_strip_has_gap(
     return filled and empty
 
 
-def _b_schedule_watch(href: str) -> str:
-    """Полоса под днями: обещание написать о новом расписании, стрелка и Telegram в самой кнопке."""
+def _b_schedule_watch(href: str, *, label: str | None = None) -> str:
+    """CTA подписки на расписание: пульс Telegram, стрелка и иконка в самой кнопке."""
     arrow = (
         '<svg class="b-watch__arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" '
         'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
@@ -1585,9 +1582,10 @@ def _b_schedule_watch(href: str) -> str:
         ".7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.2-.5-1.8-1.4-1.4zM8.8 14.6l9.4-5.9c.5-.3.9-.1.5.2"
         'l-7.8 7-.3 3.2-1.8-4.5z"/></svg>'
     )
+    text = (label or "").strip() or "сообщать о новом расписании"
     return (
         f'<a class="b-watch" href="{_esc(href)}" rel="nofollow">'
-        f"<span>сообщать о новом расписании</span>{arrow}{telegram}</a>"
+        f"<span>{_esc(text)}</span>{arrow}{telegram}</a>"
     )
 
 
