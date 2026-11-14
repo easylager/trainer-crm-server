@@ -10,6 +10,7 @@ import pytest
 from src.application.ice_watch_message import (
     NBSP,
     compose_new_schedule_message,
+    compose_schedule_change_message,
     compose_watch_subscribed_reply,
     format_dates_range,
     format_nearest,
@@ -109,7 +110,26 @@ def test_real_names_as_on_site_header(raw: str, shown: str) -> None:
     assert msg.startswith(f"<b>{shown}: новое расписание</b>\n")
     assert "„" not in msg and "“" not in msg and "««" not in msg
     assert _plain(compose_watch_subscribed_reply(raw)) == (
-        f"Готово: {shown}. Напишем один раз, когда появится новое расписание."
+        f"<b>Готово: {shown}</b>\n"
+        "Будем писать сюда, пока подписка включена.\n"
+        "Добавят сеанс или снимут уже объявленный. Сообщение придёт сразу.\n"
+        "То, что уже стоит на странице, отдельно не присылаем."
+    )
+
+
+def test_schedule_change_lists_added_and_removed() -> None:
+    msg = compose_schedule_change_message(
+        arena_name="Юность",
+        added=["завтра в 17:00"],
+        removed=["сегодня в 12:00"],
+    )
+    assert msg == (
+        "<b>Юность</b>\n"
+        "Появились сеансы:\n"
+        "• завтра в 17:00\n"
+        "Сняли сеансы:\n"
+        "• сегодня в 12:00\n"
+        "Следующее изменение тоже пришлём."
     )
 
 

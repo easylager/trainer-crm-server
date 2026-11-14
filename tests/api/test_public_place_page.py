@@ -955,3 +955,38 @@ async def test_ice_without_public_skating_says_so_and_sends_to_a_rink_nearby(app
     assert neighbour_name in html and "19:30" in html
     assert "на сайте катка" not in html
     assert "watch_" not in html, "колокольчик расписания здесь ничего не ждёт"
+
+
+def _watch_url(base_url, *, start_param, **_kwargs):
+    return f"https://t.me/glide_test_bot?start={start_param}"
+
+
+@pytest.mark.asyncio
+async def test_partial_week_offers_schedule_watch_under_the_days(app_use_test_db, db_session, monkeypatch) -> None:
+    """Сегодня есть сеансы, дальше прочерки: под днями кнопка в Telegram, не вместо «Позвать»."""
+    monkeypatch.setattr("src.application.place_links.public_telegram_cta_url", _watch_url)
+    place = await _place(db_session)
+    await _add_future_session(db_session, place["arena_id"], days_ahead=1, starts_at_local="16:15")
+    await db_session.commit()
+    async with _client() as client:
+        resp = await client.get(place["path"])
+    assert resp.status_code == 200, resp.text
+    schedule = resp.text.split('id="schedule"', 1)[1].split("</section>", 1)[0]
+    assert 'class="b-watch"' in schedule
+    assert "сообщать о новом расписании" in schedule
+    assert "b-watch__arrow" in schedule and "b-watch__tg" in schedule
+    assert f"start=watch_{place['arena_id']}" in schedule
+    assert schedule.index('class="b-sched"') < schedule.index('class="b-watch"')
+    assert "Позвать" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_empty_schedule_keeps_the_wait_block_without_the_day_button(app_use_test_db, db_session, monkeypatch) -> None:
+    """Сеансов нет: остаётся прежний блок ожидания, полоса под днями не рисуется."""
+    monkeypatch.setattr("src.application.place_links.public_telegram_cta_url", _watch_url)
+    place = await _place(db_session)
+    await db_session.commit()
+    async with _client() as client:
+        resp = await client.get(place["path"])
+    assert resp.status_code == 200, resp.text
+    assert 'class="b-watch"' not in resp.text

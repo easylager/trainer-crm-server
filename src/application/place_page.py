@@ -1555,6 +1555,42 @@ def _b_schedule_wait(card: Mapping[str, Any], links: Mapping[str, Any]) -> str:
     return f'<div class="b-wait"><p class="b-wait__title">{_esc(headline)}</p>{habit_html}{bell}</div>'
 
 
+def schedule_strip_has_gap(
+    today: date,
+    by_date: Mapping[date, Sequence[Mapping[str, Any]]],
+    matches_by_day: Mapping[date, Sequence[Any]] | None = None,
+) -> bool:
+    """В окне недели есть и день с сеансом, и день с прочерком. Полная неделя и пустая — нет."""
+    matches_by_day = matches_by_day or {}
+    filled = False
+    empty = False
+    for offset in range(SCHEDULE_DAYS):
+        d = today + timedelta(days=offset)
+        has = bool(by_date.get(d)) or bool(matches_by_day.get(d))
+        filled = filled or has
+        empty = empty or not has
+    return filled and empty
+
+
+def _b_schedule_watch(href: str) -> str:
+    """Полоса под днями: обещание написать о новом расписании, стрелка и Telegram в самой кнопке."""
+    arrow = (
+        '<svg class="b-watch__arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+        'aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
+    )
+    telegram = (
+        '<svg class="b-watch__tg" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        '<path fill="currentColor" d="M21.5 4.3 2.7 11.5c-1.3.5-1.3 1.2-.2 1.5l4.8 1.5 1.9 5.7c.2.7.1.9.8.9.5 0 '
+        ".7-.2 1-.5l2.3-2.2 4.8 3.5c.9.5 1.5.2 1.7-.8l3.1-14.6c.3-1.2-.5-1.8-1.4-1.4zM8.8 14.6l9.4-5.9c.5-.3.9-.1.5.2"
+        'l-7.8 7-.3 3.2-1.8-4.5z"/></svg>'
+    )
+    return (
+        f'<a class="b-watch" href="{_esc(href)}" rel="nofollow">'
+        f"<span>сообщать о новом расписании</span>{arrow}{telegram}</a>"
+    )
+
+
 def _b_schedule_when_empty(card: Mapping[str, Any], links: Mapping[str, Any], *, title: str) -> str:
     """Тело пустого блока. Секцию рисует ``_b_schedule``, иначе заголовок дублируется."""
     del title
@@ -1591,6 +1627,7 @@ def _b_day_strip(
     invite: bool,
     common: str,
     dark: bool = False,
+    tail: str = "",
 ) -> str:
     """Полоса дней недели и билеты дня — без JS (#якорь + :target), как в Mini App.
 
@@ -1672,7 +1709,7 @@ def _b_day_strip(
             day_klass += " b-day--current"
         sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
         sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
-    return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>'
+    return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}{tail}</nav>'
 
 
 def _place_currency(card: Mapping[str, Any], slots: Sequence[Mapping[str, Any]] | None = None) -> str:
@@ -1786,7 +1823,13 @@ def _b_schedule_parts(
         return title, line + _b_schedule_when_empty(card, links, title=title), ""
     all_slots = [s for slots in by_date.values() for s in slots]
     _aside_price, common = _b_price_floor(all_slots)
-    strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
+    watch = ""
+    href = links.get("watch")
+    if href and schedule_strip_has_gap(view["today"], by_date, view.get("matches_by_day")):
+        watch = _b_schedule_watch(str(href))
+    strip = _b_day_strip(
+        view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common, tail=watch
+    )
     currency = _place_currency(card, all_slots)
     prices = prices_html(all_slots, vv, currency=currency)
     foot: list[str] = []

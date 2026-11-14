@@ -137,7 +137,8 @@ async def _subscribe(
 async def _watch_row(db_session, watch_id: int) -> dict:
     r = await db_session.execute(
         text("""
-            SELECT active, last_notified_at, baseline_horizon_date, failed_attempts, deactivated_reason
+            SELECT active, last_notified_at, baseline_horizon_date, failed_attempts,
+                   deactivated_reason, known_sessions
             FROM client_ice_watches WHERE id = :id
             """),
         {"id": watch_id},
@@ -221,10 +222,13 @@ async def test_new_dates_past_baseline_fire_once_with_new_range(db_session) -> N
     chat_id, body, _markup = send.await_args.args
     assert chat_id == tid
     plain = body.replace(NBSP, " ")
-    assert plain.startswith("<b>Юность: новое расписание</b>\n")
+    assert plain.startswith("<b>Юность</b>\nПоявились сеансы:")
     assert f"{first.day} " in plain and f"{last.day} " in plain
     assert "17:00" in plain
     assert "20:00" not in plain
+    assert "Следующее изменение тоже пришлём." in plain
+    row = await _watch_row(db_session, watch["id"])
+    assert row["active"] is True and row["known_sessions"]
 
 
 @pytest.mark.asyncio
@@ -240,36 +244,40 @@ async def test_empty_card_fires_on_any_future_session(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reopened_watch_takes_new_baseline(db_session) -> None:
+async def test_known_snapshot_prevents_repeat_until_another_change(db_session) -> None:
     city_id, arena_id, tid, client_id = await _setup(db_session)
     watch = await _subscribe(db_session, client_id=client_id, tid=tid, arena_id=arena_id, city_id=city_id)
     await _session(db_session, arena_id, days=2)
     send = AsyncMock()
     await _pass(db_session, send)
     assert send.await_count == 1
-    # Повторная подписка после доставки: то, что уже на карточке, — не новое.
-    again = await _subscribe(db_session, client_id=client_id, tid=tid, arena_id=arena_id, city_id=city_id)
-    assert again["id"] == watch["id"]
     row = await _watch_row(db_session, watch["id"])
-    assert row["active"] is True and row["baseline_horizon_date"] is not None
+    assert row["active"] is True and row["known_sessions"]
+    # Тот же снимок — без второго сообщения.
     await _pass(db_session, send)
     assert send.await_count == 1
+    # Новое изменение снова пишет, подписка жива.
+    await _session(db_session, arena_id, days=9, hour=16)
+    await _pass(db_session, send)
+    assert send.await_count == 2
+    assert (await _watch_row(db_session, watch["id"]))["active"] is True
 
 
 # --- AC3 / AC9: журнал и отсутствие дублей ---------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_success_journal_and_deactivation(db_session) -> None:
+async def test_success_journal_keeps_sessions_watch_on(db_session) -> None:
     city_id, arena_id, tid, client_id = await _setup(db_session)
     watch = await _subscribe(db_session, client_id=client_id, tid=tid, arena_id=arena_id, city_id=city_id)
     await _session(db_session, arena_id, days=2)
     send = AsyncMock()
     await _pass(db_session, send)
     row = await _watch_row(db_session, watch["id"])
-    assert row["active"] is False
+    assert row["active"] is True
     assert row["last_notified_at"] is not None
     assert row["deactivated_reason"] is None
+    assert row["known_sessions"]
     journal = await _journal(db_session, watch["id"])
     assert len(journal) == 1
     assert journal[0]["ok"] is True and journal[0]["error"] is None
@@ -290,22 +298,22 @@ async def test_two_passes_in_a_row_send_once(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_failure_after_send_resends_once_then_stops(db_session, monkeypatch) -> None:
-    """At-least-once: сбой между отправкой и пометкой → один повтор, а не дубль на каждом проходе."""
+    """At-least-once: сбой между отправкой и снимком → один повтор, а не дубль на каждом проходе."""
     city_id, arena_id, tid, client_id = await _setup(db_session)
     watch = await _subscribe(db_session, client_id=client_id, tid=tid, arena_id=arena_id, city_id=city_id)
     await _session(db_session, arena_id, days=2)
     await db_session.commit()
 
-    real_mark = uc.ClientIceWatchRepository.mark_notified_and_deactivate
+    real_keep = uc.ClientIceWatchRepository.keep_after_notify
     calls = {"n": 0}
 
-    async def flaky_mark(self, watch_id):
+    async def flaky_keep(self, watch_id, known_sessions):
         calls["n"] += 1
         if calls["n"] == 1:
             raise ConnectionError("db went away after send")
-        return await real_mark(self, watch_id)
+        return await real_keep(self, watch_id, known_sessions)
 
-    monkeypatch.setattr(uc.ClientIceWatchRepository, "mark_notified_and_deactivate", flaky_mark)
+    monkeypatch.setattr(uc.ClientIceWatchRepository, "keep_after_notify", flaky_keep)
     send = AsyncMock()
     await _pass(db_session, send)
     assert send.await_count == 1
@@ -315,7 +323,7 @@ async def test_failure_after_send_resends_once_then_stops(db_session, monkeypatc
     await _pass(db_session, send)
     assert send.await_count == 2
     row = await _watch_row(db_session, watch["id"])
-    assert row["active"] is False and row["last_notified_at"] is not None
+    assert row["active"] is True and row["last_notified_at"] is not None and row["known_sessions"]
 
 
 # --- AC4: недоступный чат и повторы ----------------------------------------------------
@@ -387,7 +395,7 @@ async def test_transient_failure_then_success_delivers(db_session) -> None:
     await _pass(db_session, send)
     await _pass(db_session, send)
     row = await _watch_row(db_session, watch["id"])
-    assert row["active"] is False and row["last_notified_at"] is not None
+    assert row["active"] is True and row["last_notified_at"] is not None and row["known_sessions"]
     assert [j["ok"] for j in await _journal(db_session, watch["id"])] == [False, True]
 
 
@@ -485,5 +493,40 @@ async def test_dates_in_rink_timezone(db_session) -> None:
     send = AsyncMock()
     await _pass(db_session, send)
     body = send.await_args.args[1].replace(NBSP, " ")
-    assert f"Сеансы на {local_day.day} " in body
-    assert "Ближайший — завтра в 23:00." in body
+    assert body.startswith("<b>Айсбург</b>\nПоявились сеансы:")
+    assert "завтра в 23:00" in body
+    assert str(local_day.day) in body or "завтра" in body
+
+
+@pytest.mark.asyncio
+async def test_sessions_watch_notifies_cancel_then_add_and_stays_on(db_session) -> None:
+    """Живая подписка: сняли сеанс — написали; добавили — снова; active не гаснет."""
+    city_id, arena_id, tid, client_id = await _setup(db_session)
+    watch = await _subscribe(db_session, client_id=client_id, tid=tid, arena_id=arena_id, city_id=city_id)
+    day = await _session(db_session, arena_id, days=3, hour=18)
+    send = AsyncMock()
+    await _pass(db_session, send)
+    assert send.await_count == 1
+    assert "Появились сеансы:" in send.await_args.args[1]
+    known = (await _watch_row(db_session, watch["id"]))["known_sessions"]
+    assert len(known) == 1
+
+    await db_session.execute(
+        text("UPDATE ice_sessions SET status = 'cancelled' WHERE arena_id = :aid AND local_date = :ld"),
+        {"aid": arena_id, "ld": day},
+    )
+    await _pass(db_session, send)
+    assert send.await_count == 2
+    cancel_body = send.await_args.args[1]
+    assert "Сняли сеансы:" in cancel_body
+    assert "Появились сеансы:" not in cancel_body
+    assert (await _watch_row(db_session, watch["id"]))["active"] is True
+
+    await _session(db_session, arena_id, days=5, hour=19)
+    await _pass(db_session, send)
+    assert send.await_count == 3
+    add_body = send.await_args.args[1]
+    assert "Появились сеансы:" in add_body
+    assert "19:00" in add_body.replace(NBSP, " ")
+    row = await _watch_row(db_session, watch["id"])
+    assert row["active"] is True and len(row["known_sessions"]) == 1

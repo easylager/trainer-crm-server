@@ -96,5 +96,32 @@ def compose_new_schedule_message(
 
 
 def compose_watch_subscribed_reply(arena_name: str) -> str:
-    """Ответ бота на ``/start watch_<arena_id>``; кнопка к нему — ``OPEN_SCHEDULE_BUTTON``."""
-    return f"Готово: {place_name(arena_name)}. Напишем один раз, когда появится новое расписание."
+    """Ответ бота на ``/start watch_<arena_id>``; кнопка к нему — ``OPEN_SCHEDULE_BUTTON``.
+
+    Подписка живёт, пока её не выключат: не одно сообщение «когда появится», а каждое изменение.
+    """
+    name = place_name(arena_name)
+    return (
+        f"<b>Готово: {name}</b>\n"
+        "Будем писать сюда, пока подписка включена.\n"
+        "Добавят сеанс или снимут уже объявленный. Сообщение придёт сразу.\n"
+        "То, что уже стоит на странице, отдельно не присылаем."
+    )
+
+
+def compose_schedule_change_message(
+    *,
+    arena_name: str,
+    added: list[str],
+    removed: list[str],
+) -> str:
+    """Одно сообщение про изменение расписания. Строки ``added``/``removed`` уже готовые, без HTML."""
+    parts = [f"<b>{place_name(arena_name)}</b>"]
+    if added:
+        parts.append("Появились сеансы:")
+        parts.extend(f"• {line}" for line in added)
+    if removed:
+        parts.append("Сняли сеансы:")
+        parts.extend(f"• {line}" for line in removed)
+    parts.append("Следующее изменение тоже пришлём.")
+    return "\n".join(parts)

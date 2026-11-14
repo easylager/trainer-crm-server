@@ -12,7 +12,7 @@ import logging
 import html
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
 
@@ -23,7 +23,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.arena_profile import is_in_season
 from src.application.client_ice_watch_filters import filter_label, session_matches_filter
 from src.application.ice_session_use_cases import STATUS_ACTIVE
-from src.application.ice_watch_message import OPEN_SCHEDULE_BUTTON, compose_new_schedule_message
+from src.application.ice_watch_message import (
+    OPEN_SCHEDULE_BUTTON,
+    compose_new_schedule_message,
+    compose_schedule_change_message,
+    format_nearest,
+)
 from src.infrastructure.db.models import (
     ICE_WATCH_DEACTIVATED_FAILED,
     ICE_WATCH_DEACTIVATED_UNREACHABLE,
@@ -525,6 +530,56 @@ async def _arena_name_and_tz(session: AsyncSession, arena_id: int) -> tuple[str,
     return name, tz
 
 
+def _session_snap(row: dict[str, Any]) -> dict[str, str | int]:
+    clock = row["starts_at_local"]
+    if isinstance(clock, time):
+        hhmm = f"{clock.hour}:{clock.minute:02d}"
+    else:
+        parts = str(clock).split(":")
+        hhmm = f"{int(parts[0])}:{int(parts[1]):02d}"
+    day = row["local_date"]
+    day_s = day.isoformat() if isinstance(day, date) else str(day)
+    return {"id": int(row["id"]), "local_date": day_s, "starts_at_local": hhmm}
+
+
+def _snap_is_ahead(snap: dict[str, Any], *, now: datetime, tz: ZoneInfo) -> bool:
+    day = date.fromisoformat(str(snap["local_date"]))
+    hour_s, minute_s = str(snap["starts_at_local"]).split(":")[:2]
+    start = datetime.combine(day, time(int(hour_s), int(minute_s)), tzinfo=tz)
+    return start > now.astimezone(tz)
+
+
+def _line_for(day: date, clock: time, *, today: date) -> str:
+    return format_nearest(day, clock, today=today).replace(" ", " ")
+
+
+def _added_lines(rows: list[dict[str, Any]], *, today: date) -> list[str]:
+    lines = []
+    for row in rows[:8]:
+        clock = row["starts_at_local"]
+        if not isinstance(clock, time):
+            hour_s, minute_s = str(clock).split(":")[:2]
+            clock = time(int(hour_s), int(minute_s))
+        day = row["local_date"] if isinstance(row["local_date"], date) else date.fromisoformat(str(row["local_date"]))
+        lines.append(_line_for(day, clock, today=today))
+    extra = len(rows) - len(lines)
+    if extra:
+        lines.append(f"и ещё {extra}")
+    return lines
+
+
+def _removed_lines(snaps: list[dict[str, Any]], *, today: date) -> list[str]:
+    lines = []
+    for snap in snaps[:8]:
+        day = date.fromisoformat(str(snap["local_date"]))
+        hour_s, minute_s = str(snap["starts_at_local"]).split(":")[:2]
+        lines.append(_line_for(day, time(int(hour_s), int(minute_s)), today=today))
+    extra = len(snaps) - len(lines)
+    if extra:
+        lines.append(f"и ещё {extra}")
+    return lines
+
+
 def _compose_for_new_sessions(
     arena_name: str, tz: ZoneInfo, new_sessions: list[dict[str, Any]], *, now: datetime
 ) -> str:
@@ -572,10 +627,11 @@ async def deliver_ice_watch_reminders(
 ) -> IceWatchPassStats:
     """Один проход по всем активным подпискам на новое расписание (TASK-328).
 
-    Семантика доставки — at-least-once: сначала отправка, затем в одной транзакции строка
-    журнала и погашение подписки, коммит на каждую подписку. Сбой между отправкой и
-    коммитом даёт ровно один повтор на следующем проходе; успешный коммит гасит подписку,
-    поэтому дубля на каждом проходе нет. Потерять напоминание хуже, чем изредка повторить.
+    ``schedule_fresh`` по-прежнему гаснет после одного сообщения.
+
+    ``sessions`` не гаснет. Сначала отправка, затем в одной транзакции журнал и снимок
+    сеансов, о которых уже сказано. Сбой между отправкой и коммитом даёт повтор на
+    следующем проходе. Потерять напоминание хуже, чем изредка повторить.
     """
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -593,6 +649,30 @@ async def deliver_ice_watch_reminders(
         arena_id = int(watch["arena_id"])
         if arena_id not in sessions_by_arena:
             sessions_by_arena[arena_id] = await _load_future_sessions(session, arena_id, now=now, limit=5000)
+        if str(watch.get("watch_kind")) == ICE_WATCH_KIND_SESSIONS:
+            try:
+                await _deliver_sessions_watch(
+                    session,
+                    repo,
+                    watch,
+                    sessions_by_arena[arena_id],
+                    now=now,
+                    send_fn=send_fn,
+                    reply_markup_factory=reply_markup_factory,
+                    stats=stats,
+                    arena_info=arena_info,
+                )
+            except _FloodLimited:
+                stats.flood_limited = True
+                logger.warning(
+                    "ice watch delivery pass stopped by Telegram flood limit at watch_id=%s; rest goes next pass",
+                    watch.get("id"),
+                )
+                break
+            except Exception:
+                await session.rollback()
+                logger.exception("ice watch delivery bookkeeping failed watch_id=%s", watch.get("id"))
+            continue
         new_sessions = _new_sessions_for_watch(sessions_by_arena[arena_id], watch, now=now)
         if not new_sessions:
             continue
@@ -625,6 +705,59 @@ async def deliver_ice_watch_reminders(
     return stats
 
 
+async def _deliver_sessions_watch(
+    session: AsyncSession,
+    repo: ClientIceWatchRepository,
+    watch: dict[str, Any],
+    current: list[dict[str, Any]],
+    *,
+    now: datetime,
+    send_fn: SendFn,
+    reply_markup_factory: Callable[[int], Any] | None,
+    stats: IceWatchPassStats,
+    arena_info: dict[int, tuple[str, ZoneInfo]],
+) -> None:
+    """Живая подписка: новое и снятое, без выключения после сообщения."""
+    arena_id = int(watch["arena_id"])
+    matched = [s for s in current if session_matches_filter(s, watch.get("filter_json"), now=now)]
+    snapshot = [_session_snap(s) for s in matched]
+    known = watch.get("known_sessions")
+    if arena_id not in arena_info:
+        arena_info[arena_id] = await _arena_name_and_tz(session, arena_id)
+    name, tz = arena_info[arena_id]
+    today = now.astimezone(tz).date()
+    if known is None:
+        added = _new_sessions_for_watch(matched, watch, now=now)
+        removed: list[dict[str, Any]] = []
+    else:
+        known_ids = {int(item["id"]) for item in known}
+        current_ids = {int(s["id"]) for s in matched}
+        added = [s for s in matched if int(s["id"]) not in known_ids]
+        removed = [item for item in known if int(item["id"]) not in current_ids and _snap_is_ahead(item, now=now, tz=tz)]
+    if not added and not removed:
+        if known is None:
+            await repo.remember_sessions(int(watch["id"]), snapshot)
+            await session.commit()
+        return
+    stats.due += 1
+    text_msg = compose_schedule_change_message(
+        arena_name=name,
+        added=_added_lines(added, today=today),
+        removed=_removed_lines(removed, today=today),
+    )
+    await _deliver_one(
+        session,
+        repo,
+        watch,
+        text_msg=text_msg,
+        send_fn=send_fn,
+        reply_markup_factory=reply_markup_factory,
+        stats=stats,
+        deactivate=False,
+        known_after=snapshot,
+    )
+
+
 async def _deliver_one(
     session: AsyncSession,
     repo: ClientIceWatchRepository,
@@ -634,6 +767,8 @@ async def _deliver_one(
     send_fn: SendFn,
     reply_markup_factory: Callable[[int], Any] | None,
     stats: IceWatchPassStats,
+    deactivate: bool = True,
+    known_after: list | None = None,
 ) -> None:
     watch_id = int(watch["id"])
     # Лок строки до коммита: отписка из Mini App, пришедшая во время прохода, либо видна
@@ -714,7 +849,10 @@ async def _deliver_one(
         attempted_at=attempted_at,
         ok=True,
     )
-    await repo.mark_notified_and_deactivate(watch_id)
+    if deactivate:
+        await repo.mark_notified_and_deactivate(watch_id)
+    else:
+        await repo.keep_after_notify(watch_id, known_after or [])
     await session.commit()
     stats.sent += 1
 

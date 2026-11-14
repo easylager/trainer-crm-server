@@ -1325,6 +1325,8 @@ class ClientIceWatch(Base):
     last_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # TASK-328: latest future session date at subscription; only sessions past it are «new».
     baseline_horizon_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
+    # Сеансы, о которых подписчик уже знает: следующие проходы пишут только про новые и снятые.
+    known_sessions: Mapped[Optional[list]] = mapped_column(JSONB(), nullable=True)
     failed_attempts: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
     deactivated_reason: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
