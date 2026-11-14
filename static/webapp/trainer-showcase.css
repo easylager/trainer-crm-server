@@ -51,7 +51,7 @@ html body.tsw, html.trainer-theme-dark body.tsw, html.trainer-theme-light body.t
 .h1a { font: 400 22px/1.08 var(--display); margin: 0; }
 .mut { color: var(--a-hint); font-size: 13px; }
 /* pan-x + contain: горизонтальный свайп по вкладкам не уходит в сворачивание Mini App (TG). */
-.tabsA { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.tabsA { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .tabsA::-webkit-scrollbar { display: none; }
 .tabsA button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 14px; background: var(--a-sf); border: 1px solid var(--a-line); font-weight: 700; font-size: 13.5px; }
 .tabsA button[aria-selected="true"] { background: var(--a-tx); color: var(--a-bg); border-color: var(--a-tx); }
@@ -96,7 +96,7 @@ html body.tsw, html.trainer-theme-dark body.tsw, html.trainer-theme-light body.t
 /* Карточка цены — светлая/тиловая, как остальной Mini App (не navy-остров). */
 .pc { background: var(--a-sf); color: var(--a-tx); border: 1px solid var(--a-line); border-radius: 22px; padding: 14px; display: grid; gap: 12px; }
 .pc .lb { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--a-hint); font-weight: 700; }
-.seg { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.seg { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x pan-y; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .seg::-webkit-scrollbar { display: none; }
 .seg button { all: unset; cursor: pointer; flex: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; border: 1px solid var(--a-line); border-radius: 999px; padding: 0 12px; font-size: 13px; font-weight: 700; color: var(--a-hint); background: var(--a-chip); }
 .seg button[aria-pressed="true"] { background: var(--a-tx); color: var(--a-bg); border-color: var(--a-tx); }
@@ -278,7 +278,7 @@ body.tsw {
 
 /* Карточка цены */
 .tc-card.tc-pc > :first-child { margin-top: 0; }
-.tc-seg { display: flex; gap: 6px; padding: 4px; border-radius: var(--g-r); background: var(--g-chip); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.tc-seg { display: flex; gap: 6px; padding: 4px; border-radius: var(--g-r); background: var(--g-chip); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x pan-y; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .tc-seg::-webkit-scrollbar { display: none; }
 .tc-seg button { all: unset; box-sizing: border-box; cursor: pointer; flex: 1 0 0; min-width: max-content; min-height: 44px; padding: 0 14px; border-radius: var(--g-r-sm); display: flex; align-items: center; justify-content: center; white-space: nowrap; font-weight: 700; color: var(--g-ink-2); }
 .tc-seg button[aria-pressed="true"] { background: var(--g-surface); color: var(--g-ink); box-shadow: var(--g-shadow); }
@@ -478,7 +478,7 @@ button.tc-g-rink { cursor: pointer; }
 .tc-h-title { min-width: 0; }
 .tc-h-title p { margin: 0; font-size: 12px; color: var(--g-muted); overflow-wrap: anywhere; }
 .tc-h-pad { padding: 4px 16px 8px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.tc-h-days { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.tc-h-days { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; touch-action: pan-x pan-y; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .tc-h-days::-webkit-scrollbar { display: none; }
 .tc-h-day { all: unset; box-sizing: border-box; cursor: pointer; flex: none; width: 64px; min-height: 68px; border-radius: var(--g-r-md); background: var(--g-surface); border: 1px solid var(--g-line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
 .tc-h-day span { font-size: 12px; color: var(--g-muted); }
