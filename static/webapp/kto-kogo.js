@@ -382,8 +382,41 @@
     return true;
   }
 
+  function pageScroll() {
+    return window.scrollY || (document.documentElement && document.documentElement.scrollTop) || 0;
+  }
+
+  /** Запомнить, где стоял список, прежде чем открыть следующий экран. */
+  function parkScroll() {
+    var top = state.stack[state.stack.length - 1];
+    if (!top) return;
+    top.scroll = pageScroll();
+    top.restoreScroll = false;
+  }
+
+  /**
+   * Вернуть список на место после «Назад». Если экран ещё дорисовывается и короче, чем был,
+   * флаг остаётся — следующий кадр попробует ещё раз.
+   */
+  function applyParkedScroll() {
+    var top = state.stack[state.stack.length - 1];
+    if (!top || !top.restoreScroll) return;
+    var y = top.scroll || 0;
+    window.scrollTo(0, y);
+    var height = (document.documentElement && document.documentElement.scrollHeight) || 0;
+    var view = window.innerHeight || 0;
+    if (y <= 0 || height - view + 24 >= y) {
+      top.restoreScroll = false;
+      if (window.requestAnimationFrame) requestAnimationFrame(function () { window.scrollTo(0, y); });
+      return;
+    }
+    top.restoreTries = (top.restoreTries || 0) + 1;
+    if (top.restoreTries > 6) top.restoreScroll = false;
+  }
+
   function go(name, args) {
     state.sheet = null;
+    parkScroll();
     if (enter(state.stack.concat([{ name: name, args: args || {} }]))) window.scrollTo(0, 0);
   }
 
@@ -436,7 +469,12 @@
   function back() {
     var act = M.backAction(state.stack.length, !!state.sheet, inTab());
     if (act === 'sheet') return closeSheet();
-    if (act === 'pop') return enter(state.stack.slice(0, -1));
+    if (act === 'pop') {
+      var next = state.stack.slice(0, -1);
+      var frame = next[next.length - 1];
+      if (frame && frame.scroll) frame.restoreScroll = true;
+      return enter(next);
+    }
     if (act === 'stay') return;
     location.href = '/webapp/client-home' + (initData && !(tg && tg.initData) ? '?init_data=' + encodeURIComponent(initData) : '');
   }
@@ -789,6 +827,7 @@
       }
     }
     syncBack();
+    applyParkedScroll();
   }
 
   function startParam() {

@@ -50,8 +50,11 @@
     try {
       var nav = window.navigation;
       if (unifiedCard() && nav && typeof nav.canGoBack === 'boolean') {
-        consumeFlag(CAME_FROM_APP_KEY);
-        consumeFlag(CAME_FROM_COLD_KEY);
+        var coldNav = consumeFlag(CAME_FROM_COLD_KEY);
+        var markedNav = consumeFlag(CAME_FROM_APP_KEY);
+        if (coldNav) return false;
+        // Метка оболочки (каток → тренер) важнее canGoBack: в Telegram API часто врёт «назад некуда».
+        if (markedNav) return true;
         return nav.canGoBack;
       }
       if (unifiedCard()) {
@@ -315,8 +318,22 @@
     window.scrollTo(0, prev.scroll || 0);
   }
 
+  function historyCanBack() {
+    try {
+      var nav = window.navigation;
+      if (nav && typeof nav.canGoBack === 'boolean') return nav.canGoBack;
+    } catch (e) { /* */ }
+    return Number(history.length) > 1;
+  }
+
   /** Уйти с витрины туда, откуда пришли (каток, «Поиск», главная, «Сохранённые»). */
   function leave() {
+    var arenaId = num(qs.get('arena_id'));
+    // WebView не отдаёт историю, хотя карточку открыли с катка: возвращаем на эту арену явно.
+    if (!historyCanBack() && arenaId) {
+      navigate('arena?ref=' + arenaId);
+      return;
+    }
     try { history.back(); } catch (e) { /* */ }
   }
 
@@ -2619,7 +2636,10 @@
     // Список — корень раздела «Поиск» (панель вкладок под рукой): стрелки нет. Она появляется,
     // только когда идём вглубь (карточка тренера, неделя, запись) и ведёт на шаг назад.
     // Карточка по внешней ссылке — тоже корень (SPEC §8.1.3): стрелки нет (флаг выключен — rootCard() ложен).
-    if ((S.view !== 'list' || S.stack.length) && !rootCard()) Back.set(back);
+    // Скелет ещё «список», но ссылка с катка уже известна: не гасим стрелку до карточки,
+    // иначе Telegram после hide() её больше не показывает.
+    var arriving = CAME_FROM && S.view === 'list' && !S.trainer && !!num(qs.get('trainer_id'));
+    if (((S.view !== 'list' || S.stack.length) && !rootCard()) || arriving) Back.set(back);
     else Back.clear();
   }
 

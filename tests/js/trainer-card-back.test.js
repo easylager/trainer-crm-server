@@ -210,6 +210,25 @@ describe('CAME_FROM: Navigation API вместо history.length (iframe Telegram
     assert.equal(h.ctx.sessionStorage.getItem('trainer_crm_showcase_from_app'), null);
   });
 
+  it('каток открыл карточку, а canGoBack врёт false — стрелка есть и возвращает на арену', async () => {
+    const back = nativeBack();
+    const h = open({
+      search: '?trainer_id=' + trainer.id + '&arena_id=9',
+      historyLength: 2,
+      navigation: { canGoBack: false },
+      sessionStore: { trainer_crm_showcase_from_app: '1' },
+      miniAppBack: back,
+    });
+    assert.equal(back.shown, true, 'стрелка включается сразу, скелет её не прячет');
+    await tick(60);
+    assert.equal(h.S.view, 'trainer');
+    assert.equal(back.shown, true);
+    assert.doesNotMatch(h.app.innerHTML, /Другие тренеры в/);
+    back.press();
+    assert.deepEqual(h.ctx.navigated, ['arena?ref=9']);
+    assert.equal(h.ctx.history.left, 0);
+  });
+
   it('API есть — referrer его не перебивает', async () => {
     const cold = nativeBack();
     const h = open({ historyLength: 1, referrer: SAME_ORIGIN, navigation: { canGoBack: false }, miniAppBack: cold });
