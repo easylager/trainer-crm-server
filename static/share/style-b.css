@@ -1122,6 +1122,11 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-price__k, .b-price__s { font-size: 12px; color: var(--g-muted); line-height: 1.25; }
 .b-price__v { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .b-price-sum { margin: -4px 0 0; font-size: 14px; color: var(--g-ink-2); }
+/* Карточка слота уже показывает те же цены — этаж под заголовком прячем, пока план виден. */
+body:has(#plan:not([hidden]) .b-plan__prices:not([hidden])) .b-prices,
+body:has(#plan:not([hidden]) .b-plan__prices:not([hidden])) .b-price-sum {
+  display: none;
+}
 
 .b-buyline {
   display: flex; align-items: flex-start; gap: 10px; margin: 0;

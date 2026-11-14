@@ -391,6 +391,8 @@ async def test_place_page_style_b_about_focus_and_day_fragments(app_use_test_db,
     assert "flex-wrap" not in sched
     assert "overflow-x: auto" in sched
     assert "grid-auto-flow: column" in sched
+    # Этаж цен прячется, пока видна карточка слота с теми же ценами.
+    assert "body:has(#plan:not([hidden]) .b-plan__prices:not([hidden])) .b-prices" in css
     plan_time = re.search(r'<span class="b-plan__time">([^<]+)</span>', html)
     assert plan_time and plan_time.group(1).startswith("9:00")
 
