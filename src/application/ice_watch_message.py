@@ -41,6 +41,8 @@ _WEEKDAYS_ACC = (
 )
 
 OPEN_SCHEDULE_BUTTON = "Открыть расписание"
+# Кнопка у уведомления об изменении: «Я» → Сохранённые, там можно отписаться.
+MANAGE_WATCH_BUTTON = "Сохранённые"
 
 
 def open_ice_in_city_button(city_name: str | None) -> str:
@@ -125,7 +127,10 @@ def compose_schedule_change_message(
     added: list[str],
     removed: list[str],
 ) -> str:
-    """Одно сообщение про изменение расписания. Строки ``added``/``removed`` уже готовые, без HTML."""
+    """Одно сообщение про изменение расписания. Строки ``added``/``removed`` уже готовые, без HTML.
+
+    Кнопка к сообщению — ``MANAGE_WATCH_BUTTON`` → Сохранённые (отписка).
+    """
     parts = [f"<b>{place_name(arena_name)}</b>"]
     if added:
         parts.append("Появились сеансы:")
@@ -133,5 +138,4 @@ def compose_schedule_change_message(
     if removed:
         parts.append("Сняли сеансы:")
         parts.extend(f"• {line}" for line in removed)
-    parts.append("Следующее изменение тоже пришлём.")
     return "\n".join(parts)

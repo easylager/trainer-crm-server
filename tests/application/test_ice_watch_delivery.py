@@ -226,7 +226,7 @@ async def test_new_dates_past_baseline_fire_once_with_new_range(db_session) -> N
     assert f"{first.day} " in plain and f"{last.day} " in plain
     assert "17:00" in plain
     assert "20:00" not in plain
-    assert "Следующее изменение тоже пришлём." in plain
+    assert "Следующее изменение" not in plain
     row = await _watch_row(db_session, watch["id"])
     assert row["active"] is True and row["known_sessions"]
 

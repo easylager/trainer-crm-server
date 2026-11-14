@@ -24,7 +24,7 @@ from src.application.arena_profile import is_in_season
 from src.application.client_ice_watch_filters import filter_label, session_matches_filter
 from src.application.ice_session_use_cases import STATUS_ACTIVE
 from src.application.ice_watch_message import (
-    OPEN_SCHEDULE_BUTTON,
+    MANAGE_WATCH_BUTTON,
     compose_new_schedule_message,
     compose_schedule_change_message,
     format_nearest,
@@ -857,15 +857,18 @@ async def _deliver_one(
     stats.sent += 1
 
 
-def _open_schedule_markup_factory(base_url: str) -> Callable[[int], Any]:
+def _manage_watch_markup_factory(base_url: str) -> Callable[[int], Any] | None:
+    """Кнопка «Сохранённые» → раздел Я, где отключают рассылку. Без HTTPS Mini App не откроется."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
-    base = (base_url or "").rstrip("/")
+    base = (base_url or "").strip().rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
 
-    def _markup(arena_id: int) -> InlineKeyboardMarkup:
-        url = f"{base}/webapp/arena?arena_id={int(arena_id)}"
+    def _markup(_arena_id: int) -> InlineKeyboardMarkup:
+        url = f"{base}/webapp/client-saved-trainers"
         return InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text=OPEN_SCHEDULE_BUTTON, web_app=WebAppInfo(url=url))]]
+            inline_keyboard=[[InlineKeyboardButton(text=MANAGE_WATCH_BUTTON, web_app=WebAppInfo(url=url))]]
         )
 
     return _markup
@@ -898,7 +901,7 @@ async def run_ice_watch_delivery_pass(*, now: datetime | None = None) -> IceWatc
                 session,
                 now=now,
                 send_fn=_send,
-                reply_markup_factory=_open_schedule_markup_factory(settings.webapp_base_url or ""),
+                reply_markup_factory=_manage_watch_markup_factory(settings.webapp_base_url or ""),
             )
     finally:
         if bot is not None:
