@@ -168,3 +168,41 @@ def test_manual_schedule_stamp_only_within_three_days_and_without_source() -> No
     assert two_days is not None and two_days.day_label == "14.11" and two_days.source_url is None
     # Минск Арена: ручное расписание от 05.11 — без штампа.
     assert proof_stamp(_fresh(schedule_auto=False, schedule_observed_at="2026-11-05T11:16:00+00:00"), now=NOW) is None
+
+
+def test_admin_site_source_gives_the_link_even_without_parser_job() -> None:
+    # Превью/прод без задания парсера: источник «сайт катка» записан админом — ссылка есть.
+    site = "https://tczamok.by/entertainments/ice-rink"
+    stamp = proof_stamp(_fresh(schedule_auto=False, source_url=None, schedule_site_url=site), now=NOW)
+    assert stamp is not None and stamp.source_url == site
+    # Ручное расписание без записанного сайта — штамп без ссылки.
+    plain = proof_stamp(_fresh(schedule_auto=False, schedule_site_url=None), now=NOW)
+    assert plain is not None and plain.source_url is None
+
+
+def test_schedule_site_url_only_for_collected_site_sources() -> None:
+    from src.application.arena_public_use_cases import _schedule_site_url
+
+    url = "https://led.by/"
+    assert (
+        _schedule_site_url(
+            {"schedule_source_url": url, "schedule_source_kind": "site", "schedule_fetch_mode": "server"}
+        )
+        == url
+    )
+    assert (
+        _schedule_site_url({"schedule_source_url": url, "schedule_source_kind": None, "schedule_fetch_mode": "manual"})
+        == url
+    )
+    assert (
+        _schedule_site_url({"schedule_source_url": url, "schedule_source_kind": "site", "schedule_fetch_mode": "none"})
+        is None
+    )
+    ig = "https://www.instagram.com/rink/"
+    assert (
+        _schedule_site_url(
+            {"schedule_source_url": ig, "schedule_source_kind": "instagram", "schedule_fetch_mode": "manual"}
+        )
+        is None
+    )
+    assert _schedule_site_url({}) is None
