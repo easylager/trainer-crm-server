@@ -667,6 +667,18 @@ def invite_share_hook(view: Mapping[str, Any]) -> str:
     return "Сходим сюда?"
 
 
+# Города, где title катка строится под запрос «каток <название> расписание» (TASK-421).
+# Регионы ранжируются на старом шаблоне («Массовое катание — …») — их не трогаем.
+SEO_RINK_TITLE_CITIES = frozenset({"minsk"})
+
+
+def _seo_rink_title(card: Mapping[str, Any], city: str) -> bool:
+    """Новый title только для катков из перечня городов, у которых расписание действительно публикуется."""
+    if city_slug(city) not in SEO_RINK_TITLE_CITIES:
+        return False
+    return normalize_schedule_mode(card.get("schedule_mode")) not in (SCHEDULE_MODE_PHONE, SCHEDULE_MODE_SEASON_CLOSED)
+
+
 def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
     card = view["card"]
     name = format_public_name(str(card.get("name") or ""))
@@ -683,6 +695,8 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
         # Ключевые слова в начале title; бренд как у домена — иначе Google режет до
         # официального имени арены и сниппет тянет short_description из «О катке».
         if city:
+            if _seo_rink_title(card, city):
+                return f"{name}, {city} — каток, расписание массового катания | Glideclub"
             return f"Массовое катание — {name}, {city} | Glideclub"
         return f"Массовое катание — {name} | Glideclub"
     if vt == "shop":
@@ -723,6 +737,9 @@ def og_description(view: Mapping[str, Any]) -> str:
     return " · ".join(bits)
 
 
+_SEARCH_DESCRIPTION_MAX = 160
+
+
 def search_description(view: Mapping[str, Any]) -> str:
     """meta description для поисковика — без дат и счётчиков.
 
@@ -737,10 +754,19 @@ def search_description(view: Mapping[str, Any]) -> str:
         from src.application.place_visit_blocks import search_bits
 
         slots = [s for d in view.get("days") or [] for s in d.get("sessions") or []]
-        bits = search_bits(_place_visit(view), currency=str(card.get("currency_code") or "BYN"), slots=slots)
-        head = "Расписание массового катания на неделю, цены и как добраться"
-        if bits:
-            head = "Расписание массового катания на неделю. " + ". ".join(bits)
+        visit = _place_visit(view)
+        currency = str(card.get("currency_code") or "BYN")
+        where_tail = _where(card).replace(" · ", ", ")
+
+        def _compose(with_services: bool) -> str:
+            bits = search_bits(visit, currency=currency, slots=slots, with_services=with_services)
+            head = "Расписание массового катания на неделю"
+            head = f"{head}. " + ". ".join(bits) if bits else "Расписание массового катания на неделю, цены и как добраться"
+            return f"{head}. {where_tail}." if where_tail else f"{head}."
+
+        full = _compose(True)
+        # Сниппет Google режет около 160 знаков: длинный список услуг уступает адресу и ценам.
+        return full if len(full) <= _SEARCH_DESCRIPTION_MAX else _compose(False)
     elif card.get("venue_type") == "shop":
         services = " · ".join(_services(card))
         head = f"Магазин для катания: {services}" if services else "Магазин для катания"

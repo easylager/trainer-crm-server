@@ -102,11 +102,33 @@ def test_place_search_description_has_no_date_but_preview_still_does() -> None:
 
     text = search_description(_place_view())
     assert text.startswith("Расписание массового катания на неделю, цены и как добраться. ")
-    assert page_title(_place_view()).startswith("Массовое катание — ")
-    assert page_title(_place_view()).endswith("| Glideclub")
+    assert page_title(_place_view()) == "ТЦ Замок, Минск — каток, расписание массового катания | Glideclub"
     assert "пр-т Победителей, 65" in text
     assert not re.search(r"\d{1,2}:\d{2}|окт", text)
     assert "17:15" in og_description(_place_view())
+
+
+def _view_in(city: str, **card):
+    view = _place_view()
+    view["card"] = {**view["card"], "city_name": city, **card}
+    return view
+
+
+def test_minsk_rink_title_only_for_minsk_with_schedule() -> None:
+    from src.application.place_page import page_title
+
+    # Регионы и места без публикуемого расписания остаются на прежнем шаблоне.
+    for city in ("Молодечно", "Мозырь", "Берёза"):
+        assert page_title(_view_in(city)) == f"Массовое катание — ТЦ Замок, {city} | Glideclub"
+    for mode in ("phone", "season_closed"):
+        assert page_title(_view_in("Минск", schedule_mode=mode)).startswith("Массовое катание — ")
+
+
+def test_minsk_ice_without_public_skate_keeps_own_title() -> None:
+    from src.application.place_page import page_title
+
+    title = page_title(_view_in("Минск", amenities={"hockey_center": True}))
+    assert "расписание массового катания" not in title
 
 
 def test_breadcrumbs_are_absolute_or_absent() -> None:
@@ -168,3 +190,15 @@ def test_no_public_skate_block_points_to_nearest_rinks() -> None:
     lonely["card"].update(amenities={"hockey_center": True})
     _t, body, _a = _b_schedule_parts(lonely, base_path="", invite=False, links={})
     assert "Покататься можно рядом" not in body
+
+
+def test_search_description_drops_long_service_list_to_fit_snippet(monkeypatch) -> None:
+    from src.application import place_page
+
+    rows = [{"kind": "aid", "title": t} for t in (
+        "Прокат детского тренажёра («пингвин»)", "Прокат защитной экипировки и шлема", "Заточка коньков")]
+    monkeypatch.setattr(place_page, "_place_visit", lambda v: {"services": {"rows": rows}, "tickets": {"mode": "online"}})
+    text = search_description(_place_view())
+    assert len(text) <= 160
+    assert "пингвин" not in text
+    assert "Победителей, 65" in text
