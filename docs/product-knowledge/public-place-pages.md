@@ -229,3 +229,9 @@ PYTHONPATH=. python scripts/load_catalog_shops.py --file data/catalog/rinks-mins
 
 Юность и СДЮШОР (ledlife) отвечают 403 на небелорусские IP: их парсерам нужен
 `BY_EGRESS_PROXY_URL` (прокси/VPS в РБ) у процесса `notification_service`.
+
+Недельный замер поиска по `/c/minsk`: в Search Console открыть «Эффективность», отфильтровать страницу
+`https://glideclub.by/c/minsk`, период «последние 28 дней» → «Экспорт» → «Скачать CSV» (zip). Затем
+`python3 scripts/gsc_minsk_report.py <zip|папка> --save` печатает сводку, запросы со словом «минск»,
+устройства и отслеживаемые запросы (список — константа `TRACKED_QUERIES` вверху скрипта) и дописывает
+строку недели в `.ai/seo/minsk-weekly.csv` (путь — `--history`; повтор той же даты обновляет строку).
