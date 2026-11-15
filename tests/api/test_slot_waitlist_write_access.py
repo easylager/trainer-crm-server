@@ -152,6 +152,7 @@ async def test_surface_outcomes_are_recorded_with_surface_and_ids(app_use_test_d
         ("slot_wait", "denied", {"trainer_id": trainer_id}),
         ("slot_wait", "already", {"trainer_id": trainer_id}),
         ("arena_watch", "unsupported", {"arena_id": 41}),
+        ("shell_entry", "denied", {}),
     ]
     with patch_client_init_auth(tid):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -182,6 +183,7 @@ async def test_surface_outcomes_are_recorded_with_surface_and_ids(app_use_test_d
         ("write_access_denied", "slot_wait", "trainer_id"),
         ("write_access_already", "slot_wait", "trainer_id"),
         ("write_access_unsupported", "arena_watch", "arena_id"),
+        ("write_access_denied", "shell_entry", None),
     ):
         rows = [e for e in await _events(db_session, event_type) if e["payload"].get("surface") == surface]
         assert len(rows) == 1, event_type

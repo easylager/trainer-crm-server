@@ -237,6 +237,7 @@ describe('подключение', () => {
   it('«Да, писать в чат» сохраняет тем же путём, что тумблер «Сообщения в чате»', () => {
     assert.ok(/function setRemind[\s\S]*?saveRemind\(on\)/.test(board));
     assert.ok(/save: function \(\) \{ saveRemind\(true\); \}/.test(board));
+    assert.ok(/choice !== 'allow'[\s\S]*?saveRemind\(false\)/.test(board));
     assert.ok(/K\.sheet\(T\.title/.test(board), 'общая шторка игры');
   });
 });

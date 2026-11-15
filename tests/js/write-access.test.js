@@ -160,3 +160,156 @@ describe('gate', () => {
     assert.equal(await WA.gate(null, { surface: 'slot_wait', fetch: f }), 'proceed');
   });
 });
+
+describe('entryGate', () => {
+  function installDoc() {
+    const store = new Map();
+    const mem = {};
+    global.sessionStorage = {
+      getItem(k) {
+        return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null;
+      },
+      setItem(k, v) {
+        mem[k] = String(v);
+      },
+      removeItem(k) {
+        delete mem[k];
+      },
+      _mem: mem,
+    };
+    const body = {
+      classList: {
+        _c: new Set(),
+        add(c) {
+          this._c.add(c);
+        },
+        remove(c) {
+          this._c.delete(c);
+        },
+      },
+      appendChild(el) {
+        store.set(el.id, el);
+      },
+    };
+    function el(tag) {
+      const node = {
+        tagName: tag,
+        id: '',
+        className: '',
+        hidden: false,
+        disabled: false,
+        textContent: '',
+        innerHTML: '',
+        _kids: {},
+        _on: {},
+        setAttribute() {},
+        querySelector(sel) {
+          if (sel.startsWith('.')) return this._kids[sel.slice(1)] || null;
+          if (sel.startsWith('[data-act=')) {
+            const act = sel.match(/data-act="([^"]+)"/)[1];
+            return this._kids['act:' + act] || null;
+          }
+          return null;
+        },
+        addEventListener(type, fn) {
+          this._on[type] = this._on[type] || [];
+          this._on[type].push(fn);
+        },
+        click() {
+          (this._on.click || []).forEach((fn) => fn());
+        },
+        parentNode: {
+          removeChild(child) {
+            store.delete(child.id);
+          },
+        },
+      };
+      Object.defineProperty(node, 'innerHTML', {
+        get() {
+          return this._html || '';
+        },
+        set(html) {
+          this._html = html;
+          this._kids = {};
+          ['glide-entry-gate__title', 'glide-entry-gate__text'].forEach((cls) => {
+            this._kids[cls] = el('div');
+          });
+          this._kids['act:allow'] = el('button');
+          this._kids['act:bot'] = el('button');
+          this._kids['act:bot'].hidden = true;
+        },
+      });
+      return node;
+    }
+    global.document = {
+      body,
+      getElementById(id) {
+        return store.get(id) || null;
+      },
+      createElement: el,
+    };
+    return { body, store, mem };
+  }
+
+  it('already: proceed без оверлея, пишет session', async () => {
+    const { store, mem } = installDoc();
+    const f = makeFetch();
+    const tg = makeTg({ user: { allows_write_to_pm: true } });
+    assert.equal(await WA.entryGate(tg, { fetch: f }), 'proceed');
+    assert.equal(store.size, 0);
+    assert.equal(mem.glide_entry_write_ok, '1');
+    assert.equal(f.calls[0].body.surface, 'shell_entry');
+    assert.equal(f.calls[0].body.outcome, 'already');
+  });
+
+  it('granted: системный запрос без оверлея, потом proceed', async () => {
+    const { store, body, mem } = installDoc();
+    const f = makeFetch('https://t.me/bot?start=x');
+    const tg = makeTg({ answer: true });
+    assert.equal(await WA.entryGate(tg, { fetch: f }), 'proceed');
+    assert.equal(tg.requests, 1);
+    assert.equal(store.size, 0);
+    assert.equal(body.classList._c.has('glide-entry-gate-on'), false);
+    assert.equal(mem.glide_entry_write_ok, '1');
+    assert.equal(tg.initDataUnsafe.user.allows_write_to_pm, true);
+    assert.equal(f.calls[0].body.outcome, 'granted');
+  });
+
+  it('повторный вход после granted: без запроса и без оверлея', async () => {
+    const { store, mem } = installDoc();
+    mem.glide_entry_write_ok = '1';
+    const f = makeFetch();
+    const tg = makeTg({ answer: false });
+    assert.equal(await WA.entryGate(tg, { fetch: f }), 'proceed');
+    assert.equal(tg.requests, 0);
+    assert.equal(store.size, 0);
+    assert.equal(f.calls.length, 0);
+  });
+
+  it('denied: оверлей после отказа, кнопка бота', async () => {
+    installDoc();
+    const f = makeFetch('https://t.me/bot?start=x');
+    const tg = makeTg({ answer: false });
+    let done = false;
+    const p = WA.entryGate(tg, { fetch: f }).then(() => {
+      done = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(done, false);
+    const overlay = global.document.getElementById('glide-entry-gate');
+    assert.ok(overlay);
+    const bot = overlay.querySelector('[data-act="bot"]');
+    assert.equal(bot.hidden, false);
+    tg.requestWriteAccess = (cb) => cb(true);
+    overlay.querySelector('[data-act="allow"]').click();
+    await p;
+    assert.equal(done, true);
+  });
+
+  it('не Telegram: proceed', async () => {
+    installDoc();
+    assert.equal(await WA.entryGate(makeTg({ noInitData: true })), 'proceed');
+  });
+});

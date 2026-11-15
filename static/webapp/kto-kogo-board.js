@@ -109,6 +109,12 @@
   function answerWriteAsk(choice) {
     state.sheet = null;
     K.render();
+    // «Не сейчас» — явно выключаем напоминания, иначе на сервере по умолчанию «вкл» без права писать.
+    if (choice !== 'allow') {
+      saveRemind(false);
+      S.answerWriteAsk(choice, { memo: askMemo, tg: K.tg, wa: window.GlideWriteAccess || null });
+      return;
+    }
     S.answerWriteAsk(choice, { memo: askMemo, tg: K.tg, wa: window.GlideWriteAccess || null, save: function () { saveRemind(true); } });
   }
 

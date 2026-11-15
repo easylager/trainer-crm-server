@@ -189,14 +189,36 @@ describe('блок разрешения на экране успеха', () => {
     assert.equal(fetchCalls[0].body.outcome, 'already');
   });
 
-  it('запись не затрагивается: submit/payload не вызывают ни диалог, ни метрику', async () => {
+  it('payload сам по себе не зовёт диалог; skipWriteAccessGate обходит гейт', async () => {
     const { BC, tg, fetchCalls } = boot({});
     BC.buildBookingPayload({ slotId: 1, phone: '+375291112233' });
-    await BC.submitBooking({ body: { slot_id: 1 }, initData: 'x' });
+    assert.equal(tg.requests, 0);
+    await BC.submitBooking({ body: { slot_id: 1 }, initData: 'x', skipWriteAccessGate: true });
     assert.equal(tg.requests, 0);
     assert.deepEqual(
       fetchCalls.map((c) => c.url.split('?')[0]),
       ['/api/webapp/client/booking']
+    );
+  });
+
+  it('submit без skip: сначала gate, потом POST', async () => {
+    const { BC, tg, fetchCalls } = boot({ answer: true });
+    await BC.submitBooking({ body: { slot_id: 1 }, initData: 'x' });
+    assert.equal(tg.requests, 1);
+    assert.deepEqual(
+      fetchCalls.map((c) => c.url.split('?')[0]),
+      ['/api/webapp/client/write-access/outcome', '/api/webapp/client/booking']
+    );
+  });
+
+  it('submit: отказ в gate — POST нет', async () => {
+    const { BC, tg, fetchCalls } = boot({ answer: false });
+    const out = await BC.submitBooking({ body: { slot_id: 1 }, initData: 'x' });
+    assert.equal(tg.requests, 1);
+    assert.equal(out.blocked, true);
+    assert.deepEqual(
+      fetchCalls.map((c) => c.url.split('?')[0]),
+      ['/api/webapp/client/write-access/outcome']
     );
   });
 });

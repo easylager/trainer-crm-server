@@ -1228,8 +1228,7 @@
    */
   function shouldAskWrite(o) {
     o = o || {};
-    // remind === false — игрок сам выключил сообщения: не спорим. «Включено» (true) у нового игрока — просто значение по умолчанию
-    // на сервере (нет строки настроек), а писать ему бот при этом не может, ради него подводка и нужна.
+    // remind === false — сам выключил или после «Не сейчас». true/null у новичка без права писать — как раз повод для подводки.
     if (o.first !== true || o.asked === true || o.remind === false || o.sheet) return false;
     if (!o.tg || !o.wa || typeof o.wa.writeAccessState !== 'function') return false;
     try {

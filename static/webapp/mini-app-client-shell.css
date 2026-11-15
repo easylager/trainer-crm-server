@@ -599,3 +599,75 @@ body.client-shell-body.client-shell-tabs-hidden .app-toast {
   .client-tab-bar--season.client-tab-bar--switching .client-tab-bar__icon-wrap::before { transition: none; }
   .client-tab-bar__icon-wrap { transition-property: transform; }
 }
+
+/* Жёсткий вход: Mini App без чата с ботом не пускаем дальше (write-access.js entryGate). */
+body.glide-entry-gate-on {
+  overflow: hidden;
+}
+
+.glide-entry-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--app-text) 72%, transparent);
+  box-sizing: border-box;
+}
+
+.glide-entry-gate__card {
+  width: min(100%, 360px);
+  padding: 22px 20px 18px;
+  border-radius: var(--app-radius-lg);
+  background: var(--app-bg);
+  color: var(--app-text);
+  box-shadow: var(--app-btn-shadow-surface);
+}
+
+.glide-entry-gate__title {
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+
+.glide-entry-gate__text {
+  margin: 0 0 18px;
+  font-size: var(--app-text-body);
+  line-height: 1.45;
+  opacity: 0.88;
+}
+
+.glide-entry-gate__btn {
+  display: block;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--app-radius-md);
+  font: inherit;
+  font-weight: var(--app-weight-semibold);
+  cursor: pointer;
+}
+
+.glide-entry-gate__btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.glide-entry-gate__btn--pri {
+  background: var(--tg-theme-button-color);
+  color: var(--tg-theme-button-text-color);
+}
+
+.glide-entry-gate__btn--sec {
+  background: transparent;
+  color: var(--app-text);
+  border: 1px solid color-mix(in srgb, var(--app-text) 14%, transparent);
+}
+
+.glide-entry-gate__btn--sec[hidden] {
+  display: none;
+}

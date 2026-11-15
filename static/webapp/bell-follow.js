@@ -1,12 +1,11 @@
 /**
  * Колокольчик сайта: startapp=follow_arena_<id> (src/application/place_links.py: follow_start_param).
  *
- * Мини-апп открывается уже подписанной на каток и один раз просит разрешение, чтобы бот мог
- * написать первым (Telegram.WebApp.requestWriteAccess, Bot API 6.9). Успех показываем только
- * когда разрешение реально есть: исход берём из колбэка requestWriteAccess, а не из его вызова.
+ * Сначала разрешение боту писать (``GlideWriteAccess.gate``), и только потом подписка.
+ * Без права писать подписку не сохраняем — иначе пуш уходит в никуда.
  *
- * Сервер: POST /api/webapp/client/bell-follow (подписка, идемпотентно) и
- * POST /api/webapp/client/bell-follow/outcome (granted | denied | already | unsupported).
+ * Сервер: POST /api/webapp/client/bell-follow (подписка, идемпотентно).
+ * Исход разрешения пишет ``write-access.js`` (surface ``arena_watch``).
  * Нативный диалог Telegram в headless-тестах не воспроизвести: здесь он подменён моком.
  */
 (function (global, factory) {
@@ -24,8 +23,7 @@
   var FLAG = 'glide_bell_follow_v1';
   var FOLLOW_RE = /^follow_arena_([1-9][0-9]{0,8})$/;
 
-  var COPY_DECLINED = 'Подписка сохранена, но уведомления выключены.';
-  var COPY_ENABLE = 'Включить уведомления';
+  var COPY_DENIED = 'Без разрешения писать бот не\u00a0сможет прислать напоминание.';
   var COPY_FAILED = 'Не удалось сохранить подписку.';
 
   function copyDone(arenaName) {
@@ -44,18 +42,15 @@
     return id ? 'arena_' + id : sp;
   }
 
-  /* Проверки и запрос разрешения живут в write-access.js (общие с записью, ожиданием слотов и каткой). */
   var WA = typeof module !== 'undefined' && module.exports && typeof require === 'function'
     ? require('./write-access.js')
     : global.GlideWriteAccess;
 
   var isTelegramPrincipal = WA.isTelegramPrincipal;
   var canRequestWriteAccess = WA.canRequestWriteAccess;
-  /** ``already`` — бот уже может писать; ``askable`` — спросим; ``unsupported`` — спросить нечем. */
   var writeAccessState = WA.rawState;
   var requestWriteAccess = WA.requestWriteAccess;
 
-  /** Нативный попап Telegram; промис резолвится id нажатой кнопки (или ``null``). */
   function showPopup(tg, message, buttons) {
     return new Promise(function (resolve) {
       if (!tg) {
@@ -76,7 +71,7 @@
           return;
         }
       } catch (e) {
-        /* попап уже открыт или SDK не умеет — страница не должна от этого ломаться */
+        /* попап уже открыт или SDK не умеет */
       }
       resolve(null);
     });
@@ -102,7 +97,7 @@
   }
 
   /**
-   * opts: { tg, startParam, storage, post(path, body) → Promise<{ok,status,json}> }.
+   * opts: { tg, startParam, storage, post(path, body) → Promise<{ok,status,json}>, fetch }.
    * Резолвится, когда человек закрыл последний попап: после этого шелл может уводить на карточку.
    */
   function run(opts) {
@@ -120,16 +115,7 @@
       /* без storage — один раз за загрузку страницы */
     }
     var id = Number(arenaId);
-
-    function report(outcome, retry) {
-      try {
-        Promise.resolve(opts.post('/api/webapp/client/bell-follow/outcome', { arena_id: id, outcome: outcome, retry: !!retry })).catch(
-          function () {}
-        );
-      } catch (e) {
-        /* метрика не должна ломать сценарий */
-      }
-    }
+    var post = opts.post;
 
     function done(name) {
       return showPopup(tg, copyDone(name), [{ type: 'close' }]).then(function () {
@@ -137,44 +123,25 @@
       });
     }
 
-    function declined(name, retry) {
-      var buttons = canRequestWriteAccess(tg)
-        ? [{ id: 'enable', type: 'default', text: COPY_ENABLE }, { type: 'close' }]
-        : [{ type: 'close' }];
-      return showPopup(tg, COPY_DECLINED, buttons).then(function (btn) {
-        if (btn !== 'enable') return { status: 'declined' };
-        return requestWriteAccess(tg).then(function (res) {
-          report(res, true);
-          return res === 'granted' ? done(name) : declined(name, true);
-        });
-      });
-    }
-
-    return Promise.resolve()
-      .then(function () {
-        return opts.post('/api/webapp/client/bell-follow', { arena_id: id });
-      })
-      .then(function (res) {
+    function subscribeThenDone() {
+      return post('/api/webapp/client/bell-follow', { arena_id: id }).then(function (res) {
         if (res && res.status === 409) return { status: 'skipped' };
         if (!res || !res.ok || !res.json) {
           return showPopup(tg, COPY_FAILED, [{ type: 'close' }]).then(function () {
             return { status: 'error' };
           });
         }
-        var name = String(res.json.arena_name || '');
-        var state = writeAccessState(tg);
-        if (state === 'already') {
-          report('already');
-          return done(name);
-        }
-        if (state === 'unsupported') {
-          report('unsupported');
-          return declined(name, false);
-        }
-        return requestWriteAccess(tg).then(function (outcome) {
-          report(outcome);
-          return outcome === 'granted' ? done(name) : declined(name, false);
-        });
+        return done(String(res.json.arena_name || ''));
+      });
+    }
+
+    var gateOpts = { surface: 'arena_watch', arenaId: id, deniedText: COPY_DENIED };
+    if (opts.fetch) gateOpts.fetch = opts.fetch;
+
+    return WA.gate(tg, gateOpts)
+      .then(function (res) {
+        if (res !== 'proceed') return { status: 'declined' };
+        return subscribeThenDone();
       })
       .catch(function () {
         return { status: 'error' };
@@ -183,8 +150,8 @@
 
   return {
     FLAG: FLAG,
-    COPY_DECLINED: COPY_DECLINED,
-    COPY_ENABLE: COPY_ENABLE,
+    COPY_DENIED: COPY_DENIED,
+    COPY_FAILED: COPY_FAILED,
     copyDone: copyDone,
     parseFollowStartParam: parseFollowStartParam,
     arenaStartParam: arenaStartParam,

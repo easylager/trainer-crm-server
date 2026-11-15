@@ -50,10 +50,12 @@ describe('разметка и маршрут', () => {
 
   it('шторки: база раньше шторок, шторки раньше client-me.js, без async/defer', () => {
     const list = scripts();
+    // write-access в head до shell (жёсткий entryGate), bell-follow после моделей.
     const order = [
+      'write-access.js',
       'ru-text.js', 'client-sheet.js', 'client-club-sheet.js', 'client-name-sheet.js',
       'minsk-time.js', 'opening-hours.js', 'glide-copy.js', 'public-display-model.js', 'ice-tab-model.js',
-      'write-access.js', 'bell-follow.js', 'client-rink-sheet.js', 'client-me.js',
+      'bell-follow.js', 'client-rink-sheet.js', 'client-me.js',
     ];
     const idx = order.map((name) => list.findIndex((s) => s.src === name));
     idx.forEach((i, k) => assert.ok(i >= 0, order[k] + ' подключён'));
@@ -62,6 +64,7 @@ describe('разметка и маршрут', () => {
       const s = list.find((x) => x.src === name);
       assert.ok(!s.defer && !s.async, name + ' без defer/async');
     }
+    assert.ok(list.findIndex((s) => s.src === 'write-access.js') < list.findIndex((s) => s.src === 'mini-app-client-shell.js'));
     assert.ok(list.findIndex((s) => s.src === 'client-profile-switcher.js') < list.findIndex((s) => s.src === 'client-me.js'));
   });
 

@@ -2214,21 +2214,29 @@
       startParam: sp,
       storage: storage,
       post: B.makePost(initData, global.fetch.bind(global)),
+      fetch: global.fetch.bind(global),
     }).catch(function () {});
   }
 
   function bootAfterSession(session) {
-    if (
-      session &&
-      typeof CatalogPublicUrl !== 'undefined' &&
-      CatalogPublicUrl.applyClientSession
-    ) {
-      CatalogPublicUrl.applyClientSession(session);
-    }
-    refreshWatchesSummary();
-    reportCatalogPresence('miniapp_shell', readStartParam());
-    return runBellFollow().then(function () {
-      return maybeOpenArenaDeepLinkWithSession(session);
+    var WA = global.GlideWriteAccess;
+    var gate =
+      WA && typeof WA.entryGate === 'function'
+        ? WA.entryGate(getTg())
+        : Promise.resolve('proceed');
+    return gate.then(function () {
+      if (
+        session &&
+        typeof CatalogPublicUrl !== 'undefined' &&
+        CatalogPublicUrl.applyClientSession
+      ) {
+        CatalogPublicUrl.applyClientSession(session);
+      }
+      refreshWatchesSummary();
+      reportCatalogPresence('miniapp_shell', readStartParam());
+      return runBellFollow().then(function () {
+        return maybeOpenArenaDeepLinkWithSession(session);
+      });
     }).then(function (opened) {
       if (opened) return;
       // На главной префетч каталога стартует после снятия скелетона: иначе он

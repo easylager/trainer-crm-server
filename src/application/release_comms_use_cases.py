@@ -59,6 +59,8 @@ class ReleaseCommsSpec:
     # Только by_clients: города аудитории (как в шапке) и кампании, чьих получателей не трогаем.
     cities: tuple[str, ...] | None = None
     exclude_campaigns: tuple[str, ...] | None = None
+    # by_clients: не слать тем, у кого уже был chat not found и нет успешной доставки / write-access.
+    require_reachable: bool = False
 
 
 @dataclass
@@ -99,10 +101,19 @@ def parse_release_comms_file(path: Path) -> ReleaseCommsSpec:
         segment = segment_raw or "all"
     cities = _parse_list_field(meta, "cities", path)
     exclude_campaigns = _parse_list_field(meta, "exclude_campaigns", path)
-    if (cities is not None or exclude_campaigns is not None) and not (
-        audience == "clients" and segment == SEGMENT_BY_CLIENTS
-    ):
+    by_clients = audience == "clients" and segment == SEGMENT_BY_CLIENTS
+    if (cities is not None or exclude_campaigns is not None) and not by_clients:
         raise ValueError(f"cities/exclude_campaigns work only with segment: {SEGMENT_BY_CLIENTS} in {path}")
+    rr_raw = (meta.get("require_reachable") or "").strip().lower()
+    if rr_raw in ("1", "true", "yes"):
+        require_reachable = True
+    elif rr_raw in ("0", "false", "no"):
+        require_reachable = False
+    else:
+        # Промо by_clients по умолчанию не жжёт chat not found повторно.
+        require_reachable = by_clients
+    if require_reachable and not by_clients:
+        raise ValueError(f"require_reachable works only with segment: {SEGMENT_BY_CLIENTS} in {path}")
     html_body = body.strip()
     if not html_body:
         raise ValueError(f"Empty message body in {path}")
@@ -117,6 +128,7 @@ def parse_release_comms_file(path: Path) -> ReleaseCommsSpec:
         draft=(meta.get("draft") or "").strip().lower() in ("1", "true", "yes"),
         cities=cities,
         exclude_campaigns=exclude_campaigns,
+        require_reachable=require_reachable,
     )
 
 
@@ -314,11 +326,64 @@ async def _resolve_by_city_ids(session: AsyncSession, spec: ReleaseCommsSpec) ->
     return resolved
 
 
+async def _filter_reachable_clients(
+    session: AsyncSession, audience: list[int]
+) -> tuple[list[int], int]:
+    """Оставляем тех, кому бот уже доставлял, или есть write-access, или ещё не было chat not found."""
+    if not audience:
+        return [], 0
+    sent = {
+        int(tid)
+        for tid in await session.scalars(
+            text(
+                "SELECT DISTINCT telegram_id FROM client_broadcast_log "
+                "WHERE status = 'sent' AND telegram_id = ANY(:ids)"
+            ),
+            {"ids": audience},
+        )
+    }
+    cnf = {
+        int(tid)
+        for tid in await session.scalars(
+            text(
+                "SELECT DISTINCT telegram_id FROM client_broadcast_log "
+                "WHERE status = 'failed' AND telegram_id = ANY(:ids) "
+                "AND error ILIKE '%chat not found%'"
+            ),
+            {"ids": audience},
+        )
+    }
+    from src.application.catalog_consumer_events import telegram_actor_hash
+
+    hash_of = {tid: telegram_actor_hash(tid) for tid in audience}
+    hashes = [h for h in hash_of.values() if h]
+    wa_hashes: set[str] = set()
+    if hashes:
+        wa_hashes = {
+            str(h)
+            for h in await session.scalars(
+                text(
+                    "SELECT DISTINCT actor_id FROM platform_audit_events "
+                    "WHERE event_type IN ('write_access_granted', 'write_access_already') "
+                    "AND actor_id = ANY(:hashes)"
+                ),
+                {"hashes": hashes},
+            )
+            if h
+        }
+    wa_ok = {tid for tid, h in hash_of.items() if h and h in wa_hashes}
+    kept = [tid for tid in audience if tid in sent or tid in wa_ok or tid not in cnf]
+    return kept, len(audience) - len(kept)
+
+
 async def fetch_filtered_by_clients(
     session: AsyncSession, spec: ReleaseCommsSpec
 ) -> tuple[list[int], dict[str, Any] | None]:
-    """Аудитория by_clients с фильтрами шапки. Без cities/exclude_campaigns — ровно прежний список, None."""
-    if spec.cities is None and spec.exclude_campaigns is None:
+    """Аудитория by_clients с фильтрами шапки. Без фильтров — прежний список и None stats."""
+    has_filters = (
+        spec.cities is not None or spec.exclude_campaigns is not None or spec.require_reachable
+    )
+    if not has_filters:
         return await fetch_by_clients_telegram_ids(session), None
     city_names = await _resolve_by_city_ids(session, spec) if spec.cities is not None else None
     base = await fetch_by_clients_telegram_ids(session)
@@ -341,6 +406,9 @@ async def fetch_filtered_by_clients(
         kept = [tid for tid in audience if tid not in excluded]
         stats["excluded_by_campaigns"] = len(audience) - len(kept)
         audience = kept
+    if spec.require_reachable:
+        audience, dropped = await _filter_reachable_clients(session, audience)
+        stats["excluded_unreachable"] = dropped
     stats["after_filters"] = len(audience)
     return audience, stats
 
