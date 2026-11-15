@@ -15,7 +15,7 @@
 | opening_hours | администрация / справочная: Пн–Чт 9:00–18:00, Пт 9:00–16:45. Часы катка и билетных касс для массового катания — unknown | футер https://minskarena.by/. Виджет на https://minskarena.by/services.html с датой «13 декабря 2021» не используем | 2026-09-06 |
 | season | unknown | на сайте нет явной формулировки «круглый год» / месяцев сезона | 2026-09-06 |
 | amenities | skate_rental: unknown; skate_sharpening: unknown; parking: true; locker_rooms: unknown; cafe: true; accessibility: unknown | parking: ABWS `GET /api/v3/arena/home` → `data.objects` id=7 «Паркинг» + кадр со знаками P1/P2. cafe: тот же список id=12 «Кафе, ресторан». Прокат/заточка/раздевалки по-прежнему unknown — не гадаем со слотов saleframe. | 2026-09-06 |
-| short_description | Главная арена МКСК «Минск-арена»: концерты и спорт. Массовое катание на большом льду выкладывают в кассу редко — saleframe/62. Хоккейная площадка и овал Конькобежного стадиона — отдельная карточка (arena 115). | JSON-LD на https://minskarena.by/; ABWS object «Арена» vs «Конькобежный стадион» | 2026-10-04 |
+| short_description | Главная арена МКСК «Минск-арена»: концерты и спорт. Массовое катание на большом льду выкладывают в кассу редко. Хоккейная площадка и овал Конькобежного стадиона — отдельная арена. | JSON-LD на https://minskarena.by/; ABWS object «Арена» vs «Конькобежный стадион» | 2026-10-04 |
 | socials | Facebook https://www.facebook.com/arenaminsk/ ; Instagram https://www.instagram.com/minskarenaby/ | JSON-LD `sameAs` на https://minskarena.by/. Иконки в шапке ведут на `#` — см. Conflicts | 2026-09-06 |
 
 unknown явно писать `unknown`, не выдумывать.

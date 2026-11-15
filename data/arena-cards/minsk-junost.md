@@ -15,7 +15,7 @@ CSV name: `Каток хк "Юность"`. Origin `junost.by` с этого IP 
 | opening_hours | unknown | origin 403; на hockey.by нет часов объекта, только приглашение «в эти выходные» — это не opening_hours | 2026-09-06 |
 | season | unknown | нет месяцев сезона на открываемых страницах | 2026-09-06 |
 | amenities | skate_rental=true; skate_sharpening=true; cafe=true; locker_rooms=unknown; parking=unknown; accessibility=unknown | https://junost.hockey.by/clubs/skating/: прокат коньков, заточка «на постоянной основе», кафе | 2026-09-06 |
-| short_description | Крытый каток ХК «Юность-Минск», ул. Первомайская, 3. Массовое катание — только по origin junost.by (с не-BY IP страница 403). | адрес: https://junost.hockey.by/clubs/skating/ + CSV; блокер: GET https://junost.by/ → 403 | 2026-09-06 |
+| short_description | Крытый каток ХК «Юность-Минск», ул. Первомайская, 3. | адрес: https://junost.hockey.by/clubs/skating/ + CSV; служебно: массовое катание — только по origin junost.by (с не-BY IP 403); в публичный текст не выводить | 2026-09-06 |
 
 unknown явно писать `unknown`, не выдумывать.
 
