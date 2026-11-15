@@ -1005,7 +1005,7 @@ def rescore_text(
         f"закончился {score[0]}:{score[1]}, а не {old_score[0]}:{old_score[1]}."
     )
     if old_points != new_points:
-        body += f" Твои очки за матч: было +{old_points}, стало +{new_points}."
+        body += f" Твои очки за матч: +{new_points}."
     return body
 
 

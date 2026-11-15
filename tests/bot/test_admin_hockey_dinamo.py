@@ -326,12 +326,12 @@ async def test_hold_expires_by_timeout_with_one_reminder(db_session, factory, _t
     await _picks(db_session, m)
     await _auto_final(db_session, m, at(21, 40))
     await hold_delivery(db_session, m, now=at(21, 42))
-    assert (await deliver(factory, now=at(22, 5), send=Outbox()))["sent"] == 0
-    assert (await deliver(factory, now=at(22, 13), send=Outbox()))["sent"] == 2  # 21:42 + 30 мин прошли
+    assert (await deliver(factory, now=at(21, 50), send=Outbox()))["sent"] == 0  # удержание до 21:52
+    assert (await deliver(factory, now=at(21, 53), send=Outbox()))["sent"] == 2  # 21:42 + 10 мин прошли
     f = _test_db_core["factory"]
-    out, n = await _notify(f, at(22, 13))
+    out, n = await _notify(f, at(21, 53))
     assert n == 2 and any(b.startswith("<b>Правка не завершена:</b>") for b, _ in out)
-    again, n2 = await _notify(f, at(22, 20))
+    again, n2 = await _notify(f, at(22, 0))
     assert n2 == 0 and again == []
 
 
