@@ -613,29 +613,29 @@ body.glide-entry-gate-on {
   align-items: center;
   justify-content: center;
   padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
-  background: rgba(12, 14, 18, 0.72);
+  background: color-mix(in srgb, var(--app-text) 72%, transparent);
   box-sizing: border-box;
 }
 
 .glide-entry-gate__card {
   width: min(100%, 360px);
   padding: 22px 20px 18px;
-  border-radius: 16px;
-  background: var(--gl-surface, #fff);
-  color: var(--gl-text, #111);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-bg);
+  color: var(--app-text);
+  box-shadow: var(--app-btn-shadow-surface);
 }
 
 .glide-entry-gate__title {
-  font-size: 1.15rem;
-  font-weight: 700;
+  font-size: var(--app-text-title);
+  font-weight: var(--app-weight-bold);
   line-height: 1.25;
   margin: 0 0 8px;
 }
 
 .glide-entry-gate__text {
   margin: 0 0 18px;
-  font-size: 0.95rem;
+  font-size: var(--app-text-body);
   line-height: 1.45;
   opacity: 0.88;
 }
@@ -646,9 +646,9 @@ body.glide-entry-gate-on {
   margin: 0 0 8px;
   padding: 12px 14px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--app-weight-semibold);
   cursor: pointer;
 }
 
@@ -658,14 +658,14 @@ body.glide-entry-gate-on {
 }
 
 .glide-entry-gate__btn--pri {
-  background: var(--gl-accent, #1a7a4c);
-  color: #fff;
+  background: var(--tg-theme-button-color);
+  color: var(--tg-theme-button-text-color);
 }
 
 .glide-entry-gate__btn--sec {
   background: transparent;
-  color: var(--gl-text, #111);
-  border: 1px solid rgba(0, 0, 0, 0.14);
+  color: var(--app-text);
+  border: 1px solid color-mix(in srgb, var(--app-text) 14%, transparent);
 }
 
 .glide-entry-gate__btn--sec[hidden] {
