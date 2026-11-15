@@ -535,7 +535,7 @@ def test_topic_line_uses_real_numbers_and_declension() -> None:
             "city": {"name": "Минск"},
             "skate_counts": {"today": today, "tomorrow": 5, "weekend": 9},
             "skate_window_arena_counts": {"today": rinks, "tomorrow": 3, "weekend": 4},
-            "topic_price": {"lo": lo, "hi": hi, "currency_code": "BYN"} if lo else None,
+            "skate_window_prices": {"today": {"lo": lo, "hi": hi, "cur": "BYN"}} if lo else {},
         }
 
     nb = " "

@@ -104,6 +104,13 @@ _WINDOW_COUNTS_SQL = text(
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to)::int AS tomorrow_n,
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to)::int AS weekend_n,
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :day_from AND s.starts_at_utc < :day_to)::int AS day_n,
+           MIN(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :today_from AND s.starts_at_utc < :today_to)::int AS today_lo,
+           MAX(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :today_from AND s.starts_at_utc < :today_to)::int AS today_hi,
+           MIN(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to)::int AS tomorrow_lo,
+           MAX(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to)::int AS tomorrow_hi,
+           MIN(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to)::int AS weekend_lo,
+           MAX(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to)::int AS weekend_hi,
+           MIN(s.currency_code) AS cur,
            COUNT(*) FILTER (WHERE s.local_date = :pd0)::int AS pd0_n,
            COUNT(*) FILTER (WHERE s.local_date = :pd1)::int AS pd1_n,
            COUNT(*) FILTER (WHERE s.local_date = :pd2)::int AS pd2_n,
@@ -124,30 +131,6 @@ _WINDOW_COUNTS_SQL = text(
       AND s.starts_at_utc > :now
       AND (s.valid_until IS NULL OR s.valid_until >= :now)
     GROUP BY s.arena_id, (s.kind = 'hockey_practice')
-    """
-)
-
-# Вилка цен взрослого билета массового катания в окне строки героя (TASK-420).
-_LINE_PRICE_SQL = text(
-    f"""
-    SELECT s.currency_code, MIN(s.price_adult_minor)::int AS lo, MAX(s.price_adult_minor)::int AS hi,
-           COUNT(*)::int AS n
-    FROM ice_sessions s
-    JOIN arenas a ON a.id = s.arena_id
-    LEFT JOIN arena_profiles p ON p.arena_id = a.id
-    JOIN cities c ON c.id = a.city_id
-    WHERE a.city_id = :city_id
-      AND {PUBLIC_ARENA_VISIBLE_SQL}
-      AND {_NOT_HOCKEY_CENTER_SQL}
-      AND s.status = :st
-      AND s.kind IN ('public_skate', 'open_ice')
-      AND s.starts_at_utc > :now
-      AND s.starts_at_utc >= :w_from AND s.starts_at_utc < :w_to
-      AND (s.valid_until IS NULL OR s.valid_until >= :now)
-      AND s.price_adult_minor > 0
-    GROUP BY s.currency_code
-    ORDER BY n DESC
-    LIMIT 1
     """
 )
 
@@ -362,6 +345,7 @@ async def load_city_hub_view(
     ohm_arenas: set[int] = set()
     skate_by_arena: dict[int, int] = {}
     skate_window_arenas: dict[str, set[int]] = {k: set() for k in _WINDOW_KEYS}
+    skate_window_prices: dict[str, dict[str, Any]] = {k: {"lo": [], "hi": [], "cur": None} for k in _WINDOW_KEYS}
     picker_dates = home_picker_dates(now)
     day_counts: dict[date, int] = {d: 0 for d in picker_dates}
     for row in count_rows:
@@ -378,6 +362,11 @@ async def load_city_hub_view(
                 for key in _WINDOW_KEYS:
                     if int(row.get(f"{key}_n") or 0) > 0:
                         skate_window_arenas[key].add(aid)
+                    if row.get(f"{key}_lo"):
+                        acc = skate_window_prices[key]
+                        acc["lo"].append(int(row[f"{key}_lo"]))
+                        acc["hi"].append(int(row[f"{key}_hi"]))
+                        acc["cur"] = acc["cur"] or row.get("cur")
                 skate_by_arena[aid] = skate_by_arena.get(aid, 0) + int(row.get("all_n") or 0)
 
     when_explicit = window in _WINDOW_KEYS or day_key is not None
@@ -438,30 +427,6 @@ async def load_city_hub_view(
         )
         if row:
             next_ohm = dict(row)
-
-    topic_price: dict[str, Any] | None = None
-    topic_key = next((k for k in _WINDOW_KEYS if skate[k]), None)
-    if topic_key and not when_explicit:
-        bounds = _window_bounds(now)
-        price_row = (
-            (
-                await session.execute(
-                    _LINE_PRICE_SQL,
-                    {
-                        "city_id": city_id,
-                        "now": now,
-                        "st": STATUS_ACTIVE,
-                        "w_from": bounds[f"{topic_key}_from"],
-                        "w_to": bounds[f"{topic_key}_to"],
-                        **scope,
-                    },
-                )
-            )
-            .mappings()
-            .first()
-        )
-        if price_row and price_row.get("lo"):
-            topic_price = dict(price_row)
 
     place_rows = (await session.execute(_PLACES_SQL, {"city_id": city_id, **scope})).mappings().all()
     places: list[dict[str, Any]] = []
@@ -560,7 +525,10 @@ async def load_city_hub_view(
         "skate_counts": skate,
         "skate_by_arena": skate_by_arena,
         "skate_window_arena_counts": {k: len(v) for k, v in skate_window_arenas.items()},
-        "topic_price": topic_price,
+        "skate_window_prices": {
+            k: {"lo": min(v["lo"]) if v["lo"] else None, "hi": max(v["hi"]) if v["hi"] else None, "cur": v["cur"]}
+            for k, v in skate_window_prices.items()
+        },
         "ohm_counts": ohm,
         "skate_arena_count": len(skate_arenas),
         "ohm_arena_count": len(ohm_arenas),
@@ -1038,9 +1006,9 @@ def city_hub_topic_line(view: Mapping[str, Any]) -> str:
     text_ = f"Массовое катание в {where}: {lead} {n}{nb}{plural_ru(n, 'сеанс', 'сеанса', 'сеансов')}"
     if rinks:
         text_ += f" на {rinks}{nb}{plural_ru(rinks, 'катке', 'катках', 'катках')}"
-    price = view.get("topic_price")
+    price = (view.get("skate_window_prices") or {}).get(key)
     if isinstance(price, Mapping) and price.get("lo"):
-        currency = str(price.get("currency_code") or "BYN")
+        currency = str(price.get("cur") or "BYN")
         lo, hi = int(price["lo"]), int(price["hi"] or price["lo"])
         if hi > lo:
             low = format_price_minor(lo, currency).rsplit(" ", 1)[0].replace(" ", nb)
