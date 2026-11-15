@@ -91,6 +91,10 @@ FAN_WINDOW = timedelta(days=30)
 # Итог шлём, пока он свежий; ночной итог, отложенный до 09:00, остаётся свежим и утром.
 RESULT_FRESH = timedelta(hours=6)
 RESULT_FRESH_AFTER_NIGHT = timedelta(hours=16)
+# Итог уходит в чат не раньше, чем через столько после ``finalized_at``: ошибочный итог (15.11.2026 матч ушёл
+# в итог в третьем периоде) успевают поймать и поправить до рассылки. Цикл в окне итога тикает раз в 2 минуты,
+# так что 5 минут — это пара тиков для второго взгляда, а клиент ждёт итог на пять минут дольше, чем раньше.
+RESULT_SEND_DELAY = timedelta(minutes=5)
 QUIET_FROM, QUIET_TO = 23, 9
 MFINAL_FROM_HOUR = 12
 # В «корону решится сегодня» зовём тех, у кого она ещё в досягаемости.
@@ -331,6 +335,7 @@ _DUE_RESULT = text(f"""
     JOIN hockey_players AS pl ON pl.player_key = p.player_key
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = p.player_key
     JOIN game_matches AS m ON m.id = p.match_id AND m.status = 'final' AND m.finalized_at > :fresh
+                                  AND m.finalized_at <= :ready
     WHERE {_ELIGIBLE} AND COALESCE(pr.notify_result, true) AND p.points IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM hockey_notices AS n
@@ -699,7 +704,7 @@ async def _invite_code(session: AsyncSession, league_id: int) -> str:
 async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) -> list[Notice]:
     fresh = now - (RESULT_FRESH if _local(now).hour >= 15 else RESULT_FRESH_AFTER_NIGHT)
     by_player: dict[int, list] = {}
-    for r in (await session.execute(_DUE_RESULT, {"fresh": _utc(fresh)})).all():
+    for r in (await session.execute(_DUE_RESULT, {"fresh": _utc(fresh), "ready": _utc(now) - RESULT_SEND_DELAY})).all():
         by_player.setdefault(r.player_key, []).append(r)
     out: list[Notice] = []
     for player_key, rows in by_player.items():
