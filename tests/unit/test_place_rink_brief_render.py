@@ -161,10 +161,11 @@ def test_minsk_answer_line_is_open_to_snippet_sessions_and_stamp_are_not(ohm: bo
     html = _render(_view("Минск", ohm=ohm))
     sched = _schedule(html)
     line = "Каждый день 13 сеансов по 45 минут — каждый час с 10:15 до 22:15."
-    assert f'<p class="b-brief">{line}</p>' in sched
+    glued = line.replace("по 45", "по&nbsp;45").replace("с 10", "с&nbsp;10").replace("до 22", "до&nbsp;22")
+    assert f'<p class="b-brief">{glued}</p>' in sched
     assert 'id="schedule" data-nosnippet' not in html
     open_text = _without_nosnippet(sched)
-    assert line in open_text
+    assert line in open_text.replace("\xa0", " ")
     assert "Проверено" not in open_text
     assert "b-ticket" not in open_text and "сегодня" not in open_text and "завтра" not in open_text
     assert '<div class="b-proof" data-nosnippet>' in sched
@@ -179,7 +180,7 @@ def test_minsk_answer_line_is_open_to_snippet_sessions_and_stamp_are_not(ohm: bo
 def test_minsk_ohm_tab_leads_with_answer_and_hides_its_strip() -> None:
     sched = _schedule(_render(_view("Минск", ohm=True)))
     pane = sched[sched.index("b-pane--ohm") :]
-    assert '<p class="b-brief">ОХМ: пн, вт, чт и вс — один сеанс в день по 60 минут, в 13:00.</p>' in pane
+    assert '<p class="b-brief">ОХМ: пн, вт, чт и вс — один сеанс в день по&nbsp;60 минут, в&nbsp;13:00.</p>' in pane
     assert '<nav class="b-sched" aria-label="День" data-nosnippet>' in pane
 
 

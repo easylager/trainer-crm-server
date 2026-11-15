@@ -1975,6 +1975,14 @@ def place_proof_stamp(view: Mapping[str, Any]):
     return proof_stamp(view["card"].get("freshness"), now=now)
 
 
+_BRIEF_GLUE = re.compile(r"(?<=\s)(с|до|в|по|или|и) (?=\d)")
+
+
+def _brief_html(text: str) -> str:
+    """Предлог не отрывается от времени на переносе: «с&nbsp;10:15», «по&nbsp;45 минут»."""
+    return _BRIEF_GLUE.sub(r"\1&nbsp;", _esc(text))
+
+
 def _b_proof(view: Mapping[str, Any]) -> str:
     """«✓ Проверено 16.11 на сайте катка» — над днями, под data-nosnippet (дата не для сниппета)."""
     stamp = place_proof_stamp(view)
@@ -2059,7 +2067,7 @@ def _b_schedule_parts(
         from src.application.rink_brief import schedule_line, weekend_price_note
 
         answer = schedule_line(all_slots, today=view["today"])
-        lead = f'<p class="b-brief">{_esc(answer)}</p>' if answer else ""
+        lead = f'<p class="b-brief">{_brief_html(answer)}</p>' if answer else ""
         weekend = weekend_price_note(all_slots, currency=currency) or ""
         proof = _b_proof(view)
     prices = prices_html(all_slots, vv, currency=currency, extra_sum=weekend)
@@ -2146,7 +2154,7 @@ def _b_kind_parts(
             from src.application.rink_brief import ohm_line
 
             answer = ohm_line(slots, today=view["today"])
-            lead = f'<p class="b-brief">{_esc(answer)}</p>' if answer else ""
+            lead = f'<p class="b-brief">{_brief_html(answer)}</p>' if answer else ""
         return f"{lead}{notes_html}{strip}", " · ".join(aside_bits)
     return f"{strip}{notes_html}", " · ".join(aside_bits)
 
