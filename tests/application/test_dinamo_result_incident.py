@@ -224,6 +224,9 @@ async def test_finished_match_is_final_only_after_second_agreeing_poll(db_sessio
         "regulation",
         "auto",
     )
+    probe = (await db_session.execute(text("SELECT result_probe FROM hockey_matches WHERE id = :i"), {"i": mid})).scalar_one()
+    assert "подтверждено двумя опросами" in probe["confirmed_by"]
+    assert ("hockey.by" if proof == "ticker" else "sportmail.ru") in probe["confirmed_by"]
 
 
 @pytest.mark.asyncio
@@ -255,6 +258,8 @@ async def test_polls_that_disagree_go_to_review_with_a_reason(db_session, monkey
     row = await get_match(db_session, mid)
     assert row.status == "review" and "менялся между опросами" in row.review_reason
     assert "3:2" in row.review_reason and "4:2" in row.review_reason
+    probe = (await db_session.execute(text("SELECT result_probe FROM hockey_matches WHERE id = :i"), {"i": mid})).scalar_one()
+    assert "hcdinamo.by: 4:2" in probe["sources"] and "hockey.by: 4:2, матч завершён" in probe["sources"]
     # Липкая проверка: три тика с одним счётом, прошло больше 10 минут — финала нет, статус review.
     for minutes in (156, 164, 172, 190):
         assert [k for _, k in await _poll(db_session, fetch, minutes)] == [KIND_REVIEW]
