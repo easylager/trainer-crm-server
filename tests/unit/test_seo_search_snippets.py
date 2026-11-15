@@ -82,6 +82,7 @@ def test_city_search_description_has_no_session_counts() -> None:
 
 def _place_view(**extra):
     view = {
+        "session_count": 5,
         "card": {
             "name": "ТЦ Замок",
             "venue_type": "ice",
@@ -122,6 +123,13 @@ def test_minsk_rink_title_only_for_minsk_with_schedule() -> None:
         assert page_title(_view_in(city)) == f"Массовое катание — ТЦ Замок, {city} | Glideclub"
     for mode in ("phone", "season_closed"):
         assert page_title(_view_in("Минск", schedule_mode=mode)).startswith("Массовое катание — ")
+
+
+def test_minsk_rink_without_sessions_keeps_old_title() -> None:
+    from src.application.place_page import page_title
+
+    view = _place_view(days=[], session_count=0)
+    assert page_title(view).startswith("Массовое катание — ")
 
 
 def test_minsk_ice_without_public_skate_keeps_own_title() -> None:

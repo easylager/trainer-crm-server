@@ -672,8 +672,14 @@ def invite_share_hook(view: Mapping[str, Any]) -> str:
 SEO_RINK_TITLE_CITIES = frozenset({"minsk"})
 
 
-def _seo_rink_title(card: Mapping[str, Any], city: str) -> bool:
-    """Новый title только для катков из перечня городов, у которых расписание действительно публикуется."""
+def _seo_rink_title(view: Mapping[str, Any], city: str) -> bool:
+    """Новый title только для катков из перечня городов, у которых на странице есть настоящее расписание.
+
+    «Ждём новое расписание» (сеансов нет) — прежний title: обещать расписание нельзя.
+    """
+    card = view["card"]
+    if not (view.get("days") or view.get("session_count")):
+        return False
     if city_slug(city) not in SEO_RINK_TITLE_CITIES:
         return False
     return normalize_schedule_mode(card.get("schedule_mode")) not in (SCHEDULE_MODE_PHONE, SCHEDULE_MODE_SEASON_CLOSED)
@@ -695,7 +701,7 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
         # Ключевые слова в начале title; бренд как у домена — иначе Google режет до
         # официального имени арены и сниппет тянет short_description из «О катке».
         if city:
-            if _seo_rink_title(card, city):
+            if _seo_rink_title(view, city):
                 return f"{name}, {city} — каток, расписание массового катания | Glideclub"
             return f"Массовое катание — {name}, {city} | Glideclub"
         return f"Массовое катание — {name} | Glideclub"
