@@ -127,6 +127,30 @@ _WINDOW_COUNTS_SQL = text(
     """
 )
 
+# Вилка цен взрослого билета массового катания в окне строки героя (TASK-420).
+_LINE_PRICE_SQL = text(
+    f"""
+    SELECT s.currency_code, MIN(s.price_adult_minor)::int AS lo, MAX(s.price_adult_minor)::int AS hi,
+           COUNT(*)::int AS n
+    FROM ice_sessions s
+    JOIN arenas a ON a.id = s.arena_id
+    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+    JOIN cities c ON c.id = a.city_id
+    WHERE a.city_id = :city_id
+      AND {PUBLIC_ARENA_VISIBLE_SQL}
+      AND {_NOT_HOCKEY_CENTER_SQL}
+      AND s.status = :st
+      AND s.kind IN ('public_skate', 'open_ice')
+      AND s.starts_at_utc > :now
+      AND s.starts_at_utc >= :w_from AND s.starts_at_utc < :w_to
+      AND (s.valid_until IS NULL OR s.valid_until >= :now)
+      AND s.price_adult_minor > 0
+    GROUP BY s.currency_code
+    ORDER BY n DESC
+    LIMIT 1
+    """
+)
+
 _NEXT_OHM_SQL = text(
     f"""
     SELECT a.id AS arena_id, a.name AS arena_name, p.slug AS arena_slug,
@@ -337,6 +361,7 @@ async def load_city_hub_view(
     skate_arenas: set[int] = set()
     ohm_arenas: set[int] = set()
     skate_by_arena: dict[int, int] = {}
+    skate_window_arenas: dict[str, set[int]] = {k: set() for k in _WINDOW_KEYS}
     picker_dates = home_picker_dates(now)
     day_counts: dict[date, int] = {d: 0 for d in picker_dates}
     for row in count_rows:
@@ -350,6 +375,9 @@ async def load_city_hub_view(
         if int(row.get("all_n") or 0) > 0:
             (ohm_arenas if row.get("is_ohm") else skate_arenas).add(aid)
             if not row.get("is_ohm"):
+                for key in _WINDOW_KEYS:
+                    if int(row.get(f"{key}_n") or 0) > 0:
+                        skate_window_arenas[key].add(aid)
                 skate_by_arena[aid] = skate_by_arena.get(aid, 0) + int(row.get("all_n") or 0)
 
     when_explicit = window in _WINDOW_KEYS or day_key is not None
@@ -410,6 +438,30 @@ async def load_city_hub_view(
         )
         if row:
             next_ohm = dict(row)
+
+    topic_price: dict[str, Any] | None = None
+    topic_key = next((k for k in _WINDOW_KEYS if skate[k]), None)
+    if topic_key and not when_explicit:
+        bounds = _window_bounds(now)
+        price_row = (
+            (
+                await session.execute(
+                    _LINE_PRICE_SQL,
+                    {
+                        "city_id": city_id,
+                        "now": now,
+                        "st": STATUS_ACTIVE,
+                        "w_from": bounds[f"{topic_key}_from"],
+                        "w_to": bounds[f"{topic_key}_to"],
+                        **scope,
+                    },
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if price_row and price_row.get("lo"):
+            topic_price = dict(price_row)
 
     place_rows = (await session.execute(_PLACES_SQL, {"city_id": city_id, **scope})).mappings().all()
     places: list[dict[str, Any]] = []
@@ -507,6 +559,8 @@ async def load_city_hub_view(
         "service_count": len(service_places),
         "skate_counts": skate,
         "skate_by_arena": skate_by_arena,
+        "skate_window_arena_counts": {k: len(v) for k, v in skate_window_arenas.items()},
+        "topic_price": topic_price,
         "ohm_counts": ohm,
         "skate_arena_count": len(skate_arenas),
         "ohm_arena_count": len(ohm_arenas),
@@ -586,6 +640,24 @@ def _price_bits(card: Mapping[str, Any]) -> str:
     if card.get("price_with_rental"):
         bits.append(str(card["price_with_rental"]))
     return " · ".join(bits)
+
+
+def city_hub_itemlist_rinks(view: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Места для JSON-LD ItemList: только катки (лёд и открытые), порядок по ближайшим сеансам.
+
+    Магазины, сервисы, трассы — не катки, в списке с заголовком «Массовое катание…» им нечего
+    делать. Сначала катки с будущими сеансами, больше сеансов — выше (ровно то, что ищет человек);
+    при равенстве — по названию. Если сеансов нет нигде, список — все катки по названию.
+    """
+    by_arena = view.get("skate_by_arena") or {}
+    rinks = [
+        p
+        for p in view.get("places") or []
+        if p.get("slug") and _is_rink(str(p.get("venue_type") or "ice"))
+    ]
+    scheduled = [p for p in rinks if int(by_arena.get(p["id"]) or 0) > 0]
+    pool = scheduled or rinks
+    return sorted(pool, key=lambda p: (-int(by_arena.get(p["id"]) or 0), str(p["name"]).casefold()))
 
 
 def city_hub_document_title(view: Mapping[str, Any]) -> str:
@@ -788,15 +860,13 @@ def render_city_hub_page(
     # TASK-278: «Открыть в Telegram» — плашкой внизу экрана; кнопки в блоке «Поделиться» больше нет.
     share_tail["__PLACE_SHARE_BAR__"] = ""
     elements = []
-    for p in view.get("places") or []:
-        if not p.get("slug"):
-            continue
+    for p in city_hub_itemlist_rinks(view):
         path = place_path(city_name=city_name, slug=p["slug"])
         elements.append(
             {
                 "@type": "ListItem",
                 "position": len(elements) + 1,
-                "name": p["name"],
+                "name": format_public_name(str(p["name"])),
                 "url": join_public_origin(canonical_url, path),
             }
         )
@@ -948,6 +1018,36 @@ def _b_counts_line(view: Mapping[str, Any]) -> str:
         word = plural_ru(weekend_n, "сеанс", "сеанса", "сеансов")
         return f"В выходные — {weekend_n} {word}"
     return ""
+
+
+def city_hub_topic_line(view: Mapping[str, Any]) -> str:
+    """Подстрока героя: тема страницы и настоящие числа (TASK-420).
+
+    «Массовое катание в Минске: сегодня ещё 21 сеанс на 10 катках, от 7 до 15 BYN».
+    Окно — первое из «сегодня / завтра / в выходные», где есть сеансы; катки и цены считаются
+    в том же окне. Нет склонения города, окна с сеансами или хаб открыт в окне — прежняя строка.
+    """
+    where = city_locative(str(view["city"]["name"]))
+    key = next((k for k in _WINDOW_KEYS if int(view["skate_counts"].get(k) or 0)), None)
+    if not where or key is None or view.get("when_explicit"):
+        return _b_counts_line(view)
+    n = int(view["skate_counts"][key])
+    rinks = int((view.get("skate_window_arena_counts") or {}).get(key) or 0)
+    nb = "\u00a0"
+    lead = {"today": "сегодня ещё", "tomorrow": "завтра", "weekend": "в выходные"}[key]
+    text_ = f"Массовое катание в {where}: {lead} {n}{nb}{plural_ru(n, 'сеанс', 'сеанса', 'сеансов')}"
+    if rinks:
+        text_ += f" на {rinks}{nb}{plural_ru(rinks, 'катке', 'катках', 'катках')}"
+    price = view.get("topic_price")
+    if isinstance(price, Mapping) and price.get("lo"):
+        currency = str(price.get("currency_code") or "BYN")
+        lo, hi = int(price["lo"]), int(price["hi"] or price["lo"])
+        if hi > lo:
+            low = format_price_minor(lo, currency).rsplit(" ", 1)[0].replace(" ", nb)
+            text_ += f", от {low} до {format_price_minor(hi, currency).replace(' ', nb)}"
+        else:
+            text_ += f", {format_price_minor(lo, currency).replace(' ', nb)}"
+    return text_
 
 
 def _b_bar(view: Mapping[str, Any]) -> str:
@@ -1611,7 +1711,7 @@ def _b_body(
     hero = hero_html(
         title=t("hub.on_ice", city=city_name),
             title_break="на льду",
-        sub_html=f"<span data-nosnippet>{_esc(_b_counts_line(view))}</span>",
+        sub_html=f"<span data-nosnippet>{_esc(city_hub_topic_line(view))}</span>",
         kicker=_b_today_kicker(view),
         photo_url=photo,
         photo_alt=alt,

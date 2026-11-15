@@ -488,3 +488,98 @@ def test_map_links_carry_window() -> None:
     points = [{"slug": "minsk", "name": "Минск", "x": 1, "y": 1, "r": 5, "session_count": 1}]
     assert 'href="/c/minsk?w=weekend"' in render_map_svg(points, city_when="weekend")
     assert 'href="/c/minsk"' in render_map_svg(points)
+
+
+# ---------------------------------------------------------------------------
+# TASK-420: ItemList только катки, подстрока героя с темой страницы
+# ---------------------------------------------------------------------------
+
+
+def _item_list(html: str) -> dict:
+    import json
+
+    for raw in re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.S):
+        data = json.loads(raw)
+        if data.get("@type") == "ItemList":
+            return data
+    raise AssertionError("ItemList не найден")
+
+
+def test_itemlist_rinks_only_ordered_by_sessions() -> None:
+    from src.application.city_hub_page import city_hub_itemlist_rinks
+
+    view = {
+        "places": [
+            {"id": 1, "name": "Яблоко", "slug": "yabloko", "venue_type": "ice"},
+            {"id": 2, "name": "CCMshop", "slug": "ccm", "venue_type": "shop"},
+            {"id": 3, "name": "Арена", "slug": "arena", "venue_type": "ice"},
+            {"id": 4, "name": "Трасса", "slug": "trassa", "venue_type": "other"},
+            {"id": 5, "name": "Пустой", "slug": "empty", "venue_type": "ice"},
+            {"id": 6, "name": "Без слага", "slug": "", "venue_type": "ice"},
+        ],
+        "skate_by_arena": {1: 9, 3: 9, 5: 0},
+    }
+    assert [p["slug"] for p in city_hub_itemlist_rinks(view)] == ["arena", "yabloko"]
+    view["skate_by_arena"] = {1: 2, 3: 7}
+    assert [p["slug"] for p in city_hub_itemlist_rinks(view)] == ["arena", "yabloko"]
+    view["skate_by_arena"] = {}
+    assert [p["slug"] for p in city_hub_itemlist_rinks(view)] == ["arena", "empty", "yabloko"]
+    assert city_hub_itemlist_rinks({"places": []}) == []
+
+
+def test_topic_line_uses_real_numbers_and_declension() -> None:
+    from src.application.city_hub_page import city_hub_topic_line
+
+    def view(today: int, rinks: int, lo: int | None = 700, hi: int | None = 1500) -> dict:
+        return {
+            "city": {"name": "Минск"},
+            "skate_counts": {"today": today, "tomorrow": 5, "weekend": 9},
+            "skate_window_arena_counts": {"today": rinks, "tomorrow": 3, "weekend": 4},
+            "topic_price": {"lo": lo, "hi": hi, "currency_code": "BYN"} if lo else None,
+        }
+
+    nb = " "
+    assert city_hub_topic_line(view(21, 10)) == (
+        f"Массовое катание в Минске: сегодня ещё 21{nb}сеанс на 10{nb}катках, от 7 до 15{nb}BYN"
+    )
+    assert city_hub_topic_line(view(2, 1, 850, 850)) == (
+        f"Массовое катание в Минске: сегодня ещё 2{nb}сеанса на 1{nb}катке, 8,50{nb}BYN"
+    )
+    assert city_hub_topic_line(view(5, 2, None)) == (
+        f"Массовое катание в Минске: сегодня ещё 5{nb}сеансов на 2{nb}катках"
+    )
+    tomorrow = view(0, 0)
+    assert city_hub_topic_line(tomorrow).startswith("Массовое катание в Минске: завтра 5")
+    # нет сеансов вовсе — как раньше, пусто
+    assert city_hub_topic_line({**view(0, 0), "skate_counts": {"today": 0, "tomorrow": 0, "weekend": 0}}) == ""
+
+
+@pytest.mark.asyncio
+async def test_city_hub_itemlist_and_topic_line_in_html(app_use_test_db, db_session) -> None:
+    name = "Могилёв"
+    city_id = await _insert_city(db_session, name=name)
+    busy = await _insert_arena(db_session, city_id, name="Бета-арена")
+    quiet = await _insert_arena(db_session, city_id, name="Альфа-каток")
+    shop = await _insert_arena(db_session, city_id, name="Aaa Shop")
+    await db_session.execute(text("UPDATE arenas SET venue_type = 'shop' WHERE id = :id"), {"id": shop})
+    tomorrow = _minsk_today() + timedelta(days=1)
+    await _session(db_session, busy, day=tomorrow, hhmm="12:00")
+    await _session(db_session, busy, day=tomorrow, hhmm="14:00")
+    await _session(db_session, quiet, day=tomorrow, hhmm="16:00")
+    await db_session.commit()
+    invalidate_public_city_cache()
+
+    async with _client() as client:
+        html = (await client.get(f"/c/{city_slug(name)}")).text
+    data = _item_list(html)
+    names = [i["name"] for i in data["itemListElement"]]
+    assert names == ["Бета-арена", "Альфа-каток"], names
+    assert [i["position"] for i in data["itemListElement"]] == [1, 2]
+    assert all(re.search(r"/p/[^/]+/[^/]+$", i["url"]) for i in data["itemListElement"])
+    assert "Aaa Shop" not in str(data)
+    sub = re.search(r'<p class="b-hero__sub[^"]*"><span data-nosnippet>(.*?)</span>', html, re.S)
+    assert sub, html
+    line = sub.group(1).replace(" ", " ")
+    assert line.startswith("Массовое катание в ") and ": " in line
+    # Сегодня сеансов нет или есть — но числа завтра/сегодня настоящие и катков два.
+    assert "на 2 катках" in line and ", 12 BYN" in line
