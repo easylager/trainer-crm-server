@@ -518,6 +518,7 @@
           startParam: 'follow_arena_' + String(arenaId),
           storage: null,
           post: bell.makePost(initData(), root.fetch.bind(root)),
+          fetch: root.fetch.bind(root),
         }).then(function (result) {
           if (!alive) return;
           if (result && result.status === 'skipped') {

@@ -333,6 +333,7 @@ function harness(options) {
   const calls = [];
   const haptic = [];
   const popups = [];
+  const alerts = [];
   const document = {
     activeElement: null,
     documentElement: null,
@@ -400,6 +401,13 @@ function harness(options) {
           json: () => Promise.resolve(home ? { home_arena: home } : { home_arena: null }),
         });
       }
+      if (href.includes('write-access/outcome')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ok: true, bot_link: 'https://t.me/glide_bot' }),
+        });
+      }
       if (href.includes('bell-follow')) {
         const body = JSON.parse((opts && opts.body) || '{}');
         if (href.includes('/outcome')) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
@@ -441,7 +449,12 @@ function harness(options) {
     Telegram: options.telegram === false ? undefined : {
       WebApp: {
         initData: options.initData == null ? 'init-1' : options.initData,
-        initDataUnsafe: { user: { id: options.userId == null ? 7 : options.userId, allows_write_to_pm: false } },
+        initDataUnsafe: {
+          user: {
+            id: options.userId == null ? 7 : options.userId,
+            allows_write_to_pm: options.writeGranted === true,
+          },
+        },
         BackButton: back,
         HapticFeedback: { notificationOccurred(kind) { haptic.push(kind); } },
         isVersionAtLeast() { return true; },
@@ -449,6 +462,10 @@ function harness(options) {
         showPopup(config, cb) {
           popups.push(config);
           if (cb) cb('close');
+        },
+        showAlert(text, cb) {
+          alerts.push(text);
+          if (cb) cb();
         },
       },
     },
@@ -458,7 +475,7 @@ function harness(options) {
   vm.createContext(sandbox);
   vm.runInContext(sheetSrc, sandbox);
   vm.runInContext(rinkSrc, sandbox);
-  return { sandbox, document, calls, haptic, popups, back, saveGate: () => saveGate };
+  return { sandbox, document, calls, haptic, popups, alerts, back, saveGate: () => saveGate };
 }
 
 function radios(sheet) {
@@ -569,7 +586,7 @@ describe('ClientRinkSheet', () => {
     assert.equal(h.calls.some((call) => call.url.includes('bell-follow')), false);
   });
 
-  it('«Да, писать» идёт в bell-follow и показывает его текст отказа', async () => {
+  it('«Да, писать» без права: gate отказывает, подписки нет', async () => {
     const h = harness();
     const sheet = h.sandbox.ClientRinkSheet.open({ currentId: 10, onSaved() {} });
     await flush();
@@ -577,16 +594,12 @@ describe('ClientRinkSheet', () => {
     await flush();
     sheet.el.querySelector('.cr-yes').dispatch('click', {});
     await flush();
-    const follow = h.calls.find((call) => call.url === '/api/webapp/client/bell-follow');
-    assert.ok(follow);
-    assert.equal(follow.opts.method, 'POST');
-    assert.equal(JSON.parse(follow.opts.body).arena_id, 10);
-    assert.equal(follow.opts.headers['X-Telegram-Init-Data'], 'init-1');
-    const outcome = h.calls.find((call) => call.url.includes('bell-follow/outcome'));
+    assert.equal(h.calls.some((call) => call.url === '/api/webapp/client/bell-follow'), false);
+    const outcome = h.calls.find((call) => call.url.includes('write-access/outcome'));
     assert.ok(outcome);
     assert.equal(JSON.parse(outcome.opts.body).outcome, 'denied');
-    assert.equal(h.popups[0].message, bell.COPY_DECLINED);
-    assert.equal(h.popups[0].buttons[0].text, bell.COPY_ENABLE);
+    assert.equal(JSON.parse(outcome.opts.body).surface, 'arena_watch');
+    assert.deepEqual(h.alerts, [bell.COPY_DENIED]);
     assert.equal(sheet.el.isConnected, false);
   });
 
@@ -651,7 +664,10 @@ describe('ClientRinkSheet', () => {
     sheet.el.querySelector('.cr-yes').dispatch('click', {});
     await flush();
     assert.equal(h.popups[0].message, bell.copyDone('«Чижовка-арена»'));
-    assert.equal(JSON.parse(h.calls.find((call) => call.url.includes('outcome')).opts.body).outcome, 'granted');
+    const wa = h.calls.find((call) => call.url.includes('write-access/outcome'));
+    assert.ok(wa);
+    assert.equal(JSON.parse(wa.opts.body).outcome, 'already');
+    assert.ok(h.calls.some((call) => call.url === '/api/webapp/client/bell-follow'));
     assert.equal(sheet.el.isConnected, false);
   });
 
@@ -670,7 +686,7 @@ describe('ClientRinkSheet', () => {
   });
 
   it('409 колокольчика не закрывает шторку и пишет его фразу отказа', async () => {
-    const h = harness({ bellStatus: 409 });
+    const h = harness({ bellStatus: 409, writeGranted: true });
     const sheet = h.sandbox.ClientRinkSheet.open({ currentId: 10, onSaved() {} });
     await flush();
     sheet.el.querySelector('.cr-save').dispatch('click', {});

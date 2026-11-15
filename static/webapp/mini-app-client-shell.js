@@ -2214,6 +2214,7 @@
       startParam: sp,
       storage: storage,
       post: B.makePost(initData, global.fetch.bind(global)),
+      fetch: global.fetch.bind(global),
     }).catch(function () {});
   }
 
