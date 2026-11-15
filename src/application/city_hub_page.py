@@ -30,6 +30,7 @@ from src.application.arena_public_use_cases import (
     city_hockey_center_count,
 )
 from src.application.catalog_home_page import _USER_UPCOMING_SQL, _session_card
+from src.application.city_hub_seo import build_seo_model, is_seo_rich, load_seo_sessions, seo_blocks_html
 from src.application.city_place_counts import (
     city_hub_place_groups,
     city_place_counts_from_places,
@@ -304,6 +305,7 @@ async def load_city_hub_view(
     city: Mapping[str, Any],
     now: datetime | None = None,
     window: str | None = None,
+    seo_text: bool = False,
 ) -> dict[str, Any]:
     """Вид хаба города.
 
@@ -507,7 +509,18 @@ async def load_city_hub_view(
             session, city_id=city_id, origin=origin, today=local_now.date(), now=now
         )
     selected_day = date.fromisoformat(day_key) if day_key else None
+    seo_model = None
+    if seo_text and variant not in (VARIANT_ONE, VARIANT_PHONE) and is_seo_rich(city_slug(city_name)):
+        # TASK-422: один запрос сеансов на неделю — расписание, цены и ответы текстом (только Минск).
+        seo_model = build_seo_model(
+            await load_seo_sessions(
+                session, city_id=city_id, now=now, today=local_now.date(), status=STATUS_ACTIVE
+            ),
+            places,
+            today=local_now.date(),
+        )
     return {
+        "seo_text": seo_model,
         "city": dict(city),
         "slug": city_slug(city_name),
         "selected_day": selected_day,
@@ -1699,6 +1712,7 @@ def _b_body(
             matches_block,
             _b_routes(view),
             _b_for_you(view),
+            seo_blocks_html(view),
             empty,
             _b_all_places(view),
             _b_city_suggest(view),
