@@ -115,6 +115,9 @@ async def test_place_page_opens_without_auth_and_is_a_complete_answer(app_use_te
     assert ev0.get("image")
     assert ev0["organizer"]["name"] == place["name"]
     assert ev0["performer"]["name"] == place["name"]
+    # Организатор — страница катка, не noindex-вариант сеанса.
+    assert "?s=" in ev0["url"] and "?s=" not in ev0["organizer"]["url"]
+    assert ev0["eventStatus"] == "https://schema.org/EventScheduled"
     assert "schema.org/InStock" in ev0["offers"]["availability"]
 
 

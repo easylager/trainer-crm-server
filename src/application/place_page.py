@@ -1090,6 +1090,7 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str, image_url: str) -> 
                 address=street or None,
                 session_label=kind_label,
                 slot=slot,
+                organizer_url=canonical_url,
             )
             events.append(event)
             if len(events) >= 10:

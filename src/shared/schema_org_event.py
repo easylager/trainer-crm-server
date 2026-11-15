@@ -74,9 +74,14 @@ def enrich_ice_session_event(
     address: str | None = None,
     session_label: str,
     slot: Mapping[str, Any] | None = None,
+    organizer_url: str | None = None,
 ) -> dict[str, Any]:
-    """Add organizer, performer, description, image; ensure offers.availability."""
-    org = _organization(arena_name, page_url)
+    """Add organizer, performer, description, image; ensure offers.availability.
+
+    ``organizer_url`` — страница самой организации (катка); без него берётся ``page_url``.
+    Ссылка организации на ``?s=``-вариант сеанса (noindex) — не страница организатора.
+    """
+    org = _organization(arena_name, organizer_url or page_url)
     if org:
         event["organizer"] = org
         event["performer"] = org
@@ -95,6 +100,8 @@ def enrich_ice_session_event(
     slot = slot or {}
     status = str(slot.get("status") or "active").lower()
     availability = SCHEMA_OUT_OF_STOCK if status == "cancelled" else SCHEMA_IN_STOCK
+    if status == "cancelled":
+        event["eventStatus"] = "https://schema.org/EventCancelled"
     offers = event.get("offers")
     if isinstance(offers, dict):
         offers.setdefault("availability", availability)
