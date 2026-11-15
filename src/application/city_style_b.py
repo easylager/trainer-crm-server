@@ -100,6 +100,55 @@ _NEARBY_SQL = text(
     """
 )
 
+#: Другие катки того же города (для страницы места в Минске и т.п.).
+_NEARBY_ARENAS_SQL = text(
+    f"""
+    /* place-nearby-same-city */
+    WITH peers AS (
+        SELECT a.id AS arena_id, a.name, a.latitude, a.longitude, p.slug, c.name AS city_name
+        FROM arenas a
+        LEFT JOIN arena_profiles p ON p.arena_id = a.id
+        JOIN cities c ON c.id = a.city_id
+        WHERE a.city_id = :city_id
+          AND a.id <> :arena_id
+          AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+          AND p.slug IS NOT NULL AND BTRIM(p.slug) <> ''
+          AND COALESCE(a.venue_type, 'ice') IN ('ice', 'outdoor')
+          AND {PUBLIC_ARENA_VISIBLE_SQL}
+    ),
+    nxt AS (
+        SELECT DISTINCT ON (s.arena_id)
+               s.arena_id, s.local_date, s.starts_at_local
+        FROM ice_sessions s
+        JOIN peers pe ON pe.arena_id = s.arena_id
+        WHERE s.status = 'active'
+          AND s.kind IN ('public_skate', 'open_ice')
+          AND s.starts_at_utc >= :now AND s.starts_at_utc < :win_to
+          AND (s.valid_until IS NULL OR s.valid_until >= :now)
+        ORDER BY s.arena_id, s.starts_at_utc, s.id
+    ),
+    ph AS (
+        SELECT DISTINCT ON (m.owner_id) m.owner_id AS arena_id, m.variants AS photo_variants, m.display_tone
+        FROM media m
+        JOIN peers pe ON pe.arena_id = m.owner_id
+        WHERE m.owner_type = 'arena' AND m.status = 'published'
+        ORDER BY m.owner_id, m.sort_order, m.id
+    )
+    SELECT pe.arena_id, pe.name, pe.slug, pe.city_name,
+           nxt.local_date, nxt.starts_at_local, ph.photo_variants, ph.display_tone,
+           (6371 * acos(LEAST(1.0, GREATEST(-1.0,
+              cos(radians(:olat)) * cos(radians(pe.latitude))
+              * cos(radians(pe.longitude) - radians(:olon))
+              + sin(radians(:olat)) * sin(radians(pe.latitude))
+           )))) AS distance_km
+    FROM peers pe
+    JOIN nxt ON nxt.arena_id = pe.arena_id
+    LEFT JOIN ph ON ph.arena_id = pe.arena_id
+    ORDER BY distance_km, pe.arena_id
+    LIMIT 3
+    """
+)
+
 
 def choose_city_variant(places: list[Mapping[str, Any]]) -> str:
     """Много катков, один каток с расписанием или город, где катание только по телефону."""
@@ -240,16 +289,18 @@ def nearby_section_html(
     title: str,
     track_attrs_for: Any = None,
 ) -> str:
-    """Блок «Лёд рядом» — карточки городов. Пустой список → пустая строка (блока нет)."""
+    """Блок «Лёд рядом» — карточки городов или катков. Пустой список → пустая строка."""
     rows = list(items or [])
     if not rows:
         return ""
     tiles: list[str] = []
     for pos, item in enumerate(rows, start=1):
-        n = int(item.get("rink_count") or 0)
         name = format_public_name(str(item.get("name") or ""))
-        line = f"{n}\u00a0{plural_ru(n, 'каток', 'катка', 'катков')} · {item.get('when')} в\u00a0{item.get('time')}"
-        href = f"/c/{city_slug(str(item.get('name') or ''))}"
+        line = str(item.get("line") or "").strip()
+        if not line:
+            n = int(item.get("rink_count") or 0)
+            line = f"{n}\u00a0{plural_ru(n, 'каток', 'катка', 'катков')} · {item.get('when')} в\u00a0{item.get('time')}"
+        href = str(item.get("href") or "").strip() or f"/c/{city_slug(str(item.get('name') or ''))}"
         extra = ""
         if callable(track_attrs_for):
             extra = str(track_attrs_for(item, pos, href) or "").strip()
@@ -269,6 +320,21 @@ def nearby_section_html(
     return section(title, f'<div class="b-scroll">{"".join(tiles)}</div>', aside_html=more, klass="b-sec--flush")
 
 
+def _nearby_when(day: date | None, today: date) -> str | None:
+    if day == today:
+        return "сегодня"
+    if day == today + timedelta(days=1):
+        return "завтра"
+    return None
+
+
+def _photo_variants(raw: Any) -> Mapping[str, Any]:
+    variants = raw
+    if isinstance(variants, str):
+        variants = json.loads(variants)
+    return variants if isinstance(variants, Mapping) else {}
+
+
 async def load_nearby(
     session: AsyncSession,
     *,
@@ -277,6 +343,7 @@ async def load_nearby(
     today: date,
     now: datetime,
 ) -> list[dict[str, Any]]:
+    """Соседние города с сеансом сегодня/завтра — блок на /c/ и запасной на странице места."""
     tz = ZoneInfo(DEFAULT_TIMEZONE)
     start = datetime(today.year, today.month, today.day, tzinfo=tz)
     rows = (
@@ -298,25 +365,74 @@ async def load_nearby(
     )
     out: list[dict[str, Any]] = []
     for row in rows:
-        day = _as_date(row.get("local_date"))
-        if day == today:
-            when = "сегодня"
-        elif day == today + timedelta(days=1):
-            when = "завтра"
-        else:
+        when = _nearby_when(_as_date(row.get("local_date")), today)
+        if when is None:
             continue
-        variants = row.get("photo_variants")
-        if isinstance(variants, str):
-            variants = json.loads(variants)
-        variants = variants if isinstance(variants, Mapping) else {}
+        variants = _photo_variants(row.get("photo_variants"))
         out.append(
             {
+                "kind": "city",
                 "name": str(row["name"]),
                 "photo_url": b_photo_url(variants.get("card")),
                 "display_tone": bool(row.get("display_tone")),
                 "rink_count": int(row["rink_count"] or 0),
                 "when": when,
                 "time": _clock(row.get("starts_at_local")),
+                "distance": _km(float(row["distance_km"] or 0)),
+            }
+        )
+    return out
+
+
+async def load_nearby_same_city_arenas(
+    session: AsyncSession,
+    *,
+    city_id: int,
+    arena_id: int,
+    origin: tuple[float, float],
+    today: date,
+    now: datetime,
+) -> list[dict[str, Any]]:
+    """Другие катки того же города с сеансом сегодня/завтра — для страницы места."""
+    from src.application.place_links import place_path
+
+    tz = ZoneInfo(DEFAULT_TIMEZONE)
+    start = datetime(today.year, today.month, today.day, tzinfo=tz)
+    rows = (
+        (
+            await session.execute(
+                _NEARBY_ARENAS_SQL,
+                {
+                    "city_id": city_id,
+                    "arena_id": arena_id,
+                    "olat": origin[0],
+                    "olon": origin[1],
+                    "win_to": start + timedelta(days=2),
+                    "now": now,
+                    **public_scope_params(),
+                },
+            )
+        )
+        .mappings()
+        .all()
+    )
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        when = _nearby_when(_as_date(row.get("local_date")), today)
+        if when is None:
+            continue
+        variants = _photo_variants(row.get("photo_variants"))
+        clock = _clock(row.get("starts_at_local"))
+        out.append(
+            {
+                "kind": "arena",
+                "name": str(row["name"]),
+                "href": place_path(city_name=str(row["city_name"] or ""), slug=str(row["slug"] or "")),
+                "line": f"{when} в\u00a0{clock}",
+                "photo_url": b_photo_url(variants.get("card")),
+                "display_tone": bool(row.get("display_tone")),
+                "when": when,
+                "time": clock,
                 "distance": _km(float(row["distance_km"] or 0)),
             }
         )
