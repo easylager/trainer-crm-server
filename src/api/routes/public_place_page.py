@@ -784,7 +784,7 @@ async def _city_hub(
     slug = city_slug(city_name)
     if city_ref != slug:
         return RedirectResponse(url=f"/c/{slug}" + (f"?w={when}" if when else ""), status_code=301)
-    view = await load_city_hub_view(session, city=city, window=when or "auto")
+    view = await load_city_hub_view(session, city=city, window=when or "auto", seo_text=True)
     # TASK-354: единый блок «Учиться с тренером» и пункты меню — из данных каталога города.
     from src.application.site_learn_block import hockey_count, learn_block, load_learn_data
 
