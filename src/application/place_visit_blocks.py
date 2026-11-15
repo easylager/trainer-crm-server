@@ -308,7 +308,9 @@ def _upper_first(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def search_bits(vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str, Any]]) -> list[str]:
+def search_bits(
+    vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str, Any]], with_services: bool = True
+) -> list[str]:
     """Факты для meta description: цены входа, услуги, как купить."""
     bits: list[str] = []
     floors = price_floors(slots)
@@ -321,7 +323,7 @@ def search_bits(vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str
         bits.append(_upper_first(", ".join(parts)))
     names = [str(r["title"]).lower() for r in (vv.get("services") or {}).get("rows") or []
              if r.get("kind") in ("aid", "sharpening", "protection", "helmet")]
-    if names:
+    if names and with_services:
         bits.append(_upper_first(", ".join(dict.fromkeys(names))))
     mode = (vv.get("tickets") or {}).get("mode")
     if mode == "box_office":

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from src.shared.schema_org_event import (
+    SCHEMA_OUT_OF_STOCK,
     SCHEMA_IN_STOCK,
     enrich_ice_session_event,
     event_description,
@@ -45,3 +46,19 @@ def test_description_fallback_when_no_short_text() -> None:
     )
     assert "Арена" in text
     assert "Glide" in text
+
+
+def test_cancelled_session_is_marked_cancelled_and_organizer_url_is_the_rink() -> None:
+    event = {"@type": "Event", "eventStatus": "https://schema.org/EventScheduled", "url": "https://x/p/a/b?s=1"}
+    enrich_ice_session_event(
+        event,
+        arena_name="Каток",
+        page_url="https://x/p/a/b?s=1",
+        image_url=None,
+        session_label="Массовое катание",
+        slot={"status": "cancelled", "price_adult_minor": 500},
+        organizer_url="https://x/p/a/b",
+    )
+    assert event["eventStatus"] == "https://schema.org/EventCancelled"
+    assert event["organizer"]["url"] == "https://x/p/a/b"
+    assert event["offers"]["availability"] == SCHEMA_OUT_OF_STOCK

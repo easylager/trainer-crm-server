@@ -749,9 +749,15 @@ def _where_card(data: Mapping[str, Any]) -> str:
     ice_html = ""
     if ice:
         price = f", {_e(ice['price'])}" if ice.get("price") else ""
+        # Описательный якорь на страницу катка вместо «здесь же» (TASK-421); одна ссылка в блоке.
+        rink = (
+            f'<a href="{_e(data["arena_path"])}">массовое катание: {_e(name)}</a>'
+            if data.get("arena_path")
+            else "массовое катание здесь же"
+        )
         ice_html = (
             f'<div class="m-ice"><b>{_e(ice["time"])}</b>'
-            f"<span>Перед матчем — массовое катание здесь же{price}</span></div>"
+            f"<span>Перед матчем — {rink}{price}</span></div>"
         )
     return (
         '<section class="m-panel"><span class="m-lbl">КАК ДОБРАТЬСЯ</span>'
