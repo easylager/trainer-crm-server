@@ -696,7 +696,7 @@ async def test_corrected_result_reaches_only_those_who_got_the_old_one_once(db_s
     by_player = {chat: body for chat, body, _ in out.sent}
     assert set(by_player) == {SASHA, KATYA}  # LESHA итог не получал, VOVA отписан
     assert by_player[SASHA] == (
-        "Мы ошиблись с итогом: Юность — Шахтёр закончился 2:3, а не 3:2. Твои очки за матч: было +50, стало +0."
+        "Мы ошиблись с итогом: Юность — Шахтёр закончился 2:3, а не 3:2. Твои очки за матч: +0."
     )
     assert by_player[KATYA].startswith("Мы ошиблись с итогом: Юность — Шахтёр закончился 2:3, а не 3:2.")
     labels = [b["text"] for row in out.sent[0][2] for b in row]
@@ -739,5 +739,5 @@ async def test_blocked_player_gets_no_correction_and_unchanged_points_are_not_me
     by_player = {chat: body for chat, body, _ in out.sent}
     assert VOVA not in by_player
     assert by_player[KATYA] == "Мы ошиблись с итогом: Юность — Шахтёр закончился 4:2, а не 3:2."
-    assert "было +50, стало +0" not in by_player[KATYA] and "очки" not in by_player[KATYA]
+    assert "очки" not in by_player[KATYA]
     assert "очки" in by_player[SASHA]
