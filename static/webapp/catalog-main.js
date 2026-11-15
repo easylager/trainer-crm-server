@@ -7418,6 +7418,7 @@
               });
             });
         submitFn.then(function (out) {
+          if (out && out.blocked) return;
           var r = out.res;
           var data = out.data;
             if (data == null) {

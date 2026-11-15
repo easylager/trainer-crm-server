@@ -28,6 +28,7 @@ CLIENTS_MD = """---
 release_id: {rid}
 audience: clients
 segment: by_clients
+require_reachable: false
 button_text: Играть
 webapp_path: /webapp/kto-kogo?src=push1
 ---
@@ -57,10 +58,54 @@ async def _ru_city(session: AsyncSession) -> int:
 
 def test_parse_by_clients_segment(tmp_path: Path) -> None:
     assert _spec(tmp_path).segment == "by_clients"
+    assert _spec(tmp_path).require_reachable is False
     bad = tmp_path / "t.md"
     bad.write_text("---\naudience: trainers\nsegment: by_clients\n---\nx", encoding="utf-8")
     with pytest.raises(ValueError, match="segment"):
         parse_release_comms_file(bad)
+    default_rr = tmp_path / "rr.md"
+    default_rr.write_text(
+        "---\nrelease_id: rr\naudience: clients\nsegment: by_clients\n---\nx", encoding="utf-8"
+    )
+    assert parse_release_comms_file(default_rr).require_reachable is True
+
+
+@pytest.mark.asyncio
+async def test_require_reachable_skips_chat_not_found_without_sent(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    sfx = unique_test_telegram_id()
+    city = await _city(db_session, f"Дост{sfx}")
+    ids = []
+    for _ in range(3):
+        _id, tg = await _client(db_session)
+        await _session_city(db_session, tg, city)
+        ids.append(tg)
+    sent_tg, cnf_tg, fresh_tg = ids
+    await db_session.execute(
+        text("INSERT INTO client_broadcast_log (telegram_id, campaign_key, status, error) VALUES (:t, :k, 'sent', NULL)"),
+        {"t": sent_tg, "k": f"kk-old-{sfx}"},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO client_broadcast_log (telegram_id, campaign_key, status, error) "
+            "VALUES (:t, :k, 'failed', :e)"
+        ),
+        {"t": cnf_tg, "k": f"kk-old-{sfx}", "e": "Telegram server says - Bad Request: chat not found"},
+    )
+    path = tmp_path / "reach.md"
+    path.write_text(
+        f"---\nrelease_id: kk-reach-{sfx}\naudience: clients\nsegment: by_clients\n"
+        f"cities: Дост{sfx}\nrequire_reachable: true\n---\n<b>x</b>\n",
+        encoding="utf-8",
+    )
+    dry = await broadcast_release_comms(
+        db_session, parse_release_comms_file(path), settings=Settings(), dry_run=True
+    )
+    assert dry.filters is not None
+    assert dry.filters["excluded_unreachable"] == 1
+    assert dry.filters["after_filters"] == 2
+    assert sorted(dry.sample_ids or []) == sorted([sent_tg, fresh_tg])
 
 
 def test_markup_has_webapp_button_and_optout_row(tmp_path: Path) -> None:

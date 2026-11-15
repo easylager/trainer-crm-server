@@ -28,4 +28,6 @@ webapp_path: /webapp/trainer-home
 3. `segment` только у тренеров:
    - `all` — все с Telegram, кроме деактивированных
    - `pending_profile` — зашли в бота, анкета/каталог ещё не готовы (не слать тем, кто уже работает)
-4. Превью себе, dry-run, рассылка — см. `README.md`. Без апрува текст не отправлять.
+4. Для `segment: by_clients` по умолчанию `require_reachable: true` — не шлём тем, у кого уже был
+   `chat not found` и нет успешной доставки / write-access. Явно `require_reachable: false` — старое поведение.
+5. Превью себе, dry-run, рассылка — см. `README.md`. Без апрува текст не отправлять.

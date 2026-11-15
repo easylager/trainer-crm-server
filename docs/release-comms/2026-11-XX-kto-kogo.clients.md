@@ -6,6 +6,7 @@ draft: true
 release_id: 2026-11-XX-kto-kogo
 audience: clients
 segment: by_clients
+# require_reachable по умолчанию true для by_clients — не слать «мёртвым» chat not found.
 button_text: Сыграть
 webapp_path: /webapp/kto-kogo?src=push1
 ---

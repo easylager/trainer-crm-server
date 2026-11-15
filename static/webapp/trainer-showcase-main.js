@@ -2141,6 +2141,10 @@
       .then(function (x) {
         var r = x.r;
         b.submitting = false;
+        if (r && r.blocked) {
+          render();
+          return;
+        }
         if (r.res.ok && r.data && r.data.success) {
           onBooked(r.data, choice, x.profileId);
           return;

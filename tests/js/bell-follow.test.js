@@ -1,7 +1,6 @@
 /**
- * Колокольчик сайта (static/webapp/bell-follow.js): разрешение писать и тексты.
- * Нативный диалог Telegram здесь не воспроизводится: window.Telegram.WebApp — мок,
- * а requestWriteAccess вызывает колбэк так, как это делает Telegram после закрытия диалога.
+ * Колокольчик сайта (static/webapp/bell-follow.js): сначала write-access gate, потом подписка.
+ * Нативный диалог Telegram здесь не воспроизводится: window.Telegram.WebApp — мок.
  *
  * Run: node --test tests/js/bell-follow.test.js
  */
@@ -12,7 +11,8 @@ const assert = require('node:assert/strict');
 const B = require('../../static/webapp/bell-follow.js');
 
 const DONE = 'Готово. Напишем, когда у «Юность» появится расписание.';
-const DECLINED = 'Подписка сохранена, но уведомления выключены.';
+const DENIED = 'Без разрешения писать бот не\u00a0сможет прислать напоминание.';
+const OPEN_BOT = 'Откройте бота и нажмите «Старт», чтобы получать уведомления.';
 
 /** Мок WebApp. answers — что отвечает диалог на 1-й, 2-й… вызов requestWriteAccess. */
 function makeTg(opts) {
@@ -21,14 +21,18 @@ function makeTg(opts) {
     initData: 'x',
     initDataUnsafe: { user: Object.assign({ id: 111 }, opts.user || {}) },
     popups: [],
+    alerts: [],
     requests: 0,
     isVersionAtLeast: opts.version === undefined ? () => true : (v) => opts.version >= parseFloat(v),
-    // нажатия в попапах: по очереди; по умолчанию закрыть
     taps: (opts.taps || []).slice(),
     showPopup(params, cb) {
       tg.popups.push(params);
       const tap = tg.taps.length ? tg.taps.shift() : null;
       cb(tap);
+    },
+    showAlert(text, cb) {
+      tg.alerts.push(text);
+      if (cb) cb();
     },
   };
   if (!opts.noMethod) {
@@ -49,7 +53,29 @@ function makePost(log, overrides) {
     if (path === '/api/webapp/client/bell-follow') {
       return Promise.resolve({ ok: true, status: 200, json: { arena_name: 'Юность', created: true } });
     }
-    return Promise.resolve({ ok: true, status: 200, json: { ok: true } });
+    return Promise.resolve({ ok: true, status: 200, json: { ok: true, bot_link: 'https://t.me/ice_studio_bot' } });
+  };
+}
+
+/** fetch для GlideWriteAccess.gate (пишет /client/write-access/outcome). */
+function makeFetch(log, overrides) {
+  return function (url, init) {
+    const path = String(url);
+    const body = init && init.body ? JSON.parse(init.body) : null;
+    log.push({ path, body });
+    if (overrides && overrides[path]) {
+      const o = overrides[path];
+      return Promise.resolve({
+        ok: o.ok !== false,
+        status: o.status || 200,
+        json: () => Promise.resolve(o.json || { ok: true }),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ok: true, bot_link: 'https://t.me/ice_studio_bot' }),
+    });
   };
 }
 
@@ -61,11 +87,22 @@ function storage() {
 function go(tg, extra) {
   const log = [];
   const post = makePost(log, extra && extra.responses);
-  const p = B.run({ tg, startParam: (extra && extra.sp) || 'follow_arena_7', storage: storage(), post });
+  const fetchFn = makeFetch(log, extra && extra.fetchResponses);
+  const p = B.run({
+    tg,
+    startParam: (extra && extra.sp) || 'follow_arena_7',
+    storage: storage(),
+    post,
+    fetch: fetchFn,
+  });
   return p.then((res) => ({ res, log }));
 }
 
-const outcomes = (log) => log.filter((c) => c.path.endsWith('/outcome')).map((c) => [c.body.outcome, c.body.retry]);
+const followPosts = (log) => log.filter((c) => c.path === '/api/webapp/client/bell-follow');
+const outcomes = (log) =>
+  log
+    .filter((c) => String(c.path).includes('/write-access/outcome'))
+    .map((c) => [c.body && c.body.outcome, !!(c.body && c.body.retry)]);
 
 describe('разбор start_param', () => {
   it('follow_arena_N -> id; arena_N и мусор не колокольчик', () => {
@@ -98,78 +135,60 @@ describe('writeAccessState', () => {
 });
 
 describe('run: исходы', () => {
-  it('уже разрешено: диалог не показываем, успех, исход already', async () => {
+  it('уже разрешено: диалог не показываем, подписка, успех', async () => {
     const tg = makeTg({ user: { allows_write_to_pm: true } });
     const { res, log } = await go(tg);
     assert.equal(tg.requests, 0);
     assert.equal(res.status, 'done');
     assert.equal(tg.popups[0].message, DONE);
+    assert.equal(followPosts(log).length, 1);
+    assert.deepEqual(followPosts(log)[0].body, { arena_id: 7 });
     assert.deepEqual(outcomes(log), [['already', false]]);
-    assert.equal(log[0].path, '/api/webapp/client/bell-follow');
-    assert.deepEqual(log[0].body, { arena_id: 7 });
   });
 
-  it('разрешил: ровно один запрос, успех, исход granted', async () => {
+  it('разрешил: сначала gate, потом подписка', async () => {
     const tg = makeTg({ answers: [true] });
     const { res, log } = await go(tg);
     assert.equal(tg.requests, 1);
     assert.equal(res.status, 'done');
-    assert.equal(tg.popups.length, 1);
     assert.equal(tg.popups[0].message, DONE);
+    assert.equal(followPosts(log).length, 1);
+    assert.ok(log.findIndex((c) => String(c.path).includes('/write-access/outcome')) < log.findIndex((c) => c.path === '/api/webapp/client/bell-follow'));
     assert.deepEqual(outcomes(log), [['granted', false]]);
   });
 
-  it('отказал: успеха нет, текст про выключенные уведомления с кнопкой, исход denied', async () => {
+  it('отказал: подписки нет, алерт, исход denied', async () => {
     const tg = makeTg({ answers: [false] });
     const { res, log } = await go(tg);
     assert.equal(res.status, 'declined');
-    assert.equal(tg.popups.length, 1);
-    assert.equal(tg.popups[0].message, DECLINED);
+    assert.equal(followPosts(log).length, 0);
+    assert.equal(tg.alerts[0], DENIED);
     assert.ok(tg.popups.every((p) => p.message !== DONE));
-    assert.deepEqual(tg.popups[0].buttons[0], { id: 'enable', type: 'default', text: 'Включить уведомления' });
     assert.deepEqual(outcomes(log), [['denied', false]]);
   });
 
-  it('колбэк с не-true (undefined) не считается разрешением', async () => {
+  it('колбэк с не-true не считается разрешением — без подписки', async () => {
     const tg = makeTg({ answers: [undefined] });
-    const { res } = await go(tg);
-    assert.equal(res.status, 'declined');
-    assert.ok(tg.popups.every((p) => p.message !== DONE));
-  });
-
-  it('повтор по кнопке: разрешил со второго раза -> успех, исходы denied, granted(retry)', async () => {
-    const tg = makeTg({ answers: [false, true], taps: ['enable'] });
     const { res, log } = await go(tg);
-    assert.equal(tg.requests, 2);
-    assert.equal(res.status, 'done');
-    assert.deepEqual(tg.popups.map((p) => p.message), [DECLINED, DONE]);
-    assert.deepEqual(outcomes(log), [['denied', false], ['granted', true]]);
-  });
-
-  it('повтор по кнопке не помог (диалог не показался, колбэк false): честно остаёмся на «выключены»', async () => {
-    const tg = makeTg({ answers: [false, false], taps: ['enable'] });
-    const { res, log } = await go(tg);
-    assert.equal(tg.requests, 2);
     assert.equal(res.status, 'declined');
-    assert.deepEqual(tg.popups.map((p) => p.message), [DECLINED, DECLINED]);
-    assert.deepEqual(outcomes(log), [['denied', false], ['denied', true]]);
+    assert.equal(followPosts(log).length, 0);
   });
 
-  it('метода нет: подписка сохранена, сообщение «выключены», кнопки повтора нет (нажимать нечем), исход unsupported', async () => {
+  it('метода нет: подписки нет, попап «Открыть бота»', async () => {
     const tg = makeTg({ noMethod: true });
     const { res, log } = await go(tg);
     assert.equal(res.status, 'declined');
-    assert.equal(tg.popups[0].message, DECLINED);
-    assert.deepEqual(tg.popups[0].buttons, [{ type: 'close' }]);
+    assert.equal(followPosts(log).length, 0);
+    assert.equal(tg.popups[0].message, OPEN_BOT);
+    assert.ok(tg.popups[0].buttons.some((b) => b.id === 'open_bot'));
     assert.deepEqual(outcomes(log), [['unsupported', false]]);
   });
 
-  it('requestWriteAccess бросает: страница не падает, считаем unsupported-исходом denied-текста', async () => {
+  it('requestWriteAccess бросает: страница не падает, подписки нет', async () => {
     const tg = makeTg({ throws: true });
     const { res, log } = await go(tg);
     assert.equal(res.status, 'declined');
-    assert.ok(tg.popups.every((p) => p.message !== DONE));
-    assert.deepEqual(outcomes(log), [['unsupported', false]]);
+    assert.equal(followPosts(log).length, 0);
   });
 });
 
@@ -182,34 +201,30 @@ describe('run: не Telegram и защёлки', () => {
     }
   });
 
-  it('отрицательный суррогатный id (MAX/VK): пропуск целиком, без запроса разрешения', async () => {
+  it('отрицательный суррогатный id (MAX/VK): пропуск целиком', async () => {
     const tg = makeTg({ user: { id: -1000042 } });
     const { res, log } = await go(tg);
     assert.equal(res.status, 'skipped');
     assert.equal(tg.requests, 0);
-    assert.equal(tg.popups.length, 0);
     assert.equal(log.length, 0);
   });
 
-  it('сервер ответил 409 channel_unsupported: тихий пропуск, диалога нет', async () => {
-    const tg = makeTg();
+  it('сервер ответил 409 channel_unsupported: тихий пропуск после gate', async () => {
+    const tg = makeTg({ user: { allows_write_to_pm: true } });
     const { res, log } = await go(tg, {
       responses: { '/api/webapp/client/bell-follow': { ok: false, status: 409, json: { detail: 'channel_unsupported' } } },
     });
     assert.equal(res.status, 'skipped');
-    assert.equal(tg.requests, 0);
     assert.equal(tg.popups.length, 0);
-    assert.equal(outcomes(log).length, 0);
   });
 
-  it('подписка не сохранилась: диалог разрешения не показываем, успеха нет', async () => {
-    const tg = makeTg();
+  it('подписка не сохранилась: успеха нет', async () => {
+    const tg = makeTg({ user: { allows_write_to_pm: true } });
     const { res } = await go(tg, {
       responses: { '/api/webapp/client/bell-follow': { ok: false, status: 500, json: null } },
     });
     assert.equal(res.status, 'error');
-    assert.equal(tg.requests, 0);
-    assert.deepEqual(tg.popups.map((p) => p.message), ['Не удалось сохранить подписку.']);
+    assert.deepEqual(tg.popups.map((p) => p.message), [COPY_FAILED_MSG()]);
   });
 
   it('не колокольчик (arena_7): не трогаем ничего', async () => {
@@ -225,19 +240,16 @@ describe('run: не Telegram и защёлки', () => {
     const st = storage();
     const log = [];
     const post = makePost(log);
-    const first = await B.run({ tg, startParam: 'follow_arena_7', storage: st, post });
-    const second = await B.run({ tg, startParam: 'follow_arena_7', storage: st, post });
+    const fetchFn = makeFetch(log);
+    const first = await B.run({ tg, startParam: 'follow_arena_7', storage: st, post, fetch: fetchFn });
+    const second = await B.run({ tg, startParam: 'follow_arena_7', storage: st, post, fetch: fetchFn });
     assert.equal(first.status, 'done');
     assert.equal(second.status, 'already_handled');
     assert.equal(tg.requests, 1);
-  });
-
-  it('showPopup бросает (попап уже открыт): сценарий завершается без исключения', async () => {
-    const tg = makeTg({ answers: [true] });
-    tg.showPopup = () => {
-      throw new Error('WebAppPopupOpened');
-    };
-    const { res } = await go(tg);
-    assert.equal(res.status, 'done');
+    assert.equal(followPosts(log).length, 1);
   });
 });
+
+function COPY_FAILED_MSG() {
+  return 'Не удалось сохранить подписку.';
+}

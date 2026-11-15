@@ -212,6 +212,18 @@
     }
   }
 
+  /* Достижимость клиента ботом. Только Telegram-клиент, которому бот ещё не может написать
+     (нет /start и разрешения): для MAX/VK, вне Telegram и при allows_write_to_pm === true — ''. */
+  var WA_COPY_ASK = 'Чтобы получить подтверждение и напоминание о тренировке, разрешите сообщения от бота.';
+  var WA_COPY_GRANTED = 'Готово. Напишем, когда тренер подтвердит запись, и напомним о тренировке.';
+  var WA_COPY_DENIED = 'Уведомления выключены. Статус записи виден в приложении.';
+  var WA_COPY_OPEN_BOT = 'Откройте бота и нажмите «Старт», чтобы получать уведомления.';
+
+  /**
+   * Перед POST: если бот ещё не может писать — ``GlideWriteAccess.gate``.
+   * Отказ → ``{ blocked: true }`` без сети; запись не уходит.
+   * ``opts.skipWriteAccessGate`` — только тесты / не-Telegram обход.
+   */
   function submitBooking(opts) {
     opts = opts || {};
     var initData = opts.initData != null ? opts.initData : getInitData();
@@ -222,15 +234,30 @@
     if (opts.profileId != null && opts.profileId !== '') {
       headers['X-Profile-Id'] = String(opts.profileId);
     }
-    emitBookingAnalytics('booking_submitted', { slot_id: opts.body && opts.body.slot_id });
-    return fetch(apiUrl('/api/webapp/client/booking', initData), {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(opts.body || {}),
-    }).then(function (res) {
-      return res.text().then(function (text) {
-        return { res: res, data: parseBookingJsonResponse(text), text: text };
+
+    function doPost() {
+      emitBookingAnalytics('booking_submitted', { slot_id: opts.body && opts.body.slot_id });
+      return fetch(apiUrl('/api/webapp/client/booking', initData), {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(opts.body || {}),
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          return { res: res, data: parseBookingJsonResponse(text), text: text };
+        });
       });
+    }
+
+    if (opts.skipWriteAccessGate) return doPost();
+    var WA = global.GlideWriteAccess;
+    var tg = getTg();
+    if (!WA || typeof WA.gate !== 'function' || !tg) return doPost();
+    return WA.gate(tg, {
+      surface: 'booking',
+      deniedText: WA_COPY_ASK,
+    }).then(function (res) {
+      if (res !== 'proceed') return { blocked: true, writeAccess: res };
+      return doPost();
     });
   }
 
@@ -285,13 +312,6 @@
       '</div>'
     );
   }
-
-  /* Достижимость клиента ботом. Только Telegram-клиент, которому бот ещё не может написать
-     (нет /start и разрешения): для MAX/VK, вне Telegram и при allows_write_to_pm === true — ''. */
-  var WA_COPY_ASK = 'Чтобы получить подтверждение и напоминание о тренировке, разрешите сообщения от бота.';
-  var WA_COPY_GRANTED = 'Готово. Напишем, когда тренер подтвердит запись, и напомним о тренировке.';
-  var WA_COPY_DENIED = 'Уведомления выключены. Статус записи виден в приложении.';
-  var WA_COPY_OPEN_BOT = 'Откройте бота и нажмите «Старт», чтобы получать уведомления.';
 
   function unreachableState() {
     var WA = global.GlideWriteAccess;
