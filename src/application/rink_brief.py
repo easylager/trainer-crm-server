@@ -27,6 +27,9 @@ from src.application.ice_city_day import format_price_minor, plural_ru
 # их страницы не меняются ни на байт, пока здесь не появится их слаг.
 RINK_BRIEF_CITIES: frozenset[str] = frozenset({"minsk"})
 
+# Цели Метрики/GA4 (glide-track.js отправляет любое имя из data-glide-track).
+GOAL_PROOF_SOURCE_CLICK = "proof_source_click"
+
 WEEK_DAYS = 7
 BRIEF_MAX = 150
 AUTO_FRESH = timedelta(hours=48)
@@ -298,6 +301,7 @@ SEASON_NO_DATE_LINE = "Дату открытия мы пока не знаем."
 
 __all__ = [
     "BRIEF_MAX",
+    "GOAL_PROOF_SOURCE_CLICK",
     "ProofStamp",
     "RINK_BRIEF_CITIES",
     "SEASON_NO_DATE_LINE",

@@ -1084,3 +1084,39 @@ async def test_place_page_nearby_prefers_other_rinks_in_same_city(app_use_test_d
     assert f'/p/{city_slug(here["city_name"])}/{peer_slug}' in html
     assert other_city not in html
     assert f'/c/{city_slug(other_city)}' not in html
+
+
+@pytest.mark.asyncio
+async def test_minsk_rink_answer_line_and_manual_stamp_from_db(app_use_test_db, db_session) -> None:
+    """TASK-424: каток Минска из БД — строка-ответ вне nosnippet, ручное свежее расписание со штампом."""
+    from datetime import datetime, timezone
+
+    from src.application.place_page import load_place_view, render_place_page
+
+    city_id = await _insert_city(db_session, name="Минск")
+    arena_id = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:6]}", phone="+375 29 111-22-33")
+    now = datetime.now(timezone.utc)
+    for day in range(1, 7):
+        await _add_future_session(db_session, arena_id, days_ahead=day, starts_at_local="19:00", observed_at=now)
+    await db_session.commit()
+
+    view = await load_place_view(db_session, str(arena_id))
+    html = render_place_page(
+        view,
+        canonical_url="https://glideclub.by/p/minsk/x",
+        base_path="/p/minsk/x",
+        og_image_url="https://glideclub.by/og.png",
+        story_image_url="https://glideclub.by/s.png",
+        cta_url=None,
+        city_page_url="https://glideclub.by/c/minsk",
+        share={"share_url": "https://glideclub.by/p/minsk/x", "text": "", "title": ""},
+    )
+    sched = html.split('id="schedule"', 1)[1].split("</section>", 1)[0]
+    assert not sched.startswith(" data-nosnippet")
+    line = re.search(r'<p class="b-brief">([^<]+)</p>', sched)
+    assert line and "19:00" in line.group(1)
+    assert not re.search(r"сегодня|завтра|\d{1,2}\.\d{2}", line.group(1))
+    # Ручное расписание (без парсера), правка только что — штамп без ссылки на сайт.
+    assert re.search(r'<div class="b-proof" data-nosnippet>.*?Проверено \d{2}\.\d{2}</span></div>', sched)
+    assert "<div data-glide-session-list-root data-nosnippet>" in sched
+    assert "Расписание может меняться" not in html
