@@ -756,10 +756,29 @@ async def _confirm_final(session: AsyncSession, row: MatchRow, decision: Decisio
     * не ``KIND_FINAL`` → запомненный опрос сбрасывается: пары должны идти подряд, а не через сбой;
     * первое предложение → запоминаем, ждём;
     * тот же счёт и способ, прошло ≥ ``DINAMO_STABLE_AFTER`` → ``KIND_FINAL``; раньше — ждём;
-    * иначе (счёт или способ изменились) → ``KIND_REVIEW`` с причиной, свежий опрос запоминается.
+    * иначе (счёт или способ изменились) → ``KIND_REVIEW`` с причиной, свежий опрос запоминается с флагом
+      ``conflict``: дальше итог автоматически не публикуется никогда (липкая ручная проверка), probe и причина
+      лишь обновляются для карточки админа. Обычный ``review`` «нет итога к REVIEW_AFTER» флага не имеет:
+      если источники потом подтвердят (пара опросов), итог по-прежнему публикуется сам.
     """
     now = _utc(now)
     old = (await session.execute(_PROBE_GET, {"id": row.id})).scalar_one_or_none()
+    sticky = bool(old) and bool(old.get("conflict"))
+    if sticky:
+        # Опросы уже расходились: автоматического итога больше нет, решает человек. Свежий вариант пишем в probe
+        # и причину — карточка админа показывает актуальное; сам флаг ``conflict`` не сбрасывается никогда.
+        if decision.kind == KIND_FINAL:
+            fresh = {**_probe_of(decision, now), "conflict": True}
+            if (fresh["home"], fresh["away"], fresh["decided_in"]) != (old.get("home"), old.get("away"), old.get("decided_in")):
+                await session.execute(_PROBE_SET, {"id": row.id, "probe": json.dumps(fresh), "now": now})
+            return Decision(
+                KIND_REVIEW,
+                reason=(
+                    "итог менялся между опросами, нужна ручная проверка; последнее чтение: "
+                    f"{decision.home_score}:{decision.away_score} ({decision.decided_in})"
+                ),
+            )
+        return decision
     if decision.kind != KIND_FINAL:
         if old:
             await session.execute(_PROBE_CLEAR, {"id": row.id, "now": now})
@@ -780,7 +799,7 @@ async def _confirm_final(session: AsyncSession, row: MatchRow, decision: Decisio
         if now - first >= DINAMO_STABLE_AFTER:
             return decision
         return Decision(KIND_WAIT, reason="итог увиден повторно, но прошло меньше интервала подтверждения")
-    await session.execute(_PROBE_SET, {"id": row.id, "probe": json.dumps(fresh), "now": now})
+    await session.execute(_PROBE_SET, {"id": row.id, "probe": json.dumps({**fresh, "conflict": True}), "now": now})
     return Decision(
         KIND_REVIEW,
         reason=(
