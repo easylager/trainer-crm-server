@@ -268,7 +268,7 @@ async def test_auto_final_sends_one_admin_message_with_delivery_time(db_session,
     assert body == (
         "<b>Итог записан:</b> Динамо-Минск — Торпедо 3:2 (основное время).\n"
         "Источники: hcdinamo.by и hockey.by совпали (подтверждено двумя опросами).\n"
-        "Клиентам уйдёт около 21:45."
+        "Клиентам уйдёт не раньше 21:45."
     )
     assert [(b["text"], b["callback_data"]) for b in buttons[0]] == [("Всё верно", f"hk:okd:{m}"), ("Поправить", f"hk:fix:{m}")]
     again, n2 = await _notify(f, at(21, 43))  # повторный тик не дублирует

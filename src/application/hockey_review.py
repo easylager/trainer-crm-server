@@ -272,7 +272,7 @@ def auto_final_text(row) -> str:
         + (
             f"Клиентам уйдёт утром в {when:%H:%M}."
             if morning
-            else f"Клиентам уйдёт около {when:%H:%M}."
+            else f"Клиентам уйдёт не раньше {when:%H:%M}."
         )
     )
 
