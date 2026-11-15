@@ -159,7 +159,6 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
   font: 400 13px/1 var(--g-font-display); color: #0d1b26;
 }
 .hn__logo img { width: 36px; height: 36px; object-fit: contain; }
-.hn__chip { margin-left: auto; background: #ffd23f; color: #0d1424; border-radius: 10px; padding: 5px 9px; font-size: 13px; font-weight: 700; white-space: nowrap; }
 .hn__sticker {
   width: 58px; height: 58px; flex: none; border-radius: 16px; background: #ffd23f; color: #0d1424;
   display: flex; align-items: center; justify-content: center; font: 400 22px/1 var(--g-font-display); transform: rotate(-6deg);
@@ -176,6 +175,7 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
 .hn__logo--round img { width: 30px; height: 30px; }
 
 .hn__name--one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hn__name--mine { font-size: 16px; } /* «Ты за Динамо-Минск» должно влезать целиком в ячейку ленты в 267px */
 .hn__go--ev { color: var(--g-muted); }
 /* Метка — наклейка на краю карточки, как «+50» в игре. Жёлтый — цвет игры (PDEC-022), здесь он метит матч. */
 .hn__tag {
