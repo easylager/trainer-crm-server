@@ -15,7 +15,7 @@ CSV name: `СДЮШОР по фигурному катанию`. Сайт опе
 | opening_hours | unknown | origin 403; часы из поисковых сниппетов в профиль не писать | 2026-09-06 |
 | season | unknown | нет открываемого источника с месяцами сезона | 2026-09-06 |
 | amenities | skate_rental=unknown; skate_sharpening=unknown; parking=unknown; locker_rooms=unknown; cafe=unknown; accessibility=unknown | origin 403 | 2026-09-06 |
-| short_description | СДЮШОР по фигурному катанию, крытый каток (ledlife.by), адрес в CSV: Минск, пр-т Каролинский, 5. Карточка без часов и телефона, пока origin не открыть с BY IP. | CSV `data/minsk-arenas-prod.csv` id=4; блокер: GET https://ledlife.by/massovye_kataniya/ → 403 | 2026-09-06 |
+| short_description | СДЮШОР по фигурному катанию, крытый каток (ledlife.by), Минск, пр-т Каролинский, 5. | CSV `data/minsk-arenas-prod.csv` id=4; блокер: GET https://ledlife.by/massovye_kataniya/ → 403 | 2026-09-06 |
 
 unknown явно писать `unknown`, не выдумывать.
 

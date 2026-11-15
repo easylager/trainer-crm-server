@@ -24,7 +24,11 @@ _CLAUSE_DELIM_RE = re.compile(r"\s*;\s*|(?<![0-9A-Za-zА-Яа-яЁё])\.(?!\d)\s
 _LEAK_RE = re.compile(
     r"\bunknown\b|conflicts|склеивать|см\.|"
     r"html[\s\-–—]*таблиц|не\s+html|сетк\w*\s+в\s+html|html\s*/\s*json|"
-    r"не\s+парсит|фотографией\s+(?:на\s+странице|листа)",
+    r"не\s+парсит|фотографией\s+(?:на\s+странице|листа)|"
+    # Ops notes for developers (TASK-423): origin/IP blockers, scraping internals.
+    r"\borigin\b|не[\s\-]*BY\b|\bBY[\s\-]*(?:IP|egress)\b|\bIP\b|"
+    r"страниц\w*\s+403|403\s*forbidden|\b(?:http|ошибк\w*|код)\s*403\b|"
+    r"\bcookies?\b|токен|парсер|\bAPI\b|headless|\brobots(?:\.txt)?\b|saleframe|nginx",
     re.I,
 )
 _SLASH_LABEL_RE = re.compile(r"^(\S+)\s*/\s*\S+\s*:\s*")
