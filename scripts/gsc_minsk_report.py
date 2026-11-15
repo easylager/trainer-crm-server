@@ -7,6 +7,11 @@
     python3 scripts/gsc_minsk_report.py ~/Downloads/glideclub.by-Performance.zip
     python3 scripts/gsc_minsk_report.py <zip|папка> --save            # + строка недели в историю
     python3 scripts/gsc_minsk_report.py <zip|папка> --save --history other.csv --date 2026-11-23
+    python3 scripts/gsc_minsk_report.py <после> --before <до>          # до/после (TASK-424)
+
+Страницы катков Минска (TASK-424) — строки «Страницы.csv» с /p/minsk/: показы, клики, CTR,
+позиция по каждой и вместе. Для замера выгружайте весь сайт (без фильтра страницы) за
+равные периоды до и после выкладки.
 """
 from __future__ import annotations
 
@@ -32,12 +37,25 @@ TRACKED_QUERIES = [
     "охм чижовка",
     "охм даймонд",
 ]
+# Запросы к страницам катков Минска (GSC 3 мес. до TASK-424) — отдельно от TRACKED, чтобы история
+# средней позиции хаба не поменяла смысл.
+RINK_QUERIES = [
+    "замок каток расписание",
+    "тц замок каток расписание",
+    "каток на немиге",
+    "охм притыцкого",
+    "охм чижовка",
+    "ледовый дворец массовое катание расписание",
+    "олимпик арена массовые катания",
+]
+RINK_PAGE_MARK = "/p/minsk/"
 FOCUS_WORD = "минск"
 DEFAULT_HISTORY = ".ai/seo/minsk-weekly.csv"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HISTORY_FIELDS = [
     "export_date", "period_start", "period_end", "clicks", "impressions",
     "tracked_avg_position", "minsk_query_impressions", "position_mobile", "position_desktop",
+    "rink_pages_clicks", "rink_pages_impressions", "rink_pages_ctr", "rink_pages_position",
 ]
 MOBILE = ("мобиль", "mobile")
 DESKTOP = ("пк", "компьют", "desktop")
@@ -179,6 +197,65 @@ def device_positions(data: dict[str, list[Row]]) -> dict[str, float | None]:
     return res
 
 
+def rink_pages(data: dict[str, list[Row]]) -> list[dict[str, Any]]:
+    """Строки «Страницы.csv» катков Минска, по показам."""
+    rows = []
+    for r in data.get("страницы") or []:
+        url = _first_col(r).strip()
+        if RINK_PAGE_MARK in url:
+            rows.append({"page": url.split(RINK_PAGE_MARK, 1)[1].split("?", 1)[0], **_metrics(r)})
+    return sorted(rows, key=lambda p: -(p["impressions"] or 0))
+
+
+def rink_totals(pages: list[dict[str, Any]]) -> dict[str, float | None]:
+    """Сумма кликов и показов, CTR (%) и позиция, взвешенная показами. Нет страниц — всё None."""
+    if not pages:
+        return {"clicks": None, "impressions": None, "ctr": None, "position": None}
+    clicks = sum(p["clicks"] or 0 for p in pages)
+    imps = sum(p["impressions"] or 0 for p in pages)
+    weighted = [(p["position"], p["impressions"]) for p in pages if p["position"] and p["impressions"]]
+    w = sum(i for _, i in weighted)
+    return {
+        "clicks": clicks,
+        "impressions": imps,
+        "ctr": 100 * clicks / imps if imps else None,
+        "position": sum(pos * i for pos, i in weighted) / w if w else None,
+    }
+
+
+def key_metrics(data: dict[str, list[Row]]) -> dict[str, float | None]:
+    """Числа для сравнения до/после: весь срез + страницы катков Минска."""
+    s = summary(data)
+    rink = rink_totals(rink_pages(data))
+    ctr = 100 * s["clicks"] / s["impressions"] if s["clicks"] is not None and s["impressions"] else None
+    return {
+        "Клики": s["clicks"],
+        "Показы": s["impressions"],
+        "CTR, %": ctr,
+        "Катки Минска: клики": rink["clicks"],
+        "Катки Минска: показы": rink["impressions"],
+        "Катки Минска: CTR, %": rink["ctr"],
+        "Катки Минска: позиция": rink["position"],
+        "Средняя позиция (отслеживаемые)": tracked_avg_position(tracked(queries(data))),
+    }
+
+
+def render_compare(before: dict[str, list[Row]], after: dict[str, list[Row]]) -> str:
+    a, b = key_metrics(before), key_metrics(after)
+    sa, sb = summary(before), summary(after)
+    out = ["== До / после ==", f"До: {sa['start'] or sa['period_label'] or '—'} .. {sa['end'] or ''}".rstrip(" ."),
+           f"После: {sb['start'] or sb['period_label'] or '—'} .. {sb['end'] or ''}".rstrip(" .")]
+    for name in a:
+        x, y = a[name], b[name]
+        delta = f"{y - x:+.1f}".rstrip("0").rstrip(".") if x is not None and y is not None else "—"
+        digits = 2 if "CTR" in name else 1
+        if x is not None and y is not None:
+            delta = f"{y - x:+.{digits}f}".rstrip("0").rstrip(".")
+        out.append(f"{name:<34} {_fmt(x, digits):>8} → {_fmt(y, digits):>8}   {delta}")
+    out.append("Позиция: меньше — лучше. Малые страницы (сотни показов) дают направление, не значимость.")
+    return "\n".join(out)
+
+
 def _fmt(v: float | None, digits: int = 1) -> str:
     if v is None:
         return "—"
@@ -191,6 +268,7 @@ def build_history_row(data: dict[str, list[Row]], export_date: str) -> dict[str,
     mq = minsk_queries(qs)
     dev = device_positions(data)
     avg = tracked_avg_position(tracked(qs))
+    rink = rink_totals(rink_pages(data))
     return {
         "export_date": export_date,
         "period_start": s["start"] or "",
@@ -201,6 +279,10 @@ def build_history_row(data: dict[str, list[Row]], export_date: str) -> dict[str,
         "minsk_query_impressions": _fmt(sum(q["impressions"] or 0 for q in mq), 0) if qs else "",
         "position_mobile": f"{dev['mobile']:.1f}" if dev["mobile"] is not None else "",
         "position_desktop": f"{dev['desktop']:.1f}" if dev["desktop"] is not None else "",
+        "rink_pages_clicks": _fmt(rink["clicks"], 0) if rink["clicks"] is not None else "",
+        "rink_pages_impressions": _fmt(rink["impressions"], 0) if rink["impressions"] is not None else "",
+        "rink_pages_ctr": f"{rink['ctr']:.2f}" if rink["ctr"] is not None else "",
+        "rink_pages_position": f"{rink['position']:.1f}" if rink["position"] is not None else "",
     }
 
 
@@ -262,6 +344,32 @@ def render(data: dict[str, list[Row]]) -> str:
             out.append(f"{t:<46} нет показов")
     avg = tracked_avg_position(rows)
     out.append(f"Средняя позиция (по показам): {_fmt(avg, 1)}")
+
+    out.append("\n== Страницы мест Минска /p/minsk/ — катки и магазины (показы, позиция, клики, CTR) ==")
+    pages = rink_pages(data)
+    for p in pages:
+        ctr = 100 * (p["clicks"] or 0) / p["impressions"] if p["impressions"] else None
+        out.append(
+            f"{_fmt(p['impressions'], 0):>7}  {_fmt(p['position'], 1):>6}  {_fmt(p['clicks'], 0):>4}  "
+            f"{_fmt(ctr, 2):>5}%  {p['page']}"
+        )
+    if pages:
+        tot = rink_totals(pages)
+        out.append(
+            f"Вместе: показы {_fmt(tot['impressions'], 0)}, клики {_fmt(tot['clicks'], 0)}, "
+            f"CTR {_fmt(tot['ctr'], 2)}%, позиция {_fmt(tot['position'], 1)}"
+        )
+    else:
+        out.append("нет данных" if not data.get("страницы") else "нет страниц /p/minsk/ (выгрузка с фильтром страницы?)")
+
+    out.append("\n== Запросы к каткам Минска ==")
+    by_q = {q["query"].casefold(): q for q in qs}
+    for t in RINK_QUERIES:
+        m = by_q.get(t)
+        if m and m["impressions"]:
+            out.append(f"{t:<46} показы {_fmt(m['impressions'], 0):>5}  позиция {_fmt(m['position'], 1)}  клики {_fmt(m['clicks'], 0)}")
+        else:
+            out.append(f"{t:<46} нет показов")
     return "\n".join(out)
 
 
@@ -271,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--save", action="store_true", help="дописать/обновить строку недели в историю")
     ap.add_argument("--history", type=Path, default=REPO_ROOT / DEFAULT_HISTORY, help=f"CSV истории (по умолчанию <корень репо>/{DEFAULT_HISTORY})")
     ap.add_argument("--date", default=None, help="дата выгрузки YYYY-MM-DD (по умолчанию сегодня)")
+    ap.add_argument("--before", type=Path, default=None, help="выгрузка периода «до» для сравнения (TASK-424)")
     args = ap.parse_args(argv)
 
     data = load_export(args.source)
@@ -278,6 +387,8 @@ def main(argv: list[str] | None = None) -> int:
         print("В выгрузке нет CSV", file=sys.stderr)
         return 1
     print(render(data))
+    if args.before is not None:
+        print("\n" + render_compare(load_export(args.before), data))
     if args.save:
         row = build_history_row(data, args.date or date.today().isoformat())
         action = save_history(args.history, row)
