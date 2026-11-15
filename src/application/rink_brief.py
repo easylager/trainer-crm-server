@@ -292,7 +292,11 @@ def proof_stamp(freshness: Mapping[str, Any] | None, *, now: datetime) -> ProofS
     if not auto and age > MANUAL_FRESH:
         return None
     local = observed.astimezone(_MINSK).date()
-    source = str(freshness.get("source_url") or "").strip() if auto else ""
+    # Ссылка «на сайте катка»: источник, записанный админом (arena_schedule_sources, kind=site),
+    # а без записи — сайт катка, если его опрашивает парсер. Instagram/ВК и «не собираем» — без ссылки.
+    source = str(freshness.get("schedule_site_url") or "").strip()
+    if not source and auto:
+        source = str(freshness.get("source_url") or "").strip()
     return ProofStamp(day_label=f"{local.day:02d}.{local.month:02d}", source_url=source or None)
 
 

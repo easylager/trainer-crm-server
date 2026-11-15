@@ -1120,3 +1120,39 @@ async def test_minsk_rink_answer_line_and_manual_stamp_from_db(app_use_test_db, 
     assert re.search(r'<div class="b-proof" data-nosnippet>.*?Проверено \d{2}\.\d{2}</span></div>', sched)
     assert "<div data-glide-session-list-root data-nosnippet>" in sched
     assert "Расписание может меняться" not in html
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fetch_mode", "url", "linked"),
+    [("server", "https://rink.example.by/schedule", True), ("manual", "https://www.instagram.com/rink/", False)],
+)
+async def test_minsk_stamp_links_site_source_not_instagram(
+    app_use_test_db, db_session, fetch_mode: str, url: str, linked: bool
+) -> None:
+    """TASK-424: источник «сайт катка» в arena_schedule_sources → ссылка; ручное из Instagram → без ссылки."""
+    from datetime import datetime, timezone
+
+    from src.application.admin_ice_sources import detect_source_kind
+    from src.application.place_page import _b_proof, load_place_view
+
+    city_id = await _insert_city(db_session, name="Минск")
+    arena_id = await _insert_arena(db_session, city_id, name=f"Каток {uuid.uuid4().hex[:6]}", phone="+375 29 111-22-33")
+    await db_session.execute(
+        text(
+            "INSERT INTO arena_schedule_sources (arena_id, source_url, source_kind, fetch_mode) "
+            "VALUES (:a, :u, :k, :m)"
+        ),
+        {"a": arena_id, "u": url, "k": detect_source_kind(url), "m": fetch_mode},
+    )
+    await _add_future_session(
+        db_session, arena_id, days_ahead=1, starts_at_local="19:00", observed_at=datetime.now(timezone.utc)
+    )
+    await db_session.commit()
+
+    view = await load_place_view(db_session, str(arena_id))
+    assert view["card"]["freshness"]["schedule_auto"] is False  # задания парсера нет, как в превью
+    proof = _b_proof(view)
+    assert "Проверено " in proof
+    assert (f'href="{url}"' in proof) is linked
+    assert ("на&nbsp;<a" in proof) is linked
