@@ -450,22 +450,33 @@ async def load_place_view(
         trainers, _total = await load_site_trainers(session, arena_id=int(card["id"]))
     matches = await _arena_matches(session, card, now=now)
     nearby: list[dict[str, Any]] = []
-    # Тот же блок «Лёд рядом», что на странице города: города вокруг этого катка.
+    # На странице катка: сначала другие катки этого города (Минск → Чижовка, не Раубичи).
+    # Если в городе один каток — соседние города, как на /c/.
     if (
         _skating(card)
         and card.get("city_id") is not None
         and card.get("latitude") is not None
         and card.get("longitude") is not None
     ):
-        from src.application.city_style_b import load_nearby
+        from src.application.city_style_b import load_nearby, load_nearby_same_city_arenas
 
-        nearby = await load_nearby(
+        origin = (float(card["latitude"]), float(card["longitude"]))
+        nearby = await load_nearby_same_city_arenas(
             session,
             city_id=int(card["city_id"]),
-            origin=(float(card["latitude"]), float(card["longitude"])),
+            arena_id=int(card["id"]),
+            origin=origin,
             today=today,
             now=now,
         )
+        if not nearby:
+            nearby = await load_nearby(
+                session,
+                city_id=int(card["city_id"]),
+                origin=origin,
+                today=today,
+                now=now,
+            )
     return {
         "card": card,
         "matches": matches,
@@ -2413,6 +2424,7 @@ def _b_nearby(view: Mapping[str, Any]) -> str:
     from src.application.city_style_b import nearby_section_html
     from src.application.empty_state_telemetry import (
         FALLBACK_NEARBY_CITY,
+        FALLBACK_OTHER_RINK,
         GOAL_ES_FALLBACK_CLICK,
         SURFACE_PLACE,
         track_attrs,
@@ -2427,16 +2439,21 @@ def _b_nearby(view: Mapping[str, Any]) -> str:
         if normalize_schedule_mode(card.get("schedule_mode")) == SCHEDULE_MODE_PHONE
         else "hub.nearby"
     )
-    return nearby_section_html(
-        items,
-        title=t(title_key),
-        track_attrs_for=lambda item, pos, href: track_attrs(
+
+    def _track(item: Mapping[str, Any], pos: int, href: str) -> str:
+        fallback = FALLBACK_OTHER_RINK if item.get("kind") == "arena" else FALLBACK_NEARBY_CITY
+        return track_attrs(
             GOAL_ES_FALLBACK_CLICK,
-            fallback=FALLBACK_NEARBY_CITY,
+            fallback=fallback,
             target=href,
             pos=pos,
             surface=SURFACE_PLACE,
-        ),
+        )
+
+    return nearby_section_html(
+        items,
+        title=t(title_key),
+        track_attrs_for=_track,
     )
 
 

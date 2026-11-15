@@ -996,7 +996,7 @@ async def test_empty_schedule_keeps_the_wait_block_without_the_day_button(app_us
 
 @pytest.mark.asyncio
 async def test_place_page_shows_nearby_cities_block_at_the_bottom(app_use_test_db, db_session) -> None:
-    """Внизу страницы катка — тот же «Лёд рядом», что на /c/: соседние города с сеансом."""
+    """Один каток в городе → «Лёд рядом» = соседние города с сеансом (как на /c/)."""
     here = await _place(db_session, name=f"Каток здесь {uuid.uuid4().hex[:6]}")
     await db_session.execute(
         text("UPDATE arenas SET latitude = 53.90, longitude = 27.56 WHERE id = :id"),
@@ -1035,3 +1035,47 @@ async def test_place_page_shows_nearby_cities_block_at_the_bottom(app_use_test_d
     # Блок в самом низу тела: после контактов / about.
     assert html.rfind("Лёд рядом") > html.rfind('class="b-sec')
     assert f'/c/{city_slug(near_city)}' in html
+
+
+@pytest.mark.asyncio
+async def test_place_page_nearby_prefers_other_rinks_in_same_city(app_use_test_db, db_session) -> None:
+    """В городе несколько катков → «Лёд рядом» показывает их, а не соседние города."""
+    here = await _place(db_session, name=f"Минск-Арена {uuid.uuid4().hex[:6]}")
+    await db_session.execute(
+        text("UPDATE arenas SET latitude = 53.938, longitude = 27.566 WHERE id = :id"),
+        {"id": here["arena_id"]},
+    )
+    peer_name = f"Чижовка {uuid.uuid4().hex[:6]}"
+    peer_id = await _insert_arena(
+        db_session,
+        here["city_id"],
+        name=peer_name,
+        latitude=53.870,
+        longitude=27.630,
+    )
+    peer_slug = (
+        await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": peer_id})
+    ).scalar_one()
+    await _add_future_session(db_session, peer_id, days_ahead=0, starts_at_local="16:15")
+
+    other_city = f"Раубичи {uuid.uuid4().hex[:6]}"
+    other_city_id = await _insert_city(db_session, name=other_city)
+    other_arena = await _insert_arena(
+        db_session,
+        other_city_id,
+        name=f"Раубичи-арена {uuid.uuid4().hex[:6]}",
+        latitude=54.05,
+        longitude=27.70,
+    )
+    await _add_future_session(db_session, other_arena, days_ahead=0, starts_at_local="17:00")
+    await db_session.commit()
+
+    async with _client() as client:
+        resp = await client.get(here["path"])
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    assert "Лёд рядом" in html
+    assert peer_name in html
+    assert f'/p/{city_slug(here["city_name"])}/{peer_slug}' in html
+    assert other_city not in html
+    assert f'/c/{city_slug(other_city)}' not in html
