@@ -255,11 +255,30 @@ async def test_polls_that_disagree_go_to_review_with_a_reason(db_session, monkey
     row = await get_match(db_session, mid)
     assert row.status == "review" and "менялся между опросами" in row.review_reason
     assert "3:2" in row.review_reason and "4:2" in row.review_reason
-    # Новый счёт ещё не подтверждён: нужна свежая пара опросов, а не только что виденный.
-    assert [k for _, k in await _poll(db_session, fetch, 156)] == [KIND_WAIT]
-    assert (await get_match(db_session, mid)).status == "review"
-    assert [k for _, k in await _poll(db_session, fetch, 162)] == [KIND_FINAL]
-    assert (await get_match(db_session, mid)).home_score == 4
+    # Липкая проверка: три тика с одним счётом, прошло больше 10 минут — финала нет, статус review.
+    for minutes in (156, 164, 172, 190):
+        assert [k for _, k in await _poll(db_session, fetch, minutes)] == [KIND_REVIEW]
+        row = await get_match(db_session, mid)
+        assert row.status == "review" and row.home_score is None
+    probe = (await db_session.execute(text("SELECT result_probe FROM hockey_matches WHERE id = :i"), {"i": mid})).scalar_one()
+    assert probe["conflict"] is True and probe["home"] == 4
+    # Человек закрывает как обычно.
+    closed = await set_manual_result(db_session, mid, home_score=3, away_score=2, decided_in="regulation", now=_at(200))
+    assert (closed.status, closed.result_source, closed.home_score) == ("final", "manual", 3)
+
+
+@pytest.mark.asyncio
+async def test_plain_review_without_result_still_publishes_after_confirmation(db_session, monkeypatch) -> None:
+    """Обычный review «нет итога к 3ч30» не липкий: пара опросов после него публикует итог."""
+    mid = await _sochi_row(db_session)
+    world = World()
+    world.hcd, world.ticker = _hcd_third_period(), _ticker(completed=False)
+    fetch = world.install(monkeypatch)
+    assert [k for _, k in await _poll(db_session, fetch, 215)] == [KIND_REVIEW]
+    world.ticker = _ticker(completed=True)
+    assert [k for _, k in await _poll(db_session, fetch, 220)] == [KIND_WAIT]
+    assert [k for _, k in await _poll(db_session, fetch, 231)] == [KIND_FINAL]
+    assert (await get_match(db_session, mid)).status == "final"
 
 
 @pytest.mark.asyncio
