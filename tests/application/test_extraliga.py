@@ -483,3 +483,14 @@ def test_site_form_pills_have_readable_labels_and_titles() -> None:
     assert html.count("data-win") == 3
     card = _where_card({"arena": {"address": "ул. А, 1", "latitude": 53.9, "longitude": 27.5}, "arena_name": "Арена", "city": "Минск"})
     assert "Маршрут в Яндекс Картах" in card and "Google" not in card
+
+
+def test_match_ice_before_links_to_rink_with_descriptive_anchor() -> None:
+    from src.application.site_matches_page import _where_card
+
+    base = {"arena": {"address": "ул. А, 1", "latitude": 53.9, "longitude": 27.5}, "arena_name": "Чижовка-арена",
+            "city": "Минск", "ice_before": {"time": "17:00", "price": "10 BYN"}}
+    html = _where_card({**base, "arena_path": "/p/minsk/chizhovka"})
+    assert '<a href="/p/minsk/chizhovka">массовое катание: Чижовка-арена</a>' in html
+    assert "здесь же" not in html
+    assert "здесь же" in _where_card(base)
