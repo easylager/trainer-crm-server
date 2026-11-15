@@ -247,7 +247,9 @@ async def test_result_from_sportmail_when_both_primary_sources_are_down(db_sessi
             sportmail_match_url(SOCHI): _fx("sportmail-match-played.html"),
         }
     )
-    out = await check_due_results(db_session, fetch, now=_minsk(2026, 11, 8, 20, 0), alert=_silent)
+    first = await check_due_results(db_session, fetch, now=_minsk(2026, 11, 8, 20, 0), alert=_silent)
+    assert first == [(mid, KIND_WAIT)]  # одно чтение — ещё не итог
+    out = await check_due_results(db_session, fetch, now=_minsk(2026, 11, 8, 20, 10), alert=_silent)
     assert out == [(mid, KIND_FINAL)]
     row = await get_match(db_session, mid)
     assert (row.status, row.home_score, row.away_score, row.decided_in) == ("final", 3, 2, "ot")

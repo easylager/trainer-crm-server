@@ -190,7 +190,11 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     done = at(21, 40)
     await _finish(db_session, m, 3, 2, done)
 
-    by_player = {n.player_key: n for n in await due_notices(db_session, now=done)}
+    # Свежий итог в чат не уходит (буфер RESULT_SEND_DELAY): его можно поправить до рассылки.
+    assert await due_notices(db_session, now=done) == []
+    assert await due_notices(db_session, now=done + hockey_notices.RESULT_SEND_DELAY - timedelta(seconds=1)) == []
+    ready = done + hockey_notices.RESULT_SEND_DELAY
+    by_player = {n.player_key: n for n in await due_notices(db_session, now=ready)}
     sasha = by_player[SASHA]
     assert sasha.kind == "result"
     assert sasha.text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход 3:2. В точку! +50.\nТвоё место в «")
@@ -202,7 +206,7 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     assert sasha.buttons[0][0]["callback_data"] == "kk:n"
 
     out = Outbox()
-    assert (await deliver(factory, now=done, send=out))["sent"] == 4
+    assert (await deliver(factory, now=ready, send=out))["sent"] == 4
     assert (await deliver(factory, now=done + timedelta(minutes=10), send=out))["sent"] == 0
     # Через 6 часов итог устарел — но и отправленный повторно не уходит.
     assert await due_notices(db_session, now=done + timedelta(hours=7)) == []
