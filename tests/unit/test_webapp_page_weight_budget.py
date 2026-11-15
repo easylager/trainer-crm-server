@@ -24,11 +24,12 @@ _ATTR = re.compile(r"""(?:src|href)=["']([^"']+)["']""", re.I)
 # then «Тренеры» in «Поиске» and trainer taps → the trainers showcase, stage 1 of entries, 2026-11-08: ice.html +1.2 KB;
 # re-measured with the trainer funnel (/t/ pages, TASK-356), 2026-11-08;
 # catalog.html +5.4 KB: the «Я» tab and season flags in the client shell, «Твой сезон на льду», 2026-11-12;
-# ice.html +12.6 KB: the season shell on «Поиск», tab press under the finger and tab-timing in the shell, fast-tabs, 2026-11-12).
+# ice.html +12.6 KB: the season shell on «Поиск», tab press under the finger and tab-timing in the shell, fast-tabs, 2026-11-12;
+# catalog.html +12.1 KB: hard entryGate + write-access.js on shell pages, 2026-11-15).
 # A page may shrink; growth past +5% fails CI.
 _BASELINE_GZIP = {
     "ice.html": 254_228,
-    "catalog.html": 231_122,
+    "catalog.html": 243_235,
 }
 
 
@@ -75,10 +76,11 @@ def test_ice_and_catalog_page_weight_stay_within_five_percent() -> None:
 
 # TASK-391: оболочка «Я» + «Записи» (флаг fast_tabs) — первый заход по адресу вкладки. Это та же страница,
 # что без флага, плюс client-tabs.js (defer, ~7 КБ gzip) и две строки CSS; вторая вкладка приходит фрагментом
-# потом, в простое или по нажатию. Замер 2026-11-12. Рост больше 5% — падение.
+# потом, в простое или по нажатию. Замер 2026-11-12; bookings +6.7 KB — entryGate write-access.js, 2026-11-15.
+# Рост больше 5% — падение.
 _SHELL_BASELINE_GZIP = {
     "me": 173_336,
-    "bookings": 124_529,
+    "bookings": 131_225,
 }
 
 
