@@ -998,8 +998,9 @@ async def test_empty_schedule_keeps_the_wait_block_without_the_day_button(app_us
 async def test_place_page_shows_nearby_cities_block_at_the_bottom(app_use_test_db, db_session) -> None:
     """Один каток в городе → «Лёд рядом» = соседние города с сеансом (как на /c/)."""
     here = await _place(db_session, name=f"Каток здесь {uuid.uuid4().hex[:6]}")
+    # Координаты в стороне от минских фикстур — иначе LIMIT 3 в nearby съедают чужие города.
     await db_session.execute(
-        text("UPDATE arenas SET latitude = 53.90, longitude = 27.56 WHERE id = :id"),
+        text("UPDATE arenas SET latitude = 51.10, longitude = 24.10 WHERE id = :id"),
         {"id": here["arena_id"]},
     )
     near_city = f"Рядомск {uuid.uuid4().hex[:6]}"
@@ -1008,10 +1009,11 @@ async def test_place_page_shows_nearby_cities_block_at_the_bottom(app_use_test_d
         db_session,
         near_city_id,
         name=f"Каток рядом {uuid.uuid4().hex[:6]}",
-        latitude=54.00,
-        longitude=27.70,
+        latitude=51.20,
+        longitude=24.20,
     )
-    await _add_future_session(db_session, near_arena, days_ahead=0, starts_at_local="15:45")
+    # Поздний вечер: days_ahead=0 + дневное время фейлит CI после этого часа по Минску.
+    await _add_future_session(db_session, near_arena, days_ahead=0, starts_at_local="22:45")
     far_city = f"Далёск {uuid.uuid4().hex[:6]}"
     far_city_id = await _insert_city(db_session, name=far_city)
     far_arena = await _insert_arena(
@@ -1021,7 +1023,7 @@ async def test_place_page_shows_nearby_cities_block_at_the_bottom(app_use_test_d
         latitude=55.20,
         longitude=30.20,
     )
-    await _add_future_session(db_session, far_arena, days_ahead=0, starts_at_local="18:00")
+    await _add_future_session(db_session, far_arena, days_ahead=0, starts_at_local="23:00")
     await db_session.commit()
 
     async with _client() as client:
@@ -1056,7 +1058,7 @@ async def test_place_page_nearby_prefers_other_rinks_in_same_city(app_use_test_d
     peer_slug = (
         await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": peer_id})
     ).scalar_one()
-    await _add_future_session(db_session, peer_id, days_ahead=0, starts_at_local="16:15")
+    await _add_future_session(db_session, peer_id, days_ahead=0, starts_at_local="22:15")
 
     other_city = f"Раубичи {uuid.uuid4().hex[:6]}"
     other_city_id = await _insert_city(db_session, name=other_city)
@@ -1067,7 +1069,7 @@ async def test_place_page_nearby_prefers_other_rinks_in_same_city(app_use_test_d
         latitude=54.05,
         longitude=27.70,
     )
-    await _add_future_session(db_session, other_arena, days_ahead=0, starts_at_local="17:00")
+    await _add_future_session(db_session, other_arena, days_ahead=0, starts_at_local="22:30")
     await db_session.commit()
 
     async with _client() as client:
