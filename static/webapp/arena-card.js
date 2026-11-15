@@ -227,19 +227,12 @@
     );
   }
 
-  function scheduleHeaderTools(tickets) {
+  function scheduleHeaderTools() {
     // Карточка v2: колокольчик живёт на обложке; здесь он остаётся, только если обложка его не показала.
+    // «Билеты онлайн» тут не дублируем: главное действие — «Купить билет» в нижней панели.
     var watch = visit() ? '' : iceWatchBtnHtml();
-    var ticket =
-      tickets
-        ? '<a class="arena-cta arena-cta--link ga-press" href="' +
-          esc(tickets.href) +
-          '" data-action="external" data-href="' +
-          esc(tickets.href) +
-          '">Билеты онлайн</a>'
-        : '';
-    if (!watch && !ticket) return '';
-    return '<div class="arena-h-row__tools">' + watch + ticket + '</div>';
+    if (!watch) return '';
+    return '<div class="arena-h-row__tools">' + watch + '</div>';
   }
 
   function toggleIceWatch(kind) {
@@ -1756,7 +1749,6 @@
       var inStrip = focusDay && days.some(function (d) { return d.iso === focusDay; });
       state.day = inStrip ? focusDay : M.defaultScheduleDay(days);
     }
-    var tickets = M.ticketCta(state.card);
     var iso = state.day || todayIso();
     var byDate = sessionsByDate();
     var daySessions = byDate[iso] || [];
@@ -1774,7 +1766,7 @@
     return (
       '<div class="arena-sec">' +
       '<div class="arena-h-row"><p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
-      scheduleHeaderTools(tickets) +
+      scheduleHeaderTools() +
       '</div>' +
       focusGone +
       renderVisitPrices() +
