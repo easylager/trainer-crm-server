@@ -379,16 +379,11 @@ _FAN_CLUB_OF = text(f"""
 
 
 def _link(start_param: str) -> str | None:
-    from src.application.place_links import telegram_open_link
+    """Кнопки в пушах: тот же публичный вход (при via_start — ``?start=``, чат уже есть)."""
+    from src.application.place_links import public_telegram_entry_link
     from src.shared.config import Settings
 
-    settings = Settings()  # type: ignore[call-arg]
-    return telegram_open_link(
-        client_bot_username=settings.client_bot_username,
-        mini_app_short_name=settings.client_mini_app_short_name,
-        main_mini_app=settings.client_bot_main_mini_app,
-        start_param=start_param,
-    )
+    return public_telegram_entry_link(Settings(), start_param=start_param)  # type: ignore[call-arg]
 
 
 def url_button(label: str, start_param: str) -> dict | None:

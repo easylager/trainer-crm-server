@@ -5,8 +5,9 @@
  * открытая по прямой ссылке, этого не гарантирует, поэтому подписки и запись сначала смотрят
  * сюда. Успех = колбэк requestWriteAccess вернул ровно true; сам вызов метода успехом не считается.
  *
- * Сервер: POST /api/webapp/client/write-access/outcome (surface: booking | slot_wait | arena_watch)
- * пишет исход в platform_audit_events и отдаёт bot_link на чат бота.
+ * Сервер: POST /api/webapp/client/write-access/outcome
+ * (surface: booking | slot_wait | arena_watch | shell_entry) пишет исход в platform_audit_events
+ * и отдаёт bot_link на чат бота. entryGate — жёсткий вход без чата с ботом.
  * Нативный диалог Telegram в headless-тестах не воспроизвести: там window.Telegram.WebApp — мок.
  */
 (function (global, factory) {
@@ -28,6 +29,12 @@
   var COPY_OPEN_BOT = 'Откройте бота и нажмите «Старт», чтобы получать уведомления.';
   var COPY_OPEN_BOT_BUTTON = 'Открыть бота';
   var COPY_SLOT_DENIED = 'Чтобы мы написали, разрешите сообщения от бота.';
+  var COPY_ENTRY_TITLE = 'Сохраните Glide в Telegram';
+  var COPY_ENTRY_TEXT =
+    'Без чата с ботом приложение не останется в диалогах, и мы не сможем писать вам. Разрешите сообщения или откройте бота.';
+  var COPY_ENTRY_ALLOW = 'Разрешить сообщения';
+  var COPY_ENTRY_RETRY = 'Повторить';
+  var ENTRY_GATE_ID = 'glide-entry-gate';
 
   function getTg() {
     return root && root.Telegram && root.Telegram.WebApp ? root.Telegram.WebApp : null;
@@ -238,12 +245,141 @@
     });
   }
 
+  function removeEntryOverlay() {
+    var el = root && root.document && root.document.getElementById(ENTRY_GATE_ID);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    try {
+      if (root && root.document && root.document.body) {
+        root.document.body.classList.remove('glide-entry-gate-on');
+      }
+    } catch (e) {
+      /* noop */
+    }
+  }
+
+  /**
+   * Жёсткий вход: Mini App без права писать не пускаем дальше.
+   * Резолвится только ``proceed`` (уже можно / только что разрешили). Без «Позже».
+   */
+  function entryGate(tg, opts) {
+    opts = opts || {};
+    var state = writeAccessState(tg);
+    if (state === 'not_telegram') return Promise.resolve('proceed');
+    if (state === 'already') {
+      reportOutcome(tg, 'shell_entry', 'already', {}, opts);
+      return Promise.resolve('proceed');
+    }
+
+    return new Promise(function (resolve) {
+      var doc = root && root.document;
+      if (!doc || !doc.body) {
+        resolve('proceed');
+        return;
+      }
+
+      removeEntryOverlay();
+      doc.body.classList.add('glide-entry-gate-on');
+      var overlay = doc.createElement('div');
+      overlay.id = ENTRY_GATE_ID;
+      overlay.className = 'glide-entry-gate';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.innerHTML =
+        '<div class="glide-entry-gate__card">' +
+        '<div class="glide-entry-gate__title"></div>' +
+        '<p class="glide-entry-gate__text"></p>' +
+        '<button type="button" class="glide-entry-gate__btn glide-entry-gate__btn--pri" data-act="allow"></button>' +
+        '<button type="button" class="glide-entry-gate__btn glide-entry-gate__btn--sec" data-act="bot" hidden></button>' +
+        '</div>';
+      overlay.querySelector('.glide-entry-gate__title').textContent = COPY_ENTRY_TITLE;
+      overlay.querySelector('.glide-entry-gate__text').textContent = COPY_ENTRY_TEXT;
+      var allowBtn = overlay.querySelector('[data-act="allow"]');
+      var botBtn = overlay.querySelector('[data-act="bot"]');
+      allowBtn.textContent = COPY_ENTRY_ALLOW;
+      botBtn.textContent = COPY_OPEN_BOT_BUTTON;
+      doc.body.appendChild(overlay);
+
+      var botLink = null;
+      var busy = false;
+
+      function showBotPath() {
+        botBtn.hidden = false;
+        allowBtn.textContent = COPY_ENTRY_RETRY;
+      }
+
+      function finish() {
+        removeEntryOverlay();
+        resolve('proceed');
+      }
+
+      function ask() {
+        if (busy) return;
+        busy = true;
+        allowBtn.disabled = true;
+        var current = writeAccessState(tg);
+        if (current === 'already') {
+          reportOutcome(tg, 'shell_entry', 'already', {}, opts);
+          finish();
+          return;
+        }
+        if (current === 'unsupported') {
+          return withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(
+            function (res) {
+              botLink = res && res.bot_link ? res.bot_link : botLink;
+              showBotPath();
+              busy = false;
+              allowBtn.disabled = false;
+            }
+          );
+        }
+        return requestWriteAccess(tg).then(function (outcome) {
+          if (outcome === 'unsupported') {
+            return withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(
+              function (res) {
+                botLink = res && res.bot_link ? res.bot_link : botLink;
+                showBotPath();
+                busy = false;
+                allowBtn.disabled = false;
+              }
+            );
+          }
+          reportOutcome(tg, 'shell_entry', outcome, {}, opts);
+          if (outcome === 'granted') {
+            finish();
+            return;
+          }
+          showBotPath();
+          busy = false;
+          allowBtn.disabled = false;
+        });
+      }
+
+      allowBtn.addEventListener('click', function () {
+        ask();
+      });
+      botBtn.addEventListener('click', function () {
+        if (botLink) openBotChat(tg, botLink);
+        else {
+          withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(function (res) {
+            botLink = res && res.bot_link ? res.bot_link : null;
+            if (botLink) openBotChat(tg, botLink);
+          });
+        }
+      });
+
+      // Сразу системный диалог; если отказали — остаёмся на экране без «пропустить».
+      ask();
+    });
+  }
+
   return {
     OUTCOME_PATH: OUTCOME_PATH,
     COPY_ALLOW: COPY_ALLOW,
     COPY_OPEN_BOT: COPY_OPEN_BOT,
     COPY_OPEN_BOT_BUTTON: COPY_OPEN_BOT_BUTTON,
     COPY_SLOT_DENIED: COPY_SLOT_DENIED,
+    COPY_ENTRY_TITLE: COPY_ENTRY_TITLE,
+    COPY_ENTRY_TEXT: COPY_ENTRY_TEXT,
     getTg: getTg,
     isTelegramPrincipal: isTelegramPrincipal,
     canRequestWriteAccess: canRequestWriteAccess,
@@ -254,5 +390,6 @@
     reportOutcome: reportOutcome,
     showOpenBotPopup: showOpenBotPopup,
     gate: gate,
+    entryGate: entryGate,
   };
 });

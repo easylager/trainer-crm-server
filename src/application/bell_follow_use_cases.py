@@ -155,7 +155,7 @@ async def record_write_access_outcome(
 
 
 #: Где в Mini App человек увидел запрос разрешения (поле ``surface`` в payload события).
-WRITE_ACCESS_SURFACES = frozenset({"booking", "slot_wait", "arena_watch"})
+WRITE_ACCESS_SURFACES = frozenset({"booking", "slot_wait", "arena_watch", "shell_entry"})
 
 
 async def record_surface_write_access_outcome(
