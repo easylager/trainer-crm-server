@@ -164,6 +164,19 @@ describe('gate', () => {
 describe('entryGate', () => {
   function installDoc() {
     const store = new Map();
+    const mem = {};
+    global.sessionStorage = {
+      getItem(k) {
+        return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null;
+      },
+      setItem(k, v) {
+        mem[k] = String(v);
+      },
+      removeItem(k) {
+        delete mem[k];
+      },
+      _mem: mem,
+    };
     const body = {
       classList: {
         _c: new Set(),
@@ -235,31 +248,45 @@ describe('entryGate', () => {
       },
       createElement: el,
     };
-    return { body, store };
+    return { body, store, mem };
   }
 
-  it('already: proceed без оверлея', async () => {
-    const { store } = installDoc();
+  it('already: proceed без оверлея, пишет session', async () => {
+    const { store, mem } = installDoc();
     const f = makeFetch();
     const tg = makeTg({ user: { allows_write_to_pm: true } });
     assert.equal(await WA.entryGate(tg, { fetch: f }), 'proceed');
     assert.equal(store.size, 0);
+    assert.equal(mem.glide_entry_write_ok, '1');
     assert.equal(f.calls[0].body.surface, 'shell_entry');
     assert.equal(f.calls[0].body.outcome, 'already');
   });
 
-  it('granted: оверлей, системный запрос, потом proceed', async () => {
-    const { store, body } = installDoc();
+  it('granted: системный запрос без оверлея, потом proceed', async () => {
+    const { store, body, mem } = installDoc();
     const f = makeFetch('https://t.me/bot?start=x');
     const tg = makeTg({ answer: true });
     assert.equal(await WA.entryGate(tg, { fetch: f }), 'proceed');
     assert.equal(tg.requests, 1);
     assert.equal(store.size, 0);
     assert.equal(body.classList._c.has('glide-entry-gate-on'), false);
+    assert.equal(mem.glide_entry_write_ok, '1');
+    assert.equal(tg.initDataUnsafe.user.allows_write_to_pm, true);
     assert.equal(f.calls[0].body.outcome, 'granted');
   });
 
-  it('denied: остаёмся на экране (промис не резолвится сразу), кнопка бота', async () => {
+  it('повторный вход после granted: без запроса и без оверлея', async () => {
+    const { store, mem } = installDoc();
+    mem.glide_entry_write_ok = '1';
+    const f = makeFetch();
+    const tg = makeTg({ answer: false });
+    assert.equal(await WA.entryGate(tg, { fetch: f }), 'proceed');
+    assert.equal(tg.requests, 0);
+    assert.equal(store.size, 0);
+    assert.equal(f.calls.length, 0);
+  });
+
+  it('denied: оверлей после отказа, кнопка бота', async () => {
     installDoc();
     const f = makeFetch('https://t.me/bot?start=x');
     const tg = makeTg({ answer: false });
@@ -275,7 +302,6 @@ describe('entryGate', () => {
     assert.ok(overlay);
     const bot = overlay.querySelector('[data-act="bot"]');
     assert.equal(bot.hidden, false);
-    // cleanup: grant via retry
     tg.requestWriteAccess = (cb) => cb(true);
     overlay.querySelector('[data-act="allow"]').click();
     await p;
@@ -283,6 +309,7 @@ describe('entryGate', () => {
   });
 
   it('не Telegram: proceed', async () => {
+    installDoc();
     assert.equal(await WA.entryGate(makeTg({ noInitData: true })), 'proceed');
   });
 });

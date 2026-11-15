@@ -35,6 +35,38 @@
   var COPY_ENTRY_ALLOW = 'Разрешить сообщения';
   var COPY_ENTRY_RETRY = 'Повторить';
   var ENTRY_GATE_ID = 'glide-entry-gate';
+  /** После granted/already — не спрашиваем снова при переходах между страницами Mini App. */
+  var ENTRY_OK_KEY = 'glide_entry_write_ok';
+
+  function entryOkStored() {
+    try {
+      var ss = root && root.sessionStorage;
+      return !!(ss && ss.getItem(ENTRY_OK_KEY) === '1');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markEntryOk() {
+    try {
+      var ss = root && root.sessionStorage;
+      if (ss) ss.setItem(ENTRY_OK_KEY, '1');
+    } catch (e) {
+      /* private mode */
+    }
+  }
+
+  /** Telegram часто не сразу ставит allows_write_to_pm в initData после колбэка. */
+  function rememberWriteGranted(tg) {
+    markEntryOk();
+    try {
+      if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        tg.initDataUnsafe.user.allows_write_to_pm = true;
+      }
+    } catch (e) {
+      /* noop */
+    }
+  }
 
   function getTg() {
     return root && root.Telegram && root.Telegram.WebApp ? root.Telegram.WebApp : null;
@@ -259,116 +291,130 @@
 
   /**
    * Жёсткий вход: Mini App без права писать не пускаем дальше.
-   * Резолвится только ``proceed`` (уже можно / только что разрешили). Без «Позже».
+   * Сначала только системный диалог Telegram (без нашего оверлея). Оверлей — если отказали
+   * или метод недоступен. После proceed в sessionStorage, чтобы не мигать на каждом табе.
    */
   function entryGate(tg, opts) {
     opts = opts || {};
+    if (entryOkStored()) return Promise.resolve('proceed');
     var state = writeAccessState(tg);
     if (state === 'not_telegram') return Promise.resolve('proceed');
     if (state === 'already') {
+      rememberWriteGranted(tg);
       reportOutcome(tg, 'shell_entry', 'already', {}, opts);
       return Promise.resolve('proceed');
     }
 
-    return new Promise(function (resolve) {
-      var doc = root && root.document;
-      if (!doc || !doc.body) {
-        resolve('proceed');
-        return;
-      }
-
-      removeEntryOverlay();
-      doc.body.classList.add('glide-entry-gate-on');
-      var overlay = doc.createElement('div');
-      overlay.id = ENTRY_GATE_ID;
-      overlay.className = 'glide-entry-gate';
-      overlay.setAttribute('role', 'dialog');
-      overlay.setAttribute('aria-modal', 'true');
-      overlay.innerHTML =
-        '<div class="glide-entry-gate__card">' +
-        '<div class="glide-entry-gate__title"></div>' +
-        '<p class="glide-entry-gate__text"></p>' +
-        '<button type="button" class="glide-entry-gate__btn glide-entry-gate__btn--pri" data-act="allow"></button>' +
-        '<button type="button" class="glide-entry-gate__btn glide-entry-gate__btn--sec" data-act="bot" hidden></button>' +
-        '</div>';
-      overlay.querySelector('.glide-entry-gate__title').textContent = COPY_ENTRY_TITLE;
-      overlay.querySelector('.glide-entry-gate__text').textContent = COPY_ENTRY_TEXT;
-      var allowBtn = overlay.querySelector('[data-act="allow"]');
-      var botBtn = overlay.querySelector('[data-act="bot"]');
-      allowBtn.textContent = COPY_ENTRY_ALLOW;
-      botBtn.textContent = COPY_OPEN_BOT_BUTTON;
-      doc.body.appendChild(overlay);
-
-      var botLink = null;
-      var busy = false;
-
-      function showBotPath() {
-        botBtn.hidden = false;
-        allowBtn.textContent = COPY_ENTRY_RETRY;
-      }
-
-      function finish() {
-        removeEntryOverlay();
-        resolve('proceed');
-      }
-
-      function ask() {
-        if (busy) return;
-        busy = true;
-        allowBtn.disabled = true;
-        var current = writeAccessState(tg);
-        if (current === 'already') {
-          reportOutcome(tg, 'shell_entry', 'already', {}, opts);
-          finish();
+    function showBlockedOverlay(initialOutcome) {
+      return new Promise(function (resolve) {
+        var doc = root && root.document;
+        if (!doc || !doc.body) {
+          resolve('proceed');
           return;
         }
-        if (current === 'unsupported') {
-          return withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(
-            function (res) {
-              botLink = res && res.bot_link ? res.bot_link : botLink;
-              showBotPath();
-              busy = false;
-              allowBtn.disabled = false;
-            }
-          );
+
+        removeEntryOverlay();
+        doc.body.classList.add('glide-entry-gate-on');
+        var overlay = doc.createElement('div');
+        overlay.id = ENTRY_GATE_ID;
+        overlay.className = 'glide-entry-gate';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.innerHTML =
+          '<div class="glide-entry-gate__card">' +
+          '<div class="glide-entry-gate__title"></div>' +
+          '<p class="glide-entry-gate__text"></p>' +
+          '<button type="button" class="glide-entry-gate__btn glide-entry-gate__btn--pri" data-act="allow"></button>' +
+          '<button type="button" class="glide-entry-gate__btn glide-entry-gate__btn--sec" data-act="bot"></button>' +
+          '</div>';
+        overlay.querySelector('.glide-entry-gate__title').textContent = COPY_ENTRY_TITLE;
+        overlay.querySelector('.glide-entry-gate__text').textContent = COPY_ENTRY_TEXT;
+        var allowBtn = overlay.querySelector('[data-act="allow"]');
+        var botBtn = overlay.querySelector('[data-act="bot"]');
+        allowBtn.textContent = COPY_ENTRY_RETRY;
+        botBtn.textContent = COPY_OPEN_BOT_BUTTON;
+        botBtn.hidden = false;
+        doc.body.appendChild(overlay);
+
+        var botLink = null;
+        var busy = false;
+
+        function finish() {
+          rememberWriteGranted(tg);
+          removeEntryOverlay();
+          resolve('proceed');
         }
-        return requestWriteAccess(tg).then(function (outcome) {
-          if (outcome === 'unsupported') {
-            return withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(
-              function (res) {
-                botLink = res && res.bot_link ? res.bot_link : botLink;
-                showBotPath();
-                busy = false;
-                allowBtn.disabled = false;
-              }
-            );
-          }
-          reportOutcome(tg, 'shell_entry', outcome, {}, opts);
-          if (outcome === 'granted') {
+
+        function afterUnsupported(res) {
+          botLink = res && res.bot_link ? res.bot_link : botLink;
+          busy = false;
+          allowBtn.disabled = false;
+        }
+
+        function ask() {
+          if (busy) return;
+          busy = true;
+          allowBtn.disabled = true;
+          var current = writeAccessState(tg);
+          if (current === 'already' || entryOkStored()) {
+            reportOutcome(tg, 'shell_entry', 'already', {}, opts);
             finish();
             return;
           }
-          showBotPath();
-          busy = false;
-          allowBtn.disabled = false;
-        });
-      }
-
-      allowBtn.addEventListener('click', function () {
-        ask();
-      });
-      botBtn.addEventListener('click', function () {
-        if (botLink) openBotChat(tg, botLink);
-        else {
-          withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(function (res) {
-            botLink = res && res.bot_link ? res.bot_link : null;
-            if (botLink) openBotChat(tg, botLink);
+          if (current === 'unsupported') {
+            return withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(
+              afterUnsupported
+            );
+          }
+          return requestWriteAccess(tg).then(function (outcome) {
+            if (outcome === 'unsupported') {
+              return withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(
+                afterUnsupported
+              );
+            }
+            reportOutcome(tg, 'shell_entry', outcome, {}, opts);
+            if (outcome === 'granted') {
+              finish();
+              return;
+            }
+            busy = false;
+            allowBtn.disabled = false;
           });
         }
-      });
 
-      // Сразу системный диалог; если отказали — остаёмся на экране без «пропустить».
-      ask();
+        allowBtn.addEventListener('click', function () {
+          ask();
+        });
+        botBtn.addEventListener('click', function () {
+          if (botLink) openBotChat(tg, botLink);
+          else {
+            withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(function (res) {
+              botLink = res && res.bot_link ? res.bot_link : null;
+              if (botLink) openBotChat(tg, botLink);
+            });
+          }
+        });
+
+        if (initialOutcome === 'unsupported') {
+          withTimeout(reportOutcome(tg, 'shell_entry', 'unsupported', {}, opts), LINK_WAIT_MS).then(afterUnsupported);
+        } else {
+          reportOutcome(tg, 'shell_entry', initialOutcome || 'denied', {}, opts);
+        }
+      });
+    }
+
+    if (state === 'unsupported') {
+      return showBlockedOverlay('unsupported');
+    }
+
+    // Системный запрос без нашего экрана — оверлей только если отказали.
+    return requestWriteAccess(tg).then(function (outcome) {
+      if (outcome === 'granted') {
+        rememberWriteGranted(tg);
+        reportOutcome(tg, 'shell_entry', 'granted', {}, opts);
+        return 'proceed';
+      }
+      return showBlockedOverlay(outcome === 'unsupported' ? 'unsupported' : 'denied');
     });
   }
 
