@@ -36,6 +36,7 @@ def render_site_footer_html(
     telegram_href: str | None = None,
     show_telegram_button: bool = True,
     show_app_button: bool = True,
+    show_disclaimer: bool = True,
 ) -> str:
     """HTML футера для подстановки в ``__SITE_FOOTER__``.
 
@@ -45,6 +46,9 @@ def render_site_footer_html(
     Кнопка «Приложение» закреплена внизу экрана на каждой странице с подвалом и ссылкой
     в Telegram. ``show_app_button=False`` — когда у страницы своя нижняя панель (каток
     с «Позвать»): кнопка тогда живёт в ней.
+
+    ``show_disclaimer=False`` — у страницы есть свежий штамп «Проверено DD.MM» (TASK-424):
+    оговорка «Расписание может меняться» ему противоречит.
     """
     year = datetime.now(timezone.utc).year
     profile = public_telegram_href()
@@ -126,8 +130,8 @@ def render_site_footer_html(
         f'<hr class="b-site-foot__rule" />'
         f'<div class="b-site-foot__meta">'
         f'<p class="b-site-foot__copy">© Glide {_esc(year)}</p>'
-        f'<p class="b-site-foot__disclaimer">{_esc(disclaimer)}</p>'
-        f"</div>"
+        + (f'<p class="b-site-foot__disclaimer">{_esc(disclaimer)}</p>' if show_disclaimer else "")
+        + f"</div>"
         f"</div>"
         f"</div>"
         f"</footer>"

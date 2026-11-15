@@ -746,6 +746,41 @@ def og_description(view: Mapping[str, Any]) -> str:
 _SEARCH_DESCRIPTION_MAX = 160
 
 
+def _brief_description(
+    view: Mapping[str, Any],
+    *,
+    slots: Sequence[Mapping[str, Any]],
+    visit: Mapping[str, Any],
+    currency: str,
+    where_tail: str,
+) -> str:
+    """TASK-424: у катков Минска описание начинается со строки-ответа, затем цены.
+
+    Строка без дат и «сегодня», поэтому годится для выдачи, которую поисковик держит неделями.
+    Не влезает в 160 знаков — сначала уходит адрес, потом «Билеты онлайн».
+    """
+    if not _brief_on(view) or _seo_rink_title(view, _city(view["card"])) is False:
+        return ""
+    from src.application.place_visit_blocks import search_bits
+    from src.application.rink_brief import schedule_line
+
+    line = schedule_line(slots, today=view["today"])
+    if not line:
+        return ""
+    bits = search_bits(visit, currency=currency, slots=list(slots), with_services=False)
+    tail = f" {where_tail}." if where_tail else ""
+    candidates = [
+        " ".join([line, *(f"{b}." for b in bits)]) + tail,
+        " ".join([line, *(f"{b}." for b in bits)]),
+        " ".join([line, *(f"{b}." for b in bits[:1])]),
+        line,
+    ]
+    for text in candidates:
+        if len(text) <= _SEARCH_DESCRIPTION_MAX:
+            return text
+    return ""
+
+
 def search_description(view: Mapping[str, Any]) -> str:
     """meta description для поисковика — без дат и счётчиков.
 
@@ -770,6 +805,9 @@ def search_description(view: Mapping[str, Any]) -> str:
             head = f"{head}. " + ". ".join(bits) if bits else "Расписание массового катания на неделю, цены и как добраться"
             return f"{head}. {where_tail}." if where_tail else f"{head}."
 
+        answer = _brief_description(view, slots=slots, visit=visit, currency=currency, where_tail=where_tail)
+        if answer:
+            return answer
         full = _compose(True)
         # Сниппет Google режет около 160 знаков: длинный список услуг уступает адресу и ценам.
         return full if len(full) <= _SEARCH_DESCRIPTION_MAX else _compose(False)
@@ -1267,11 +1305,16 @@ def _place_hub_footer_links(*, city: str, city_page_url: str | None, public_skat
     )
 
 
-def _place_site_footer(city_link: str, *, telegram_href: str | None, own_dock: bool = False) -> str:
+def _place_site_footer(
+    city_link: str, *, telegram_href: str | None, own_dock: bool = False, show_disclaimer: bool = True
+) -> str:
     from src.application.public_site_footer import render_site_footer_html
 
     return render_site_footer_html(
-        context_html=city_link, telegram_href=telegram_href, show_app_button=not own_dock
+        context_html=city_link,
+        telegram_href=telegram_href,
+        show_app_button=not own_dock,
+        show_disclaimer=show_disclaimer,
     )
 
 
@@ -1344,7 +1387,10 @@ def render_place_page(
         "__STYLE_V__": STYLE_VERSION,
         "__COMPONENTS_V__": COMPONENTS_VERSION,
         "__SITE_FOOTER__": _place_site_footer(
-            city_link, telegram_href=cta_url, own_dock=_place_has_share_dock(view)
+            city_link,
+            telegram_href=cta_url,
+            own_dock=_place_has_share_dock(view),
+            show_disclaimer=place_proof_stamp(view) is None,
         ),
         "__BODY__": body,
         "__PLACE_SHARE_BAR__": _place_share_bar_html(view, invite=invite, telegram_url=cta_url),
@@ -1729,6 +1775,7 @@ def _b_day_strip(
     invite: bool,
     common: str,
     dark: bool = False,
+    nosnippet: bool = False,
 ) -> str:
     """Полоса дней недели и билеты дня — без JS (#якорь + :target), как в Mini App.
 
@@ -1810,7 +1857,9 @@ def _b_day_strip(
             day_klass += " b-day--current"
         sched_bits.append(f'<a class="{day_klass}" id="{frag}" href="#{frag}">{inner}</a>')
         sched_bits.append(f'<div class="b-daypane"><div class="b-tickets">{tickets}</div></div>')
-    return f'<nav class="b-sched" aria-label="День">{"".join(sched_bits)}</nav>'
+    # TASK-424: «сегодня», «завтра» и билеты дня — не для сниппета (там, где секция открыта поисковику).
+    snippet = " data-nosnippet" if nosnippet else ""
+    return f'<nav class="b-sched" aria-label="День"{snippet}>{"".join(sched_bits)}</nav>'
 
 
 def _place_currency(card: Mapping[str, Any], slots: Sequence[Mapping[str, Any]] | None = None) -> str:
@@ -1836,7 +1885,9 @@ def _place_visit(view: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
-def _b_buy_pill(view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[str, Any]) -> str:
+def _b_buy_pill(
+    view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[str, Any], *, nosnippet: bool = False
+) -> str:
     """Кнопка онлайн-кассы в шапке блока «На льду».
 
     Касса «только в день сеанса», а сегодня сеансов нет — кнопка сначала открывает шторку:
@@ -1883,7 +1934,8 @@ def _b_buy_pill(view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[s
     return (
         f'<a class="b-buypill" href="{_esc(href)}"{blank_attrs} {buy_track} data-sameday-open>'
         f"{label}{icon_svg('external')}</a>"
-        '<dialog class="b-sheet" id="sameDaySheet" aria-labelledby="sameDayTitle">'
+        + ("<div data-nosnippet>" if nosnippet else "")
+        + '<dialog class="b-sheet" id="sameDaySheet" aria-labelledby="sameDayTitle">'
         '<div class="b-sheet__in" tabindex="-1" autofocus>'
         '<button type="button" class="b-sheet__x" data-sheet-close aria-label="Закрыть">'
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>'
@@ -1893,11 +1945,66 @@ def _b_buy_pill(view: Mapping[str, Any], links: Mapping[str, Any], vv: Mapping[s
         f"{remind}"
         f'<a class="b-sheet__alt" href="{_esc(href)}"{blank_attrs} {buy_track}>Всё равно открыть сайт кассы</a>'
         "</div></dialog>"
-        "<script>(function(){var d=document.getElementById('sameDaySheet');"
+        + ("</div>" if nosnippet else "")
+        + "<script>(function(){var d=document.getElementById('sameDaySheet');"
         "var a=document.querySelector('[data-sameday-open]');if(!d||!a||!d.showModal)return;"
         "a.addEventListener('click',function(e){e.preventDefault();d.showModal();});"
         "d.addEventListener('click',function(e){if(e.target===d||e.target.closest('[data-sheet-close]'))d.close();});"
         "})();</script>"
+    )
+
+
+def _brief_on(view: Mapping[str, Any]) -> bool:
+    """TASK-424: строка-ответ и штамп — только у катков городов из ``RINK_BRIEF_CITIES``."""
+    from src.application.rink_brief import brief_enabled
+
+    card = view.get("card")
+    if not isinstance(card, Mapping) or not _skating(card) or _ice_without_public_skate(card):
+        return False
+    city = _city(card)
+    return bool(city) and brief_enabled(city_slug(city))
+
+
+def place_proof_stamp(view: Mapping[str, Any]):
+    """Штамп «Проверено DD.MM» — только у города из списка, при сеансах и свежих данных."""
+    if not _brief_on(view) or not any(d.get("sessions") for d in view.get("days") or []):
+        return None
+    from src.application.rink_brief import proof_stamp
+
+    now = view.get("now") if isinstance(view.get("now"), datetime) else datetime.now(timezone.utc)
+    return proof_stamp(view["card"].get("freshness"), now=now)
+
+
+_BRIEF_GLUE = re.compile(r"(?<=\s)(с|до|в|по|или|и) (?=\d)")
+
+
+def _brief_html(text: str) -> str:
+    """Предлог не отрывается от времени на переносе: «с&nbsp;10:15», «по&nbsp;45 минут»."""
+    return _BRIEF_GLUE.sub(r"\1&nbsp;", _esc(text))
+
+
+def _b_proof(view: Mapping[str, Any]) -> str:
+    """«✓ Проверено 16.11 на сайте катка» — над днями, под data-nosnippet (дата не для сниппета)."""
+    stamp = place_proof_stamp(view)
+    if stamp is None:
+        return ""
+    from src.application.empty_state_telemetry import SURFACE_PLACE, track_attrs
+    from src.application.rink_brief import GOAL_PROOF_SOURCE_CLICK
+
+    card = view["card"]
+    text = _esc(f"Проверено {stamp.day_label}")
+    source = safe_external_url(stamp.source_url)
+    if source:
+        arena_id = int(card["id"]) if card.get("id") is not None else None
+        track = track_attrs(GOAL_PROOF_SOURCE_CLICK, surface=SURFACE_PLACE, arena_id=arena_id)
+        text += (
+            f' на&nbsp;<a href="{_esc(source)}" rel="noopener nofollow" target="_blank" {track}>сайте катка</a>'
+        )
+    # data-nosnippet Google понимает только на span/div/section — поэтому div, а не p.
+    return (
+        '<div class="b-proof" data-nosnippet>'
+        '<svg class="b-proof__ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        f'<path d="M20 6 9 17l-5-5"/></svg><span>{text}</span></div>'
     )
 
 
@@ -1922,10 +2029,19 @@ def _b_schedule_parts(
     mode = normalize_schedule_mode(card.get("schedule_mode"))
     days = list(view.get("days") or [])
     line = ticket_line_html(vv)
+    brief = _brief_on(view)
     if mode == SCHEDULE_MODE_SEASON_CLOSED:
         reopen = _parse_iso_date(card.get("schedule_reopen_date"))
         text = season_closed_user_line(reopen_date=reopen, note=card.get("schedule_mode_note"))
-        return title, f'<p class="b-text">{_esc(text)}</p>', ""
+        body = f'<p class="b-text">{_esc(text)}</p>'
+        if brief and reopen is None:
+            # TASK-424: «когда откроется» — честно «не знаем» и подписка, а не пустота.
+            from src.application.rink_brief import SEASON_NO_DATE_LINE
+
+            body += f'<p class="b-note">{_esc(SEASON_NO_DATE_LINE)}</p>'
+            if links.get("watch"):
+                body += _b_schedule_watch(str(links["watch"]), label=t("schedule.bell_cta"))
+        return title, body, ""
     if card.get("in_season") is False:
         return None
     if not days:
@@ -1946,15 +2062,25 @@ def _b_schedule_parts(
         watch = _b_schedule_watch(str(href))
     strip = _b_day_strip(view, by_date, frag_prefix="d", base_path=base_path, invite=invite, common=common)
     currency = _place_currency(card, all_slots)
-    prices = prices_html(all_slots, vv, currency=currency)
+    lead = proof = weekend = ""
+    if brief:
+        from src.application.rink_brief import schedule_line, weekend_price_note
+
+        answer = schedule_line(all_slots, today=view["today"])
+        lead = f'<p class="b-brief">{_brief_html(answer)}</p>' if answer else ""
+        weekend = weekend_price_note(all_slots, currency=currency) or ""
+        proof = _b_proof(view)
+    prices = prices_html(all_slots, vv, currency=currency, extra_sum=weekend)
     foot: list[str] = []
     zovi = zovi_entry_path(view)
     if zovi:
         foot.append(f'<a class="b-link" href="{_esc(zovi)}">{_esc(t("share.card"))}</a>')
     links_row = f'<div class="b-links">{"".join(foot)}</div>' if foot else ""
     # Подписка под билетами дня: не встаёт между выбором дня и сеансами.
-    body = f"{prices}{line}<div data-glide-session-list-root>{strip}{watch}{links_row}</div>"
-    return title, body, _b_buy_pill(view, links, vv)
+    # TASK-424: строка-ответ открыта сниппету, сеансы и штамп с датой — нет.
+    root = "<div data-glide-session-list-root data-nosnippet>" if brief else "<div data-glide-session-list-root>"
+    body = f"{lead}{prices}{line}{proof}{root}{strip}{watch}{links_row}</div>"
+    return title, body, _b_buy_pill(view, links, vv, nosnippet=brief)
 
 
 def _b_schedule(
@@ -1971,7 +2097,9 @@ def _b_schedule(
     if parts is None:
         return ""
     title, body, aside = parts
-    return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule", nosnippet=True)
+    return section(
+        title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule", nosnippet=not _brief_on(view)
+    )
 
 
 def _b_kind_parts(
@@ -2007,7 +2135,11 @@ def _b_kind_parts(
             aside_bits.append(f"{minutes} мин")
     except ValueError:
         pass
-    strip = _b_day_strip(view, by_date, frag_prefix=frag_prefix, base_path=base_path, invite=invite, common=price, dark=dark)
+    brief = _brief_on(view)
+    strip = _b_day_strip(
+        view, by_date, frag_prefix=frag_prefix, base_path=base_path, invite=invite, common=price, dark=dark,
+        nosnippet=brief,
+    )
     notes: list[str] = []
     for slot in slots:
         for key in ("age_note", "capacity_note", "price_note"):
@@ -2015,6 +2147,15 @@ def _b_kind_parts(
             if note and note not in notes:
                 notes.append(note)
     notes_html = f'<p class="b-note">{_esc(" ".join(notes))}</p>' if notes else ""
+    if brief:
+        # TASK-424: у ОХМ сначала ответ «когда» и правила (экипировка, возраст), потом билеты.
+        lead = ""
+        if days_key == "ohm_days":
+            from src.application.rink_brief import ohm_line
+
+            answer = ohm_line(slots, today=view["today"])
+            lead = f'<p class="b-brief">{_brief_html(answer)}</p>' if answer else ""
+        return f"{lead}{notes_html}{strip}", " · ".join(aside_bits)
     return f"{strip}{notes_html}", " · ".join(aside_bits)
 
 
@@ -2068,7 +2209,9 @@ def _b_ice(
         return ""
     if not extras:
         title, body, aside = skate  # type: ignore[misc]
-        return section(title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule", nosnippet=True)
+        return section(
+            title, body, aside_html=aside, klass="b-sec--place", sec_id="schedule", nosnippet=not _brief_on(view)
+        )
     if skate is None and len(extras) == 1:
         key, label, extra_body, extra_aside = extras[0]
         aside = f'<span class="b-aside">{_esc(extra_aside)}</span>' if extra_aside else ""
