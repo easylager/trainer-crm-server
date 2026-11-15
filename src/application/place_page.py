@@ -746,6 +746,41 @@ def og_description(view: Mapping[str, Any]) -> str:
 _SEARCH_DESCRIPTION_MAX = 160
 
 
+def _brief_description(
+    view: Mapping[str, Any],
+    *,
+    slots: Sequence[Mapping[str, Any]],
+    visit: Mapping[str, Any],
+    currency: str,
+    where_tail: str,
+) -> str:
+    """TASK-424: у катков Минска описание начинается со строки-ответа, затем цены.
+
+    Строка без дат и «сегодня», поэтому годится для выдачи, которую поисковик держит неделями.
+    Не влезает в 160 знаков — сначала уходит адрес, потом «Билеты онлайн».
+    """
+    if not _brief_on(view) or _seo_rink_title(view, _city(view["card"])) is False:
+        return ""
+    from src.application.place_visit_blocks import search_bits
+    from src.application.rink_brief import schedule_line
+
+    line = schedule_line(slots, today=view["today"])
+    if not line:
+        return ""
+    bits = search_bits(visit, currency=currency, slots=list(slots), with_services=False)
+    tail = f" {where_tail}." if where_tail else ""
+    candidates = [
+        " ".join([line, *(f"{b}." for b in bits)]) + tail,
+        " ".join([line, *(f"{b}." for b in bits)]),
+        " ".join([line, *(f"{b}." for b in bits[:1])]),
+        line,
+    ]
+    for text in candidates:
+        if len(text) <= _SEARCH_DESCRIPTION_MAX:
+            return text
+    return ""
+
+
 def search_description(view: Mapping[str, Any]) -> str:
     """meta description для поисковика — без дат и счётчиков.
 
@@ -770,6 +805,9 @@ def search_description(view: Mapping[str, Any]) -> str:
             head = f"{head}. " + ". ".join(bits) if bits else "Расписание массового катания на неделю, цены и как добраться"
             return f"{head}. {where_tail}." if where_tail else f"{head}."
 
+        answer = _brief_description(view, slots=slots, visit=visit, currency=currency, where_tail=where_tail)
+        if answer:
+            return answer
         full = _compose(True)
         # Сниппет Google режет около 160 знаков: длинный список услуг уступает адресу и ценам.
         return full if len(full) <= _SEARCH_DESCRIPTION_MAX else _compose(False)

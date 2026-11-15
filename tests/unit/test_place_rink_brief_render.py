@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from src.application import place_page
-from src.application.place_page import render_place_page
+from src.application.place_page import render_place_page, search_description
 
 TODAY = date(2026, 11, 16)  # понедельник
 NOW = datetime(2026, 11, 16, 7, 0, tzinfo=timezone.utc)  # 10:00 по Минску
@@ -214,3 +214,25 @@ def test_region_pages_are_byte_identical_to_the_gate_off_path(city: str, kw: dic
         assert 'id="schedule" data-nosnippet' in html
     monkeypatch.setattr(place_page, "_brief_on", lambda view: False)
     assert _render(_view(city, **kw)) == html
+
+
+def test_minsk_description_leads_with_answer_line_and_fits() -> None:
+    text = search_description(_view("Минск"))
+    assert text.startswith("Каждый день 13 сеансов по 45 минут — каждый час с 10:15 до 22:15. ")
+    assert "Вход от 10 BYN" in text
+    assert len(text) <= 160
+    assert not re.search(r"сегодня|завтра|\d{1,2}\.\d{2}|\b(ноя|дек)", text, re.I)
+
+
+@pytest.mark.parametrize("city", REGIONS)
+def test_region_description_unchanged(city: str, monkeypatch) -> None:
+    text = search_description(_view(city))
+    assert text.startswith("Расписание массового катания на неделю. ")
+    monkeypatch.setattr(place_page, "_brief_on", lambda view: False)
+    assert search_description(_view(city)) == text
+
+
+def test_minsk_without_sessions_keeps_old_description() -> None:
+    view = _view("Минск")
+    view.update(days=[], session_count=0, next_slot=None)
+    assert search_description(view).startswith("Расписание массового катания на неделю")
