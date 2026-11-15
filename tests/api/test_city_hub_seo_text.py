@@ -86,9 +86,11 @@ async def test_minsk_hub_has_server_blocks(app_use_test_db, db_session) -> None:
     assert "взрослый 7 BYN · детский 5 BYN" in sched.replace(" ", " ")
     assert re.search(r'<a href="/p/[^"]+/[^"]+" title="Расписание и цены: Дешёвый каток">Дешёвый каток</a>', sched)
     prices = html.split(PRICES_H2)[1].split(FAQ_H2)[0]
-    assert prices.index("Дешёвый каток") < prices.index("Дорогой каток") < prices.index("Каток без цен")
+    assert prices.index("Дешёвый каток") < prices.index("Дорогой каток")
+    assert "Каток без цен" not in prices  # ни одной цены - нет строки в таблице цен
+    assert "Каток без цен" in sched  # но в расписании остаётся
     assert "пр. Победителей, 1" in prices
-    assert prices.count("уточняйте у катка") >= 3  # у «без цен» нет ни одной цены
+    assert prices.count("уточняйте у катка") == 1  # только прокат у «Дорогого»; у «Дешёвого» все три цены
     faq = html.split(FAQ_H2)[1]
     assert "Чаще всего — 45 минут" in faq and "от 45 до 90" in faq
     assert "Где в Минске взять коньки напрокат?" in faq and "Дешёвый каток" in faq

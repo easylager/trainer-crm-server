@@ -223,6 +223,9 @@ def _prices_html(view: Mapping[str, Any], model: Mapping[str, Any], index: Mappi
     ask = '<td class="b-ptable__ask">уточняйте у катка</td>'
     rows = []
     for p in model["prices"]:
+        # Нет данных — нет строки: каток без единой цены остаётся только в блоке расписания.
+        if not any(p["floors"].get(key) for key in ("adult", "child", "rental")):
+            continue
         place = index[p["arena_id"]]
         cells = []
         for key in ("adult", "child", "rental"):
@@ -231,6 +234,8 @@ def _prices_html(view: Mapping[str, Any], model: Mapping[str, Any], index: Mappi
         addr = str(place.get("address") or "").strip()
         sub = f'<small class="b-seo__addr">{_esc(addr)}</small>' if addr else ""
         rows.append(f"<tr><td>{_link(view, place)}{sub}</td>{''.join(cells)}</tr>")
+    if not rows:
+        return ""
     head = "<tr><th>Каток</th><th>Взрослый</th><th>Детский</th><th>Прокат</th></tr>"
     note = (
         '<p class="b-more-lead">Цены — минимальные из ближайших сеансов, «от» — если на разные сеансы они разные. '
