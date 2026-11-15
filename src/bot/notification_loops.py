@@ -3469,6 +3469,12 @@ async def _extraliga_pass(pace: ExtraligaPace, health, *, alert, fallback=None) 
     return out
 
 
+async def _defer_review_alert_to_card(_text: str) -> bool:
+    """Текстовый алерт ``check_due_results`` не шлём: ``False`` не ставит ``review_alerted_at``, карточку отправит
+    ``notify_new_reviews`` сразу после тика."""
+    return False
+
+
 async def run_hockey_matches_loop() -> None:
     """Каждые 10 минут, в окно итога — каждые 2. Молчит, пока HOCKEY_MATCHES_ENABLED выключен.
 
@@ -3519,10 +3525,21 @@ async def run_hockey_matches_loop() -> None:
                         session,
                         default_fetch,
                         now=now,
-                        alert=send_review_alert,
+                        alert=_defer_review_alert_to_card,
                         calendar_due=calendar_due,
                     )
                     await session.commit()
+                    # Матч Динамо на проверке: админу приходит карточка с кнопками (принять / поправить / отменить),
+                    # а не текстовый алерт; флаг «алерт был» ставит сама карточка (один раз на матч).
+                    from src.application.hockey_review import (
+                        notify_auto_finals,
+                        notify_new_reviews,
+                        send_card_to_admins,
+                    )
+
+                    await notify_new_reviews(async_session_factory, now=now, send=send_card_to_admins)
+                    # Автоматический итог Динамо — админу сообщение «Итог записан…» с кнопками (один раз на матч).
+                    await notify_auto_finals(async_session_factory, now=now, send=send_card_to_admins)
                     if await result_window_open(session, now=now):
                         delay = HOCKEY_RESULT_WINDOW_INTERVAL_SEC
                 # Сообщения бота «Кто кого» (TASK-334 S6) — после коммита: гонка уже закрыта, если был финал.

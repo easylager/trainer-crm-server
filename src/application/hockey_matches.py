@@ -456,6 +456,11 @@ def validate_result(home_score: int, away_score: int, decided_in: str) -> None:
 
 DECIDED_TECHNICAL = "technical"
 
+_RELEASE_HOLD = text("""
+    UPDATE hockey_matches SET result_probe = result_probe - 'hold_until' - 'hold_reminded_at'
+    WHERE id = :id AND result_probe->>'hold_until' IS NOT NULL
+    """)
+
 _CANCEL = text("""
     UPDATE hockey_matches
     SET status = 'cancelled', review_reason = :reason, home_score = NULL, away_score = NULL, decided_in = NULL,
@@ -491,8 +496,17 @@ async def set_manual_result(
     if decided_in == DECIDED_TECHNICAL:
         return await cancel_match(session, match_id, reason="technical", now=now)
     validate_result(home_score, away_score, decided_in)
-    if await get_match(session, match_id) is None:
+    previous = await get_match(session, match_id)
+    if previous is None:
         raise LookupError(match_id)
+    if previous.status == STATUS_FINAL and previous.home_score is not None and previous.away_score is not None:
+        # Поправка уже опубликованного итога: игрокам, получившим старый счёт, уйдёт исправление. Очереди пишем до
+        # пересчёта очков (в них ещё старые), сама рассылка — отдельным циклом (hockey_notices).
+        from src.application.hockey_notices import queue_rescore
+
+        await queue_rescore(
+            session, match_id, old=(previous.home_score, previous.away_score), new=(home_score, away_score)
+        )
     await session.execute(
         _FINAL,
         {
@@ -504,6 +518,8 @@ async def set_manual_result(
             "now": _utc(now),
         },
     )
+    # Правка применена: удержание рассылки (кнопка «Поправить» у админа) снимается.
+    await session.execute(_RELEASE_HOLD, {"id": match_id})
     row = await get_match(session, match_id)
     assert row is not None
     return row
@@ -763,6 +779,8 @@ async def _confirm_final(session: AsyncSession, row: MatchRow, decision: Decisio
     """
     now = _utc(now)
     old = (await session.execute(_PROBE_GET, {"id": row.id})).scalar_one_or_none()
+    if old and (old.get("first_seen_at") is None or old.get("home") is None):
+        old = None  # в probe только пояснение источников для карточки админа (``_note_sources``), не опрос
     sticky = bool(old) and bool(old.get("conflict"))
     if sticky:
         # Опросы уже расходились: автоматического итога больше нет, решает человек. Свежий вариант пишем в probe
@@ -807,6 +825,71 @@ async def _confirm_final(session: AsyncSession, row: MatchRow, decision: Decisio
             f"стал {decision.home_score}:{decision.away_score} ({decision.decided_in})"
         ),
     )
+
+
+_PROBE_NOTE = text("""
+    UPDATE hockey_matches SET result_probe = COALESCE(result_probe, CAST('{}' AS jsonb)) || CAST(:note AS jsonb)
+    WHERE id = :id AND COALESCE(result_probe->>'sources', '') <> :sources
+    """)
+
+
+def sources_human(page: HcdinamoMatch | None, confirm: TickerResult | None, trace: dict) -> str:
+    """Что показал каждый источник — по-человечески, для карточки админа."""
+    lines = []
+    if page is None:
+        lines.append("hcdinamo.by: страница недоступна")
+    elif page.home_score is None:
+        lines.append("hcdinamo.by: счёта нет")
+    else:
+        lines.append(f"hcdinamo.by: {page.home_score}:{page.away_score}")
+    if confirm is None:
+        lines.append("hockey.by: матча в ленте нет")
+    else:
+        state = "матч завершён" if confirm.completed else "матч ещё не завершён"
+        lines.append(f"hockey.by: {confirm.points[0]}:{confirm.points[1]}, {state}")
+    table, page_sm = trace.get("sm_table"), trace.get("sm_page")
+    if table is None and page_sm is None:
+        lines.append("sportmail.ru: нет данных")
+    else:
+        part = f"таблица {table[0]}:{table[1]}" if table and table[0] is not None else "в таблице счёта нет"
+        if page_sm is not None:
+            part += ", страница: " + ("матч завершён" if page_sm[2] else "идёт" if page_sm[3] else "не завершён")
+        lines.append("sportmail.ru: " + part)
+    return "\n".join(lines)
+
+
+async def _note_sources(session: AsyncSession, row: MatchRow, sources: str) -> None:
+    """Запомнить для карточки админа, что показали источники, не трогая сам опрос в ``result_probe``."""
+    await session.execute(_PROBE_NOTE, {"id": row.id, "note": json.dumps({"sources": sources}), "sources": sources})
+
+
+def confirmation_human(
+    page: HcdinamoMatch | None, confirm: TickerResult | None, trace: dict, decision: Decision
+) -> str:
+    """Кто подтвердил итог — по-человечески, для сообщения админу об автоматическом итоге."""
+    ours = (decision.home_score, decision.away_score)
+    parts = []
+    if page is not None and page.looks_final and (page.home_score, page.away_score) == ours:
+        parts.append("hcdinamo.by")
+    if confirm is not None and confirm.completed:
+        parts.append("hockey.by")
+    sm_page = trace.get("sm_page")
+    if sm_page is not None and sm_page[2]:
+        parts.append("страница матча sportmail.ru")
+    if not parts:
+        parts.append("sportmail.ru")
+    who = " и ".join(parts) + (" совпали" if len(parts) > 1 else " подтвердил завершение")
+    return f"Источники: {who} (подтверждено двумя опросами)."
+
+
+_PROBE_CONFIRMED = text("""
+    UPDATE hockey_matches SET result_probe = COALESCE(result_probe, CAST('{}' AS jsonb)) || CAST(:note AS jsonb)
+    WHERE id = :id
+    """)
+
+
+async def _note_confirmation(session: AsyncSession, row: MatchRow, confirmed_by: str) -> None:
+    await session.execute(_PROBE_CONFIRMED, {"id": row.id, "note": json.dumps({"confirmed_by": confirmed_by})})
 
 
 def _sources_line(page: HcdinamoMatch | None, confirm: TickerResult | None, trace: dict) -> str:
@@ -913,6 +996,10 @@ async def check_due_results(
         decision = decide_result(page, ticker, starts_at=row.starts_at, now=now)
         proposed = await _sportmail_decision(row, decision, page, ticker, sportmail, fetch, now=now, trace=trace)
         decision = await _confirm_final(session, row, proposed, now=now)
+        if decision.kind == KIND_FINAL:
+            await _note_confirmation(session, row, confirmation_human(page, _find_ticker(ticker, row.starts_at), trace, decision))
+        if decision.kind == KIND_REVIEW:
+            await _note_sources(session, row, sources_human(page, _find_ticker(ticker, row.starts_at), trace))
         # Путь решения в логе: кто что показал и почему итог принят/отложен (разбор инцидента 15.11.2026).
         logger.info(
             "hockey result: match=%s %s — %s kind=%s (предложено %s, через %s) %s%s | %s",
