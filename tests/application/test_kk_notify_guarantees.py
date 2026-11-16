@@ -346,6 +346,8 @@ def test_g5_defaults_are_closed(monkeypatch) -> None:
         monkeypatch.delenv(name, raising=False)
     cfg = GateConfig.from_settings()
     assert (cfg.enabled, cfg.dry_run, cfg.texts_accepted) == (False, True, False)
+    bare = GateConfig()
+    assert (bare.enabled, bare.dry_run, bare.texts_accepted) == (False, True, False)
     assert cfg.kinds == frozenset() and cfg.whitelist == frozenset()
 
 
