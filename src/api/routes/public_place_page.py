@@ -454,7 +454,9 @@ async def place_story_image(
 # ---------------------------------------------------------------------------
 
 # Видимость — тот же предикат, что у списка и карточки (TASK-177). Свой фильтр не копируем.
-# lastmod места — что новее: правка профиля или начало самого позднего сеанса.
+# lastmod места — что новее: правка профиля или последнее подтверждение расписания источником
+# (ice_sessions.observed_at). Начало будущего сеанса — не правка: раньше оно упиралось в «сейчас»
+# и менялось на каждом запросе. Нет ни того, ни другого — lastmod не пишем.
 _SITEMAP_SQL = text(f"""
     SELECT c.name AS city_name, p.slug, a.venue_type,
            GREATEST(p.updated_at, sess.last_at) AS lastmod
@@ -462,7 +464,7 @@ _SITEMAP_SQL = text(f"""
     JOIN arena_profiles p ON p.arena_id = a.id
     JOIN cities c ON c.id = a.city_id
     LEFT JOIN (
-        SELECT arena_id, MAX(starts_at_utc) AS last_at
+        SELECT arena_id, MAX(observed_at) AS last_at
         FROM ice_sessions
         GROUP BY arena_id
     ) sess ON sess.arena_id = a.id
@@ -531,10 +533,20 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
         from src.application.winter_page import winter_city_path
 
         now = datetime.now(timezone.utc)
+        winter_city_stamp, winter_point_stamp = await winter_public.sitemap_stamps(session, now=now)
         for city_name in await winter_public.cities_with_points(session, now=now):
-            winter_urls.append((f"{base}{winter_city_path(city_name)}", "daily", None, "0.6"))
+            winter_urls.append(
+                (f"{base}{winter_city_path(city_name)}", "daily", winter_city_stamp.get(city_name), "0.6")
+            )
         for point in await winter_public.sitemap_points(session, now=now):
-            winter_urls.append((place_page_url(base_url=base, city_name=point["city"], slug=point["slug"]), "daily", None, "0.5"))
+            winter_urls.append(
+                (
+                    place_page_url(base_url=base, city_name=point["city"], slug=point["slug"]),
+                    "daily",
+                    winter_point_stamp.get(point["slug"]),
+                    "0.5",
+                )
+            )
     urls: list[tuple[str, str, datetime | None, str | None]] = [
         (f"{base}/", "daily", site_stamp, "1.0"),
         # Без lastmod: свежесть катков к лендингу отношения не имеет, а ложная дата
@@ -772,7 +784,7 @@ async def _city_hub(
     slug = city_slug(city_name)
     if city_ref != slug:
         return RedirectResponse(url=f"/c/{slug}" + (f"?w={when}" if when else ""), status_code=301)
-    view = await load_city_hub_view(session, city=city, window=when or "auto")
+    view = await load_city_hub_view(session, city=city, window=when or "auto", seo_text=True)
     # TASK-354: единый блок «Учиться с тренером» и пункты меню — из данных каталога города.
     from src.application.site_learn_block import hockey_count, learn_block, load_learn_data
 

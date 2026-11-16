@@ -1,0 +1,11 @@
+{
+  "arena_id": 28,
+  "source": "Instagram-сторис led_arena_basseyn, 2026-11-16: массовое катание 16.11.26 14:30-15:15. Цен в прошлых сеансах катка нет, не выдумываем.",
+  "defaults": {
+    "kind": "public_skate",
+    "duration_minutes": 45
+  },
+  "sessions": [
+    {"date": "2026-11-16", "start": "14:30"}
+  ]
+}

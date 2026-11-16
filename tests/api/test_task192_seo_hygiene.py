@@ -64,12 +64,12 @@ async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_
         text("UPDATE arena_profiles SET updated_at = :ts WHERE arena_id = :id"),
         {"ts": profile_stamp, "id": newer["arena_id"]},
     )
-    session_stamp = (
-        await db_session.execute(
-            text("SELECT MAX(starts_at_utc) FROM ice_sessions WHERE arena_id = :id"),
-            {"id": older["arena_id"]},
-        )
-    ).scalar_one()
+    # Расписание подтверждено источником 5 ноября; будущее начало сеанса датой правки не считается.
+    observed = datetime(2026, 11, 5, 9, 30, tzinfo=timezone.utc)
+    await db_session.execute(
+        text("UPDATE ice_sessions SET observed_at = :ts WHERE arena_id = :id"),
+        {"ts": observed, "id": older["arena_id"]},
+    )
     trainer_id = await _insert_bare_trainer(db_session)
     hidden_name = f"Скрытск {uuid.uuid4().hex[:4]}"
     hidden_city = await _insert_city(db_session, name=hidden_name)
@@ -103,13 +103,17 @@ async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_
 
     older_block = _url_block(xml, older["path"])
     newer_block = _url_block(xml, newer["path"])
-    # Обе метки — в будущем (сеанс через 3 дня, профиль в 2099): lastmod не позже «сейчас».
-    assert session_stamp > datetime.now(timezone.utc) and profile_stamp > datetime.now(timezone.utc)
-    for block in (older_block, newer_block):
-        found = re.search(r"<lastmod>([^<]+)</lastmod>", block)
-        assert found
-        stamp = datetime.strptime(found.group(1), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        assert stamp <= datetime.now(timezone.utc)
+    # older: профиль 2020, расписание подтверждено 05.11 -> lastmod = подтверждение, а не «сейчас».
+    assert "<lastmod>2026-11-05T09:30:00Z</lastmod>" in older_block
+    # newer: профиль «из 2099» — не позже «сейчас»; без подтверждений расписания берётся только профиль.
+    found = re.search(r"<lastmod>([^<]+)</lastmod>", newer_block)
+    assert found
+    stamp = datetime.strptime(found.group(1), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    assert stamp <= datetime.now(timezone.utc)
+    # Повторный запрос даёт ту же дату: lastmod не плавает вместе с часами.
+    async with _client() as client2:
+        xml2 = (await client2.get("/sitemap.xml")).text
+    assert _url_block(xml2, older["path"]) == older_block
     city_block = _url_block(xml, f"/c/{city_slug(older['city_name'])}")
     assert "<lastmod>" in city_block
     # TASK-266: старый адрес «Лёд сегодня» — 301 на список, в sitemap его нет.

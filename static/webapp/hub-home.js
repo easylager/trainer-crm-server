@@ -490,9 +490,10 @@
     root.setAttribute('aria-label', 'Кто кого');
     if (pick && pick.side) {
       var mine = m[pick.side] || {};
-      var row = link(el('a', 'hn__card'), 'kto-kogo');
-      row.style.flexDirection = 'row';
-      row.style.alignItems = 'center';
+      /* Та же компактная карточка, что у матчей ленты: в ячейке в 82% ширины колонка текста между логотипом
+         и жёлтой плашкой была ~100px и строки переносились до четырёх, поэтому по одной строке, время первым (оно важнее соперника), плашка на краю. */
+      var row = link(el('a', 'hn__card hn__ev'), 'kto-kogo');
+      var rival = (pick.side === 'home' ? m.away : m.home) || {};
       var logo = el('span', 'hn__logo');
       if (mine.logo) {
         var img = el('img');
@@ -502,11 +503,16 @@
       } else logo.textContent = mine.short || '';
       row.appendChild(logo);
       var what = el('span', 'hn__what');
-      what.appendChild(el('span', 'hn__name', 'Ты за ' + clubName(mine.name)));
-      what.appendChild(el('span', 'hn__sub', clubName(m.home.name) + ' — ' + clubName(m.away.name) + ', ' + whenLabel(m.starts_at)));
+      what.appendChild(el('span', 'hn__name hn__name--one hn__name--mine', 'Ты за ' + clubName(mine.name)));
+      what.appendChild(el('span', 'hn__sub hn__name--one', whenLabel(m.starts_at) + ' · ' + clubName(rival.name)));
       row.appendChild(what);
       var hasScore = pick.home_score != null;
-      row.appendChild(el('span', 'hn__chip', card.mode === 'waiting' ? 'Ждём итог' : hasScore ? pick.home_score + ':' + pick.away_score : 'Какой счёт?'));
+      var tagText = card.mode === 'waiting' ? 'ЖДЁМ ИТОГ' : hasScore ? pick.home_score + ':' + pick.away_score : 'КАКОЙ СЧЁТ?';
+      row.setAttribute('aria-label', 'Ты за ' + clubName(mine.name) + ', ' + clubName(m.home.name) + ' — ' + clubName(m.away.name) + ', ' + whenLabel(m.starts_at) + ', ' + tagText.toLowerCase());
+      var tag = el('span', 'hn__tag');
+      tag.setAttribute('aria-hidden', 'true');
+      tag.appendChild(doc.createTextNode(tagText));
+      row.appendChild(tag);
       host.replaceChildren(row);
       return;
     }

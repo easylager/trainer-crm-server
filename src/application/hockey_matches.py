@@ -12,6 +12,7 @@ hockey.by — вместе с тем, как решён матч (основно
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -67,10 +68,22 @@ RESULT_AUTO = "auto"
 RESULT_MANUAL = "manual"
 
 # Матч КХЛ в основное время с перерывами — 2 ч 05–2 ч 20, с овертаймом и буллитами — до 2 ч 45.
-# Итог публикуется только при совпадении двух источников, поэтому искать рано безопасно.
-RESULT_CHECK_AFTER = timedelta(hours=1, minutes=50)
-# Не подтвердилось к этому сроку (≈30 мин после самых долгих буллитов) — зовём человека.
-REVIEW_AFTER = timedelta(hours=3, minutes=15)
+# 15.11.2026 итог Торпедо — Динамо пришёл на 1 ч 50 мин, в третьем периоде (идущий матч принят за сыгранный).
+# До 2 ч 15 мин источники ради итога не опрашиваем: рано — значит риск принять промежуточный счёт.
+# Поздно тоже дёшево: клиенту итог приходит через минуты после этого порога, а не «в момент свистка».
+RESULT_CHECK_AFTER = timedelta(hours=2, minutes=15)
+# Итог принимается после двух одинаковых опросов не ближе друг к другу, чем это время. Цикл в окне итога тикает
+# раз в 2 минуты, так что флаг «завершён» от одного случайного ответа или кэша страницы пары не даст: нужно,
+# чтобы источник держал тот же счёт и способ окончания десять минут подряд (по образцу ``extraliga.RESULT_STABLE_AFTER``,
+# но короче: у Динамо два независимых источника, а не один). Дольше нельзя — клиенты ждут итог.
+DINAMO_STABLE_AFTER = timedelta(minutes=10)
+# Самый долгий матч (овертайм + буллиты + задержки) заканчивается к ~2 ч 50 мин; первое согласное чтение — там,
+# второе — через ``DINAMO_STABLE_AFTER`` (≈3 ч 00 мин). До 3 ч 30 мин человека не зовём: запас на сбой одного
+# источника на пару тиков. Не подтвердилось — зовём человека.
+REVIEW_AFTER = timedelta(hours=3, minutes=30)
+# Быстрый цикл (2 мин) держим ещё на время подтверждения после REVIEW_AFTER: иначе пара опросов при 10-минутном
+# цикле растянулась бы до 20 минут.
+RESULT_HOT_EXTRA = timedelta(minutes=20)
 # Сезон КХЛ: сентябрь–апрель. Пустой календарь в сезон — сломанный разбор, а не перерыв.
 SEASON_MONTHS = frozenset({9, 10, 11, 12, 1, 2, 3, 4})
 # Лента hockey.by держит матчи за пару дней — дальше автоматом не подтвердить.
@@ -121,7 +134,16 @@ def decide_result(
     starts_at: datetime,
     now: datetime,
 ) -> Decision:
-    """Чистое решение по одному матчу: ждать, публиковать итог или звать человека."""
+    """Чистое решение по одному матчу: ждать, публиковать итог или звать человека.
+
+    Единое правило для всех веток (и для ``_sportmail_decision``): ``KIND_FINAL`` — это только предложение итога, и оно
+    возможно лишь при независимом подтверждении «матч завершён» от источника, который отличает завершённый матч
+    от идущего: hockey.by (класс ``hsc-completed``) или страница матча sportmail.ru («Матч завершен»).
+    НЕ подтверждение: ``looks_final`` страницы hcdinamo.by (у идущего третьего периода он тоже истинен), счёт
+    в таблице sportmail.ru (у идущего матча он уже стоит), совпадение двух живых счётов, живой счёт из тикера.
+    Само предложение публикуется только после второго такого же опроса не раньше ``DINAMO_STABLE_AFTER``
+    (``_confirm_final``); ручной ввод админа сильнее и закрывает без проверки.
+    """
     starts_at, now = _utc(starts_at), _utc(now)
     if now < starts_at + RESULT_CHECK_AFTER:
         return Decision(KIND_WAIT)
@@ -434,6 +456,11 @@ def validate_result(home_score: int, away_score: int, decided_in: str) -> None:
 
 DECIDED_TECHNICAL = "technical"
 
+_RELEASE_HOLD = text("""
+    UPDATE hockey_matches SET result_probe = result_probe - 'hold_until' - 'hold_reminded_at'
+    WHERE id = :id AND result_probe->>'hold_until' IS NOT NULL
+    """)
+
 _CANCEL = text("""
     UPDATE hockey_matches
     SET status = 'cancelled', review_reason = :reason, home_score = NULL, away_score = NULL, decided_in = NULL,
@@ -469,8 +496,17 @@ async def set_manual_result(
     if decided_in == DECIDED_TECHNICAL:
         return await cancel_match(session, match_id, reason="technical", now=now)
     validate_result(home_score, away_score, decided_in)
-    if await get_match(session, match_id) is None:
+    previous = await get_match(session, match_id)
+    if previous is None:
         raise LookupError(match_id)
+    if previous.status == STATUS_FINAL and previous.home_score is not None and previous.away_score is not None:
+        # Поправка уже опубликованного итога: игрокам, получившим старый счёт, уйдёт исправление. Очереди пишем до
+        # пересчёта очков (в них ещё старые), сама рассылка — отдельным циклом (hockey_notices).
+        from src.application.hockey_notices import queue_rescore
+
+        await queue_rescore(
+            session, match_id, old=(previous.home_score, previous.away_score), new=(home_score, away_score)
+        )
     await session.execute(
         _FINAL,
         {
@@ -482,6 +518,8 @@ async def set_manual_result(
             "now": _utc(now),
         },
     )
+    # Правка применена: удержание рассылки (кнопка «Поправить» у админа) снимается.
+    await session.execute(_RELEASE_HOLD, {"id": match_id})
     row = await get_match(session, match_id)
     assert row is not None
     return row
@@ -549,9 +587,9 @@ _HOT = text("""
 
 
 async def result_window_open(session: AsyncSession, *, now: datetime) -> bool:
-    """Идёт окно поиска итога (от RESULT_CHECK_AFTER до REVIEW_AFTER) — цикл ходит чаще."""
+    """Идёт окно поиска итога (от RESULT_CHECK_AFTER до REVIEW_AFTER + RESULT_HOT_EXTRA) — цикл ходит чаще."""
     now = _utc(now)
-    params = {"hot_from": now - RESULT_CHECK_AFTER, "hot_to": now - REVIEW_AFTER}
+    params = {"hot_from": now - RESULT_CHECK_AFTER, "hot_to": now - REVIEW_AFTER - RESULT_HOT_EXTRA}
     return (await session.execute(_HOT, params)).first() is not None
 
 
@@ -632,13 +670,20 @@ async def _sportmail_decision(
     fetch: Fetch,
     *,
     now: datetime,
+    trace: dict | None = None,
 ) -> Decision:
     """Запасной источник на месте недоступного основного (TASK-364). Нужно, чтобы итог подтверждали два чтения.
 
-    * есть страница hcdinamo.by, нет hockey.by → sportmail.ru подтверждает вместо ленты;
-    * есть лента hockey.by, нет страницы → sportmail.ru даёт счёт вместо страницы;
+    * есть страница hcdinamo.by, нет завершённого матча в hockey.by → sportmail.ru подтверждает вместо ленты;
+    * есть завершённый матч в hockey.by, нет страницы → sportmail.ru даёт счёт вместо страницы;
     * нет обоих → sportmail.ru читаем дважды: таблица команды и страница самого матча («Матч завершен»).
-    Любое расхождение — на ручную проверку; если sportmail.ru тоже молчит, решение остаётся прежним.
+
+    Правило одно (см. ``decide_result``): «завершён» говорит только завершённый матч hockey.by или страница матча
+    sportmail.ru с ``is_played``. Счёт в таблице sportmail.ru и ``looks_final`` hcdinamo.by — не признак конца:
+    без hockey.by страница матча sportmail.ru запрашивается всегда. Любое расхождение — на ручную проверку;
+    если sportmail.ru молчит или не подтвердил «завершён», решение остаётся прежним.
+
+    ``trace`` (если дан) заполняется тем, что показал sportmail.ru, — для строки лога в ``check_due_results``.
     """
     starts_at, now = _utc(row.starts_at), _utc(now)
     if decision.kind == KIND_FINAL or now < starts_at + RESULT_CHECK_AFTER:
@@ -650,17 +695,21 @@ async def _sportmail_decision(
     if candidate is not None and confirm is not None:
         return decision  # оба основных есть: их решение (в том числе расхождение) окончательное
     match = _sportmail_for(row, await sportmail.matches())
+    if trace is not None:
+        trace["sm_table"] = None if match is None else (match.home_score, match.away_score, match.decided_in)
     if match is None or not match.played or (match.home == DINAMO) != (row.home_team == DINAMO):
         return decision
-    if candidate is None and confirm is None:
-        # Основные источники молчат. В таблице sportmail.ru счёт стоит и у идущего матча (без «(ОТ)»/«(Бул)»), поэтому
-        # «сыгран» решает страница матча («Матч завершен»), а не наличие счёта: иначе ничья 0:0 в игре
-        # уходила бы на ручную проверку, а промежуточный счёт — в итог.
+    if confirm is None:
+        # Завершённого матча в hockey.by нет. В таблице sportmail.ru счёт стоит и у идущего матча (без «(ОТ)»/«(Бул)»),
+        # и hcdinamo.by в третьем периоде тоже «выглядит итоговым» — поэтому «сыгран» решает только страница матча
+        # («Матч завершен»), всегда, а не наличие счёта в таблице. Иначе 15.11.2026 идущий матч ушёл в итог на 1 ч 50 мин.
         try:
             second = parse_sportmail_match(await fetch(sportmail_match_url(match.source_match_id)))
         except Exception:
             logger.warning("sportmail match %s failed", match.source_match_id, exc_info=True)
             return decision
+        if trace is not None:
+            trace["sm_page"] = (second.home_score, second.away_score, second.is_played, second.is_online)
         if not second.is_played or (second.home_score, second.away_score) != (match.home_score, match.away_score):
             return decision
     ours = (match.home_score, match.away_score, match.decided_in)
@@ -669,6 +718,8 @@ async def _sportmail_decision(
     except ValueError as exc:
         return Decision(KIND_REVIEW, reason=f"sportmail.ru: {exc}")
     final = Decision(KIND_FINAL, home_score=match.home_score, away_score=match.away_score, decided_in=match.decided_in)
+    if trace is not None:
+        trace["via"] = "sportmail"
     if candidate is not None:
         if (candidate.home_score, candidate.away_score, candidate.decided_in) == ours:
             return final
@@ -693,7 +744,162 @@ async def _sportmail_decision(
             KIND_REVIEW,
             reason=f"счёт не совпал: hockey.by {theirs[0]}:{theirs[1]}, sportmail.ru {ours[0]}:{ours[1]}",
         )
-    return final  # страница матча уже подтвердила «сыгран» и счёт выше
+    return final  # страница матча sportmail.ru уже подтвердила «сыгран» и счёт выше
+
+
+_PROBE_GET = text("SELECT result_probe FROM hockey_matches WHERE id = :id")
+
+_PROBE_SET = text("""
+    UPDATE hockey_matches SET result_probe = CAST(:probe AS jsonb), updated_at = :now WHERE id = :id
+    """)
+
+_PROBE_CLEAR = text("UPDATE hockey_matches SET result_probe = NULL, updated_at = :now WHERE id = :id")
+
+
+def _probe_of(decision: Decision, now: datetime) -> dict:
+    return {
+        "home": decision.home_score,
+        "away": decision.away_score,
+        "decided_in": decision.decided_in,
+        "first_seen_at": now.isoformat(),
+    }
+
+
+async def _confirm_final(session: AsyncSession, row: MatchRow, decision: Decision, *, now: datetime) -> Decision:
+    """Отложенное подтверждение: итог уходит в базу только со второго такого же предложения, не раньше
+    ``DINAMO_STABLE_AFTER`` после первого (``result_probe`` — как у Экстралиги, миграции не нужно).
+
+    * не ``KIND_FINAL`` → запомненный опрос сбрасывается: пары должны идти подряд, а не через сбой;
+    * первое предложение → запоминаем, ждём;
+    * тот же счёт и способ, прошло ≥ ``DINAMO_STABLE_AFTER`` → ``KIND_FINAL``; раньше — ждём;
+    * иначе (счёт или способ изменились) → ``KIND_REVIEW`` с причиной, свежий опрос запоминается с флагом
+      ``conflict``: дальше итог автоматически не публикуется никогда (липкая ручная проверка), probe и причина
+      лишь обновляются для карточки админа. Обычный ``review`` «нет итога к REVIEW_AFTER» флага не имеет:
+      если источники потом подтвердят (пара опросов), итог по-прежнему публикуется сам.
+    """
+    now = _utc(now)
+    old = (await session.execute(_PROBE_GET, {"id": row.id})).scalar_one_or_none()
+    if old and (old.get("first_seen_at") is None or old.get("home") is None):
+        old = None  # в probe только пояснение источников для карточки админа (``_note_sources``), не опрос
+    sticky = bool(old) and bool(old.get("conflict"))
+    if sticky:
+        # Опросы уже расходились: автоматического итога больше нет, решает человек. Свежий вариант пишем в probe
+        # и причину — карточка админа показывает актуальное; сам флаг ``conflict`` не сбрасывается никогда.
+        if decision.kind == KIND_FINAL:
+            fresh = {**_probe_of(decision, now), "conflict": True}
+            if (fresh["home"], fresh["away"], fresh["decided_in"]) != (old.get("home"), old.get("away"), old.get("decided_in")):
+                await session.execute(_PROBE_SET, {"id": row.id, "probe": json.dumps(fresh), "now": now})
+            return Decision(
+                KIND_REVIEW,
+                reason=(
+                    "итог менялся между опросами, нужна ручная проверка; последнее чтение: "
+                    f"{decision.home_score}:{decision.away_score} ({decision.decided_in})"
+                ),
+            )
+        return decision
+    if decision.kind != KIND_FINAL:
+        if old:
+            await session.execute(_PROBE_CLEAR, {"id": row.id, "now": now})
+        return decision
+    fresh = _probe_of(decision, now)
+    if not old:
+        await session.execute(_PROBE_SET, {"id": row.id, "probe": json.dumps(fresh), "now": now})
+        return Decision(KIND_WAIT, reason="итог увиден один раз, ждём второго такого же опроса")
+    if (old.get("home"), old.get("away"), old.get("decided_in")) == (
+        decision.home_score,
+        decision.away_score,
+        decision.decided_in,
+    ):
+        try:
+            first = _utc(datetime.fromisoformat(old["first_seen_at"]))
+        except (KeyError, TypeError, ValueError):
+            first = now
+        if now - first >= DINAMO_STABLE_AFTER:
+            return decision
+        return Decision(KIND_WAIT, reason="итог увиден повторно, но прошло меньше интервала подтверждения")
+    await session.execute(_PROBE_SET, {"id": row.id, "probe": json.dumps({**fresh, "conflict": True}), "now": now})
+    return Decision(
+        KIND_REVIEW,
+        reason=(
+            f"итог менялся между опросами: был {old.get('home')}:{old.get('away')} ({old.get('decided_in')}), "
+            f"стал {decision.home_score}:{decision.away_score} ({decision.decided_in})"
+        ),
+    )
+
+
+_PROBE_NOTE = text("""
+    UPDATE hockey_matches SET result_probe = COALESCE(result_probe, CAST('{}' AS jsonb)) || CAST(:note AS jsonb)
+    WHERE id = :id AND COALESCE(result_probe->>'sources', '') <> :sources
+    """)
+
+
+def sources_human(page: HcdinamoMatch | None, confirm: TickerResult | None, trace: dict) -> str:
+    """Что показал каждый источник — по-человечески, для карточки админа."""
+    lines = []
+    if page is None:
+        lines.append("hcdinamo.by: страница недоступна")
+    elif page.home_score is None:
+        lines.append("hcdinamo.by: счёта нет")
+    else:
+        lines.append(f"hcdinamo.by: {page.home_score}:{page.away_score}")
+    if confirm is None:
+        lines.append("hockey.by: матча в ленте нет")
+    else:
+        state = "матч завершён" if confirm.completed else "матч ещё не завершён"
+        lines.append(f"hockey.by: {confirm.points[0]}:{confirm.points[1]}, {state}")
+    table, page_sm = trace.get("sm_table"), trace.get("sm_page")
+    if table is None and page_sm is None:
+        lines.append("sportmail.ru: нет данных")
+    else:
+        part = f"таблица {table[0]}:{table[1]}" if table and table[0] is not None else "в таблице счёта нет"
+        if page_sm is not None:
+            part += ", страница: " + ("матч завершён" if page_sm[2] else "идёт" if page_sm[3] else "не завершён")
+        lines.append("sportmail.ru: " + part)
+    return "\n".join(lines)
+
+
+async def _note_sources(session: AsyncSession, row: MatchRow, sources: str) -> None:
+    """Запомнить для карточки админа, что показали источники, не трогая сам опрос в ``result_probe``."""
+    await session.execute(_PROBE_NOTE, {"id": row.id, "note": json.dumps({"sources": sources}), "sources": sources})
+
+
+def confirmation_human(
+    page: HcdinamoMatch | None, confirm: TickerResult | None, trace: dict, decision: Decision
+) -> str:
+    """Кто подтвердил итог — по-человечески, для сообщения админу об автоматическом итоге."""
+    ours = (decision.home_score, decision.away_score)
+    parts = []
+    if page is not None and page.looks_final and (page.home_score, page.away_score) == ours:
+        parts.append("hcdinamo.by")
+    if confirm is not None and confirm.completed:
+        parts.append("hockey.by")
+    sm_page = trace.get("sm_page")
+    if sm_page is not None and sm_page[2]:
+        parts.append("страница матча sportmail.ru")
+    if not parts:
+        parts.append("sportmail.ru")
+    who = " и ".join(parts) + (" совпали" if len(parts) > 1 else " подтвердил завершение")
+    return f"Источники: {who} (подтверждено двумя опросами)."
+
+
+_PROBE_CONFIRMED = text("""
+    UPDATE hockey_matches SET result_probe = COALESCE(result_probe, CAST('{}' AS jsonb)) || CAST(:note AS jsonb)
+    WHERE id = :id
+    """)
+
+
+async def _note_confirmation(session: AsyncSession, row: MatchRow, confirmed_by: str) -> None:
+    await session.execute(_PROBE_CONFIRMED, {"id": row.id, "note": json.dumps({"confirmed_by": confirmed_by})})
+
+
+def _sources_line(page: HcdinamoMatch | None, confirm: TickerResult | None, trace: dict) -> str:
+    """Что показал каждый источник — для строки лога решения."""
+    hcd = "нет" if page is None else f"{page.home_score}:{page.away_score} looks_final={page.looks_final}"
+    tick = "нет" if confirm is None else f"{confirm.points[0]}:{confirm.points[1]} completed={confirm.completed}"
+    return (
+        f"hcdinamo={hcd}; hockey.by={tick}; sportmail.table={trace.get('sm_table')}; "
+        f"sportmail.page(home,away,is_played,is_online)={trace.get('sm_page')}"
+    )
 
 
 class _SportmailCache:
@@ -786,8 +992,27 @@ async def check_due_results(
         except Exception:
             logger.warning("hockey results: match %s failed", row.source_match_id, exc_info=True)
             page = None
+        trace: dict = {"via": "hcdinamo+hockey.by"}
         decision = decide_result(page, ticker, starts_at=row.starts_at, now=now)
-        decision = await _sportmail_decision(row, decision, page, ticker, sportmail, fetch, now=now)
+        proposed = await _sportmail_decision(row, decision, page, ticker, sportmail, fetch, now=now, trace=trace)
+        decision = await _confirm_final(session, row, proposed, now=now)
+        if decision.kind == KIND_FINAL:
+            await _note_confirmation(session, row, confirmation_human(page, _find_ticker(ticker, row.starts_at), trace, decision))
+        if decision.kind == KIND_REVIEW:
+            await _note_sources(session, row, sources_human(page, _find_ticker(ticker, row.starts_at), trace))
+        # Путь решения в логе: кто что показал и почему итог принят/отложен (разбор инцидента 15.11.2026).
+        logger.info(
+            "hockey result: match=%s %s — %s kind=%s (предложено %s, через %s) %s%s | %s",
+            row.id,
+            row.home_team,
+            row.away_team,
+            decision.kind,
+            proposed.kind,
+            trace["via"] if proposed.kind == KIND_FINAL else "-",
+            f"{decision.home_score}:{decision.away_score} {decision.decided_in}" if decision.kind == KIND_FINAL else "",
+            f" причина: {decision.reason}" if decision.reason else "",
+            _sources_line(page, _find_ticker(ticker, row.starts_at), trace),
+        )
         # Матч уже на проверке: причина обновится, второго алерта не будет (review_alerted_at).
         if await apply_decision(session, row, decision, now=now):
             delivered = await alert(format_review_alert(row, decision.reason))

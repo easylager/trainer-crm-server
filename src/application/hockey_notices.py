@@ -65,6 +65,7 @@ KIND_OVERTOOK = "overtook"
 KIND_MFINAL = "mfinal"
 KIND_MOVED = "moved"
 KIND_MOVED_FREE = "mvfree"
+KIND_RESCORE = "rescore"  # итог поправили после рассылки: «Мы ошиблись с итогом…»
 KIND_BEFORE = "before"  # прежнее «за час»: больше не шлём, записи остались в таблице
 # Приоритет внутри дневного бюджета (меньше — важнее).
 PRIORITY = {KIND_MFINAL: 0, KIND_OVERTOOK: 1, KIND_NOMOVE: 2}
@@ -91,6 +92,10 @@ FAN_WINDOW = timedelta(days=30)
 # Итог шлём, пока он свежий; ночной итог, отложенный до 09:00, остаётся свежим и утром.
 RESULT_FRESH = timedelta(hours=6)
 RESULT_FRESH_AFTER_NIGHT = timedelta(hours=16)
+# Итог уходит в чат не раньше, чем через столько после ``finalized_at``: ошибочный итог (15.11.2026 матч ушёл
+# в итог в третьем периоде) успевают поймать и поправить до рассылки. Цикл в окне итога тикает раз в 2 минуты,
+# так что 5 минут — это пара тиков для второго взгляда, а клиент ждёт итог на пять минут дольше, чем раньше.
+RESULT_SEND_DELAY = timedelta(minutes=5)
 QUIET_FROM, QUIET_TO = 23, 9
 MFINAL_FROM_HOUR = 12
 # В «корону решится сегодня» зовём тех, у кого она ещё в досягаемости.
@@ -331,6 +336,10 @@ _DUE_RESULT = text(f"""
     JOIN hockey_players AS pl ON pl.player_key = p.player_key
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = p.player_key
     JOIN game_matches AS m ON m.id = p.match_id AND m.status = 'final' AND m.finalized_at > :fresh
+                                  AND m.finalized_at <= :ready
+         -- админ нажал «Поправить» и ещё не закончил: рассылку держим до ``hold_until`` (hockey_review.HOLD_FOR)
+         AND (m.result_probe->>'hold_until' IS NULL
+              OR CAST(m.result_probe->>'hold_until' AS TIMESTAMPTZ) <= :ready_now)
     WHERE {_ELIGIBLE} AND COALESCE(pr.notify_result, true) AND p.points IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM hockey_notices AS n
@@ -358,7 +367,7 @@ _MFINAL_FANS = text(f"""
 
 _SENT_TODAY = text("""
     SELECT DISTINCT player_key FROM hockey_notices
-    WHERE sent_at >= :since AND sent_at < :until AND kind NOT IN ('result', 'moved', 'mvfree')
+    WHERE sent_at >= :since AND sent_at < :until AND kind NOT IN ('result', 'moved', 'mvfree', 'rescore')
     """)
 
 _HAS_PICK = text("SELECT 1 FROM hockey_picks WHERE match_id = :match_id AND player_key = :player_key")
@@ -699,7 +708,7 @@ async def _invite_code(session: AsyncSession, league_id: int) -> str:
 async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) -> list[Notice]:
     fresh = now - (RESULT_FRESH if _local(now).hour >= 15 else RESULT_FRESH_AFTER_NIGHT)
     by_player: dict[int, list] = {}
-    for r in (await session.execute(_DUE_RESULT, {"fresh": _utc(fresh)})).all():
+    for r in (await session.execute(_DUE_RESULT, {"fresh": _utc(fresh), "ready": _utc(now) - RESULT_SEND_DELAY, "ready_now": _utc(now)})).all():
         by_player.setdefault(r.player_key, []).append(r)
     out: list[Notice] = []
     for player_key, rows in by_player.items():
@@ -831,6 +840,8 @@ async def due_notices(session: AsyncSession, *, now: datetime, overtakes: Iterab
     out = await _result_notices(session, now=now, cache=cache)
     # «Перенесли матч» — событийные, вне дневного бюджета (как итоги): об отмене хода сказать обязательно.
     out += await _moved_notices(session, now=now)
+    # Исправление уже разосланного итога — тоже вне бюджета и без срока свежести: в тихие часы ждёт до 09:00.
+    out += await _rescore_notices(session)
 
     since, until = day_bounds(now)
     spent = set((await session.execute(_SENT_TODAY, {"since": since, "until": until})).scalars().all())
@@ -908,6 +919,113 @@ async def _moved_notices(session: AsyncSession, *, now: datetime) -> list[Notice
             [url_button("Открыть матч", f"{START_PICK}_{r.match_id}")],
         )
         out.append(Notice(r.kind, r.player_key, r.match_id, body, buttons, preclaimed=True))
+    return out
+
+
+# ---------- «мы ошиблись с итогом» (событие правки итога) ----------
+
+# Кому уходит исправление: игрокам, которым итог (kind='result') уже отправлен, с теми же правилами, что у самого
+# итога (главный выключатель, блок бота, тип «итоги ходов»). Старый счёт и очки фиксируются в момент правки
+# в payload: потом по базе уже не узнать, что именно было в сообщении клиенту. Один раз на игрока и матч
+# (ключ таблицы); если до отправки итог поправили ещё раз, старый счёт остаётся первым, новый читается из матча.
+_RESCORE_AUDIENCE = f"""
+    FROM hockey_notices AS n
+    JOIN hockey_players AS pl ON pl.player_key = n.player_key
+    LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = n.player_key
+    JOIN hockey_picks AS p ON p.player_key = n.player_key AND p.match_id = n.match_id
+    WHERE n.match_id = :match_id AND n.kind = 'result' AND n.sent_at IS NOT NULL
+      AND COALESCE(pr.remind, true) AND pr.bot_blocked_at IS NULL AND COALESCE(pr.notify_result, true)
+"""
+
+_RESCORE_QUEUE = text(f"""
+    INSERT INTO hockey_notices (player_key, match_id, kind, payload)
+    SELECT n.player_key, n.match_id, 'rescore',
+           jsonb_build_object('old_home', CAST(:old_home AS INT), 'old_away', CAST(:old_away AS INT),
+                              'old_points', COALESCE(p.points, 0) * CASE WHEN p.doubled THEN 2 ELSE 1 END)
+    {_RESCORE_AUDIENCE}
+    ON CONFLICT (player_key, match_id, kind) DO NOTHING
+    """)
+
+# Итог вернули к тому, что клиент уже видел (А→Б→А до отправки): исправлять нечего.
+_RESCORE_DROP_SAME = text("""
+    DELETE FROM hockey_notices
+    WHERE match_id = :match_id AND kind = 'rescore' AND sent_at IS NULL AND NOT failed
+      AND (payload->>'old_home')::int = :new_home AND (payload->>'old_away')::int = :new_away
+    """)
+
+_RESCORE_COUNT_AUDIENCE = text(f"SELECT COUNT(*) {_RESCORE_AUDIENCE}")
+
+_RESCORE_PENDING = text("""
+    SELECT COUNT(*) FROM hockey_notices WHERE match_id = :match_id AND kind = 'rescore' AND sent_at IS NULL AND NOT failed
+    """)
+
+
+async def queue_rescore(
+    session: AsyncSession, match_id: int, *, old: tuple[int, int], new: tuple[int, int]
+) -> int:
+    """Итог поправили с ``old`` на ``new``: поставить исправление тем, кто получил старый. Вызывать ДО пересчёта очков.
+
+    Тот же счёт — ничего. Возвращает, сколько игроков теперь ждут исправления."""
+    # Сначала вставка (для уже ждущих строк это no-op: в них записан счёт, который видел клиент), потом чистка строк,
+    # где «что видел клиент» совпало с новым счётом (А→Б→А до отправки).
+    if old != new:
+        await session.execute(_RESCORE_QUEUE, {"match_id": match_id, "old_home": old[0], "old_away": old[1]})
+    await session.execute(_RESCORE_DROP_SAME, {"match_id": match_id, "new_home": new[0], "new_away": new[1]})
+    return await pending_rescores(session, match_id)
+
+
+async def rescore_audience(session: AsyncSession, match_id: int) -> int:
+    """Сколько игроков получили итог и получат исправление, если счёт поменять."""
+    return int((await session.execute(_RESCORE_COUNT_AUDIENCE, {"match_id": match_id})).scalar_one())
+
+
+async def pending_rescores(session: AsyncSession, match_id: int) -> int:
+    return int((await session.execute(_RESCORE_PENDING, {"match_id": match_id})).scalar_one())
+
+
+_DUE_RESCORE = text("""
+    SELECT n.player_key, n.match_id, n.payload, m.home_team, m.away_team, m.home_score, m.away_score,
+           p.points, p.doubled
+    FROM hockey_notices AS n
+    JOIN game_matches AS m ON m.id = n.match_id AND m.status = 'final' AND m.home_score IS NOT NULL
+    JOIN hockey_picks AS p ON p.player_key = n.player_key AND p.match_id = n.match_id
+         AND p.points IS NOT NULL AND p.scored_at >= m.finalized_at
+    LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = n.player_key
+    WHERE n.kind = 'rescore' AND n.sent_at IS NULL AND NOT n.failed
+      AND COALESCE(pr.remind, true) AND pr.bot_blocked_at IS NULL AND COALESCE(pr.notify_result, true)
+    ORDER BY n.match_id, n.player_key
+    """)
+
+
+def rescore_text(
+    *, home: str, away: str, score: tuple[int, int], old_score: tuple[int, int], old_points: int, new_points: int
+) -> str:
+    body = (
+        f"Мы ошиблись с итогом: {html.escape(club_name(home))} — {html.escape(club_name(away))} "
+        f"закончился {score[0]}:{score[1]}, а не {old_score[0]}:{old_score[1]}."
+    )
+    if old_points != new_points:
+        body += f" Твои очки за матч: +{new_points}."
+    return body
+
+
+async def _rescore_notices(session: AsyncSession) -> list[Notice]:
+    out: list[Notice] = []
+    for r in (await session.execute(_DUE_RESCORE)).all():
+        payload = r.payload or {}
+        old_score = (int(payload.get("old_home", -1)), int(payload.get("old_away", -1)))
+        if old_score == (r.home_score, r.away_score):
+            continue  # итог вернули к тому, что клиент видел
+        body = rescore_text(
+            home=r.home_team,
+            away=r.away_team,
+            score=(r.home_score, r.away_score),
+            old_score=old_score,
+            old_points=int(payload.get("old_points", 0)),
+            new_points=int(r.points) * (2 if r.doubled else 1),
+        )
+        buttons = _rows([url_button("Таблица", f"{START_PICK}_{r.match_id}")], off_button(KIND_RESULT))
+        out.append(Notice(KIND_RESCORE, r.player_key, r.match_id, body, buttons, preclaimed=True))
     return out
 
 

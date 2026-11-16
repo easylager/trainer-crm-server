@@ -85,9 +85,9 @@ async def test_arena_card_page_and_assets_served(app_use_test_db) -> None:
     assert "arena?ref=" in deeplink
     assert "iceRowCta" in model.text
     assert "ticketCta" in model.text
-    # Касса — в шапке расписания и на каждом времени, а не второй липкой панелью над навигацией.
+    # Касса — на каждом времени и в нижней панели; отдельной ссылки в шапке расписания нет.
     assert "id=\"arenaTicketsCta\"" not in body
-    assert "Билеты онлайн" in js.text
+    assert "Билеты онлайн</a>" not in js.text
     assert "arena-slot-buy" in css.text
     assert "bookable: false" in model.text or "bookable:false" in model.text
     assert 'data-action="book"' not in js.text

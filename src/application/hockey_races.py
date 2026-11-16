@@ -147,6 +147,12 @@ _INSERT_CLOSURE = text("""
     RETURNING id
     """)
 
+_EXTRALIGA_CLUBS = text("""
+    SELECT home_team AS club FROM game_matches WHERE league = 'extraliga'
+    UNION
+    SELECT away_team FROM game_matches WHERE league = 'extraliga'
+    """)
+
 _SET_CROWNED = text("UPDATE hockey_closures SET crowned = :crowned WHERE id = :id")
 
 _INSERT_CROWN = text("""
@@ -228,8 +234,11 @@ async def _award(
     rows,
     now: datetime,
     manual: bool = False,
+    crowns: bool = True,
 ) -> int | None:
-    """Закрыть срез и записать короны. ``None`` — срез уже был закрыт (ничего не пишем)."""
+    """Закрыть срез и записать короны. ``None`` — срез уже был закрыт (ничего не пишем).
+
+    ``crowns=False`` — срез закрывается без наград (соперники Динамо, общая таблица)."""
     closure = (
         await session.execute(
             _INSERT_CLOSURE,
@@ -247,7 +256,7 @@ async def _award(
         return None
     # Лига — круг друзей: корону разыгрывают двое с очками; срезы «все» и «клуб» — трое.
     min_players = CROWN_MIN_PLAYERS if league_id is None else LEAGUE_CROWN_MIN_MEMBERS
-    leaders = crown_leaders(rows, min_players=min_players)
+    leaders = crown_leaders(rows, min_players=min_players) if crowns else []
     for r in leaders:
         await session.execute(
             _INSERT_CROWN,
@@ -268,6 +277,16 @@ async def _award(
     return closure
 
 
+async def crown_clubs(session: AsyncSession) -> frozenset[str]:
+    """Клубы, за которые выдаются короны и звания: «Динамо-Минск» и клубы белорусской Экстралиги.
+
+    Соперники Динамо по КХЛ в календаре есть, но срез по ним не разыгрывается; общей таблицы («все») тоже нет:
+    её срез закрывается без наград, чтобы гонка месяца закрывалась как раньше.
+    """
+    teams = (await session.execute(_EXTRALIGA_CLUBS)).scalars().all()
+    return frozenset({DINAMO, *teams})
+
+
 async def _closed_set(session: AsyncSession, *, kinds: list[str], first: datetime) -> set[tuple]:
     rows = (await session.execute(_CLOSED, {"first": first, "kinds": kinds})).all()
     return {(r.kind, _utc(r.period_start), r.club, r.league_id) for r in rows}
@@ -276,6 +295,7 @@ async def _closed_set(session: AsyncSession, *, kinds: list[str], first: datetim
 async def _close_months(session: AsyncSession, *, now: datetime, closed: list[int]) -> None:
     first, _ = month_bounds(FIRST_RACE_MONTH)
     done = await _closed_set(session, kinds=["month"], first=first)
+    eligible = await crown_clubs(session)
     for record in (await session.execute(_OPEN_RACES, {"first": first, "now": _utc(now)})).all():
         race = _race(record)
         covers = race.calendar_synced_at is not None and race.calendar_synced_at >= race.ends_at - CALENDAR_COVERS_END
@@ -297,6 +317,7 @@ async def _close_months(session: AsyncSession, *, now: datetime, closed: list[in
                 league_id=None,
                 rows=rows,
                 now=now,
+                crowns=club in eligible,
             )
             if closure is not None:
                 closed.append(closure)
@@ -409,6 +430,7 @@ async def _close_seasons(session: AsyncSession, *, now: datetime, closed: list[i
             "mleague": None,
         }
         covers = last_sync is not None and _utc(last_sync) >= season.until - CALENDAR_COVERS_END
+        eligible = await crown_clubs(session)
         for state in (await session.execute(_SLICE_STATES, params)).all():
             if ("season", season.since, state.club, None) in done or not _ready(state, now=now, covers=covers):
                 continue
@@ -428,7 +450,7 @@ async def _close_seasons(session: AsyncSession, *, now: datetime, closed: list[i
             if closure is None:
                 continue
             rows = await slice_rows(session, scope=club_scope(state.club), period=season)
-            leaders = crown_leaders(rows)
+            leaders = crown_leaders(rows) if state.club in eligible else []
             for r in leaders:
                 await session.execute(
                     _INSERT_TITLE,
@@ -492,6 +514,7 @@ async def confirm_close_month(
         rows=rows,
         now=now,
         manual=True,
+        crowns=club in await crown_clubs(session),
     )
     if closure is not None and club is None:
         await session.execute(_CLOSE_RACE, {"race_id": race.id, "now": _utc(now)})
@@ -506,6 +529,7 @@ async def pending_month_closures(session: AsyncSession, *, now: datetime, limit:
     """
     first, _ = month_bounds(FIRST_RACE_MONTH)
     done = await _closed_set(session, kinds=["month"], first=first)
+    eligible = await crown_clubs(session)
     out: list[dict] = []
     for record in (await session.execute(_OPEN_RACES, {"first": first, "now": _utc(now)})).all():
         race = _race(record)
@@ -516,6 +540,8 @@ async def pending_month_closures(session: AsyncSession, *, now: datetime, limit:
         period = Period(PERIOD_MONTH, race.starts_at, race.ends_at, "", race.title)
         for state in (await session.execute(_SLICE_STATES, params)).all():
             club = state.club
+            if club not in eligible:
+                continue  # короны по соперникам Динамо и по «всем» не выдаются
             if (KIND_MONTH, _utc(race.starts_at), club, None) in done or state.open_n or not state.finals:
                 continue
             if _ready(state, now=now, covers=True):
@@ -853,6 +879,7 @@ __all__ = [
     "Race",
     "close_due_races",
     "confirm_close_month",
+    "crown_clubs",
     "confirm_close_month_by_race",
     "crown_card_data",
     "crown_counts",

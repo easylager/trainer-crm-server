@@ -199,6 +199,8 @@ async def test_sitemap_has_indexable_winter_pages_only(on, client, db_session):
     r = await client.get("/sitemap.xml")
     xml = r.text
     assert "/c/minsk/zimoy" in xml
+    # lastmod зимней страницы города — правка сезонных записей, не пусто и не «сейчас».
+    assert re.search(r"/c/minsk/zimoy</loc><lastmod>\d{4}-\d{2}-\d{2}T[\d:]+Z</lastmod>", xml)
     assert await slug_of(db_session, good) in xml
     assert await slug_of(db_session, vague) not in xml
     assert await slug_of(db_session, hidden) not in xml

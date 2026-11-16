@@ -73,3 +73,34 @@ async def test_ice_watch_admin_pulse_counts_clicks_and_watches(db_session) -> No
     assert pulse["active"] >= 1
     assert pulse["cancelled"] >= 1
     assert pulse["new_active_7d"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_ice_watch_by_arena_counts_active_and_skips_owner_test_account(db_session) -> None:
+    from src.application.client_ice_watch_use_cases import (
+        ICE_WATCH_STATS_EXCLUDED_TELEGRAM_IDS,
+        get_ice_watch_by_arena,
+    )
+
+    city_id, arena_id, tid, client_id = await _setup(db_session)
+    owner_tid = ICE_WATCH_STATS_EXCLUDED_TELEGRAM_IDS[0]
+    owner_client = await _client(db_session, telegram_id=owner_tid)
+    cancelled_client = await _client(db_session, telegram_id=tid + 7)
+    for cid, t in ((client_id, tid), (owner_client, owner_tid), (cancelled_client, tid + 7)):
+        row = await subscribe_ice_watch(
+            db_session,
+            client_id=cid,
+            telegram_id=t,
+            arena_id=arena_id,
+            watch_kind=ICE_WATCH_KIND_SESSIONS,
+            filter_json={"when": "any", "intent": "skate"},
+            city_id=city_id,
+        )
+        if cid == cancelled_client:
+            await db_session.execute(text("UPDATE client_ice_watches SET active = false WHERE id = :id"), {"id": row["id"]})
+    await db_session.commit()
+
+    rows = await get_ice_watch_by_arena(db_session)
+    mine = [r for r in rows if r["arena_id"] == arena_id]
+    assert len(mine) == 1
+    assert mine[0]["subscribers"] == 1  # владелец и отключённая подписка не считаются

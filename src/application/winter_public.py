@@ -428,6 +428,40 @@ async def sitemap_points(session: AsyncSession, *, now: datetime) -> list[dict[s
     return out
 
 
+async def sitemap_stamps(session: AsyncSession, *, now: datetime) -> tuple[dict[str, datetime], dict[str, datetime]]:
+    """Даты последней правки зимних страниц: по городу (имя) и по точке (slug) — для sitemap.xml.
+
+    Это правка сезонной записи, её статуса или профиля, а не «сейчас». Нет даты — ключа нет.
+    """
+    rows = (
+        await session.execute(
+            text(
+                """SELECT c.name AS city_name, p.slug,
+                          GREATEST(s.updated_at, s.state_at, p.updated_at) AS stamp
+                   FROM seasonal_rink_seasons s
+                   JOIN arenas a ON a.id = s.arena_id AND a.is_active
+                   JOIN cities c ON c.id = a.city_id AND c.is_active
+                   LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                   WHERE s.season = :season AND s.state <> 'hidden'"""
+            ),
+            {"season": ws.current_season(now)},
+        )
+    ).all()
+    by_city: dict[str, datetime] = {}
+    by_slug: dict[str, datetime] = {}
+    for r in rows:
+        if r.stamp is None:
+            continue
+        name = str(r.city_name)
+        if name not in by_city or r.stamp > by_city[name]:
+            by_city[name] = r.stamp
+        if r.slug:
+            slug = str(r.slug)
+            if slug not in by_slug or r.stamp > by_slug[slug]:
+                by_slug[slug] = r.stamp
+    return by_city, by_slug
+
+
 async def cities_with_points(session: AsyncSession, *, now: datetime) -> list[str]:
     """Названия городов, где есть хотя бы одна показываемая зимняя точка (страница «Зимой в …» не пустая)."""
     rows = (

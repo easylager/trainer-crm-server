@@ -15,11 +15,12 @@ hockey.by подряд. Если опросы разошлись, метки с�
 from __future__ import annotations
 
 import html
+import json
 import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +35,7 @@ CB_ACCEPT = "hk:ok"  # hk:ok:<матч>
 CB_FIX = "hk:fix"  # hk:fix:<матч>
 CB_CANCEL = "hk:no"  # hk:no:<матч> — спросить; hk:no2:<матч> — подтвердить
 CB_CANCEL_YES = "hk:no2"
+CB_AUTO_OK = "hk:okd"  # hk:okd:<матч> — «Всё верно» под сообщением об автоматическом итоге Динамо
 CB_CLOSE_MONTH = "hk:cm"  # hk:cm:<гонка>:<клуб|->
 ALL_CLUBS = "-"
 
@@ -61,6 +63,7 @@ class ReviewItem:
     starts_at: datetime
     reason: str | None
     probe: dict | None
+    league: str = "extraliga"
 
     @property
     def probe_ready(self) -> bool:
@@ -69,21 +72,21 @@ class ReviewItem:
 
 
 _QUEUE = text("""
-    SELECT id, home_team, away_team, starts_at, review_reason AS reason, result_probe AS probe
+    SELECT id, home_team, away_team, starts_at, review_reason AS reason, result_probe AS probe, league
     FROM hockey_matches
-    WHERE league = 'extraliga' AND status = 'review'
+    WHERE status = 'review'
     ORDER BY starts_at
     LIMIT :limit
     """)
 
 _ONE = text("""
-    SELECT id, home_team, away_team, starts_at, review_reason AS reason, result_probe AS probe, status
-    FROM hockey_matches WHERE id = :id AND league = 'extraliga'
+    SELECT id, home_team, away_team, starts_at, review_reason AS reason, result_probe AS probe, league, status
+    FROM hockey_matches WHERE id = :id
     """)
 
 _UNALERTED = text("""
     SELECT id FROM hockey_matches
-    WHERE league = 'extraliga' AND status = 'review' AND review_alerted_at IS NULL
+    WHERE status = 'review' AND review_alerted_at IS NULL
     ORDER BY starts_at
     """)
 
@@ -91,7 +94,9 @@ _ALERTED = text("UPDATE hockey_matches SET review_alerted_at = :now WHERE id = :
 
 
 def _item(record) -> ReviewItem:
-    return ReviewItem(record.id, record.home_team, record.away_team, record.starts_at, record.reason, record.probe)
+    return ReviewItem(
+        record.id, record.home_team, record.away_team, record.starts_at, record.reason, record.probe, record.league
+    )
 
 
 async def review_queue(session: AsyncSession, *, limit: int = 10) -> list[ReviewItem]:
@@ -117,6 +122,8 @@ def probe_title(probe: dict | None) -> str | None:
 
 
 def review_text(item: ReviewItem) -> str:
+    if item.league != "extraliga":
+        return _dinamo_review_text(item)
     out = (
         f"<b>Экстралига: итог на проверке</b>\n"
         f"{html.escape(item.home_team)} — {html.escape(item.away_team)}, {_when(item.starts_at)}\n"
@@ -128,11 +135,31 @@ def review_text(item: ReviewItem) -> str:
     return out
 
 
+def _dinamo_review_text(item: ReviewItem) -> str:
+    """Карточка проверки матча Динамо: почему не принят сам и что показал каждый источник."""
+    out = (
+        f"<b>Динамо-Минск: итог на проверке</b>\n"
+        f"{html.escape(item.home_team)} — {html.escape(item.away_team)}, {_when(item.starts_at)}\n"
+        f"Почему не принят сам: {html.escape(item.reason or 'причина не записана')}"
+    )
+    sources = (item.probe or {}).get("sources")
+    if sources:
+        out += "\nЧто показали источники:\n" + html.escape(str(sources))
+    seen = probe_title(item.probe)
+    if seen:
+        out += f"\nПоследнее чтение источников: {seen}"
+    out += "\nМожно принять последнее чтение, ввести счёт или отменить матч."
+    return out
+
+
 def review_buttons(item: ReviewItem) -> list[list[dict]]:
     rows: list[list[dict]] = []
     if item.probe_ready:
         p = item.probe or {}
-        rows.append([{"text": f"Принять {p['home']}:{p['away']}", "callback_data": f"{CB_ACCEPT}:{item.id}"}])
+        label = f"Принять {p['home']}:{p['away']}"
+        if item.league != "extraliga":
+            label += f" ({ENDING_TITLES[p['decided_in']]})"
+        rows.append([{"text": label, "callback_data": f"{CB_ACCEPT}:{item.id}"}])
     rows.append(
         [
             {"text": "Поправить", "callback_data": f"{CB_FIX}:{item.id}"},
@@ -142,6 +169,157 @@ def review_buttons(item: ReviewItem) -> list[list[dict]]:
     return rows
 
 
+_RECENT_FINALS = text("""
+    SELECT id, home_team, away_team, starts_at, home_score, away_score, decided_in, result_source
+    FROM hockey_matches
+    WHERE status = 'final' AND finalized_at >= :since AND home_score IS NOT NULL
+    ORDER BY starts_at DESC
+    LIMIT :limit
+    """)
+
+
+async def recent_finals(session: AsyncSession, *, now: datetime, hours: int = 48, limit: int = 5) -> list:
+    from datetime import timedelta
+
+    params = {"since": now - timedelta(hours=hours), "limit": limit}
+    return list((await session.execute(_RECENT_FINALS, params)).all())
+
+
+def recent_final_text(row, delivered: int) -> str:
+    ending = ENDING_TITLES.get(row.decided_in or "", "")
+    out = (
+        f"<b>Недавний итог</b>\n"
+        f"{html.escape(row.home_team)} — {html.escape(row.away_team)}, {_when(row.starts_at)}: "
+        f"{row.home_score}:{row.away_score}" + (f" ({ending})" if ending else "")
+    )
+    if delivered:
+        out += f"\nИтог уже разослан {delivered} игрокам: поправка отправит им исправление."
+    return out + "\nОшибка? Нажмите «Поправить» и пришлите верный счёт."
+
+
+# ---------- автоматический итог Динамо: сообщение админу и удержание рассылки ----------
+
+# Пока админ правит итог (нажал «Поправить»), рассылку держим не дольше этого времени: ввод могли забросить,
+# а игра не должна зависнуть. Хватает набрать «3:2 от»; по истечении — напоминание админу и рассылка как обычно.
+HOLD_FOR = timedelta(minutes=10)
+# Сообщение об автоитоге ищем среди недавних: на первом запуске старые итоги админов не заваливают.
+AUTO_FINAL_RECENT = timedelta(hours=3)
+
+_AUTO_FINALS = text("""
+    SELECT id, home_team, away_team, home_score, away_score, decided_in, finalized_at, result_probe AS probe
+    FROM hockey_matches
+    WHERE league = 'khl' AND status = 'final' AND result_source = 'auto' AND finalized_at >= :since
+      AND result_probe->>'admin_notified_at' IS NULL
+    ORDER BY finalized_at, id
+    """)
+
+_HOLD_EXPIRED = text("""
+    SELECT id, home_team, away_team, home_score, away_score, decided_in, result_probe AS probe
+    FROM hockey_matches
+    WHERE league = 'khl' AND status = 'final' AND result_probe->>'hold_until' IS NOT NULL
+      AND CAST(result_probe->>'hold_until' AS TIMESTAMPTZ) <= :now AND result_probe->>'hold_reminded_at' IS NULL
+    ORDER BY id
+    """)
+
+_MERGE_PROBE = text("""
+    UPDATE hockey_matches SET result_probe = COALESCE(result_probe, CAST('{}' AS jsonb)) || CAST(:patch AS jsonb)
+    WHERE id = :id
+    """)
+
+_SET_HOLD = text("""
+    UPDATE hockey_matches
+    SET result_probe = COALESCE(result_probe, CAST('{}' AS jsonb)) || CAST(:patch AS jsonb)
+    WHERE id = :id AND status = 'final'
+    """)
+
+_DROP_HOLD = text("""
+    UPDATE hockey_matches SET result_probe = result_probe - 'hold_until' - 'hold_reminded_at'
+    WHERE id = :id AND result_probe->>'hold_until' IS NOT NULL
+    """)
+
+
+async def hold_delivery(session: AsyncSession, match_id: int, *, now: datetime) -> None:
+    """Админ начал правку итога: рассылку этого итога клиентам держим ``HOLD_FOR`` (в ``result_probe``, без миграций)."""
+    patch = {"hold_until": (now + HOLD_FOR).isoformat(), "hold_reminded_at": None}
+    await session.execute(_SET_HOLD, {"id": match_id, "patch": json.dumps(patch)})
+
+
+async def release_hold(session: AsyncSession, match_id: int) -> None:
+    await session.execute(_DROP_HOLD, {"id": match_id})
+
+
+def delivery_time(finalized_at: datetime) -> tuple[datetime, bool]:
+    """Когда клиентам уйдёт итог: ``finalized_at`` + буфер, а в тихие часы — в 09:00. Второе значение: «утром»."""
+    from src.application.hockey_notices import QUIET_FROM, QUIET_TO, RESULT_SEND_DELAY, in_quiet_hours
+
+    when = (finalized_at + RESULT_SEND_DELAY).astimezone(MINSK_TZ)
+    if not in_quiet_hours(when):
+        return when, False
+    morning = when.replace(hour=QUIET_TO, minute=0, second=0, microsecond=0)
+    if when.hour >= QUIET_FROM:
+        morning += timedelta(days=1)
+    return morning, True
+
+
+def auto_final_text(row) -> str:
+    ending = ENDING_TITLES.get(row.decided_in or "", "")
+    when, morning = delivery_time(row.finalized_at)
+    sources = (row.probe or {}).get("confirmed_by") or "Источники: подтверждено двумя опросами."
+    return (
+        f"<b>Итог записан:</b> {html.escape(row.home_team)} — {html.escape(row.away_team)} "
+        f"{row.home_score}:{row.away_score}" + (f" ({ending})" if ending else "") + ".\n"
+        f"{html.escape(sources)}\n"
+        + (
+            f"Клиентам уйдёт утром в {when:%H:%M}."
+            if morning
+            else f"Клиентам уйдёт не раньше {when:%H:%M}."
+        )
+    )
+
+
+def auto_final_buttons(match_id: int) -> list[list[dict]]:
+    return [
+        [
+            {"text": "Всё верно", "callback_data": f"{CB_AUTO_OK}:{match_id}"},
+            {"text": "Поправить", "callback_data": f"{CB_FIX}:{match_id}"},
+        ]
+    ]
+
+
+async def notify_auto_finals(session_factory, *, now: datetime, send: Sender) -> int:
+    """Матч Динамо получил итог автоматически → админу одно сообщение с кнопками (один раз на матч).
+
+    Рассылка клиентам от этого не зависит: ``send`` вернул ``False`` (админ-бот недоступен) — повторим на
+    следующем тике, а итог клиентам уйдёт по таймеру. Вторая часть: удержание рассылки истекло, а админ так
+    и не закончил правку → напоминание (один раз), рассылка идёт как обычно."""
+    now = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
+    async with session_factory() as session:
+        fresh = (await session.execute(_AUTO_FINALS, {"since": now - AUTO_FINAL_RECENT})).all()
+        expired = (await session.execute(_HOLD_EXPIRED, {"now": now})).all()
+    sent = 0
+    for row in fresh:
+        if await send(auto_final_text(row), auto_final_buttons(row.id)) is False:
+            continue
+        async with session_factory() as session:
+            await session.execute(_MERGE_PROBE, {"id": row.id, "patch": json.dumps({"admin_notified_at": now.isoformat()})})
+            await session.commit()
+        sent += 1
+    for row in expired:
+        ending = ENDING_TITLES.get(row.decided_in or "", "")
+        body = (
+            f"<b>Правка не завершена:</b> {html.escape(row.home_team)} — {html.escape(row.away_team)} "
+            f"{row.home_score}:{row.away_score}" + (f" ({ending})" if ending else "") + ".\n"
+            "Итог уходит клиентам как записан. Если он неверный — нажмите «Поправить» ещё раз."
+        )
+        if await send(body, [[{"text": "Поправить", "callback_data": f"{CB_FIX}:{row.id}"}]]) is False:
+            continue
+        async with session_factory() as session:
+            await session.execute(_MERGE_PROBE, {"id": row.id, "patch": json.dumps({"hold_reminded_at": now.isoformat()})})
+            await session.commit()
+        sent += 1
+    return sent
+
+
 class ReviewError(ValueError):
     """Решение админа не применено: текст ошибки показываем ему как есть."""
 
@@ -149,7 +327,7 @@ class ReviewError(ValueError):
 async def _settle(session: AsyncSession, match_id: int) -> tuple[ReviewItem, str]:
     found = await get_review_item(session, match_id)
     if found is None:
-        raise ReviewError("Такого матча Экстралиги нет")
+        raise ReviewError("Такого матча нет")
     return found
 
 
@@ -287,6 +465,15 @@ __all__ = [
     "month_close_text",
     "notify_new_reviews",
     "parse_fix",
+    "HOLD_FOR",
+    "CB_AUTO_OK",
+    "auto_final_buttons",
+    "auto_final_text",
+    "hold_delivery",
+    "notify_auto_finals",
+    "release_hold",
+    "recent_final_text",
+    "recent_finals",
     "review_buttons",
     "review_queue",
     "review_text",

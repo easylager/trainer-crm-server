@@ -183,7 +183,8 @@ describe('H · время на две недели', () => {
     assert.doesNotMatch(html, /он предложит/);
     assert.match(html, /Записаться на .*10:00/);
     assert.doesNotMatch(html, /class="wk"/);
-    const days = html.match(/class="tc-h-day/g) || [];
+    // Только кнопки дней: «tc-h-daytitle» — заголовок выбранного дня, в понедельник он давал лишние 2 в счёте.
+    const days = html.match(/class="tc-h-day(?: tc-h-day--empty)?"/g) || [];
     assert.ok(days.length >= 8 && days.length <= 14, 'горизонт окна слотов, дней: ' + days.length);
   });
 

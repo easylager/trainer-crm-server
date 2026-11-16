@@ -240,7 +240,7 @@ def test_league_crown_threshold_is_two_players_with_points_slices_stay_at_three(
 
 
 @pytest.mark.asyncio
-async def test_month_crowns_for_all_and_each_club_once_after_the_correction_window(db_session) -> None:
+async def test_month_crowns_for_each_belarusian_club_once_and_none_for_all_after_the_correction_window(db_session) -> None:
     await ensure_races(db_session, now=NOV)
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
     await _three_players_game(db_session, t, mid="c1", home="Юность", away="Неман", extraliga=True)
@@ -248,21 +248,34 @@ async def test_month_crowns_for_all_and_each_club_once_after_the_correction_wind
     # Окно исправления итога — 2 суток: через сутки после матча короны ещё нет.
     assert await close_due_races(db_session, now=t + timedelta(days=1)) == []
     closed = await close_due_races(db_session, now=t + timedelta(days=3))
-    assert len(closed) == 3  # Все, Юность, Неман
+    assert len(closed) == 3  # Все (без награды), Юность, Неман
     crowns = (
         await db_session.execute(
             text("SELECT club, player_key, kind, race_id FROM hockey_crowns ORDER BY club NULLS FIRST")
         )
     ).all()
     assert [(c.club, c.player_key, c.kind) for c in crowns] == [
-        (None, P[0], "month"),
         ("Неман", P[0], "month"),
         ("Юность", P[0], "month"),
     ]
     # Повторное закрытие ничего не дублирует.
     assert await close_due_races(db_session, now=t + timedelta(days=9)) == []
-    assert (await db_session.execute(text("SELECT count(*) FROM hockey_crowns"))).scalar_one() == 3
-    assert await crown_counts(db_session, league_id=None) == {P[0]: 3}
+    assert (await db_session.execute(text("SELECT count(*) FROM hockey_crowns"))).scalar_one() == 2
+    assert await crown_counts(db_session, league_id=None) == {P[0]: 2}
+
+
+@pytest.mark.asyncio
+async def test_no_crown_for_dinamo_opponents_or_for_the_whole_table(db_session) -> None:
+    """Соперники Динамо по КХЛ и общая таблица: срез закрывается, но корон и званий нет."""
+    await ensure_races(db_session, now=NOV)
+    t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
+    await _three_players_game(db_session, t, mid="k1", home=DINAMO, away="СКА")
+    await mark_calendar_synced(db_session, now=SYNC)
+    closed = await close_due_races(db_session, now=t + timedelta(days=3))
+    assert len(closed) == 3  # Все, Динамо, СКА: гонка закрывается как раньше
+    clubs = (await db_session.execute(text("SELECT club FROM hockey_crowns"))).scalars().all()
+    assert clubs == [DINAMO]
+    assert (await db_session.execute(text("SELECT count(*) FROM hockey_closures WHERE crowned > 0"))).scalar_one() == 1
 
 
 @pytest.mark.asyncio
@@ -278,7 +291,8 @@ async def test_correction_window_is_two_days_after_the_last_result_not_seven(db_
     # Ровно двое суток — закрыт (не ждём недели).
     closed = await close_due_races(db_session, now=final_at + timedelta(days=2))
     assert len(closed) == 3  # Все, Динамо, Барыс
-    assert (await db_session.execute(text("SELECT count(*) FROM hockey_crowns"))).scalar_one() == 3
+    # Корона одна: у Динамо. Барыс (соперник) и «Все» закрыты без награды.
+    assert (await db_session.execute(text("SELECT count(*) FROM hockey_crowns"))).scalar_one() == 1
 
 
 @pytest.mark.asyncio
@@ -295,13 +309,13 @@ async def test_full_tie_on_all_three_criteria_shares_place_and_crown(db_session)
     await mark_calendar_synced(db_session, now=SYNC)
     await close_due_races(db_session, now=t + timedelta(days=3))
     crowned = (
-        (await db_session.execute(text("SELECT player_key FROM hockey_crowns WHERE club IS NULL ORDER BY player_key")))
+        (await db_session.execute(text(f"SELECT player_key FROM hockey_crowns WHERE club = '{DINAMO}' ORDER BY player_key")))
         .scalars()
         .all()
     )
     assert crowned == [P[0], P[1]]
     closure = (
-        await db_session.execute(text("SELECT crowned FROM hockey_closures WHERE kind = 'month' AND club IS NULL"))
+        await db_session.execute(text(f"SELECT crowned FROM hockey_closures WHERE kind = 'month' AND club = '{DINAMO}'"))
     ).scalar_one()
     assert closure == 2
 
@@ -368,9 +382,9 @@ async def test_manual_confirm_closes_before_the_window(db_session) -> None:
     race = await ensure_races(db_session, now=NOV)
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
     await _three_players_game(db_session, t, mid="mc")
-    assert await confirm_close_month(db_session, period_start=race.starts_at, club=None, now=t + timedelta(days=1))
+    assert await confirm_close_month(db_session, period_start=race.starts_at, club=DINAMO, now=t + timedelta(days=1))
     assert (
-        await confirm_close_month(db_session, period_start=race.starts_at, club=None, now=t + timedelta(days=1)) is None
+        await confirm_close_month(db_session, period_start=race.starts_at, club=DINAMO, now=t + timedelta(days=1)) is None
     )
     assert (await db_session.execute(text("SELECT count(*) FROM hockey_crowns"))).scalar_one() == 1
 
@@ -390,11 +404,8 @@ async def test_season_titles_after_the_season_and_window_only_once(db_session) -
     titles = (
         await db_session.execute(text("SELECT season, club, player_key FROM hockey_titles ORDER BY club NULLS FIRST"))
     ).all()
-    assert [(x.season, x.club, x.player_key) for x in titles] == [
-        ("2026/27", None, P[0]),
-        ("2026/27", "Барыс", P[0]),
-        ("2026/27", DINAMO, P[0]),
-    ] or {x.club for x in titles} == {None, "Барыс", DINAMO}
+    # Звание сезона — только у белорусских клубов: ни «Барыса», ни общей таблицы.
+    assert [(x.season, x.club, x.player_key) for x in titles] == [("2026/27", DINAMO, P[0])]
     n = (await db_session.execute(text("SELECT count(*) FROM hockey_titles"))).scalar_one()
     await close_due_races(db_session, now=after + timedelta(days=1))
     assert (await db_session.execute(text("SELECT count(*) FROM hockey_titles"))).scalar_one() == n

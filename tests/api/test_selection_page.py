@@ -85,7 +85,8 @@ async def test_unfiltered_selection_matches_feed_without_shops(app_use_test_db, 
         )
         shops = await client.get(f"/c/{slug}", params={"t": "shop"})
     assert page.status_code == 200
-    assert "Ледовый" in page.text and "Зал Силы" in page.text
+    # Хаб (JSON-LD ItemList, TASK-420) перечисляет только катки; зал и магазин видны в шаре ниже.
+    assert "Ледовый" in page.text
     body = share.json()["share_body"]
     assert "Ледовый" in body and "Зал Силы" in body
     assert shop not in body

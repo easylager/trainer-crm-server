@@ -14,6 +14,7 @@ from src.application.hockey_matches import (
     KIND_FINAL,
     KIND_REVIEW,
     KIND_WAIT,
+    REVIEW_AFTER,
     CalendarEmpty,
     LoopHealth,
     check_due_results,
@@ -224,7 +225,11 @@ async def test_due_result_published_when_sources_agree(db_session) -> None:
         alerts.append(body)
         return True
 
-    out = await check_due_results(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 0), alert=alert)
+    # Первое согласное чтение итог не публикует (подтверждение вторым опросом), второе — не раньше чем через 10 минут.
+    first = await check_due_results(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 0), alert=alert)
+    assert [k for _, k in first] == [KIND_WAIT]
+    assert (await get_match(db_session, first[0][0])).status == "scheduled"
+    out = await check_due_results(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 10), alert=alert)
     assert [k for _, k in out] == [KIND_FINAL]
     row = await get_match(db_session, out[0][0])
     assert (row.status, row.home_score, row.away_score, row.decided_in, row.result_source) == (
@@ -236,7 +241,7 @@ async def test_due_result_published_when_sources_agree(db_session) -> None:
     )
     assert alerts == []
     # Сыгранный матч больше не проверяется.
-    assert await check_due_results(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 10), alert=alert) == []
+    assert await check_due_results(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 20), alert=alert) == []
 
 
 @pytest.mark.asyncio
@@ -317,8 +322,12 @@ async def test_run_tick_without_calendar_due_leaves_calendar(db_session) -> None
 async def test_run_tick_publishes_played_match(db_session) -> None:
     pages = {match_url("1218869"): _page("hcdinamo-match-final.html"), HOCKEY_BY_URL: _page("hockey-by-ticker.html")}
     await upsert_calendar_match(db_session, _match("final", "1218869"), now=_minsk(2026, 10, 18, 12, 0))
-    counts = await run_tick(
+    first = await run_tick(
         db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=False
+    )
+    assert first["final"] == 0
+    counts = await run_tick(
+        db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 10), alert=_silent, calendar_due=False
     )
     assert counts["final"] == 1 and counts["calendar"] is None
     row = (
@@ -336,8 +345,9 @@ async def test_run_tick_races_failure_keeps_result_and_surfaces_error(db_session
         await session.execute(text("SELECT * FROM table_that_does_not_exist"))
 
     monkeypatch.setattr("src.application.hockey_races.close_due_races", broken)
+    await run_tick(db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=False)
     counts = await run_tick(
-        db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=False
+        db_session, _fake_fetch(pages), now=_minsk(2026, 10, 18, 20, 10), alert=_silent, calendar_due=False
     )
     assert counts["races_failed"] is True and counts["races_error"]
     assert counts["closed_races"] == []
@@ -374,7 +384,8 @@ async def test_run_tick_calendar_failure_still_checks_results(db_session) -> Non
             raise TimeoutError("hcdinamo.by не ответил")
         return pages[url]
 
-    counts = await run_tick(db_session, fetch, now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=True)
+    await run_tick(db_session, fetch, now=_minsk(2026, 10, 18, 20, 0), alert=_silent, calendar_due=True)
+    counts = await run_tick(db_session, fetch, now=_minsk(2026, 10, 18, 20, 10), alert=_silent, calendar_due=True)
     assert counts["calendar_failed"] is True and counts["calendar"] is None
     assert counts["final"] == 1
 
@@ -421,8 +432,11 @@ async def test_result_window_drives_the_fast_loop(db_session) -> None:
     await upsert_calendar_match(db_session, _match("final", "1218869"), now=_minsk(2026, 10, 18, 12, 0))
     start = (await get_match(db_session, await _row(db_session, "1218869"))).starts_at
     assert await result_window_open(db_session, now=start + timedelta(hours=1)) is False
-    assert await result_window_open(db_session, now=start + timedelta(hours=2)) is True
+    assert await result_window_open(db_session, now=start + timedelta(hours=2)) is False  # до 2 ч 15 мин тишина
+    assert await result_window_open(db_session, now=start + timedelta(hours=2, minutes=15)) is True
     assert await result_window_open(db_session, now=start + timedelta(hours=3)) is True
+    # Подтверждение второго опроса может прийти уже после REVIEW_AFTER: быстрый цикл держим ещё RESULT_HOT_EXTRA.
+    assert await result_window_open(db_session, now=start + REVIEW_AFTER + timedelta(minutes=10)) is True
     assert await result_window_open(db_session, now=start + timedelta(hours=4)) is False
 
 

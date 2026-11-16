@@ -79,6 +79,9 @@ ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES: frozenset[str] = frozenset(
         "write_access_denied",
         "write_access_already",
         "write_access_unsupported",
+        # Переход по публичной ссылке /join: считают и люди, и боты, и превью ссылок. Это охват лендинга
+        # (воронка по utm/arena смотрится запросом), а не действие тренера: в ленте только мешает.
+        "landing.trainer_join_redirect",
     }
 )
 

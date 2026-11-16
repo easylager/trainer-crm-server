@@ -30,6 +30,7 @@ from src.application.arena_public_use_cases import (
     city_hockey_center_count,
 )
 from src.application.catalog_home_page import _USER_UPCOMING_SQL, _session_card
+from src.application.city_hub_seo import is_seo_rich
 from src.application.city_place_counts import (
     city_hub_place_groups,
     city_place_counts_from_places,
@@ -88,6 +89,8 @@ _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "pla
 _UPCOMING_DAYS = 7
 _UPCOMING_LIMIT = 3
 _UPCOMING_FETCH = 24
+_RIBBON_FETCH = 600  # TASK-425: лента по каткам считает «ещё N сеансов» по всем сеансам окна
+_RIBBON_LIMIT = 12
 _WINDOW_KEYS = ("today", "tomorrow", "weekend")
 # Окна, в которых открывается хаб (``/c/{город}?w=…``, PDEC-026). Остальные ``w`` — список.
 HUB_WINDOW_KEYS = _WINDOW_KEYS
@@ -104,6 +107,13 @@ _WINDOW_COUNTS_SQL = text(
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to)::int AS tomorrow_n,
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to)::int AS weekend_n,
            COUNT(*) FILTER (WHERE s.starts_at_utc >= :day_from AND s.starts_at_utc < :day_to)::int AS day_n,
+           MIN(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :today_from AND s.starts_at_utc < :today_to)::int AS today_lo,
+           MAX(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :today_from AND s.starts_at_utc < :today_to)::int AS today_hi,
+           MIN(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to)::int AS tomorrow_lo,
+           MAX(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :tomorrow_from AND s.starts_at_utc < :tomorrow_to)::int AS tomorrow_hi,
+           MIN(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to)::int AS weekend_lo,
+           MAX(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0 AND s.starts_at_utc >= :weekend_from AND s.starts_at_utc < :weekend_to)::int AS weekend_hi,
+           MIN(s.currency_code) AS cur,
            COUNT(*) FILTER (WHERE s.local_date = :pd0)::int AS pd0_n,
            COUNT(*) FILTER (WHERE s.local_date = :pd1)::int AS pd1_n,
            COUNT(*) FILTER (WHERE s.local_date = :pd2)::int AS pd2_n,
@@ -297,6 +307,7 @@ async def load_city_hub_view(
     city: Mapping[str, Any],
     now: datetime | None = None,
     window: str | None = None,
+    seo_text: bool = False,
 ) -> dict[str, Any]:
     """Вид хаба города.
 
@@ -337,6 +348,8 @@ async def load_city_hub_view(
     skate_arenas: set[int] = set()
     ohm_arenas: set[int] = set()
     skate_by_arena: dict[int, int] = {}
+    skate_window_arenas: dict[str, set[int]] = {k: set() for k in _WINDOW_KEYS}
+    skate_window_prices: dict[str, dict[str, Any]] = {k: {"lo": [], "hi": [], "cur": None} for k in _WINDOW_KEYS}
     picker_dates = home_picker_dates(now)
     day_counts: dict[date, int] = {d: 0 for d in picker_dates}
     for row in count_rows:
@@ -350,6 +363,14 @@ async def load_city_hub_view(
         if int(row.get("all_n") or 0) > 0:
             (ohm_arenas if row.get("is_ohm") else skate_arenas).add(aid)
             if not row.get("is_ohm"):
+                for key in _WINDOW_KEYS:
+                    if int(row.get(f"{key}_n") or 0) > 0:
+                        skate_window_arenas[key].add(aid)
+                    if row.get(f"{key}_lo"):
+                        acc = skate_window_prices[key]
+                        acc["lo"].append(int(row[f"{key}_lo"]))
+                        acc["hi"].append(int(row[f"{key}_hi"]))
+                        acc["cur"] = acc["cur"] or row.get("cur")
                 skate_by_arena[aid] = skate_by_arena.get(aid, 0) + int(row.get("all_n") or 0)
 
     when_explicit = window in _WINDOW_KEYS or day_key is not None
@@ -366,6 +387,7 @@ async def load_city_hub_view(
             (tw.ends_at - timedelta(microseconds=1)).astimezone(local_tz).date(),
         )
 
+    rink_ribbon = bool(seo_text) and is_seo_rich(city_slug(city_name))
     upcoming_rows = (
         (
             await session.execute(
@@ -376,7 +398,7 @@ async def load_city_hub_view(
                     "ends_at": upcoming_to,
                     "now": now,
                     "st": STATUS_ACTIVE,
-                    "lim": _UPCOMING_FETCH,
+                    "lim": _RIBBON_FETCH if rink_ribbon else _UPCOMING_FETCH,
                     **scope,
                 },
             )
@@ -387,14 +409,24 @@ async def load_city_hub_view(
     # Три ближайших — по разным каткам: три сеанса одного ТЦ подряд ничего не говорят о городе.
     upcoming: list[dict[str, Any]] = []
     seen_arenas: set[str] = set()
+    ribbon_extra: dict[str, int] = {}
     for row in upcoming_rows:
         key = str(row.get("arena_slug") or row.get("arena_name") or "")
         if key in seen_arenas:
+            ribbon_extra[key] = ribbon_extra.get(key, 0) + 1
             continue
         seen_arenas.add(key)
-        upcoming.append(_session_card(row, now=now))
-        if len(upcoming) >= _UPCOMING_LIMIT:
-            break
+        if len(upcoming) >= (_RIBBON_LIMIT if rink_ribbon else _UPCOMING_LIMIT):
+            if not rink_ribbon:
+                break
+            continue
+        card = _session_card(row, now=now)
+        card["_ribbon_key"] = key
+        upcoming.append(card)
+    if rink_ribbon:
+        # Плитка = каток: бейдж — ближайший сеанс, «ещё N» — остальные сеансы окна.
+        for card in upcoming:
+            card["more_sessions"] = ribbon_extra.get(card.pop("_ribbon_key"), 0)
 
     next_ohm = None
     if ohm["all"]:
@@ -507,6 +539,11 @@ async def load_city_hub_view(
         "service_count": len(service_places),
         "skate_counts": skate,
         "skate_by_arena": skate_by_arena,
+        "skate_window_arena_counts": {k: len(v) for k, v in skate_window_arenas.items()},
+        "skate_window_prices": {
+            k: {"lo": min(v["lo"]) if v["lo"] else None, "hi": max(v["hi"]) if v["hi"] else None, "cur": v["cur"]}
+            for k, v in skate_window_prices.items()
+        },
         "ohm_counts": ohm,
         "skate_arena_count": len(skate_arenas),
         "ohm_arena_count": len(ohm_arenas),
@@ -586,6 +623,24 @@ def _price_bits(card: Mapping[str, Any]) -> str:
     if card.get("price_with_rental"):
         bits.append(str(card["price_with_rental"]))
     return " · ".join(bits)
+
+
+def city_hub_itemlist_rinks(view: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Места для JSON-LD ItemList: только катки (лёд и открытые), порядок по ближайшим сеансам.
+
+    Магазины, сервисы, трассы — не катки, в списке с заголовком «Массовое катание…» им нечего
+    делать. Сначала катки с будущими сеансами, больше сеансов — выше (ровно то, что ищет человек);
+    при равенстве — по названию. Если сеансов нет нигде, список — все катки по названию.
+    """
+    by_arena = view.get("skate_by_arena") or {}
+    rinks = [
+        p
+        for p in view.get("places") or []
+        if p.get("slug") and _is_rink(str(p.get("venue_type") or "ice"))
+    ]
+    scheduled = [p for p in rinks if int(by_arena.get(p["id"]) or 0) > 0]
+    pool = scheduled or rinks
+    return sorted(pool, key=lambda p: (-int(by_arena.get(p["id"]) or 0), str(p["name"]).casefold()))
 
 
 def city_hub_document_title(view: Mapping[str, Any]) -> str:
@@ -788,15 +843,13 @@ def render_city_hub_page(
     # TASK-278: «Открыть в Telegram» — плашкой внизу экрана; кнопки в блоке «Поделиться» больше нет.
     share_tail["__PLACE_SHARE_BAR__"] = ""
     elements = []
-    for p in view.get("places") or []:
-        if not p.get("slug"):
-            continue
+    for p in city_hub_itemlist_rinks(view):
         path = place_path(city_name=city_name, slug=p["slug"])
         elements.append(
             {
                 "@type": "ListItem",
                 "position": len(elements) + 1,
-                "name": p["name"],
+                "name": format_public_name(str(p["name"])),
                 "url": join_public_origin(canonical_url, path),
             }
         )
@@ -950,6 +1003,30 @@ def _b_counts_line(view: Mapping[str, Any]) -> str:
     return ""
 
 
+def city_hub_topic_line(view: Mapping[str, Any]) -> str:
+    """Подстрока героя: тема страницы и настоящие числа (TASK-420, вариант B).
+
+    «Массовое катание в Минске: сегодня 21 сеанс, от 7 BYN». Окно — первое из «сегодня / завтра /
+    в выходные», где есть сеансы; цена — минимальная в том же окне. Нет склонения города, окна с сеансами
+    или хаб открыт в окне — прежняя строка. Короткая: на телефоне одна–две строки, герой почти не растёт.
+    """
+    where = city_locative(str(view["city"]["name"]))
+    key = next((k for k in _WINDOW_KEYS if int(view["skate_counts"].get(k) or 0)), None)
+    if not where or key is None or view.get("when_explicit"):
+        return _b_counts_line(view)
+    n = int(view["skate_counts"][key])
+    nb = "\u00a0"
+    lead = {"today": "сегодня", "tomorrow": "завтра", "weekend": "в выходные"}[key]
+    text_ = f"Массовое катание в {where}: {lead} {n}{nb}{plural_ru(n, 'сеанс', 'сеанса', 'сеансов')}"
+    price = (view.get("skate_window_prices") or {}).get(key)
+    if isinstance(price, Mapping) and price.get("lo"):
+        currency = str(price.get("cur") or "BYN")
+        lo, hi = int(price["lo"]), int(price["hi"] or price["lo"])
+        shown = format_price_minor(lo, currency).replace(" ", nb)
+        text_ += f", от {shown}" if hi > lo else f", {shown}"
+    return text_
+
+
 def _b_bar(view: Mapping[str, Any]) -> str:
     from src.application.style_b import brand_link, city_pill
 
@@ -1030,10 +1107,12 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
         if arena_slug and arena_slug not in seen_slugs:
             seen_slugs.add(arena_slug)
             vt_name = place_vt_name(arena_slug)
+        more_n = int(card.get("more_sessions") or 0)
         tile = tile_html(
             href=href,
             name=name,
             line=_price_bits(card) or day,
+            more_line=f"ещё {more_n} {plural_ru(more_n, 'сеанс', 'сеанса', 'сеансов')}" if more_n > 0 else "",
             photo_url=place.get("photo_url"),
             photo_alt=name,
             toned=bool(place.get("display_tone")),
@@ -1611,7 +1690,7 @@ def _b_body(
     hero = hero_html(
         title=t("hub.on_ice", city=city_name),
             title_break="на льду",
-        sub_html=f"<span data-nosnippet>{_esc(_b_counts_line(view))}</span>",
+        sub_html=f"<span data-nosnippet>{_esc(city_hub_topic_line(view))}</span>",
         kicker=_b_today_kicker(view),
         photo_url=photo,
         photo_alt=alt,

@@ -39,8 +39,13 @@ def price_floors(slots: list[Mapping[str, Any]]) -> dict[str, tuple[int, bool]]:
     return {k: (min(v), len(v) > 1) for k, v in seen.items() if v}
 
 
-def prices_html(slots: list[Mapping[str, Any]], vv: Mapping[str, Any], *, currency: str) -> str:
-    """Три цены под заголовком: вход, детский, прокат — и итог «с прокатом»."""
+def prices_html(
+    slots: list[Mapping[str, Any]], vv: Mapping[str, Any], *, currency: str, extra_sum: str = ""
+) -> str:
+    """Три цены под заголовком: вход, детский, прокат — и итог «с прокатом».
+
+    ``extra_sum`` — ещё одна фраза в ту же строку (TASK-424: «В сб и вс взрослый — 11 BYN.»).
+    """
     floors = price_floors(slots)
     if not floors:
         return ""
@@ -78,7 +83,11 @@ def prices_html(slots: list[Mapping[str, Any]], vv: Mapping[str, Any], *, curren
     if "adult" in floors and "rental" in floors:
         sum_minor = floors["adult"][0] + floors["rental"][0]
         prefix = "от " if floors["adult"][1] or floors["rental"][1] else ""
-        total = f'<p class="b-price-sum">Взрослому с прокатом — {prefix}{_esc(format_price_minor(sum_minor, currency))}.</p>'
+        total = f"Взрослому с прокатом — {prefix}{_esc(format_price_minor(sum_minor, currency))}."
+    if extra_sum:
+        total = f"{total} {_esc(extra_sum)}" if total else _esc(extra_sum)
+    if total:
+        total = f'<p class="b-price-sum">{total}</p>'
     return f'<div class="b-prices b-prices--{len(cells)}">{body}</div>{total}'
 
 
@@ -308,7 +317,9 @@ def _upper_first(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def search_bits(vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str, Any]]) -> list[str]:
+def search_bits(
+    vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str, Any]], with_services: bool = True
+) -> list[str]:
     """Факты для meta description: цены входа, услуги, как купить."""
     bits: list[str] = []
     floors = price_floors(slots)
@@ -321,7 +332,7 @@ def search_bits(vv: Mapping[str, Any], *, currency: str, slots: list[Mapping[str
         bits.append(_upper_first(", ".join(parts)))
     names = [str(r["title"]).lower() for r in (vv.get("services") or {}).get("rows") or []
              if r.get("kind") in ("aid", "sharpening", "protection", "helmet")]
-    if names:
+    if names and with_services:
         bits.append(_upper_first(", ".join(dict.fromkeys(names))))
     mode = (vv.get("tickets") or {}).get("mode")
     if mode == "box_office":

@@ -163,8 +163,8 @@ async def test_mogilev_ds_filters_school_and_hockey_rows() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mogilev_ds_prefers_bycard_sessions_with_buy_link() -> None:
-    """ByCard даёт сеансы на неделю вперёд: цены из прайса дворца, ссылка покупки — на каждый сеанс."""
+async def test_mogilev_ds_keeps_bycard_sessions_with_buy_link_and_adds_table_rows() -> None:
+    """Сетка — таблица hockey.by, ByCard даёт ссылку покупки; сеансы только из ByCard тоже остаются."""
     job = _job(
         arena_id=43,
         parser_key=PARSER_KEY_MOGILEV_DS,
@@ -173,14 +173,30 @@ async def test_mogilev_ds_prefers_bycard_sessions_with_buy_link() -> None:
         job_id=102,
     )
     extraction = await MogilevDsParser().extract(job)
-    assert len(extraction.slots) == 9
-    first = extraction.slots[0]
+    with_link = [s for s in extraction.slots if s.external_url]
+    assert len(with_link) == 9  # все сеансы ByCard на месте
+    first = with_link[0]
     assert (first.local_date, first.starts_at_local, first.ends_at_local) == ("2026-10-30", "21:45", "22:30")
     assert (first.price_adult, first.price_child, first.price_rental) == (800, 500, 700)
     assert first.age_note == "детский до 6 лет"
     assert first.source_id == "1775651"
     assert first.external_url == "https://saleframe.bycard.by/?sid=1775651&lang=ru"
-    assert all(s.external_url for s in extraction.slots)
+    # Строки таблицы, которых нет в ByCard, не теряются (раньше один сеанс ByCard закрывал всю сетку).
+    assert len(extraction.slots) > len(with_link)
+
+
+@pytest.mark.asyncio
+async def test_mogilev_ds_matching_table_row_gets_the_buy_link_not_a_duplicate() -> None:
+    job = _job(
+        arena_id=43,
+        parser_key=PARSER_KEY_MOGILEV_DS,
+        config=MOGILEV_DS_CONFIG,
+        slug="mogilev-bycard",
+        job_id=102,
+    )
+    extraction = await MogilevDsParser().extract(job)
+    keys = [(str(s.local_date), str(s.starts_at_local)) for s in extraction.slots]
+    assert len(keys) == len(set(keys))  # день+время не дублируются
 
 
 @pytest.mark.asyncio

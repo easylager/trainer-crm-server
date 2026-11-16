@@ -254,11 +254,12 @@ async def test_close_month_button_writes_crowns_once(db_session) -> None:
     await _full_month(db_session)
     # Итог 20-го в 22:00: окно исправления (2 суток) ещё идёт 22-го в 19:00 — срез ждёт кнопки.
     pending = await pending_month_closures(db_session, now=at(22))
-    assert {p["club"] for p in pending} >= {None, "Юность"}
+    # «Все» и соперники Динамо в списке не показываем: короны там не выдаются.
+    assert {p["club"] for p in pending} == {"Неман", "Юность"}
     assert pending[0]["leaders"][0][1] == 50
     race_id = pending[0]["race_id"]
 
-    cb = _callback(f"hk:cm:{race_id}:-")
+    cb = _callback(f"hk:cm:{race_id}:Юность")
     await admin_handlers.on_hockey_close_month(cb)
     assert cb.answer.await_args.args[0] == "Месяц закрыт: короны записаны."
     crowns = (
@@ -266,15 +267,15 @@ async def test_close_month_button_writes_crowns_once(db_session) -> None:
             text("SELECT player_key, club FROM hockey_crowns WHERE period_start = :s"), {"s": at(1, 0)}
         )
     ).all()
-    assert [(c.player_key, c.club) for c in crowns] == [(A, None)]
+    assert [(c.player_key, c.club) for c in crowns] == [(A, "Юность")]
     # Нажать второй раз — ничего не дублируется.
-    again = _callback(f"hk:cm:{race_id}:-")
+    again = _callback(f"hk:cm:{race_id}:Юность")
     await admin_handlers.on_hockey_close_month(again)
     assert again.answer.await_args.args[0] == "Этот срез уже закрыт."
-    count = (await db_session.execute(text("SELECT COUNT(*) FROM hockey_crowns WHERE club IS NULL"))).scalar_one()
+    count = (await db_session.execute(text("SELECT COUNT(*) FROM hockey_crowns WHERE club = 'Юность'"))).scalar_one()
     assert count == 1
     # Срез клуба — отдельная кнопка со своим названием.
-    club_cb = _callback(f"hk:cm:{race_id}:Юность")
+    club_cb = _callback(f"hk:cm:{race_id}:Неман")
     await admin_handlers.on_hockey_close_month(club_cb)
     assert club_cb.answer.await_args.args[0] == "Месяц закрыт: короны записаны."
 

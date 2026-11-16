@@ -190,6 +190,8 @@ ADMIN_SUPPORT_REPLY_PREFIX = "admin:support:reply:"
 _admin_awaiting_arena_coords: dict[int, int] = {}
 # admin user_id -> hockey_matches.id (ждём счёт вручную: «3:2», «3:2 от», «3:2 б»)
 _admin_awaiting_hockey_fix: dict[int, int] = {}
+# admin user_id -> (hockey_matches.id, введённый счёт): правка уже разосланного итога ждёт подтверждения «Да»
+_admin_pending_hockey_fix: dict[int, tuple[int, str]] = {}
 
 
 def _is_admin(user_id: int | None) -> bool:
@@ -985,19 +987,29 @@ async def _send_hockey_queue(message: Message) -> None:
         month_close_buttons,
         month_close_text,
         review_buttons,
+        recent_final_text,
+        recent_finals,
         review_queue,
         review_text,
     )
+    from src.application.hockey_notices import rescore_audience
 
+    now = datetime.now(timezone.utc)
     async with async_session_factory() as session:
         queue = await review_queue(session)
-        months = await pending_month_closures(session, now=datetime.now(timezone.utc))
+        months = await pending_month_closures(session, now=now)
+        finals = [(row, await rescore_audience(session, row.id)) for row in await recent_finals(session, now=now)]
     for item in queue:
         await message.answer(review_text(item), reply_markup=_hockey_markup(review_buttons(item)))
+    for row, delivered in finals:
+        await message.answer(
+            recent_final_text(row, delivered),
+            reply_markup=_hockey_markup([[{"text": "Поправить", "callback_data": f"hk:fix:{row.id}"}]]),
+        )
     for entry in months:
         await message.answer(month_close_text(entry), reply_markup=_hockey_markup(month_close_buttons(entry)))
-    if not queue and not months:
-        await message.answer("Очередь пуста: итогов на проверке и месяцев к закрытию нет.")
+    if not queue and not months and not finals:
+        await message.answer("Очередь пуста: итогов на проверке, недавних итогов и месяцев к закрытию нет.")
 
 
 async def _hockey_guard(callback: CallbackQuery) -> bool:
@@ -1058,10 +1070,98 @@ async def on_hockey_fix(callback: CallbackQuery) -> None:
         await callback.answer()
         return
     _admin_awaiting_hockey_fix[callback.from_user.id] = match_id
+    # Итог уже записан, но, возможно, не разослан: пока админ правит, рассылку держим (до HOLD_FOR).
+    from datetime import datetime, timezone
+
+    from src.application.hockey_review import hold_delivery
+
+    async with async_session_factory() as session:
+        await hold_delivery(session, match_id, now=datetime.now(timezone.utc))
+        await session.commit()
     await callback.answer()
     await callback.message.answer(
         "Пришлите счёт: 3:2 — основное время, 3:2 от — овертайм, 3:2 б — буллиты. Отмена — /cancel."
     )
+
+
+async def _hockey_apply_fix(answer, user_id: int, match_id: int, raw: str) -> bool:
+    """Записать счёт и ответить админу: что записано, сколько игроков получат исправление. False — ввод не принят."""
+    from datetime import datetime, timezone
+
+    from src.application.hockey_notices import pending_rescores
+    from src.application.hockey_review import ReviewError, fix_result
+
+    async with async_session_factory() as session:
+        try:
+            title = await fix_result(session, match_id, raw=raw, now=datetime.now(timezone.utc))
+            notified = await pending_rescores(session, match_id)
+            await session.commit()
+        except ReviewError as exc:
+            await answer(f"{exc} (или /cancel)")
+            return False
+    audit_log("hockey.review_fix", ACTOR_ADMIN_BOT, user_id, {"match_id": match_id, "raw": raw[:20]})
+    if notified:
+        await answer(f"Счёт записан: {title}. Очки пересчитаны. Исправление уйдёт {notified} игрокам.")
+    else:
+        await answer(f"Счёт записан: {title}. Очки посчитаны.")
+    return True
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("hk:okd:"))
+async def on_hockey_auto_ok(callback: CallbackQuery) -> None:
+    """«Всё верно» под сообщением об автоитоге: ничего не меняет (рассылка идёт и без нажатия), снимает кнопки."""
+    from src.application.hockey_review import release_hold
+
+    if not await _hockey_guard(callback):
+        return
+    match_id = _hockey_match_id(callback)
+    if match_id is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        await release_hold(session, match_id)  # если до этого нажимали «Поправить» и передумали
+        await session.commit()
+    _admin_awaiting_hockey_fix.pop(callback.from_user.id, None)
+    await callback.answer("Подтверждено")
+    try:
+        await callback.message.edit_text((callback.message.html_text or "") + "\n\nПодтверждено.", reply_markup=None)
+    except Exception:  # noqa: BLE001 — сообщение могло быть изменено; хотя бы снимем кнопки
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("hk:fy:"))
+async def on_hockey_fix_confirm(callback: CallbackQuery) -> None:
+    """«Да» под вопросом про уже разосланный итог: применяем отложенную правку."""
+    if not await _hockey_guard(callback):
+        return
+    match_id = _hockey_match_id(callback)
+    pending = _admin_pending_hockey_fix.get(callback.from_user.id)
+    if match_id is None or pending is None or pending[0] != match_id:
+        await callback.answer("Правка уже не ждёт подтверждения", show_alert=True)
+        return
+    _admin_pending_hockey_fix.pop(callback.from_user.id, None)
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:  # noqa: BLE001
+        pass
+    await _hockey_apply_fix(callback.message.answer, callback.from_user.id, match_id, pending[1])
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("hk:fn:"))
+async def on_hockey_fix_decline(callback: CallbackQuery) -> None:
+    if not await _hockey_guard(callback):
+        return
+    _admin_pending_hockey_fix.pop(callback.from_user.id, None)
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:  # noqa: BLE001
+        pass
+    await callback.message.answer("Правка отменена, итог не менялся.")
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("hk:no:"))
@@ -3068,6 +3168,13 @@ async def on_admin_message(message: Message) -> None:
         support_id = _admin_awaiting_support_reply.pop(user_id, None)
         arena_coords_id = _admin_awaiting_arena_coords.pop(user_id, None)
         hockey_fix_id = _admin_awaiting_hockey_fix.pop(user_id, None)
+        _admin_pending_hockey_fix.pop(user_id, None)
+        if hockey_fix_id is not None:
+            from src.application.hockey_review import release_hold
+
+            async with async_session_factory() as session:
+                await release_hold(session, hockey_fix_id)
+                await session.commit()
         if support_id is not None:
             await message.answer(msg.ADMIN_SUPPORT_REPLY_CANCELLED)
         elif arena_coords_id is not None:
@@ -3080,20 +3187,36 @@ async def on_admin_message(message: Message) -> None:
 
     hockey_fix_id = _admin_awaiting_hockey_fix.pop(user_id, None)
     if hockey_fix_id is not None:
-        from datetime import datetime, timezone
+        from src.application.hockey_matches import get_match
+        from src.application.hockey_notices import rescore_audience
+        from src.application.hockey_review import ReviewError, parse_fix
 
-        from src.application.hockey_review import ReviewError, fix_result
-
+        try:
+            home, away, _decided = parse_fix(text)
+        except ReviewError as exc:
+            _admin_awaiting_hockey_fix[user_id] = hockey_fix_id
+            await message.answer(f"{exc} (или /cancel)")
+            return
+        # Итог уже опубликован и разослан, счёт меняется → один раз спрашиваем: исправление уйдёт игрокам.
         async with async_session_factory() as session:
-            try:
-                title = await fix_result(session, hockey_fix_id, raw=text, now=datetime.now(timezone.utc))
-                await session.commit()
-            except ReviewError as exc:
-                _admin_awaiting_hockey_fix[user_id] = hockey_fix_id
-                await message.answer(f"{exc} (или /cancel)")
-                return
-        audit_log("hockey.review_fix", ACTOR_ADMIN_BOT, user_id, {"match_id": hockey_fix_id, "raw": text[:20]})
-        await message.answer(f"Счёт записан: {title}. Очки посчитаны.")
+            current = await get_match(session, hockey_fix_id)
+            delivered = 0
+            if current is not None and current.status == "final" and (current.home_score, current.away_score) != (home, away):
+                delivered = await rescore_audience(session, hockey_fix_id)
+        if delivered:
+            _admin_pending_hockey_fix[user_id] = (hockey_fix_id, text)
+            await message.answer(
+                f"Итог уже разослан {delivered} игрокам. Им уйдёт сообщение с исправлением. Подтвердить?",
+                reply_markup=_hockey_markup(
+                    [[
+                        {"text": "Да", "callback_data": f"hk:fy:{hockey_fix_id}"},
+                        {"text": "Отмена", "callback_data": f"hk:fn:{hockey_fix_id}"},
+                    ]]
+                ),
+            )
+            return
+        if not await _hockey_apply_fix(message.answer, user_id, hockey_fix_id, text):
+            _admin_awaiting_hockey_fix[user_id] = hockey_fix_id
         return
 
     arena_coords_id = _admin_awaiting_arena_coords.pop(user_id, None)

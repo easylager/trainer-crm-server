@@ -1122,6 +1122,18 @@ body[data-client-shell] .tg-out { display: none !important; }
 .b-price__k, .b-price__s { font-size: 12px; color: var(--g-muted); line-height: 1.25; }
 .b-price__v { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .b-price-sum { margin: -4px 0 0; font-size: 14px; color: var(--g-ink-2); }
+/* TASK-424: строка-ответ над ценами («Каждый день 13 сеансов…») и штамп свежести над днями. */
+.b-brief { margin: -2px 0 2px; font-size: 17px; line-height: 1.4; font-weight: 600; color: var(--g-ink); text-wrap: pretty; }
+.b-proof {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+  font-size: 14px; line-height: 1.4; color: var(--g-ink-2);
+}
+.b-proof__ic {
+  width: 16px; height: 16px; flex: none; fill: none; stroke: var(--g-accent-ink);
+  stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+}
+.b-proof a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--g-line-strong); }
+.b-proof a:hover { color: var(--g-ink); }
 /* Карточка слота уже показывает те же цены — этаж под заголовком прячем, пока план виден. */
 body:has(#plan:not([hidden]) .b-plan__prices:not([hidden])) .b-prices,
 body:has(#plan:not([hidden]) .b-plan__prices:not([hidden])) .b-price-sum {
@@ -1329,3 +1341,6 @@ html.days-sheet-open, html.days-sheet-open body { overflow: hidden; overscroll-b
   border-radius: 12px; background: var(--g-dark); color: var(--g-on-photo);
   font-size: 16px; font-weight: 600; text-decoration: none;
 }
+
+/* ── Лента «Лёд» по каткам: плитка = каток (TASK-425) ─────────────────── */
+.b-tile__more { display: block; font-size: 12px; color: var(--g-muted); }

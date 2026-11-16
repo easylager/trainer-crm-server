@@ -23,6 +23,7 @@ from src.application.hockey_notices import (
     due_notices,
     get_prefs,
     in_quiet_hours,
+    mark_blocked,
     next_move,
     scan_league_ranks,
     set_fav_club,
@@ -190,7 +191,11 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     done = at(21, 40)
     await _finish(db_session, m, 3, 2, done)
 
-    by_player = {n.player_key: n for n in await due_notices(db_session, now=done)}
+    # Свежий итог в чат не уходит (буфер RESULT_SEND_DELAY): его можно поправить до рассылки.
+    assert await due_notices(db_session, now=done) == []
+    assert await due_notices(db_session, now=done + hockey_notices.RESULT_SEND_DELAY - timedelta(seconds=1)) == []
+    ready = done + hockey_notices.RESULT_SEND_DELAY
+    by_player = {n.player_key: n for n in await due_notices(db_session, now=ready)}
     sasha = by_player[SASHA]
     assert sasha.kind == "result"
     assert sasha.text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход 3:2. В точку! +50.\nТвоё место в «")
@@ -202,7 +207,7 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     assert sasha.buttons[0][0]["callback_data"] == "kk:n"
 
     out = Outbox()
-    assert (await deliver(factory, now=done, send=out))["sent"] == 4
+    assert (await deliver(factory, now=ready, send=out))["sent"] == 4
     assert (await deliver(factory, now=done + timedelta(minutes=10), send=out))["sent"] == 0
     # Через 6 часов итог устарел — но и отправленный повторно не уходит.
     assert await due_notices(db_session, now=done + timedelta(hours=7)) == []
@@ -654,3 +659,85 @@ async def test_default_on_for_anyone_with_a_move_off_stays_off(db_session) -> No
     assert (await get_prefs(db_session, SASHA))["on"] is True  # строки настроек нет — включено
     notices = await due_notices(db_session, now=at(16, 5))
     assert [(n.player_key, n.match_id) for n in notices] == [(SASHA, mine)]
+
+
+# ---------- «мы ошиблись с итогом»: исправление уже разосланного итога ----------
+
+
+async def _resent_world(db_session, factory):
+    """Матч 3:2, итог разослан SASHA (точный счёт), KATYA (сторона), VOVA; у LESHA тип «итоги» выключен с начала."""
+    for player, name in ((SASHA, "Саша"), (KATYA, "Катя"), (LESHA, "Лёша"), (VOVA, "Вова")):
+        await _fan(db_session, player, name=name)
+    await set_type(db_session, LESHA, "result", False)
+    m = await _match(db_session, "rs1", at(19))
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, home_score=3, away_score=2, now=at(10))
+    await make_pick(db_session, player_key=KATYA, display_name="Катя", match_id=m, side="home", now=at(10))
+    await make_pick(db_session, player_key=LESHA, display_name="Лёша", match_id=m, side="home", now=at(10))
+    await make_pick(db_session, player_key=VOVA, display_name="Вова", match_id=m, side="away", now=at(10))
+    await _finish(db_session, m, 3, 2, at(21, 40))
+    out = Outbox()
+    assert (await deliver(factory, now=at(21, 50), send=out))["sent"] == 3
+    return m, out
+
+
+async def _correct(db_session, m: int, home: int, away: int, when: datetime, decided: str = "regulation") -> None:
+    await set_manual_result(db_session, m, home_score=home, away_score=away, decided_in=decided, now=when)
+    await score_finished_matches(db_session, now=when)
+
+
+@pytest.mark.asyncio
+async def test_corrected_result_reaches_only_those_who_got_the_old_one_once(db_session, factory) -> None:
+    m, _ = await _resent_world(db_session, factory)
+    await set_type(db_session, VOVA, "result", False)  # отписался уже после итога: исправление ему не нужно
+    await _correct(db_session, m, 2, 3, at(22, 0))
+
+    out = Outbox()
+    assert (await deliver(factory, now=at(22, 10), send=out))["sent"] == 2
+    by_player = {chat: body for chat, body, _ in out.sent}
+    assert set(by_player) == {SASHA, KATYA}  # LESHA итог не получал, VOVA отписан
+    assert by_player[SASHA] == (
+        "Мы ошиблись с итогом: Юность — Шахтёр закончился 2:3, а не 3:2. Твои очки за матч: +0."
+    )
+    assert by_player[KATYA].startswith("Мы ошиблись с итогом: Юность — Шахтёр закончился 2:3, а не 3:2.")
+    labels = [b["text"] for row in out.sent[0][2] for b in row]
+    assert "Таблица" in labels
+    # Один раз на игрока и матч: ни повтор, ни вторая правка не шлют снова.
+    assert (await deliver(factory, now=at(22, 20), send=out))["sent"] == 0
+    await _correct(db_session, m, 5, 1, at(22, 30))
+    assert (await deliver(factory, now=at(22, 40), send=out))["sent"] == 0
+
+
+@pytest.mark.asyncio
+async def test_same_score_or_returning_to_it_sends_nothing(db_session, factory) -> None:
+    m, _ = await _resent_world(db_session, factory)
+    await _correct(db_session, m, 3, 2, at(22, 0), decided="ot")  # тот же счёт, другой способ окончания
+    assert (await deliver(factory, now=at(22, 10), send=Outbox()))["sent"] == 0
+    await _correct(db_session, m, 2, 3, at(22, 15))
+    await _correct(db_session, m, 3, 2, at(22, 20))  # вернули к тому, что клиенты уже видели
+    assert (await deliver(factory, now=at(22, 30), send=Outbox()))["sent"] == 0
+
+
+@pytest.mark.asyncio
+async def test_correction_in_quiet_hours_waits_until_morning(db_session, factory) -> None:
+    m, _ = await _resent_world(db_session, factory)
+    await _correct(db_session, m, 2, 3, at(23, 30))
+    out = Outbox()
+    assert (await deliver(factory, now=at(23, 40), send=out))["sent"] == 0
+    assert (await deliver(factory, now=at(2, 0, day=11), send=out))["sent"] == 0
+    # Утром, много часов спустя (окно свежести итога для исправления не действует), оно уходит.
+    assert (await deliver(factory, now=at(9, 5, day=11), send=out))["sent"] == 3
+    assert all(body.startswith("Мы ошиблись с итогом") for _, body, _ in out.sent)
+
+
+@pytest.mark.asyncio
+async def test_blocked_player_gets_no_correction_and_unchanged_points_are_not_mentioned(db_session, factory) -> None:
+    m, _ = await _resent_world(db_session, factory)
+    await mark_blocked(db_session, VOVA, now=at(22, 0))
+    await _correct(db_session, m, 4, 2, at(22, 5))  # победитель тот же: у KATYA очки не меняются
+    out = Outbox()
+    assert (await deliver(factory, now=at(22, 15), send=out))["sent"] == 2
+    by_player = {chat: body for chat, body, _ in out.sent}
+    assert VOVA not in by_player
+    assert by_player[KATYA] == "Мы ошиблись с итогом: Юность — Шахтёр закончился 4:2, а не 3:2."
+    assert "очки" not in by_player[KATYA]
+    assert "очки" in by_player[SASHA]

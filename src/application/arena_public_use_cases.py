@@ -761,6 +761,8 @@ SELECT
     p.schedule_mode, p.reopen_date, p.schedule_mode_note,
     p.amenities, p.visit_info, p.status, p.verified_at, p.updated_at AS profile_updated_at,
     c.country, c.name AS city_name,
+    ass.source_url AS schedule_source_url, ass.source_kind AS schedule_source_kind,
+    ass.fetch_mode AS schedule_fetch_mode,
     COALESCE((
         SELECT COUNT(*)::int FROM ice_sessions s
         WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
@@ -798,6 +800,7 @@ FROM arenas a
 LEFT JOIN arena_profiles p ON p.arena_id = a.id
 JOIN cities c ON c.id = a.city_id
 LEFT JOIN ice_parser_jobs ipj ON ipj.arena_id = a.id
+LEFT JOIN arena_schedule_sources ass ON ass.arena_id = a.id
 WHERE a.id = :arena_id
   AND {PUBLIC_ARENA_VISIBLE_SQL}
 LIMIT 1
@@ -2294,7 +2297,21 @@ def _freshness_payload(
         # Q-012: последняя правка карточки — источник «обновлено N назад» у мест без
         # расписания с сайта (магазин, зал). NULL — неизвестно, тогда о свежести молчим.
         "profile_updated_at": _iso(row.get("profile_updated_at")),
+        # TASK-424: откуда админ берёт расписание (arena_schedule_sources) — ссылка штампа
+        # «Проверено DD.MM на сайте катка». Только сайт и только если источник собирают.
+        "schedule_site_url": _schedule_site_url(row),
     }
+
+
+def _schedule_site_url(row: Mapping[str, Any]) -> str | None:
+    """Сайт катка как источник расписания: kind=site и режим сбора не «none». Иначе ``None``."""
+    from src.application.admin_ice_sources import detect_source_kind
+
+    url = str(row.get("schedule_source_url") or "").strip()
+    if not url or row.get("schedule_fetch_mode") in (None, "none"):
+        return None
+    kind = row.get("schedule_source_kind") or detect_source_kind(url)
+    return url if kind == "site" else None
 
 
 async def get_public_arena_card(

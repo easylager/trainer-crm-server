@@ -188,3 +188,21 @@ async def test_admin_timeline_excludes_next_step_shown_too(db_session: AsyncSess
     data = await list_platform_audit_events_for_admin(db_session, limit=20, trainer_id=trainer_id)
     event_types = {ev["event_type"] for ev in data["events"]}
     assert "trainer.hub.next_step_shown" not in event_types
+
+
+@pytest.mark.asyncio
+async def test_join_redirect_is_stored_but_not_in_the_admin_timeline(db_session: AsyncSession) -> None:
+    """Переход по /join — охват лендинга: в базе остаётся, в ленте «История» его нет."""
+    event_id = await insert_platform_audit_from_record(
+        db_session,
+        {
+            "event": "landing.trainer_join_redirect",
+            "actor_type": "api",
+            "actor_id": "135.181.166.38",
+            "payload": {"has_referral": False},
+        },
+    )
+    assert event_id is not None
+    assert "landing.trainer_join_redirect" in ADMIN_TIMELINE_EXCLUDED_EVENT_TYPES
+    feed = await list_platform_audit_events_for_admin(db_session, limit=100)
+    assert all(e["event_type"] != "landing.trainer_join_redirect" for e in feed["events"])
