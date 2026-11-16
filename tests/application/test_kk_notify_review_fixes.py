@@ -195,7 +195,7 @@ async def _league_notice(db, key: int) -> int:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "prefs", [{"remind": False}, {"blocked_at": at(1, day=9)}, {"notify_league": False}], ids=["optout", "blocked", "type"]
+    "prefs", [{"blocked_at": at(1, day=9)}, {"notify_league": False}], ids=["blocked", "type"]
 )
 async def test_league_notice_goes_through_gate(db_session, factory, prefs) -> None:
     await seed_player(db_session, SASHA, **prefs)
@@ -379,7 +379,7 @@ async def test_report_counts_weekly_cap_refusals(db_session) -> None:
         )
     got = await report.collect(db_session, now=MONDAY)
     assert got.weekly_cap_refusals == 2
-    assert "Отказов по недельному лимиту: 2." in report.render_report(got, report.Thresholds())
+    assert "Записей журнала об отказе по недельному лимиту: 2 " in report.render_report(got, report.Thresholds())
 
 
 @pytest.mark.asyncio
@@ -430,3 +430,128 @@ async def test_already_lost_player_is_not_counted_as_left(db_session) -> None:
     await seed_pick(db_session, LESHA, at(10, day=20, month=10))  # отвалился ещё до отчётной недели
     got = await report.collect(db_session, now=MONDAY)
     assert got.left == 0 and got.phases_now == {"lost": 1}
+
+
+# ---------- A1. письма лиг не зависят от согласия remind ----------
+
+
+@pytest.mark.asyncio
+async def test_league_notice_ignores_remind_switch(db_session, factory) -> None:
+    await seed_player(db_session, SASHA, remind=False)
+    await _league_notice(db_session, SASHA)
+    out = Outbox()
+    await hn.deliver_league_notices(factory, now=at(12), send=out)
+    assert len(out.sent) == 1  # как было всегда: remind — про игровую рассылку, не про письма лиги
+    assert gate.KIND_POLICY["league"].respects_remind is False
+
+
+@pytest.mark.asyncio
+async def test_league_notice_still_waits_for_morning(db_session, factory) -> None:
+    await seed_player(db_session, SASHA)
+    await _league_notice(db_session, SASHA)
+    out = Outbox()
+    await hn.deliver_league_notices(factory, now=at(23, 30), send=out)
+    assert out.sent == []
+
+
+# ---------- A2. замок игрока в старом deliver и в письмах лиг ----------
+
+
+async def _hold_lock(maker, key):
+    """Соединение, которое держит замок игрока, пока не скажут отпустить."""
+    release = asyncio.Event()
+    held = asyncio.Event()
+
+    async def hold():
+        async with maker() as other:
+            await gate.lock_player(other, key)
+            held.set()
+            await release.wait()
+            await other.rollback()
+
+    task = asyncio.create_task(hold())
+    await held.wait()
+    return release, task
+
+
+@pytest.mark.asyncio
+async def test_legacy_deliver_waits_for_player_lock(real, monkeypatch) -> None:
+    notice = hn.Notice("nomove", REAL_KEY, real.match_ids[0], "т", [])
+
+    async def fake_due(session, *, now, overtakes=()):
+        return [notice]
+
+    async def fake_scan(session, *, now):
+        return []
+
+    monkeypatch.setattr(hn, "due_notices", fake_due)
+    monkeypatch.setattr(hn, "scan_league_ranks", fake_scan)
+    today = datetime.now(MINSK_TZ).replace(hour=12, minute=0, second=0, microsecond=0)
+    release, holder = await _hold_lock(real.factory, REAL_KEY)
+    out = Outbox()
+    work = asyncio.create_task(hn.deliver(real.factory, now=today, send=out))
+    await asyncio.sleep(0.4)
+    assert out.sent == [] and not work.done()  # ждёт замок
+    release.set()
+    await work
+    await holder
+    assert len(out.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_league_notices_wait_for_player_lock(real) -> None:
+    async with real.factory() as s:
+        league_id = (
+            await s.execute(
+                text("""INSERT INTO hockey_leagues (name, invite_code, owner_key, scope, term_kind, starts_at, ends_at)
+                        VALUES ('Л', 'kk426real', :o, 'dinamo', 'month', :s, :e) RETURNING id"""),
+                {"o": REAL_KEY, "s": at(0, day=1), "e": at(0, day=30)},
+            )
+        ).scalar_one()
+        await s.execute(
+            text("INSERT INTO hockey_league_notices (league_id, player_key, kind) VALUES (:l, :k, 'extended')"),
+            {"l": league_id, "k": REAL_KEY},
+        )
+        await s.commit()
+    try:
+        release, holder = await _hold_lock(real.factory, REAL_KEY)
+        out = Outbox()
+        work = asyncio.create_task(hn.deliver_league_notices(real.factory, now=at(12), send=out))
+        await asyncio.sleep(0.4)
+        assert out.sent == [] and not work.done()
+        release.set()
+        await work
+        await holder
+        assert len(out.sent) == 1
+    finally:
+        async with real.factory() as s:
+            await s.execute(text("DELETE FROM hockey_leagues WHERE invite_code = 'kk426real'"))
+            await s.commit()
+
+
+# ---------- A4. цикл матчей шлёт отправителем с обнаружением gone ----------
+
+
+def test_loop_uses_gone_aware_sender_everywhere() -> None:
+    import re
+
+    src = (ROOT / "src/bot/notification_loops.py").read_text(encoding="utf-8")
+    assert not re.search(r"send=send_via_client_bot\b(?!_gone)", src), "цикл вернулся к отправителю без gone"
+    assert src.count("send=send_via_client_bot_gone") >= 3  # deliver, deliver_league_notices, kk_notify
+
+
+# ---------- A5. чистка журнала ----------
+
+
+@pytest.mark.asyncio
+async def test_journal_cleanup_keeps_ninety_days(db_session, factory) -> None:
+    now = at(12, day=16)
+    for days_ago, label in ((91, "old"), (90, "edge"), (89, "keep"), (1, "new")):
+        await db_session.execute(
+            text("INSERT INTO kk_notify_decisions (tick_at, player_key, phase, kind, decision, reason) "
+                 "VALUES (:t, 1, 'active', 'x', 'skip', :r)"),
+            {"t": now - timedelta(days=days_ago), "r": label},
+        )
+    await hn.cleanup_old_notices(factory, now=now, force=True)
+    left = sorted(r.reason for r in (await db_session.execute(text("SELECT reason FROM kk_notify_decisions"))).all())
+    assert left == ["edge", "keep", "new"]  # ровно 90 суток ещё хранится

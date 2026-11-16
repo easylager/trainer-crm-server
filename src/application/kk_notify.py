@@ -33,6 +33,7 @@ from src.application.kk_notify_gate import (
     GateConfig,
     Recheck,
     admit,
+    lock_player,
 )
 from src.application.kk_notify_journal import UNKNOWN_PHASE, write_journal
 from src.application.kk_notify_phase import Phase, PlayerFacts, load_player_facts
@@ -100,9 +101,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-LOCK_SQL = text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))")
-
-
 async def dispatch(
     session_factory,
     proposal: Proposal,
@@ -136,7 +134,7 @@ async def dispatch(
 
     try:
         async with session_factory() as session:
-            await session.execute(LOCK_SQL, {"lock_key": f"kk_notify:{player_key}"})
+            await lock_player(session, player_key)
             admission: Admission = await admit(
                 session,
                 kind=kind,

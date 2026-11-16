@@ -65,6 +65,12 @@ class KindPolicy:
     type_column: str | None = None
     # Меньше — важнее, когда у игрока в один проход несколько кандидатов.
     priority: int = 100
+    # Зависит ли от главного согласия ``remind``. «Лига продлена» — ответ на действие владельца лиги, а не
+    # игровая рассылка, и пришла бы и тому, кто не включал напоминания (так было всегда); остальные — зависят.
+    respects_remind: bool = True
+    # Нужно ли согласие на новые сообщения (``notify_consent``: ответ на первое сообщение или согласие по умолчанию
+    # для игравших до выкатки). Итоги и события его не требуют.
+    needs_consent: bool = False
 
 
 KIND_POLICY: dict[str, KindPolicy] = {
@@ -73,8 +79,9 @@ KIND_POLICY: dict[str, KindPolicy] = {
     "moved": KindPolicy(budgeted=False),
     "mvfree": KindPolicy(budgeted=False),
     "rescore": KindPolicy(budgeted=False, type_column="notify_result"),
-    # «Лига продлена» — ответ на действие владельца лиги: вне бюджета, но с тихими часами, блокировкой и отключением.
-    "league": KindPolicy(budgeted=False, type_column="notify_league"),
+    # «Лига продлена» — ответ на действие владельца лиги: вне бюджета и не зависит от согласия ``remind``
+    # (письмо о лиге, в которой человек состоит, а не рассылка), но с тихими часами, блокировкой и отключением типа.
+    "league": KindPolicy(budgeted=False, type_column="notify_league", respects_remind=False),
     "mfinal": KindPolicy(budgeted=True, type_column="notify_mfinal", priority=0),
     "overtook": KindPolicy(budgeted=True, type_column="notify_overtook", priority=1),
     "nomove": KindPolicy(budgeted=True, type_column="notify_nomove", priority=2),
@@ -186,6 +193,15 @@ async def _spent(session: AsyncSession, player_key: int, since: datetime, until:
     return int((await session.execute(_SPENT, params)).scalar_one())
 
 
+_LOCK = text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))")
+
+
+async def lock_player(session: AsyncSession, player_key: int) -> None:
+    """Замок на игрока до конца транзакции: допуск и занятие строки идут под ним, так что два цикла (или процесса)
+    не пройдут допуск по одному игроку одновременно. Один ключ для всех путей отправки."""
+    await session.execute(_LOCK, {"lock_key": f"kk_notify:{player_key}"})
+
+
 async def admit(
     session: AsyncSession,
     *,
@@ -229,7 +245,7 @@ async def _admit(
     prefs = (await session.execute(_PREFS, {"player_key": player_key})).one()
     if prefs.bot_blocked_at is not None:
         return Admission(False, BLOCKED)
-    if not prefs.remind:
+    if policy.respects_remind and not prefs.remind:
         return Admission(False, OPTED_OUT)
     if policy.type_column is not None and not getattr(prefs, policy.type_column):
         return Admission(False, TYPE_OFF)
@@ -269,6 +285,7 @@ __all__ = [
     "Recheck",
     "WEEKLY_CAP",
     "admit",
+    "lock_player",
     "day_bounds",
     "in_quiet_hours",
     "register_kind",

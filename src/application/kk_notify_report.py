@@ -290,7 +290,7 @@ def render_report(data: ReportData, th: Thresholds) -> str:
             f"Не дошло: {data.failed_total} из {attempts} ({percent(data.failed_total, attempts)}{NBSP}%)."
         )
     lines.append(f"Заблокировали бота: {data.blocked_players}.")
-    lines.append(f"Отказов по недельному лимиту: {data.weekly_cap_refusals}.")
+    lines.append(f"Записей журнала об отказе по недельному лимиту: {data.weekly_cap_refusals} (повтор в течение часа не пишется).")
     lines.append("")
     lines.append("Ход в течение суток после сообщения:")
     for kind in INVITE_KINDS:

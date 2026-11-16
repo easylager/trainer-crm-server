@@ -58,8 +58,15 @@ from src.application.hockey_slices import (
 )
 from src.application.hockey_slices_sql import SCOPE_SQL
 from src.application.hockey_teams import display_name as club_name
-from src.application.kk_notify_gate import QUIET_FROM, QUIET_TO, admit, day_bounds, in_quiet_hours  # noqa: F401
-from src.application.kk_notify_journal import UNKNOWN_PHASE, write_journal
+from src.application.kk_notify_gate import (  # noqa: F401
+    QUIET_FROM,
+    QUIET_TO,
+    admit,
+    day_bounds,
+    in_quiet_hours,
+    lock_player,
+)
+from src.application.kk_notify_journal import UNKNOWN_PHASE, cleanup_journal, write_journal
 from src.application.kk_notify_phase import load_one
 from src.ingestion.hockey_sources import MINSK_TZ
 
@@ -1115,6 +1122,7 @@ async def cleanup_old_notices(session_factory, *, now: datetime, force: bool = F
         return 0
     _last_cleanup = now
     total = 0
+    await cleanup_journal(session_factory, now=now)
     for _ in range(NOTICES_CLEANUP_MAX_BATCHES):
         async with session_factory() as session:
             result = await session.execute(
@@ -1166,19 +1174,22 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
         notices = await due_notices(session, now=now, overtakes=overtakes)
     for notice in notices:
         # Единая точка допуска (kk_notify_gate): тихие часы, бюджет, блокировка и «не присылать» перечитываются
-        # прямо перед отправкой. Неизвестный повод или сбой проверки — не пишем, строку не занимаем.
+        # прямо перед отправкой, под замком игрока вместе с занятием строки. Неизвестный повод или сбой проверки —
+        # не пишем, строку не занимаем.
         async with session_factory() as session:
+            await lock_player(session, notice.player_key)
             admission = await admit(session, kind=notice.kind, player_key=notice.player_key, now=now)
+            claimed = True
+            if admission.allowed and not notice.preclaimed:
+                claimed = await claim(session, notice)
+                await session.commit()
         if not admission.allowed:
             logger.info("kto-kogo notice %s/%s not admitted: %s", notice.kind, notice.player_key, admission.reason)
             counts["refused"] = counts.get("refused", 0) + 1
             await _journal_refusal(session_factory, notice, admission.reason, now=now)
             continue
-        if not notice.preclaimed:
-            async with session_factory() as session:
-                if not await claim(session, notice):
-                    continue
-                await session.commit()
+        if not claimed:
+            continue
         try:
             outcome = _outcome(await send(notice.player_key, notice.text, notice.buttons))
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
@@ -1319,8 +1330,9 @@ def league_extended_buttons(league_id: int, invite_code: str) -> list[list[dict]
 
 
 async def deliver_league_notices(session_factory, *, now: datetime, send: Sender) -> dict[str, int]:
-    """Письма «лига продлена». Ответ на действие владельца, поэтому вне дневного бюджета; допуск (kk_notify_gate)
-    не пускает к тем, кто отключил этот тип, нажал «не присылать» или заблокировал бота. Ночью ждут утра."""
+    """Письма «лига продлена». Ответ на действие владельца лиги, а не игровая рассылка, поэтому: вне дневного бюджета
+    и не зависят от согласия ``remind`` (так было всегда). Допуск (kk_notify_gate) не пускает к тем, кто отключил
+    именно этот тип (``notify_league``) или заблокировал бота; ночью письма ждут утра."""
     counts = {"sent": 0, "failed": 0, "blocked": 0, "skipped": 0}
     if in_quiet_hours(now):
         return counts
@@ -1328,20 +1340,18 @@ async def deliver_league_notices(session_factory, *, now: datetime, send: Sender
         due = list((await session.execute(_DUE_LEAGUE_NOTICES)).all())
     for r in due:
         params = {"league_id": r.league_id, "player_key": r.player_key}
+        # Под замком игрока: занять письмо и пройти допуск (он перечитывает блокировку и «не присылать» заново,
+        # r.* — из выборки и мог устареть). Отказ тоже «съедает» письмо, как и раньше.
         async with session_factory() as session:
+            await lock_player(session, r.player_key)
             if (await session.execute(_CLAIM_LEAGUE_NOTICE, {**params, "now": _utc(now)})).first() is None:
                 continue
-            await session.commit()
-        # Допуск перечитывает блокировку и «не присылать» заново (r.* — из выборки, мог устареть).
-        async with session_factory() as session:
             admission = await admit(session, kind="league", player_key=r.player_key, now=now)
+            await session.commit()
         if not admission.allowed:
             counts["skipped"] += 1
             await _journal_refusal(
-                session_factory,
-                Notice("league", r.player_key, 0, "", []),
-                admission.reason,
-                now=now,
+                session_factory, Notice("league", r.player_key, 0, "", []), admission.reason, now=now
             )
             continue
         try:

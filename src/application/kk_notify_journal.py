@@ -14,6 +14,10 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 JOURNAL_DEDUPE = timedelta(hours=1)
+# Журнал хранится 90 дней; чистится вместе с ``hockey_notices`` (``cleanup_old_notices``), порциями.
+JOURNAL_KEEP = timedelta(days=90)
+JOURNAL_CLEANUP_BATCH = 2000
+JOURNAL_CLEANUP_MAX_BATCHES = 10
 UNKNOWN_PHASE = "unknown"
 
 _JOURNAL_RECENT = text("""
@@ -63,4 +67,29 @@ async def write_journal(
 
 
 
-__all__ = ["JOURNAL_DEDUPE", "UNKNOWN_PHASE", "write_journal"]
+_DELETE_OLD = text("""
+    DELETE FROM kk_notify_decisions
+    WHERE id IN (SELECT id FROM kk_notify_decisions WHERE tick_at < :cutoff ORDER BY id LIMIT :batch)
+    """)
+
+
+async def cleanup_journal(session_factory, *, now: datetime) -> int:
+    """Удалить записи старше ``JOURNAL_KEEP`` порциями; сбой чистки ничего не ломает. Возвращает число удалённых."""
+    total = 0
+    try:
+        for _ in range(JOURNAL_CLEANUP_MAX_BATCHES):
+            async with session_factory() as session:
+                result = await session.execute(
+                    _DELETE_OLD, {"cutoff": now - JOURNAL_KEEP, "batch": JOURNAL_CLEANUP_BATCH}
+                )
+                await session.commit()
+            deleted = getattr(result, "rowcount", 0) or 0
+            total += deleted
+            if deleted < JOURNAL_CLEANUP_BATCH:
+                break
+    except Exception:  # noqa: BLE001
+        logger.warning("kk_notify journal cleanup failed", exc_info=True)
+    return total
+
+
+__all__ = ["JOURNAL_DEDUPE", "JOURNAL_KEEP", "UNKNOWN_PHASE", "cleanup_journal", "write_journal"]
