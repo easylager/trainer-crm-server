@@ -252,7 +252,7 @@ async def test_comeback_ten_day_step_names_place_by_rule(db_session) -> None:
     await db_session.execute(text("UPDATE hockey_picks SET picked_at = :t WHERE player_key = :k"), {"t": at(10, day=1), "k": SASHA})
     await seed_match(db_session, at(19, day=13), home="Динамо-Минск", away="Спартак")
     [p] = [x for x in await ev.produce_comeback(db_session, now=WED) if x.notice.player_key == SASHA]
-    assert plain(p.notice.text).splitlines()[0] == "В~таблице ноября по~Динамо-Минск ты на~3-м~месте."
+    assert plain(p.notice.text).splitlines()[0] == "В~таблице ноября (Динамо-Минск) ты на~3-м~месте."
     assert mid
 
 
@@ -291,7 +291,7 @@ async def test_week_text_with_place_and_match_line(db_session) -> None:
     await seed_match(db_session, at(19, 30, day=18), home="Юность", away="Шахтер")
     [p] = await ev.produce_week(db_session, now=MON)
     lines = plain(p.notice.text).splitlines()
-    assert lines[0] == "За~неделю 3~хода и~60~очков, в~таблице ноября по~Юность ты на~1-м~месте."
+    assert lines[0] == "За~неделю 3~хода и~60~очков, в~таблице ноября (Юность) ты на~1-м~месте."
     assert lines[1] == "<b>Юность~— Шахтёр</b> в~среду в~19:30. Твой ход?"
     assert p.notice.kind == "week" and p.notice.match_id == ids[-1]  # якорь — последний матч недели
 
@@ -354,7 +354,7 @@ async def test_month_without_crown_with_place(db_session) -> None:
     await _month_table(db_session, me_points=30, others=[50, 50, 30, 20, 10])
     await _close_november(db_session)
     [p] = [x for x in await ev.produce_month(db_session, now=DEC1) if x.notice.player_key == SASHA]
-    assert plain(p.notice.text) == "В~таблице ноября по~Динамо-Минск ты на~3-м~месте из~6: 30~очков."
+    assert plain(p.notice.text) == "В~таблице ноября (Динамо-Минск) ты на~3-м~месте из~6: 30~очков."
     assert p.notice.kind == "month"
 
 
@@ -363,9 +363,9 @@ async def test_month_crown_variants(db_session) -> None:
     mid, others = await _month_table(db_session, me_points=50, others=[50, 50, 10, 10, 0])
     await db_session.execute(text("UPDATE hockey_picks SET points = 50 WHERE match_id = :m AND player_key = :k"), {"m": mid, "k": SASHA})
     for crowned, expected in (
-        ([SASHA], "Корона за~ноябрь по~Динамо-Минск~— твоя. 50~очков, 1~ход в~точку."),
-        ([SASHA, others[0]], "Корона за~ноябрь по~Динамо-Минск~— на~двоих: у~тебя и~ещё одного игрока."),
-        ([SASHA, others[0], others[1]], "Корона за~ноябрь по~Динамо-Минск~— общая: у~тебя и~ещё 2~игрока."),
+        ([SASHA], "Корона за~ноябрь (Динамо-Минск)~— твоя. 50~очков, 1~ход в~точку."),
+        ([SASHA, others[0]], "Корона за~ноябрь (Динамо-Минск)~— на~двоих: у~тебя и~ещё одного игрока."),
+        ([SASHA, others[0], others[1]], "Корона за~ноябрь (Динамо-Минск)~— общая: у~тебя и~ещё 2~игрока."),
     ):
         await db_session.execute(text("DELETE FROM hockey_closures"))
         await db_session.execute(text("DELETE FROM hockey_crowns"))

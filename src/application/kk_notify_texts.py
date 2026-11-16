@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 from datetime import datetime, timezone
 
@@ -36,6 +37,11 @@ def _local(value: datetime) -> datetime:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(MINSK_TZ)
+
+
+def club_text(name: str) -> str:
+    """Название клуба для сообщения (ParseMode.HTML): как в ``club_name``, с экранированием."""
+    return html.escape(club_name(name))
 
 
 def word(kind: str, n: int) -> str:
@@ -80,8 +86,8 @@ def match_line(home: str, away: str, starts_at: datetime, now: datetime) -> str:
     return typo(
         t(
             "kk_notify.match",
-            home=club_name(home),
-            away=club_name(away),
+            home=club_text(home),
+            away=club_text(away),
             day=day_phrase(starts_at, now),
             time=hhmm(starts_at),
         )
@@ -112,7 +118,7 @@ def comeback_text(
 def place_line(*, club: str, month: int, rank: int, size: int) -> str | None:
     if not place_shown(rank, size):
         return None
-    return typo(t("kk_notify.place_line", month_gen=month_gen(month), club=club_name(club), rank=rank))
+    return typo(t("kk_notify.place_line", month_gen=month_gen(month), club=club_text(club), rank=rank))
 
 
 def week_text(
@@ -130,7 +136,7 @@ def week_text(
     shown = club is not None and rank is not None and size is not None and place_shown(rank, size)
     kw = dict(moves=moves, moves_word=word("move", moves), points=points, points_word=word("point", points))
     if shown:
-        head = t("kk_notify.week_place", month_gen=month_gen(month), club=club_name(club), rank=rank, **kw)
+        head = t("kk_notify.week_place", month_gen=month_gen(month), club=club_text(club), rank=rank, **kw)
     else:
         head = t("kk_notify.week_plain", **kw)
     line = match_line(match["home"], match["away"], match["starts_at"], now) if match else None
@@ -158,7 +164,7 @@ def month_text(
     clause = _exact_clause(exact)
     points_word = word("point", points)
     if i_am_crowned and club is not None:
-        base = dict(month_nom=month_nom(month), club=club_name(club))
+        base = dict(month_nom=month_nom(month), club=club_text(club))
         if crowned <= 1:
             head = t("kk_notify.crown_one", points=points, points_word=points_word, exact_clause=clause, **base)
         elif crowned == 2:
@@ -170,7 +176,7 @@ def month_text(
         head = t(
             "kk_notify.month_place",
             month_gen=month_gen(month),
-            club=club_name(club),
+            club=club_text(club),
             rank=rank,
             size=size,
             points=points,
