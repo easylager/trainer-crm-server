@@ -133,6 +133,7 @@ async def public_page_view_beacon(
     s: str | None = Query(None, description="id сеанса из ?s="),
     src: str | None = Query(None, description="канал шаринга"),
     i: str | None = Query(None, description="1 — тон «Позвать с собой»"),
+    utm_source: str | None = Query(None, max_length=64, description="метка платной ссылки (TASK-428)"),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """Просмотр /, /c/, /p/ с клиента (prefetch/bfcache-safe); GET HTML просмотр не пишет."""
@@ -162,6 +163,7 @@ async def public_page_view_beacon(
             "s": session_id,
             "i": "1" if invite else None,
             "src": clean_share_src(src),
+            "utm_source": utm_source,
         },
     )
     return Response(status_code=204)

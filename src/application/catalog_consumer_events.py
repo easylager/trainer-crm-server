@@ -27,6 +27,7 @@ import hmac
 import json
 import logging
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
 from urllib.parse import parse_qsl
@@ -135,7 +136,35 @@ _MINIAPP_DEDUP_GROUP = "miniapp"
 
 _missing_secret_logged = False
 
-_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src"})
+_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src", "utm_source"})
+
+# TASK-428: метка источника платной ссылки. Сайт — ``?utm_source=<метка>``, Mini App — ``startapp=src_<метка>``.
+# Пишется в ``payload.source`` события и разводит дедуп: органический заход в тот же день не съедает рекламный.
+_SOURCE_LABEL_RE = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
+SOURCE_START_PREFIX = "src_"
+
+
+def clean_source_label(value: Any) -> str | None:
+    """Метка источника: 2–32 латиница, цифры, «_», «-», в нижнем регистре; всё прочее — ``None``."""
+    raw = str(value or "").strip()
+    return raw.lower() if _SOURCE_LABEL_RE.fullmatch(raw) else None
+
+
+def source_from_start_param(start_param: str | None) -> str | None:
+    """``src_ig1124`` → ``ig1124``. Другие параметры запуска (каток, город, игра) меткой не считаются."""
+    sp = (start_param or "").strip()
+    if not sp.startswith(SOURCE_START_PREFIX):
+        return None
+    return clean_source_label(sp[len(SOURCE_START_PREFIX) :])
+
+
+def _dedup_variant(body: Mapping[str, Any]) -> str | None:
+    parts = []
+    if body.get("src") in SHARE_SRC_VALUES:
+        parts.append(str(body["src"]))
+    if body.get("source"):
+        parts.append(f"source:{body['source']}")
+    return "|".join(parts) or None
 
 
 def _actor_hmac_secret() -> bytes | None:
@@ -428,7 +457,7 @@ async def record_catalog_consumer_event(
             day=day,
             city_id=city_id,
             arena_id=arena_id,
-            variant=str(body["src"]) if body.get("src") in SHARE_SRC_VALUES else None,
+            variant=_dedup_variant(body),
         )
         if dedup
         else None
@@ -776,6 +805,10 @@ def public_page_view_attribution_payload(extra_payload: dict[str, Any] | None) -
         elif key == "i":
             if str(value).strip().lower() in ("1", "true", "yes"):
                 out["i"] = "1"
+        elif key == "utm_source":
+            label = clean_source_label(value)
+            if label:
+                out["source"] = label
     return out
 
 

@@ -405,6 +405,7 @@ from src.application.client_share_message import (
 )
 from src.application.catalog_consumer_events import (
     KIND_MINIAPP_CATALOG_ENTRY,
+    source_from_start_param,
     is_share_attributed_deeplink_open,
     record_catalog_consumer_event,
     resolve_entry_scope,
@@ -3657,6 +3658,8 @@ async def post_client_catalog_presence(
             "platform": principal.platform.value,
             "chat_type": chat_type,
             "share_deeplink": is_share_attributed_deeplink_open(sp, chat_type=chat_type),
+            # TASK-428: метка платной ссылки (startapp=src_<метка>); без неё ключа нет.
+            **({"source": label} if (label := source_from_start_param(sp)) else {}),
         },
     )
     return {"ok": True, "recorded": inserted}
