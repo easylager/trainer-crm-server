@@ -3547,18 +3547,18 @@ async def run_hockey_matches_loop() -> None:
                     close_client_bot,
                     deliver,
                     deliver_league_notices,
-                    send_via_client_bot,
+                    send_via_client_bot_gone,
                 )
 
                 try:
-                    counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot)
+                    counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot_gone)
                     counts["league_notices"] = await deliver_league_notices(
-                        async_session_factory, now=now, send=send_via_client_bot
+                        async_session_factory, now=now, send=send_via_client_bot_gone
                     )
                     # Новые поводы (TASK-426): закрыты флагами, без поводов — пустой проход.
                     from src.application.kk_notify import run_tick as kk_notify_tick
 
-                    counts["kk_notify"] = await kk_notify_tick(async_session_factory, now=now, send=send_via_client_bot)
+                    counts["kk_notify"] = await kk_notify_tick(async_session_factory, now=now, send=send_via_client_bot_gone)
                     # Старые строки hockey_notices — редко (раз в 6 часов) и порциями.
                     from src.application.hockey_notices import cleanup_old_notices
 

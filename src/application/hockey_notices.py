@@ -59,6 +59,8 @@ from src.application.hockey_slices import (
 from src.application.hockey_slices_sql import SCOPE_SQL
 from src.application.hockey_teams import display_name as club_name
 from src.application.kk_notify_gate import QUIET_FROM, QUIET_TO, admit, day_bounds, in_quiet_hours  # noqa: F401
+from src.application.kk_notify_journal import UNKNOWN_PHASE, write_journal
+from src.application.kk_notify_phase import load_one
 from src.ingestion.hockey_sources import MINSK_TZ
 
 logger = logging.getLogger(__name__)
@@ -119,6 +121,7 @@ CB_LEAVE = "kk:lv"  # kk:lv:<лига>
 SENT = "ok"
 BLOCKED = "blocked"
 FAILED = "failed"
+GONE = "gone"  # чат не найден / аккаунт удалён: недостижим, трактуется как блокировка
 RETRY = "retry"  # временный сбой (429, сеть, 5xx): сообщение не потеряно, повторим на следующем проходе
 # Попыток на одно сообщение; счётчик в памяти процесса — дальше страхуют окна свежести и тишина.
 MAX_ATTEMPTS = 5
@@ -1133,6 +1136,27 @@ def _outcome(value: "bool | str") -> str:
     return value
 
 
+async def _journal_refusal(session_factory, notice: Notice, reason: str, *, now: datetime) -> None:
+    """Отказ допуска у прежнего повода — в журнал решений, не только в лог (ошибка журнала ничего не ломает)."""
+    phase = UNKNOWN_PHASE
+    try:
+        async with session_factory() as session:
+            facts = await load_one(session, notice.player_key, as_of=now)
+        if facts is not None:
+            phase = facts.phase(now).value
+    except Exception:  # noqa: BLE001
+        logger.warning("kto-kogo refusal journal: phase failed", exc_info=True)
+    await write_journal(
+        session_factory,
+        tick_at=_utc(now),
+        player_key=notice.player_key,
+        phase=phase,
+        kind=notice.kind,
+        decision="skip",
+        reason=reason,
+    )
+
+
 async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, int]:
     """Сверить места в лигах, занять — закоммитить — отправить — отметить. Каждое сообщение — своя транзакция."""
     counts = {"sent": 0, "failed": 0, "blocked": 0}
@@ -1148,6 +1172,7 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
         if not admission.allowed:
             logger.info("kto-kogo notice %s/%s not admitted: %s", notice.kind, notice.player_key, admission.reason)
             counts["refused"] = counts.get("refused", 0) + 1
+            await _journal_refusal(session_factory, notice, admission.reason, now=now)
             continue
         if not notice.preclaimed:
             async with session_factory() as session:
@@ -1159,6 +1184,8 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
             logger.warning("kto-kogo notice %s/%s failed", notice.kind, notice.match_id, exc_info=True)
             outcome = FAILED
+        if outcome == GONE:
+            outcome = BLOCKED
         key = (notice.kind, notice.player_key, notice.match_ids)
         if outcome == RETRY and not _attempt(key):
             outcome = FAILED
@@ -1292,8 +1319,8 @@ def league_extended_buttons(league_id: int, invite_code: str) -> list[list[dict]
 
 
 async def deliver_league_notices(session_factory, *, now: datetime, send: Sender) -> dict[str, int]:
-    """Письма «лига продлена». Ответ на действие владельца, поэтому вне дневного бюджета и без главного
-    выключателя; не шлём тем, кто отключил этот тип или заблокировал бота. Ночью ждут утра."""
+    """Письма «лига продлена». Ответ на действие владельца, поэтому вне дневного бюджета; допуск (kk_notify_gate)
+    не пускает к тем, кто отключил этот тип, нажал «не присылать» или заблокировал бота. Ночью ждут утра."""
     counts = {"sent": 0, "failed": 0, "blocked": 0, "skipped": 0}
     if in_quiet_hours(now):
         return counts
@@ -1305,8 +1332,17 @@ async def deliver_league_notices(session_factory, *, now: datetime, send: Sender
             if (await session.execute(_CLAIM_LEAGUE_NOTICE, {**params, "now": _utc(now)})).first() is None:
                 continue
             await session.commit()
-        if not r.wants or r.bot_blocked_at is not None:
+        # Допуск перечитывает блокировку и «не присылать» заново (r.* — из выборки, мог устареть).
+        async with session_factory() as session:
+            admission = await admit(session, kind="league", player_key=r.player_key, now=now)
+        if not admission.allowed:
             counts["skipped"] += 1
+            await _journal_refusal(
+                session_factory,
+                Notice("league", r.player_key, 0, "", []),
+                admission.reason,
+                now=now,
+            )
             continue
         try:
             outcome = _outcome(
@@ -1319,6 +1355,8 @@ async def deliver_league_notices(session_factory, *, now: datetime, send: Sender
         except Exception:  # noqa: BLE001
             logger.warning("kto-kogo league notice %s failed", r.league_id, exc_info=True)
             outcome = FAILED
+        if outcome == GONE:
+            outcome = BLOCKED
         key = ("league", r.league_id, r.player_key)
         if outcome == RETRY and not _attempt(key):
             outcome = FAILED
@@ -1343,6 +1381,7 @@ async def deliver_league_notices(session_factory, *, now: datetime, send: Sender
 _THROTTLE_SEC = 1 / 25
 # Дольше этого просьбу подождать (RetryAfter) не ждём: сообщение вернётся в очередь на следующий проход.
 _RETRY_AFTER_CAP_SEC = 30
+_GONE_PHRASES = ("chat not found", "user is deactivated")
 _last_send = 0.0
 _bot = None
 _bot_token = ""
@@ -1382,10 +1421,18 @@ async def _throttle() -> None:
     _last_send = time.monotonic()
 
 
-async def send_via_client_bot(chat_id: int, text_body: str, buttons: list[list[dict]]) -> str:
+async def send_via_client_bot_gone(chat_id: int, text_body: str, buttons: list[list[dict]]) -> str:
+    """Тот же отправитель, но «чат не найден» и «аккаунт удалён» отдаёт как ``gone`` (трактуется как блокировка)."""
+    return await send_via_client_bot(chat_id, text_body, buttons, detect_gone=True)
+
+
+async def send_via_client_bot(
+    chat_id: int, text_body: str, buttons: list[list[dict]], *, detect_gone: bool = False
+) -> str:
     """Личное сообщение клиентским ботом: ``ok``, ``blocked`` (запретил писать), ``retry`` (429, сеть, 5xx —
     повторим позже) или ``failed`` (BadRequest и прочее постоянное)."""
     from aiogram.exceptions import (
+        TelegramBadRequest,
         TelegramForbiddenError,
         TelegramNetworkError,
         TelegramRetryAfter,
@@ -1417,7 +1464,13 @@ async def send_via_client_bot(chat_id: int, text_body: str, buttons: list[list[d
         except (TimeoutError, TelegramNetworkError, TelegramServerError):
             logger.info("kto-kogo notice to %s: temporary error, retry later", chat_id, exc_info=True)
             return RETRY
-        except Exception:  # noqa: BLE001 — BadRequest и прочее постоянное: не повторяем
+        except TelegramBadRequest as exc:
+            if detect_gone and any(p in str(exc).lower() for p in _GONE_PHRASES):
+                logger.info("kto-kogo notice to %s: chat gone", chat_id)
+                return GONE
+            logger.info("kto-kogo notice to %s not delivered", chat_id, exc_info=True)
+            return FAILED
+        except Exception:  # noqa: BLE001 — прочее постоянное: не повторяем
             logger.info("kto-kogo notice to %s not delivered", chat_id, exc_info=True)
             return FAILED
     return RETRY
@@ -1425,6 +1478,7 @@ async def send_via_client_bot(chat_id: int, text_body: str, buttons: list[list[d
 
 __all__ = [
     "BLOCKED",
+    "GONE",
     "CB_LEAVE",
     "CB_NEXT",
     "CB_OFF",
@@ -1464,6 +1518,7 @@ __all__ = [
     "result_text",
     "scan_league_ranks",
     "send_via_client_bot",
+    "send_via_client_bot_gone",
     "set_fav_club",
     "set_remind",
     "set_type",
