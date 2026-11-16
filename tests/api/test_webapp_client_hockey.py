@@ -327,7 +327,7 @@ async def test_month_race_result_and_seen(app_use_test_db, db_session) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with patch_client_principal(ME):
             body = (await client.get(f"/api/webapp/client/hockey/races/{race.id}/result")).json()
-            assert (body["title"], body["won"], body["points"], body["league"]) == ("ноябрь", True, 50, None)
+            assert (body["title"], body["won"], body["points"], body["league"]) == ("ноябрь", False, 50, None)  # общей таблице корона не выдаётся
             seen = await client.post(f"/api/webapp/client/hockey/races/{race.id}/seen")
             assert seen.status_code == 204
     assert await fresh_race_result(db_session, player_key=ME, now=dec) is None
