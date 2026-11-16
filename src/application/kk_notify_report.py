@@ -241,9 +241,7 @@ def detect_anomalies(data: ReportData, th: Thresholds) -> list[str]:
     """Что вышло за порог. Пустой список — отклонений нет. Пороги — только из ``th``."""
     out: list[str] = []
     if data.matches_in_week > 0 and data.sent_prev_total >= th.stall_min_prev and data.sent_total == 0:
-        out.append(
-            f"Рассылка встала: на прошлой неделе ушло {data.sent_prev_total}, на этой — ни одного сообщения."
-        )
+        out.append(f"Рассылка встала: на прошлой неделе ушло {data.sent_prev_total}, на этой — ни одного сообщения.")
     attempts = data.sent_total + data.failed_total
     if attempts >= th.fail_min_sample and data.failed_total / attempts > th.fail_share:
         out.append(
@@ -289,19 +287,17 @@ def render_report(data: ReportData, th: Thresholds) -> str:
     )
     lines.append("")
     if data.sent:
-        parts = [
-            f"{KIND_LABELS.get(kind, kind)} {n}" for kind, n in sorted(data.sent.items(), key=lambda kv: -kv[1])
-        ]
+        parts = [f"{KIND_LABELS.get(kind, kind)} {n}" for kind, n in sorted(data.sent.items(), key=lambda kv: -kv[1])]
         lines.append(f"Отправлено {data.sent_total}: " + ", ".join(parts) + ".")
     else:
         lines.append("Отправлено: ничего.")
     attempts = data.sent_total + data.failed_total
     if attempts:
-        lines.append(
-            f"Не дошло: {data.failed_total} из {attempts} ({percent(data.failed_total, attempts)}{NBSP}%)."
-        )
+        lines.append(f"Не дошло: {data.failed_total} из {attempts} ({percent(data.failed_total, attempts)}{NBSP}%).")
     lines.append(f"Заблокировали бота: {data.blocked_players}.")
-    lines.append(f"Записей журнала об отказе по недельному лимиту: {data.weekly_cap_refusals} (повтор в течение часа не пишется).")
+    lines.append(
+        f"Записей журнала об отказе по недельному лимиту: {data.weekly_cap_refusals} (повтор в течение часа не пишется)."
+    )
     lines.append("")
     lines.append("Ход в течение суток после сообщения:")
     for kind in INVITE_KINDS:

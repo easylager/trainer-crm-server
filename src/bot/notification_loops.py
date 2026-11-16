@@ -3558,7 +3558,9 @@ async def run_hockey_matches_loop() -> None:
                     # Новые поводы (TASK-426): закрыты флагами, без поводов — пустой проход.
                     from src.application.kk_notify import run_tick as kk_notify_tick
 
-                    counts["kk_notify"] = await kk_notify_tick(async_session_factory, now=now, send=send_via_client_bot_gone)
+                    counts["kk_notify"] = await kk_notify_tick(
+                        async_session_factory, now=now, send=send_via_client_bot_gone
+                    )
                     # Старые строки hockey_notices — редко (раз в 6 часов) и порциями.
                     from src.application.hockey_notices import cleanup_old_notices
 

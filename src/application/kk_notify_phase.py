@@ -72,9 +72,7 @@ class PlayerFacts:
     consent: bool | None = None
 
     def phase(self, now: datetime) -> Phase:
-        return player_phase(
-            now=now, last_pick_at=self.last_pick_at, blocked=self.blocked, opted_out=self.opted_out
-        )
+        return player_phase(now=now, last_pick_at=self.last_pick_at, blocked=self.blocked, opted_out=self.opted_out)
 
 
 _FACTS = text("""
@@ -92,9 +90,7 @@ _FACTS = text("""
     """)
 
 
-async def load_player_facts(
-    session: AsyncSession, *, as_of: datetime, only: int | None = None
-) -> list[PlayerFacts]:
+async def load_player_facts(session: AsyncSession, *, as_of: datetime, only: int | None = None) -> list[PlayerFacts]:
     """Факты по всем игрокам на момент ``as_of``. Ходы и регистрация учитываются «как были тогда»;
     блокировка и «не присылать» — текущие (истории этих отметок в базе нет)."""
     rows = (await session.execute(_FACTS, {"as_of": _utc(as_of), "only": only})).all()

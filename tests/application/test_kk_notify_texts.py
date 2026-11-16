@@ -62,7 +62,10 @@ def test_only_declared_texts_exist() -> None:
 @pytest.mark.parametrize("title,body", RENDERED)
 def test_nbsp_after_prepositions_numbers_and_before_dash(title: str, body: str) -> None:
     visible = re.sub(r"</?b>", "", body)
-    assert not re.search(r"(?<![0-9A-Za-zА-Яа-яЁё])(в|во|на|по|у|и|о|из|за|с|со|к|не) ", visible, re.IGNORECASE), (title, visible)
+    assert not re.search(r"(?<![0-9A-Za-zА-Яа-яЁё])(в|во|на|по|у|и|о|из|за|с|со|к|не) ", visible, re.IGNORECASE), (
+        title,
+        visible,
+    )
     assert not re.search(r"\d(?:-м)? [А-Яа-яЁё]", visible), (title, visible)
     assert " —" not in visible, (title, visible)
     assert NB in body, title
@@ -109,13 +112,26 @@ def test_week_declensions(moves, points, expected) -> None:
 ])  # fmt: skip
 def test_crown_many_declension(crowned, expected) -> None:
     now = datetime(2026, 12, 1, 10, 0, tzinfo=MINSK_TZ)
-    body = tx.month_text(month=11, club="Динамо-Минск", points=10, exact=0, rank=1, size=9, crowned=crowned, i_am_crowned=True, match=None, now=now)
+    body = tx.month_text(
+        month=11,
+        club="Динамо-Минск",
+        points=10,
+        exact=0,
+        rank=1,
+        size=9,
+        crowned=crowned,
+        i_am_crowned=True,
+        match=None,
+        now=now,
+    )
     assert expected in body.replace(NB, "~")
 
 
 def test_exact_clause_only_when_at_least_one() -> None:
     now = datetime(2026, 12, 1, 10, 0, tzinfo=MINSK_TZ)
-    base = dict(month=11, club=None, points=40, rank=None, size=None, crowned=0, i_am_crowned=False, match=None, now=now)
+    base = dict(
+        month=11, club=None, points=40, rank=None, size=None, crowned=0, i_am_crowned=False, match=None, now=now
+    )
     assert "в~точку" not in tx.month_text(**base, exact=0).replace(NB, "~")
     assert tx.month_text(**base, exact=1).replace(NB, "~") == "В~ноябре 40~очков, 1~ход в~точку."
     assert tx.month_text(**base, exact=5).replace(NB, "~") == "В~ноябре 40~очков, 5~ходов в~точку."
@@ -135,7 +151,15 @@ def test_month_cases_for_every_month() -> None:
 
 @pytest.mark.parametrize(
     ("day", "expected"),
-    [(16, "сегодня"), (17, "завтра"), (18, "в среду"), (19, "в четверг"), (20, "в пятницу"), (21, "в субботу"), (22, "в воскресенье")],
+    [
+        (16, "сегодня"),
+        (17, "завтра"),
+        (18, "в среду"),
+        (19, "в четверг"),
+        (20, "в пятницу"),
+        (21, "в субботу"),
+        (22, "в воскресенье"),
+    ],
 )
 def test_day_phrase_words(day, expected) -> None:
     now = datetime(2026, 11, 16, 9, 30, tzinfo=MINSK_TZ)
@@ -144,7 +168,10 @@ def test_day_phrase_words(day, expected) -> None:
 
 def test_day_phrase_tuesday_and_far_date() -> None:
     now = datetime(2026, 11, 16, 9, 30, tzinfo=MINSK_TZ)
-    assert tx.day_phrase(datetime(2026, 11, 17, 19, 30, tzinfo=MINSK_TZ), datetime(2026, 11, 11, 9, 0, tzinfo=MINSK_TZ)) == "во вторник"
+    assert (
+        tx.day_phrase(datetime(2026, 11, 17, 19, 30, tzinfo=MINSK_TZ), datetime(2026, 11, 11, 9, 0, tzinfo=MINSK_TZ))
+        == "во вторник"
+    )
     assert tx.day_phrase(datetime(2026, 12, 3, 19, 30, tzinfo=MINSK_TZ), now) == "3 декабря"
 
 
@@ -161,7 +188,18 @@ def test_day_phrase_uses_minsk_not_utc() -> None:
 
 @pytest.mark.parametrize(
     ("rank", "size", "shown"),
-    [(1, 5, True), (2, 5, True), (3, 5, False), (5, 10, True), (6, 10, False), (3, 4, False), (1, 4, False), (4, 8, True), (11, 21, False), (10, 21, True)],
+    [
+        (1, 5, True),
+        (2, 5, True),
+        (3, 5, False),
+        (5, 10, True),
+        (6, 10, False),
+        (3, 4, False),
+        (1, 4, False),
+        (4, 8, True),
+        (11, 21, False),
+        (10, 21, True),
+    ],
 )
 def test_place_rule(rank, size, shown) -> None:
     assert tx.place_shown(rank, size) is shown
@@ -251,6 +289,8 @@ def test_club_names_are_escaped_for_html() -> None:
         assert "Ёж&amp;Ко&nbsp;" not in body  # экранируем «&» и «<», пробелы не трогаем
         assert "Ёж&amp;Ко &lt;i&gt;" in body.replace(NB, " "), body
         assert "<i>" not in body and "Ёж&Ко" not in body
-    line = tx.match_line(nasty, "А<Б", datetime(2026, 12, 3, 19, 30, tzinfo=MINSK_TZ), datetime(2026, 12, 1, 9, 30, tzinfo=MINSK_TZ))
+    line = tx.match_line(
+        nasty, "А<Б", datetime(2026, 12, 3, 19, 30, tzinfo=MINSK_TZ), datetime(2026, 12, 1, 9, 30, tzinfo=MINSK_TZ)
+    )
     assert "Ёж&amp;Ко &lt;i&gt;" in line.replace(NB, " ") and "А&lt;Б" in line
     assert line.count("<b>") == 1 and line.count("</b>") == 1

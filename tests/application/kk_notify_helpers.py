@@ -69,9 +69,13 @@ async def seed_player(
         {"k": key, "reg": registered},
     )
     if remind is not None or blocked_at or paused_until or type_flags:
-        await db.execute(text("INSERT INTO hockey_player_prefs (player_key) VALUES (:k) ON CONFLICT DO NOTHING"), {"k": key})
+        await db.execute(
+            text("INSERT INTO hockey_player_prefs (player_key) VALUES (:k) ON CONFLICT DO NOTHING"), {"k": key}
+        )
         if remind is not None:
-            await db.execute(text("UPDATE hockey_player_prefs SET remind = :v WHERE player_key = :k"), {"k": key, "v": remind})
+            await db.execute(
+                text("UPDATE hockey_player_prefs SET remind = :v WHERE player_key = :k"), {"k": key, "v": remind}
+            )
         await db.execute(
             text("UPDATE hockey_player_prefs SET bot_blocked_at = :b, notify_paused_until = :p WHERE player_key = :k"),
             {"k": key, "b": blocked_at, "p": paused_until},
@@ -110,8 +114,10 @@ async def seed_final(db, home: str, away: str, starts_at: datetime, *, status: s
     mid = await seed_match(db, starts_at, home=home, away=away)
     if status == "final":
         await db.execute(
-            text("UPDATE hockey_matches SET status = 'final', home_score = 3, away_score = 2, decided_in = 'regulation', result_source = 'manual', "
-                 "finalized_at = :t WHERE id = :m"),
+            text(
+                "UPDATE hockey_matches SET status = 'final', home_score = 3, away_score = 2, decided_in = 'regulation', result_source = 'manual', "
+                "finalized_at = :t WHERE id = :m"
+            ),
             {"m": mid, "t": starts_at + timedelta(hours=3)},
         )
     elif status != "scheduled":

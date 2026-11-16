@@ -78,8 +78,18 @@ _SIX = "матч в ближайшие 6 суток, хода на него не
 # название варианта в предпросмотре -> (повод, кому, когда, матч для кнопок хода или None)
 _D, _T, _A, _S, _SP = PREVIEW.DINAMO, PREVIEW.TORPEDO, PREVIEW.AK_BARS, PREVIEW.SOCHI, PREVIEW.SPARTAK
 SCENARIOS: dict[str, tuple[str, str, str, tuple[str, str] | None]] = {
-    "1. Матч сегодня": ("матч сегодня", f"{_ACTIVE}, хода на матч нет", f"{_MORNING}, до матча не меньше 3 часов", (_D, _T)),
-    "1. Матч завтра": ("матч завтра", f"{_ACTIVE}, хода на матч нет", f"{_MORNING}, до матча не меньше 3 часов", (_D, _T)),
+    "1. Матч сегодня": (
+        "матч сегодня",
+        f"{_ACTIVE}, хода на матч нет",
+        f"{_MORNING}, до матча не меньше 3 часов",
+        (_D, _T),
+    ),
+    "1. Матч завтра": (
+        "матч завтра",
+        f"{_ACTIVE}, хода на матч нет",
+        f"{_MORNING}, до матча не меньше 3 часов",
+        (_D, _T),
+    ),
     "2. Возврат, 3 дня": ("возврат, 3 дня", f"игроку 3 суток без хода; {_SIX}", _MORNING, (_D, _A)),
     "2. Возврат, 10 дней, место есть": (
         "возврат, 10 дней, со строкой места",
@@ -133,16 +143,36 @@ SCENARIOS: dict[str, tuple[str, str, str, tuple[str, str] | None]] = {
 _MONTH_WHO = "игроку с засчитанными очками за месяц; месяц закрыт, правок итога нет"
 _MONTH_WHEN = "1-го числа с 10:00 (если не ушло — 2-го до 11:00)"
 for _title, _name, _extra, _match in (
-    ("4. Месяц без короны, место", "итог месяца, без короны, с местом", "он в верхней половине таблицы, участников не меньше 5", (_D, _S)),
-    ("4. Месяц без короны, места нет", "итог месяца, без короны, без места", "места не называем (нижняя половина или мало участников)", (_D, _S)),
-    ("4. Месяц без «в точку»", "итог месяца, без «в точку»", "ни одного хода в точку: клауза «в точку» не пишется", None),
+    (
+        "4. Месяц без короны, место",
+        "итог месяца, без короны, с местом",
+        "он в верхней половине таблицы, участников не меньше 5",
+        (_D, _S),
+    ),
+    (
+        "4. Месяц без короны, места нет",
+        "итог месяца, без короны, без места",
+        "места не называем (нижняя половина или мало участников)",
+        (_D, _S),
+    ),
+    (
+        "4. Месяц без «в точку»",
+        "итог месяца, без «в точку»",
+        "ни одного хода в точку: клауза «в точку» не пишется",
+        None,
+    ),
     ("4. Корона одному", "итог месяца, корона одному", "корона за месяц у него одного", (_D, _S)),
     ("4. Корона на двоих", "итог месяца, корона на двоих", "корона за месяц у него и ещё одного игрока", (_D, _S)),
     ("4. Корона общая, трое", "итог месяца, корона общая (трое)", "корона за месяц у него и ещё двоих", (_D, _S)),
     ("4. Корона общая, шестеро", "итог месяца, корона общая (шестеро)", "корона за месяц у него и ещё пятерых", None),
 ):
     SCENARIOS[_title] = (_name, f"{_MONTH_WHO}; {_extra}", _MONTH_WHEN, _match)
-CONSENT = ("5. Согласие после первого хода", "вопрос о согласии", "игроку после первого хода, согласия ещё нет", "в тот же день вне тихих часов 23:00–09:00")
+CONSENT = (
+    "5. Согласие после первого хода",
+    "вопрос о согласии",
+    "игроку после первого хода, согласия ещё нет",
+    "в тот же день вне тихих часов 23:00–09:00",
+)
 EXTRA = (
     ("ответ на «Не присылать»", "игроку, нажавшему «Не присылать»", "сразу после нажатия (всплывающее окно; под сообщением остаётся «Присылать»)", "kk_notify.off_done", "kk_notify.btn.yes"),
     ("ответ на «Присылать»", "игроку, нажавшему «Присылать»", "сразу после нажатия (всплывающее окно; под сообщением остаётся «Не присылать»)", "kk_notify.on_done", "kk_notify.btn.no"),
@@ -157,7 +187,12 @@ class _LinkSettings:
         self.public_entry_via_start = env("PUBLIC_ENTRY_VIA_START", "").strip().lower() in ("1", "true", "yes", "on")
         self.client_bot_username = env("CLIENT_BOT_USERNAME") or None
         self.client_mini_app_short_name = env("CLIENT_MINI_APP_SHORT_NAME") or None
-        self.client_bot_main_mini_app = env("CLIENT_BOT_MAIN_MINI_APP", "").strip().lower() in ("1", "true", "yes", "on")
+        self.client_bot_main_mini_app = env("CLIENT_BOT_MAIN_MINI_APP", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
 
 
 def table_button() -> dict:
@@ -240,7 +275,9 @@ async def deliver(messages, *, send, chat_id=OWNER_TEST_CHAT_ID, sleep=asyncio.s
                     await sleep(float(wait) + 0.5)
                     continue
                 where = "заголовок" if m.scenario == 0 else f"сценарий {m.scenario}"
-                raise SendStopped(f"Остановлено: {where}, сообщение {index} из {len(messages)}: {_scrub(exc)}") from None
+                raise SendStopped(
+                    f"Остановлено: {where}, сообщение {index} из {len(messages)}: {_scrub(exc)}"
+                ) from None
         sent += 1
         if index < len(messages):
             await sleep(PAUSE_SEC)
@@ -270,9 +307,7 @@ def make_telegram_send(token: str):
             if buttons
             else None
         )
-        await bot.send_message(
-            chat_id=chat_id, text=text, reply_markup=markup, parse_mode="HTML" if html else None
-        )
+        await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup, parse_mode="HTML" if html else None)
 
     send.close = bot.session.close  # type: ignore[attr-defined]
     return send
@@ -310,9 +345,14 @@ def main(
         return 0
     token = (os.environ.get("TELEGRAM_BOT_TOKEN_CLIENT") or "").strip()
     if not token:
-        out("Ошибка: не задан TELEGRAM_BOT_TOKEN_CLIENT (для прода: railway run -s <сервис> -- python scripts/kk_notify_preview_send.py --send)")
+        out(
+            "Ошибка: не задан TELEGRAM_BOT_TOKEN_CLIENT (для прода: railway run -s <сервис> -- python scripts/kk_notify_preview_send.py --send)"
+        )
         return 2
-    if not args.yes and input_fn(f"Отправить {len(messages)} сообщений в чат {OWNER_TEST_CHAT_ID}? [y/N] ").strip().lower() != "y":
+    if (
+        not args.yes
+        and input_fn(f"Отправить {len(messages)} сообщений в чат {OWNER_TEST_CHAT_ID}? [y/N] ").strip().lower() != "y"
+    ):
         out("Отменено, ничего не отправлено.")
         return 1
     send = make_send(token)

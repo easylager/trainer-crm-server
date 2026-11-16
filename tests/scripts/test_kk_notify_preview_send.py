@@ -60,14 +60,38 @@ def run_main(argv, *, fake=None, token=TOKEN, monkeypatch=None, inputs=("y",)):
         return fake
 
     answers = iter(inputs)
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN_CLIENT", token) if token else monkeypatch.delenv("TELEGRAM_BOT_TOKEN_CLIENT", raising=False)
-    code = mod.main(argv, input_fn=lambda prompt: (out.append(prompt), next(answers))[1], make_send=make_send, out=out.append, sleep=sleeper)
+    (
+        monkeypatch.setenv("TELEGRAM_BOT_TOKEN_CLIENT", token)
+        if token
+        else monkeypatch.delenv("TELEGRAM_BOT_TOKEN_CLIENT", raising=False)
+    )
+    code = mod.main(
+        argv,
+        input_fn=lambda prompt: (out.append(prompt), next(answers))[1],
+        make_send=make_send,
+        out=out.append,
+        sleep=sleeper,
+    )
     return code, out, fake, sleeps, made
 
 
 # ---------- 1. охрана получателя ----------
 
-BAD_IDS = [0, -1, -OWNER, OWNER + 1, "1304982166", None, [OWNER], (OWNER,), True, float(OWNER), {OWNER}, "", b"1304982166"]
+BAD_IDS = [
+    0,
+    -1,
+    -OWNER,
+    OWNER + 1,
+    "1304982166",
+    None,
+    [OWNER],
+    (OWNER,),
+    True,
+    float(OWNER),
+    {OWNER},
+    "",
+    b"1304982166",
+]
 
 
 @pytest.mark.parametrize("bad", BAD_IDS, ids=repr)
@@ -142,7 +166,9 @@ def test_every_sent_body_matches_the_renderer(monkeypatch) -> None:
 def test_header_first_and_caption_message_pairs(monkeypatch) -> None:
     _, _, fake, _, _ = run_main(["--send", "--yes"], monkeypatch=monkeypatch)
     calls = fake.calls
-    assert calls[0][1] == "Тестовая рассылка текстов «Кто кого». Это примеры, кнопки не работают. Отправлено только вам."
+    assert (
+        calls[0][1] == "Тестовая рассылка текстов «Кто кого». Это примеры, кнопки не работают. Отправлено только вам."
+    )
     assert calls[0][3] is False
     body_calls = calls[1:]
     assert len(body_calls) % 2 == 0
@@ -175,7 +201,12 @@ def test_buttons_are_inert_previews() -> None:
                 else:
                     assert b["url"].startswith("https://t.me/") and b["text"] == "Таблица"
     assert {"Таблица", "Не присылать", "Присылать"} <= texts
-    assert not any(re.match(r"^kk:(p|n|yes|noall|off|lv)\b", b.get("callback_data", "")) for m in mod.build_messages() for r in m.buttons for b in r)
+    assert not any(
+        re.match(r"^kk:(p|n|yes|noall|off|lv)\b", b.get("callback_data", ""))
+        for m in mod.build_messages()
+        for r in m.buttons
+        for b in r
+    )
 
 
 def test_return_button_present_in_off_reply() -> None:
@@ -266,3 +297,24 @@ def test_script_does_not_import_database_modules() -> None:
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=ROOT)
     assert result.returncode == 0, result.stderr
     assert "BAD []" in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize("bad", BAD_IDS, ids=repr)
+def test_deliver_checks_the_recipient_on_entry_before_any_send(bad) -> None:
+    """Проверка на входе стоит сама по себе: с пустым списком сообщений проверка перед вызовом не сработала бы."""
+    fake = Fake()
+    with pytest.raises(mod.RecipientError):
+        asyncio.run(mod.deliver([], send=fake, chat_id=bad, sleep=no_sleep))
+    assert fake.calls == []
+
+
+def test_preview_button_line_is_up_to_date() -> None:
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        mod.PREVIEW.main([])
+    out = buf.getvalue()
+    assert "кроме итога хода, поправок итога, переноса матча и писем лиг" in out
+    assert "итог хода остаётся" not in out

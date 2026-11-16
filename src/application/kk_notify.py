@@ -41,7 +41,6 @@ from src.application.kk_notify_phase import Phase, PlayerFacts, load_player_fact
 logger = logging.getLogger(__name__)
 
 
-
 @dataclass(frozen=True)
 class Proposal:
     """Предложение повода: готовое сообщение и (необязательно) проверка, что оно ещё актуально."""
@@ -67,9 +66,7 @@ def match_still_open(match_id: int, *, min_left: timedelta | None = None) -> Rec
 
     async def check(session: AsyncSession, player_key: int, now: datetime) -> str | None:
         row = (
-            await session.execute(
-                text("SELECT status, starts_at FROM game_matches WHERE id = :id"), {"id": match_id}
-            )
+            await session.execute(text("SELECT status, starts_at FROM game_matches WHERE id = :id"), {"id": match_id})
         ).one_or_none()
         if row is None:
             return "no_match"

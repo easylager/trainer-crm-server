@@ -86,7 +86,11 @@ async def test_refusals_send_nothing(db_session, factory, kind, config, prefs, n
 @pytest.mark.parametrize("kind", NEEDS_CONSENT)
 @pytest.mark.parametrize("consent", [None, False])
 async def test_no_consent_no_message(db_session, factory, kind, consent) -> None:
-    await _player(db_session, notify_consent=consent) if consent is not None else await seed_player(db_session, SASHA, registered=at(10, day=1))
+    (
+        await _player(db_session, notify_consent=consent)
+        if consent is not None
+        else await seed_player(db_session, SASHA, registered=at(10, day=1))
+    )
     out = Outbox()
     assert (await _go(factory, await _p(db_session, kind), send=out)).reason == gate.NO_CONSENT and out.sent == []
 

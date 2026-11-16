@@ -90,8 +90,10 @@ async def real():
         for i in range(2):
             mid = (
                 await s.execute(
-                    text("""INSERT INTO hockey_matches (source, league, source_match_id, home_team, away_team, starts_at)
-                            VALUES ('hockeyby', 'extraliga', :m, 'Юность', 'Шахтер', :t) RETURNING id"""),
+                    text(
+                        """INSERT INTO hockey_matches (source, league, source_match_id, home_team, away_team, starts_at)
+                            VALUES ('hockeyby', 'extraliga', :m, 'Юность', 'Шахтер', :t) RETURNING id"""
+                    ),
                     {"m": f"kk426-real-{i}", "t": at(19, day=12)},
                 )
             ).scalar_one()
@@ -194,9 +196,7 @@ async def _league_notice(db, key: int) -> int:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "prefs", [{"blocked_at": at(1, day=9)}, {"notify_league": False}], ids=["blocked", "type"]
-)
+@pytest.mark.parametrize("prefs", [{"blocked_at": at(1, day=9)}, {"notify_league": False}], ids=["blocked", "type"])
 async def test_league_notice_goes_through_gate(db_session, factory, prefs) -> None:
     await seed_player(db_session, SASHA, **prefs)
     await _league_notice(db_session, SASHA)
@@ -220,7 +220,7 @@ async def test_league_notice_sent_when_allowed_and_ignores_budget(db_session, fa
 def test_tripwire_covers_league_path() -> None:
     src = (ROOT / "src/application/hockey_notices.py").read_text(encoding="utf-8")
     body = src[src.index("async def deliver_league_notices(") : src.index("# Telegram режет рассылку")]
-    assert body.index('await admit(') < body.index("await send(")
+    assert body.index("await admit(") < body.index("await send(")
     assert "league" in gate.KIND_POLICY
 
 
@@ -311,7 +311,11 @@ def sender(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("message", "gone"),
-    [("Bad Request: chat not found", True), ("Bad Request: user is deactivated", True), ("Bad Request: message too long", False)],
+    [
+        ("Bad Request: chat not found", True),
+        ("Bad Request: user is deactivated", True),
+        ("Bad Request: message too long", False),
+    ],
 )
 async def test_sender_gone_only_for_chat_not_found_and_deactivated(sender, message, gone) -> None:
     from aiogram.exceptions import TelegramBadRequest
@@ -371,10 +375,18 @@ MONDAY = at(10, 0, day=16)
 @pytest.mark.asyncio
 async def test_report_counts_weekly_cap_refusals(db_session) -> None:
     await seed_player(db_session, SASHA)
-    for day, reason in ((10, "weekly_cap"), (11, "weekly_cap"), (12, "daily_cap"), (3, "weekly_cap"), (17, "weekly_cap")):
+    for day, reason in (
+        (10, "weekly_cap"),
+        (11, "weekly_cap"),
+        (12, "daily_cap"),
+        (3, "weekly_cap"),
+        (17, "weekly_cap"),
+    ):
         await db_session.execute(
-            text("INSERT INTO kk_notify_decisions (tick_at, player_key, phase, kind, decision, reason) "
-                 "VALUES (:t, :k, 'active', 'x', 'skip', :r)"),
+            text(
+                "INSERT INTO kk_notify_decisions (tick_at, player_key, phase, kind, decision, reason) "
+                "VALUES (:t, :k, 'active', 'x', 'skip', :r)"
+            ),
             {"t": at(12, day=day), "k": SASHA, "r": reason},
         )
     got = await report.collect(db_session, now=MONDAY)
@@ -548,8 +560,10 @@ async def test_journal_cleanup_keeps_ninety_days(db_session, factory) -> None:
     now = at(12, day=16)
     for days_ago, label in ((91, "old"), (90, "edge"), (89, "keep"), (1, "new")):
         await db_session.execute(
-            text("INSERT INTO kk_notify_decisions (tick_at, player_key, phase, kind, decision, reason) "
-                 "VALUES (:t, 1, 'active', 'x', 'skip', :r)"),
+            text(
+                "INSERT INTO kk_notify_decisions (tick_at, player_key, phase, kind, decision, reason) "
+                "VALUES (:t, 1, 'active', 'x', 'skip', :r)"
+            ),
             {"t": now - timedelta(days=days_ago), "r": label},
         )
     await hn.cleanup_old_notices(factory, now=now, force=True)

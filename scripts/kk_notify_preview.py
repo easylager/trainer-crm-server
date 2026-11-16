@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.application import kk_notify_texts as tx  # noqa: E402
-MINSK_TZ = ZoneInfo("Europe/Minsk")
 from src.shared.copy_ru import t  # noqa: E402
+
+MINSK_TZ = ZoneInfo("Europe/Minsk")  # без импорта слоя данных
 
 DINAMO = "Динамо-Минск"
 SOCHI = "Сочи"
@@ -49,7 +50,9 @@ def render_all() -> list[tuple[str, str]]:
     place = tx.place_line(club=DINAMO, month=11, rank=9, size=21)
     out.append(("2. Возврат, 10 дней, место есть", tx.comeback_text(**ak, place_line_text=place)))
     nope = tx.place_line(club=DINAMO, month=11, rank=15, size=21)
-    out.append(("2. Возврат, 10 дней, место не называем (нижняя половина)", tx.comeback_text(**ak, place_line_text=nope)))
+    out.append(
+        ("2. Возврат, 10 дней, место не называем (нижняя половина)", tx.comeback_text(**ak, place_line_text=nope))
+    )
     out.append(
         ("2. Возврат, 30 дней", tx.comeback_text(home=DINAMO, away=SOCHI, starts_at=at(3, 19, 30, month=12), now=now))
     )
@@ -59,20 +62,44 @@ def render_all() -> list[tuple[str, str]]:
     out.append(("3. Итог недели, место и матч", tx.week_text(**wk, rank=4, size=12, match=nxt)))
     out.append(("3. Итог недели, место, без строки матча", tx.week_text(**wk, rank=4, size=12, match=None)))
     out.append(("3. Итог недели, места нет (мало участников)", tx.week_text(**wk, rank=2, size=4, match=nxt)))
-    out.append(("3. Итог недели, 1 ход и 11 очков", tx.week_text(**{**wk, "moves": 1, "points": 11}, rank=1, size=9, match=None)))
-    out.append(("3. Итог недели, 21 ход и 105 очков", tx.week_text(**{**wk, "moves": 21, "points": 105}, rank=3, size=9, match=None)))
+    out.append(
+        (
+            "3. Итог недели, 1 ход и 11 очков",
+            tx.week_text(**{**wk, "moves": 1, "points": 11}, rank=1, size=9, match=None),
+        )
+    )
+    out.append(
+        (
+            "3. Итог недели, 21 ход и 105 очков",
+            tx.week_text(**{**wk, "moves": 21, "points": 105}, rank=3, size=9, match=None),
+        )
+    )
 
     mo = dict(month=11, club=DINAMO, points=240, exact=2, now=month_end)
     line = _m(DINAMO, SOCHI, at(3, 19, 30, month=12))
-    out.append(("4. Месяц без короны, место", tx.month_text(**mo, rank=3, size=21, crowned=1, i_am_crowned=False, match=line)))
-    out.append(("4. Месяц без короны, места нет", tx.month_text(**mo, rank=15, size=21, crowned=1, i_am_crowned=False, match=line)))
     out.append(
-        ("4. Месяц без «в точку»", tx.month_text(**{**mo, "exact": 0}, rank=None, size=None, crowned=0, i_am_crowned=False, match=None))
+        ("4. Месяц без короны, место", tx.month_text(**mo, rank=3, size=21, crowned=1, i_am_crowned=False, match=line))
+    )
+    out.append(
+        (
+            "4. Месяц без короны, места нет",
+            tx.month_text(**mo, rank=15, size=21, crowned=1, i_am_crowned=False, match=line),
+        )
+    )
+    out.append(
+        (
+            "4. Месяц без «в точку»",
+            tx.month_text(**{**mo, "exact": 0}, rank=None, size=None, crowned=0, i_am_crowned=False, match=None),
+        )
     )
     out.append(("4. Корона одному", tx.month_text(**mo, rank=1, size=21, crowned=1, i_am_crowned=True, match=line)))
     out.append(("4. Корона на двоих", tx.month_text(**mo, rank=1, size=21, crowned=2, i_am_crowned=True, match=line)))
-    out.append(("4. Корона общая, трое", tx.month_text(**mo, rank=1, size=21, crowned=3, i_am_crowned=True, match=line)))
-    out.append(("4. Корона общая, шестеро", tx.month_text(**mo, rank=1, size=21, crowned=6, i_am_crowned=True, match=None)))
+    out.append(
+        ("4. Корона общая, трое", tx.month_text(**mo, rank=1, size=21, crowned=3, i_am_crowned=True, match=line))
+    )
+    out.append(
+        ("4. Корона общая, шестеро", tx.month_text(**mo, rank=1, size=21, crowned=6, i_am_crowned=True, match=None))
+    )
 
     out.append(("5. Согласие после первого хода", tx.consent_text()))
     return out
@@ -82,7 +109,7 @@ def buttons_overview() -> list[str]:
     return [
         "Ход: названия двух команд (кнопки хода)",
         f"«{t('kk_notify.btn.table')}» (ссылка в игру)",
-        f"«{t('kk_notify.btn.no')}» (выключает все новые сообщения; итог хода остаётся)",
+        f"«{t('kk_notify.btn.no')}» (выключает все пуши игры, кроме итога хода, поправок итога, переноса матча и писем лиг)",
         f"Согласие: «{t('kk_notify.btn.yes')}» / «{t('kk_notify.btn.no')}»",
     ]
 

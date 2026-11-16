@@ -161,7 +161,7 @@ async def _place(session, cache, player_key: int, club: str | None, period) -> t
 
 
 def _buttons(match: dict | None) -> list[list[dict]]:
-    rows: list[list[dict | None]] = []
+    rows: list = []
     if match is not None:
         rows.append(list(hn.pick_buttons(match["match_id"], match["home"], match["away"])))
     start = f"{hn.START_PICK}_{match['match_id']}" if match is not None else hn.START_PICK
@@ -179,7 +179,9 @@ CB_NOALL = "kk:noall"
 CB_YES = "kk:yes"
 
 
-async def _facts(session: AsyncSession, now: datetime, phases: set[Phase], *, consented: bool = True) -> list[PlayerFacts]:
+async def _facts(
+    session: AsyncSession, now: datetime, phases: set[Phase], *, consented: bool = True
+) -> list[PlayerFacts]:
     out = []
     for f in await load_player_facts(session, as_of=now):
         if f.phase(now) not in phases:
@@ -202,16 +204,18 @@ async def produce_invite(session: AsyncSession, *, now: datetime) -> list[Propos
         club = await hn.fan_club(session, f.player_key, now=now)
         if club is None:
             continue
-        m = await next_match(
-            session, f.player_key, club=club, from_=now + INVITE_MIN_LEFT, until=until, free=True
-        )
+        m = await next_match(session, f.player_key, club=club, from_=now + INVITE_MIN_LEFT, until=until, free=True)
         if m is None:
             continue
+
+        def render(sent_now, m=m):
+            return tx.invite_text(home=m["home"], away=m["away"], starts_at=m["starts_at"], now=sent_now)
+
         notice = hn.Notice(
             KIND_INVITE,
             f.player_key,
             m["match_id"],
-            tx.invite_text(home=m["home"], away=m["away"], starts_at=m["starts_at"], now=now),
+            render(now),
             _buttons(m),
         )
         out.append(
@@ -221,9 +225,7 @@ async def produce_invite(session: AsyncSession, *, now: datetime) -> list[Propos
                     _window_check(MORNING_FROM, MORNING_TO),
                     match_still_open(m["match_id"], min_left=INVITE_MIN_LEFT),
                 ),
-                lambda sent_now, m=m: tx.invite_text(
-                    home=m["home"], away=m["away"], starts_at=m["starts_at"], now=sent_now
-                ),
+                render,
             )
         )
     return out
@@ -276,12 +278,20 @@ async def produce_comeback(session: AsyncSession, *, now: datetime) -> list[Prop
         if step is None:
             continue
         # Попыток за период молчания (после последнего хода) — не больше трёх, по одной на ступень.
-        done = (await session.execute(_COMEBACKS_SINCE, {"player_key": f.player_key, "since": hn._utc(f.last_pick_at)})).scalar_one()
+        done = (
+            await session.execute(_COMEBACKS_SINCE, {"player_key": f.player_key, "since": hn._utc(f.last_pick_at)})
+        ).scalar_one()
         if done >= step:
             continue
         club = await hn.fan_club(session, f.player_key, now=now)
         m = await next_match(
-            session, f.player_key, club=club, from_=now + MATCH_MIN_LEFT, until=now + COMEBACK_HORIZON, free=True, fresh=True
+            session,
+            f.player_key,
+            club=club,
+            from_=now + MATCH_MIN_LEFT,
+            until=now + COMEBACK_HORIZON,
+            free=True,
+            fresh=True,
         )
         if m is None:
             continue
@@ -350,7 +360,9 @@ async def produce_week(session: AsyncSession, *, now: datetime) -> list[Proposal
         club = await hn.fan_club(session, f.player_key, now=now)
         place = await _place(session, cache, f.player_key, club, month)
         m = (
-            await next_match(session, f.player_key, club=club, from_=now + MATCH_MIN_LEFT, until=now + LINE_HORIZON, free=False)
+            await next_match(
+                session, f.player_key, club=club, from_=now + MATCH_MIN_LEFT, until=now + LINE_HORIZON, free=False
+            )
             if club
             else None
         )
@@ -404,7 +416,9 @@ _UNFINISHED = text("""
     WHERE starts_at >= :since AND starts_at < :until AND (home_team = :club OR away_team = :club)
       AND status NOT IN ('final', 'cancelled') LIMIT 1
     """)
-_PENDING_RESCORE = text("SELECT 1 FROM hockey_notices WHERE kind = 'rescore' AND sent_at IS NULL AND NOT failed LIMIT 1")
+_PENDING_RESCORE = text(
+    "SELECT 1 FROM hockey_notices WHERE kind = 'rescore' AND sent_at IS NULL AND NOT failed LIMIT 1"
+)
 _CROWNED = text("""
     SELECT player_key FROM hockey_crowns
     WHERE kind = 'month' AND period_start = :since AND club = :club AND league_id IS NULL
@@ -438,7 +452,9 @@ async def produce_month(session: AsyncSession, *, now: datetime) -> list[Proposa
     if not month_window(now):
         return []
     period = previous_month(now)
-    players = set((await session.execute(_MONTH_PLAYERS, {"since": period.since, "until": period.until})).scalars().all())
+    players = set(
+        (await session.execute(_MONTH_PLAYERS, {"since": period.since, "until": period.until})).scalars().all()
+    )
     if not players:
         return []
     out: list[Proposal] = []
@@ -460,14 +476,18 @@ async def produce_month(session: AsyncSession, *, now: datetime) -> list[Proposa
             continue
         crowned = set((await session.execute(_CROWNED, {"since": period.since, "club": club})).scalars().all())
         anchor = (
-            await session.execute(_MONTH_ANCHOR, {"player_key": f.player_key, "since": period.since, "until": period.until})
+            await session.execute(
+                _MONTH_ANCHOR, {"player_key": f.player_key, "since": period.since, "until": period.until}
+            )
         ).scalar_one_or_none()
         if anchor is None:
             continue
         # Уже отправляли (или занято) — догон не шлёт второй раз: ключ строки тот же.
         if (await session.execute(_MONTH_DONE, {"player_key": f.player_key, "match_id": anchor})).first() is not None:
             continue
-        m = await next_match(session, f.player_key, club=club, from_=now + MATCH_MIN_LEFT, until=now + LINE_HORIZON, free=True)
+        m = await next_match(
+            session, f.player_key, club=club, from_=now + MATCH_MIN_LEFT, until=now + LINE_HORIZON, free=True
+        )
         month_number = _local(period.since).month
 
         def render(sent_now, mine=mine, club=club, crowned=crowned, rows=rows, m=m, month_number=month_number, f=f):

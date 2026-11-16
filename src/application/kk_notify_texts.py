@@ -15,9 +15,10 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from src.application.hockey_teams import display_name as club_name
-MINSK_TZ = ZoneInfo("Europe/Minsk")  # без импорта слоя данных: тексты и предпросмотр не трогают базу
 from src.shared.copy_ru import t
 from src.shared.ru_text import plural_ru
+
+MINSK_TZ = ZoneInfo("Europe/Minsk")  # без импорта слоя данных: тексты и предпросмотр не трогают базу
 
 NBSP = " "
 # Место называем, только если игрок в верхней половине таблицы и участников не меньше 5.
@@ -46,7 +47,9 @@ def club_text(name: str) -> str:
 
 
 def word(kind: str, n: int) -> str:
-    return plural_ru(n, t(f"kk_notify.word.{kind}.one"), t(f"kk_notify.word.{kind}.few"), t(f"kk_notify.word.{kind}.many"))
+    return plural_ru(
+        n, t(f"kk_notify.word.{kind}.one"), t(f"kk_notify.word.{kind}.few"), t(f"kk_notify.word.{kind}.many")
+    )
 
 
 def month_gen(month: int) -> str:
@@ -135,9 +138,10 @@ def week_text(
 ) -> str:
     """Повод 3: итог недели. ``match`` — ближайший матч без хода (``home``, ``away``, ``starts_at``) или ``None``."""
     shown = club is not None and rank is not None and size is not None and place_shown(rank, size)
+    assert not shown or club is not None  # для типов
     kw = dict(moves=moves, moves_word=word("move", moves), points=points, points_word=word("point", points))
     if shown:
-        head = t("kk_notify.week_place", month_gen=month_gen(month), club=club_text(club), rank=rank, **kw)
+        head = t("kk_notify.week_place", month_gen=month_gen(month), club=club_text(club or ""), rank=rank, **kw)
     else:
         head = t("kk_notify.week_plain", **kw)
     line = match_line(match["home"], match["away"], match["starts_at"], now) if match else None
@@ -185,7 +189,13 @@ def month_text(
             exact_clause=clause,
         )
     else:
-        head = t("kk_notify.month_plain", month_prep=month_prep(month), points=points, points_word=points_word, exact_clause=clause)
+        head = t(
+            "kk_notify.month_plain",
+            month_prep=month_prep(month),
+            points=points,
+            points_word=points_word,
+            exact_clause=clause,
+        )
     line = match_line(match["home"], match["away"], match["starts_at"], now) if match else None
     return _join(typo(head), line)
 

@@ -66,7 +66,6 @@ async def write_journal(
         logger.warning("kk_notify journal write failed for %s", player_key, exc_info=True)
 
 
-
 _DELETE_OLD = text("""
     DELETE FROM kk_notify_decisions
     WHERE id IN (SELECT id FROM kk_notify_decisions WHERE tick_at < :cutoff ORDER BY id LIMIT :batch)

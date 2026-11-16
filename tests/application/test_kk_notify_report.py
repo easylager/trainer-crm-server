@@ -44,7 +44,12 @@ def test_week_window_is_previous_seven_minsk_days() -> None:
 
 
 def test_no_anomalies_on_quiet_week() -> None:
-    assert detect_anomalies(data(sent={"result": 20}, failed={"result": 1}, phases_prev={"active": 10}, phases_now={"active": 9}), TH) == []
+    assert (
+        detect_anomalies(
+            data(sent={"result": 20}, failed={"result": 1}, phases_prev={"active": 10}, phases_now={"active": 9}), TH
+        )
+        == []
+    )
 
 
 def test_stall_needs_previous_week_volume() -> None:
@@ -64,7 +69,10 @@ def test_failure_share_threshold_and_min_sample() -> None:
 
 
 def test_active_drop_threshold_and_min_base() -> None:
-    assert any("Активных было 12, стало 8" in a for a in detect_anomalies(data(phases_prev={"active": 12}, phases_now={"active": 8}), TH))
+    assert any(
+        "Активных было 12, стало 8" in a
+        for a in detect_anomalies(data(phases_prev={"active": 12}, phases_now={"active": 8}), TH)
+    )
     assert detect_anomalies(data(phases_prev={"active": 12}, phases_now={"active": 9}), TH) == []  # минус четверть
     assert detect_anomalies(data(phases_prev={"active": 5}, phases_now={"active": 0}), TH) == []  # база мала
 
@@ -94,7 +102,13 @@ def sample_texts() -> list[str]:
         blocked_players=1,
         invites={"nomove": (8, 5), "mfinal": (0, 0)},
     )
-    bad = data(sent_prev_total=9, phases_prev={"active": 12}, phases_now={"active": 4}, sent={"result": 5}, failed={"result": 9})
+    bad = data(
+        sent_prev_total=9,
+        phases_prev={"active": 12},
+        phases_now={"active": 4},
+        sent={"result": 5},
+        failed={"result": 9},
+    )
     empty = data()
     return [render_report(full, TH), render_report(bad, TH), render_report(empty, TH)]
 
@@ -200,7 +214,10 @@ async def test_weekly_report_goes_out_once(db_session) -> None:
     admin = Admin()
     assert await report.send_weekly_report_if_due(factory, now=at(9, 59, day=16), send=admin) == "not_due"
     assert await report.send_weekly_report_if_due(factory, now=MONDAY, send=admin) == "sent"
-    assert await report.send_weekly_report_if_due(factory, now=MONDAY + timedelta(minutes=2), send=admin) == "claimed_elsewhere"
+    assert (
+        await report.send_weekly_report_if_due(factory, now=MONDAY + timedelta(minutes=2), send=admin)
+        == "claimed_elsewhere"
+    )
     assert await report.send_weekly_report_if_due(factory, now=at(18, day=17), send=admin) == "claimed_elsewhere"
     assert len(admin.messages) == 1
     # следующая неделя — новый отчёт
@@ -226,7 +243,10 @@ async def test_weekly_report_not_resent_inside_claim_window(db_session) -> None:
     factory = make_factory(db_session)
     admin = Admin(answer=False)
     await report.send_weekly_report_if_due(factory, now=MONDAY, send=admin)
-    assert await report.send_weekly_report_if_due(factory, now=MONDAY + timedelta(minutes=3), send=admin) == "claimed_elsewhere"
+    assert (
+        await report.send_weekly_report_if_due(factory, now=MONDAY + timedelta(minutes=3), send=admin)
+        == "claimed_elsewhere"
+    )
 
 
 @pytest.mark.asyncio
@@ -235,6 +255,9 @@ async def test_weekly_report_unconfigured_admin_bot_is_done(db_session) -> None:
     factory = make_factory(db_session)
     admin = Admin(answer=None)
     assert await report.send_weekly_report_if_due(factory, now=MONDAY, send=admin) == "sent"
-    assert await report.send_weekly_report_if_due(factory, now=MONDAY + timedelta(hours=1), send=admin) == "claimed_elsewhere"
+    assert (
+        await report.send_weekly_report_if_due(factory, now=MONDAY + timedelta(hours=1), send=admin)
+        == "claimed_elsewhere"
+    )
     [row] = (await db_session.execute(text("SELECT done_at FROM kk_notify_runs"))).all()
     assert row.done_at is not None

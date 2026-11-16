@@ -53,9 +53,7 @@ async def _proposal(db, key: int, *, recheck=None, starts=None) -> Proposal:
 
 async def _go(factory, proposal, *, send, now=None, config=CFG, phase="active"):
     now = now or at(12)
-    return await dispatch(
-        factory, proposal, phase=phase, tick_at=now, send=send, config=config, clock=lambda: now
-    )
+    return await dispatch(factory, proposal, phase=phase, tick_at=now, send=send, config=config, clock=lambda: now)
 
 
 async def _rows(db, sql: str, **params):
@@ -257,7 +255,9 @@ async def test_g3_one_player_failing_does_not_stop_others(db_session, factory, m
     counts = await run_tick(factory, now=at(12), send=out, producers={KIND: producer}, config=CFG, clock=lambda: at(12))
     assert [chat for chat, *_ in out.sent] == [KATYA]
     assert counts.get("error") == 1
-    journal = await _rows(db_session, "SELECT player_key, decision, reason FROM kk_notify_decisions ORDER BY player_key")
+    journal = await _rows(
+        db_session, "SELECT player_key, decision, reason FROM kk_notify_decisions ORDER BY player_key"
+    )
     assert (SASHA, "error", "tick") in [tuple(r) for r in journal]
 
 
@@ -312,7 +312,9 @@ async def test_g4_match_started_or_closed(db_session, factory) -> None:
     mid = await seed_match(db_session, at(12, 0, day=10))
     proposal = Proposal(hn.Notice(KIND, SASHA, mid, "т", []), match_still_open(mid))
     out = Outbox()
-    assert (await _go(factory, proposal, send=out, now=at(11, 59))).reason == "stale:match_started"  # закрытие за минуту
+    assert (
+        await _go(factory, proposal, send=out, now=at(11, 59))
+    ).reason == "stale:match_started"  # закрытие за минуту
     assert (await _go(factory, proposal, send=out, now=at(12, 30))).reason == "stale:match_started"
     await db_session.execute(text("UPDATE hockey_matches SET status = 'cancelled' WHERE id = :m"), {"m": mid})
     assert (await _go(factory, proposal, send=out, now=at(10))).reason == "stale:match_status"
@@ -342,7 +344,13 @@ async def test_g4_fresh_candidate_passes(db_session, factory) -> None:
 
 
 def test_g5_defaults_are_closed(monkeypatch) -> None:
-    for name in ("KK_NOTIFY_ENABLED", "KK_NOTIFY_DRY_RUN", "KK_NOTIFY_TEXTS_ACCEPTED", "KK_NOTIFY_KINDS", "KK_NOTIFY_WHITELIST"):
+    for name in (
+        "KK_NOTIFY_ENABLED",
+        "KK_NOTIFY_DRY_RUN",
+        "KK_NOTIFY_TEXTS_ACCEPTED",
+        "KK_NOTIFY_KINDS",
+        "KK_NOTIFY_WHITELIST",
+    ):
         monkeypatch.delenv(name, raising=False)
     cfg = GateConfig.from_settings()
     assert (cfg.enabled, cfg.dry_run, cfg.texts_accepted) == (False, True, False)
@@ -365,7 +373,9 @@ def test_g5_flags_come_from_environment(monkeypatch) -> None:
 async def test_g5_master_flag_off_sends_nothing(db_session, factory) -> None:
     await seed_player(db_session, SASHA)
     out = Outbox()
-    result = await _go(factory, await _proposal(db_session, SASHA), send=out, config=GateConfig(kinds=frozenset({KIND})))
+    result = await _go(
+        factory, await _proposal(db_session, SASHA), send=out, config=GateConfig(kinds=frozenset({KIND}))
+    )
     assert out.sent == [] and result.reason == gate.DISABLED
     # и проход целиком молчит, пока общий флаг выключен
     assert await run_tick(factory, now=at(12), send=out, producers={KIND: None}, config=GateConfig()) == {}
@@ -408,7 +418,9 @@ async def test_g5_dry_run_still_applies_limits(db_session, factory) -> None:
 async def test_g6_without_acceptance_only_whitelist_gets_messages(db_session, factory) -> None:
     for key in (SASHA, KATYA):
         await seed_player(db_session, key)
-    cfg = GateConfig(enabled=True, dry_run=False, texts_accepted=False, kinds=frozenset({KIND}), whitelist=frozenset({SASHA}))
+    cfg = GateConfig(
+        enabled=True, dry_run=False, texts_accepted=False, kinds=frozenset({KIND}), whitelist=frozenset({SASHA})
+    )
     out = Outbox()
     r1 = await _go(factory, await _proposal(db_session, SASHA), send=out, config=cfg)
     r2 = await _go(factory, await _proposal(db_session, KATYA), send=out, config=cfg)
@@ -551,7 +563,9 @@ async def test_g9_week_across_month_end(db_session) -> None:
     now = at(12, day=1, month=12)
     assert (await admit(db_session, kind=KIND, player_key=SASHA, now=now, config=CFG)).reason == gate.WEEKLY_LIMIT
     # 4 декабря окно ещё начинается 28 ноября; 5 декабря 28-е вышло из окна и остались два сообщения
-    assert (await admit(db_session, kind=KIND, player_key=SASHA, now=at(12, day=4, month=12), config=CFG)).reason == gate.WEEKLY_LIMIT
+    assert (
+        await admit(db_session, kind=KIND, player_key=SASHA, now=at(12, day=4, month=12), config=CFG)
+    ).reason == gate.WEEKLY_LIMIT
     assert (await admit(db_session, kind=KIND, player_key=SASHA, now=at(12, day=5, month=12), config=CFG)).allowed
 
 
@@ -642,5 +656,7 @@ async def test_g2_one_message_per_player_per_tick_by_priority(db_session, factor
 
     cfg = GateConfig(enabled=True, dry_run=False, texts_accepted=True, kinds=frozenset({KIND, "mfinal"}))
     out = Outbox()
-    await run_tick(factory, now=at(12), send=out, producers={KIND: p_low, "mfinal": p_high}, config=cfg, clock=lambda: at(12))
+    await run_tick(
+        factory, now=at(12), send=out, producers={KIND: p_low, "mfinal": p_high}, config=cfg, clock=lambda: at(12)
+    )
     assert [body for _, body, _ in out.sent] == ["важный"]

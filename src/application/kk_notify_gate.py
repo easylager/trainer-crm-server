@@ -274,7 +274,9 @@ async def _admit(
     if policy.needs_consent:
         consent = prefs.notify_consent
         if consent is False:
-            return Admission(False, NO_CONSENT)  # нажал «Не присылать»: выключены все пуши игры, кроме итога хода и событий
+            return Admission(
+                False, NO_CONSENT
+            )  # нажал «Не присылать»: выключены все пуши игры, кроме итога хода и событий
         if consent is None:
             # Не спрашивали. Новые поводы без согласия не идут никогда. Прежние (nomove, mfinal, overtook) идут, пока
             # вопрос о согласии никому не задаётся (флаги выключены или сухой прогон): иначе новые игроки молча

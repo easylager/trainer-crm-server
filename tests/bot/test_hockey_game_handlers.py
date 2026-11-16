@@ -143,7 +143,11 @@ async def test_do_not_send_button_switches_off_new_messages_only(db_session) -> 
 
     cb = _callback("kk:noall", [[("Таблица", "x")], [("Не присылать", "kk:noall")]])
     await h.on_off_all(cb)
-    row = (await db_session.execute(text("SELECT notify_consent, remind FROM hockey_player_prefs WHERE player_key = :p"), {"p": ME})).one()
+    row = (
+        await db_session.execute(
+            text("SELECT notify_consent, remind FROM hockey_player_prefs WHERE player_key = :p"), {"p": ME}
+        )
+    ).one()
     assert row.notify_consent is False and row.remind is True  # итог хода (remind) остаётся
     assert (await get_prefs(db_session, ME))["types"]["result"] is True
     cb.message.edit_reply_markup.assert_awaited()
