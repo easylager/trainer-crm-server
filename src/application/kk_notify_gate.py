@@ -44,6 +44,7 @@ BLOCKED = "blocked"
 OPTED_OUT = "opted_out"
 TYPE_OFF = "type_off"
 PAUSED = "paused"
+NO_CONSENT = "no_consent"
 QUIET = "quiet_hours"
 DAILY_LIMIT = "daily_cap"
 WEEKLY_LIMIT = "weekly_cap"
@@ -86,7 +87,14 @@ KIND_POLICY: dict[str, KindPolicy] = {
     "overtook": KindPolicy(budgeted=True, type_column="notify_overtook", priority=1),
     "nomove": KindPolicy(budgeted=True, type_column="notify_nomove", priority=2),
 }
-# Новые поводы регистрируются в срезах 2–4 через ``register_kind``; пока их нет.
+
+
+# Названия видов — до 12 символов (колонка ``hockey_notices.kind``) и в CHECK миграции 0328.
+KIND_INVITE = "invite"  # матч сегодня или завтра, хода нет
+KIND_COMEBACK = "comeback"  # возврат: 3, 10, 30 дней молчания
+KIND_WEEK = "week"  # итог недели
+KIND_MONTH = "month"  # итог месяца
+KIND_CONSENT = "consent"  # вопрос о согласии после первого хода
 
 
 def register_kind(kind: str, policy: KindPolicy, *, allow_unbudgeted: bool = False) -> None:
@@ -170,7 +178,7 @@ def week_bounds(now: datetime) -> tuple[datetime, datetime]:
 
 
 _PREFS = text("""
-    SELECT COALESCE(pr.remind, true) AS remind, pr.bot_blocked_at, pr.notify_paused_until,
+    SELECT COALESCE(pr.remind, true) AS remind, pr.bot_blocked_at, pr.notify_paused_until, pr.notify_consent,
            COALESCE(pr.notify_nomove, true) AS notify_nomove, COALESCE(pr.notify_result, true) AS notify_result,
            COALESCE(pr.notify_overtook, true) AS notify_overtook, COALESCE(pr.notify_mfinal, true) AS notify_mfinal,
            COALESCE(pr.notify_league, true) AS notify_league
@@ -191,6 +199,15 @@ async def _spent(session: AsyncSession, player_key: int, since: datetime, until:
     exempt = [k for k, p in KIND_POLICY.items() if not p.budgeted]
     params = {"player_key": player_key, "exempt": exempt, "since": since, "until": until}
     return int((await session.execute(_SPENT, params)).scalar_one())
+
+
+# Новые поводы (TASK-426, срезы 2–4): все в дневном и недельном лимитах, под паузой игрока и под согласием, кроме
+# самого вопроса о согласии. Приоритет внутри прохода: меньше — важнее.
+register_kind(KIND_CONSENT, KindPolicy(budgeted=True, weekly=True, new=True, priority=0))
+register_kind(KIND_MONTH, KindPolicy(budgeted=True, weekly=True, new=True, priority=1, needs_consent=True))
+register_kind(KIND_WEEK, KindPolicy(budgeted=True, weekly=True, new=True, priority=2, needs_consent=True))
+register_kind(KIND_INVITE, KindPolicy(budgeted=True, weekly=True, new=True, priority=3, needs_consent=True))
+register_kind(KIND_COMEBACK, KindPolicy(budgeted=True, weekly=True, new=True, priority=4, needs_consent=True))
 
 
 _LOCK = text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))")
@@ -249,6 +266,8 @@ async def _admit(
         return Admission(False, OPTED_OUT)
     if policy.type_column is not None and not getattr(prefs, policy.type_column):
         return Admission(False, TYPE_OFF)
+    if policy.needs_consent and prefs.notify_consent is not True:
+        return Admission(False, NO_CONSENT)  # не спрашивали, не ответил или нажал «Не присылать»
     if policy.new and prefs.notify_paused_until is not None and _utc(prefs.notify_paused_until) > _utc(now):
         return Admission(False, PAUSED)
 

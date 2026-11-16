@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
@@ -48,19 +48,22 @@ class Proposal:
 
     notice: hn.Notice
     recheck: Recheck | None = None
+    # Текст на момент отправки (день недели и «сегодня/завтра» считаются тогда, а не при сборке). ``None`` — как в notice.
+    render: Callable[[datetime], str] | None = None
 
 
 # Повод: по состоянию базы и времени предлагает сообщения игрокам. Ничего не отправляет и не пишет.
 Producer = Callable[..., Awaitable[list[Proposal]]]
 # Сюда срезы 2–4 добавляют поводы; сейчас пусто.
-PRODUCERS: dict[str, Producer] = {}
+PRODUCERS: dict[str, Producer] = {}  # заполняется ``kk_notify_events.PRODUCERS`` лениво, при первом проходе
 
 
 # ---------- проверка свежести ----------
 
 
-def match_still_open(match_id: int) -> Recheck:
-    """Матч ещё не начался (с запасом на закрытие хода), всё ещё запланирован и у игрока нет хода на него."""
+def match_still_open(match_id: int, *, min_left: timedelta | None = None) -> Recheck:
+    """Матч ещё не начался (с запасом на закрытие хода), всё ещё запланирован и у игрока нет хода на него.
+    ``min_left`` — до начала должно остаться не меньше (для «матч сегодня» — 3 часа)."""
 
     async def check(session: AsyncSession, player_key: int, now: datetime) -> str | None:
         row = (
@@ -74,6 +77,8 @@ def match_still_open(match_id: int) -> Recheck:
             return "match_status"
         if hn._utc(row.starts_at) <= hn._utc(now) + PICK_CLOSES_BEFORE:
             return "match_started"
+        if min_left is not None and hn._utc(row.starts_at) < hn._utc(now) + min_left:
+            return "too_close"
         has_pick = (
             await session.execute(
                 text("SELECT 1 FROM hockey_picks WHERE match_id = :m AND player_key = :p"),
@@ -147,6 +152,8 @@ async def dispatch(
                 return await finish(Outcome("dry_run" if admission.dry_run else "skip", admission.reason))
             if kind not in KIND_POLICY or not KIND_POLICY[kind].new:
                 return await finish(Outcome("skip", "not_a_new_kind"))
+            if proposal.render is not None:
+                notice = replace(notice, text=proposal.render(clock()))
             if not await hn.claim(session, notice):
                 return await finish(Outcome("skip", "already_claimed"))
             await session.commit()  # «занято» видно всем до вызова Telegram; блокировка снята
@@ -201,10 +208,21 @@ async def run_tick(
         cfg = config or GateConfig.from_settings()
         if not cfg.enabled:
             return counts
-        producers = PRODUCERS if producers is None else producers
+        if producers is None:
+            from src.application.kk_notify_events import PRODUCERS as event_producers
+
+            producers = event_producers
         active = [k for k in producers if k in cfg.kinds and k in KIND_POLICY]
         if not active:
             return counts
+        try:  # пауза «два приглашения без хода»: сбой не мешает проходу
+            from src.application.kk_notify_events import apply_silence_pause
+
+            async with session_factory() as session:
+                await apply_silence_pause(session, now=now)
+                await session.commit()
+        except Exception:  # noqa: BLE001
+            logger.warning("kk_notify tick: silence pause failed", exc_info=True)
         async with session_factory() as session:
             facts: dict[int, PlayerFacts] = {f.player_key: f for f in await load_player_facts(session, as_of=now)}
     except Exception:  # noqa: BLE001

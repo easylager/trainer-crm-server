@@ -2,7 +2,7 @@
 
 | фаза       | условие                                              |
 |------------|------------------------------------------------------|
-| off        | заблокировал бота или нажал «не присылать»            |
+| off        | заблокировал бота, выключил напоминания или нажал «Не присылать» |
 | new        | зарегистрировался, ходов нет                          |
 | active     | последний ход — меньше 7 суток назад                  |
 | cooling    | 7–13 суток назад                                      |
@@ -68,6 +68,8 @@ class PlayerFacts:
     opted_out: bool
     blocked: bool
     paused_until: datetime | None = None
+    # Согласие на новые сообщения: None — не спрашивали, True — согласен, False — нажал «Не присылать».
+    consent: bool | None = None
 
     def phase(self, now: datetime) -> Phase:
         return player_phase(
@@ -79,9 +81,10 @@ _FACTS = text("""
     SELECT pl.player_key, pl.created_at AS registered_at,
            (SELECT MAX(hp.picked_at) FROM hockey_picks AS hp
             WHERE hp.player_key = pl.player_key AND hp.picked_at <= :as_of) AS last_pick_at,
-           NOT COALESCE(pr.remind, true) AS opted_out,
+           (NOT COALESCE(pr.remind, true) OR pr.notify_consent IS FALSE) AS opted_out,
            (pr.bot_blocked_at IS NOT NULL) AS blocked,
-           pr.notify_paused_until AS paused_until
+           pr.notify_paused_until AS paused_until,
+           pr.notify_consent AS consent
     FROM hockey_players AS pl
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key
     WHERE pl.created_at <= :as_of AND (CAST(:only AS BIGINT) IS NULL OR pl.player_key = :only)
@@ -103,6 +106,7 @@ async def load_player_facts(
             opted_out=bool(r.opted_out),
             blocked=bool(r.blocked),
             paused_until=r.paused_until,
+            consent=r.consent,
         )
         for r in rows
     ]
