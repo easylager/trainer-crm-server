@@ -39,7 +39,7 @@ from src.application.kk_notify_gate import (
     KIND_WEEK,
     day_bounds,
 )
-from src.application.kk_notify_phase import Phase, PlayerFacts, days_since, load_player_facts
+from src.application.kk_notify_phase import Phase, PlayerFacts, days_since, load_one, load_player_facts
 from src.ingestion.hockey_sources import MINSK_TZ
 from src.shared.copy_ru import t
 
@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 MORNING_FROM, MORNING_TO = 9, 11  # окно утренних сообщений по Минску: [9:00, 11:00)
 MONTH_FROM = 10  # итог месяца — с 10:00 первого числа
+MONTH_CATCHUP_TO = 11  # догон: 2-го числа до 11:00, если 1-го отправка не состоялась (отказ допуска, сбой)
 INVITE_MIN_LEFT = timedelta(hours=3)
 MATCH_MIN_LEFT = hn.NOMOVE_MIN_LEFT  # для строки матча в итогах и возвратах
 COMEBACK_HORIZON = timedelta(days=6)
@@ -76,6 +77,16 @@ def _all_of(*checks):
         return None
 
     return check
+
+
+def month_window(now: datetime) -> bool:
+    """Итог месяца: 1-го числа с 10:00 и догоняющий проход 2-го до 11:00."""
+    local = _local(now)
+    return (local.day == 1 and local.hour >= MONTH_FROM) or (local.day == 2 and local.hour < MONTH_CATCHUP_TO)
+
+
+async def _month_window_check(session, player_key, now):
+    return None if month_window(now) else "out_of_window"
 
 
 def _window_check(start_hour: int, end_hour: int | None):
@@ -223,7 +234,7 @@ async def produce_invite(session: AsyncSession, *, now: datetime) -> list[Propos
 _COMEBACKS_SINCE = text("""
     SELECT COUNT(*) FROM hockey_notices
     WHERE player_key = :player_key AND kind = 'comeback'
-      AND (sent_at > :since OR (sent_at IS NULL AND NOT failed AND created_at > :since))
+      AND (sent_at > :since OR (sent_at IS NULL AND created_at > :since))  -- занято или окончательно не ушло: попытка
     """)
 
 
@@ -233,6 +244,23 @@ def comeback_step(days_silent: int) -> int | None:
         if first <= days_silent < last:
             return number
     return None
+
+
+def _comeback_still_due(step: int):
+    """Перед отправкой: молчание всё ещё на этой ступени (не было хода на другой матч), попытки не исчерпаны."""
+
+    async def check(session, player_key, now):
+        facts = await load_one(session, player_key, as_of=now)
+        if facts is None or facts.last_pick_at is None:
+            return "no_facts"
+        if comeback_step(days_since(facts.last_pick_at, now)) != step:
+            return "step_changed"
+        done = (
+            await session.execute(_COMEBACKS_SINCE, {"player_key": player_key, "since": hn._utc(facts.last_pick_at)})
+        ).scalar_one()
+        return "step_done" if done >= step else None
+
+    return check
 
 
 async def produce_comeback(session: AsyncSession, *, now: datetime) -> list[Proposal]:
@@ -271,7 +299,11 @@ async def produce_comeback(session: AsyncSession, *, now: datetime) -> list[Prop
         out.append(
             Proposal(
                 hn.Notice(KIND_COMEBACK, f.player_key, m["match_id"], render(now), _buttons(m)),
-                _all_of(_window_check(MORNING_FROM, MORNING_TO), match_still_open(m["match_id"], min_left=MATCH_MIN_LEFT)),
+                _all_of(
+                    _window_check(MORNING_FROM, MORNING_TO),
+                    _comeback_still_due(step),
+                    match_still_open(m["match_id"], min_left=MATCH_MIN_LEFT),
+                ),
                 render,
             )
         )
@@ -360,6 +392,9 @@ _MONTH_ANCHOR = text("""
     WHERE p.player_key = :player_key AND p.points IS NOT NULL AND m.starts_at >= :since AND m.starts_at < :until
     ORDER BY m.starts_at DESC, m.id DESC LIMIT 1
     """)
+_MONTH_DONE = text("""
+    SELECT 1 FROM hockey_notices WHERE player_key = :player_key AND match_id = :match_id AND kind = 'month'
+    """)
 _CLOSURE = text("""
     SELECT 1 FROM hockey_closures
     WHERE kind = 'month' AND period_start = :since AND club = :club AND league_id IS NULL
@@ -400,8 +435,7 @@ def _month_recheck(club: str, period, match_check):
 
 
 async def produce_month(session: AsyncSession, *, now: datetime) -> list[Proposal]:
-    local = _local(now)
-    if local.day != 1 or not in_window(now, MONTH_FROM, None):
+    if not month_window(now):
         return []
     period = previous_month(now)
     players = set((await session.execute(_MONTH_PLAYERS, {"since": period.since, "until": period.until})).scalars().all())
@@ -430,6 +464,9 @@ async def produce_month(session: AsyncSession, *, now: datetime) -> list[Proposa
         ).scalar_one_or_none()
         if anchor is None:
             continue
+        # Уже отправляли (или занято) — догон не шлёт второй раз: ключ строки тот же.
+        if (await session.execute(_MONTH_DONE, {"player_key": f.player_key, "match_id": anchor})).first() is not None:
+            continue
         m = await next_match(session, f.player_key, club=club, from_=now + MATCH_MIN_LEFT, until=now + LINE_HORIZON, free=True)
         month_number = _local(period.since).month
 
@@ -451,7 +488,7 @@ async def produce_month(session: AsyncSession, *, now: datetime) -> list[Proposa
         out.append(
             Proposal(
                 hn.Notice(KIND_MONTH, f.player_key, anchor, render(now), _buttons(m)),
-                _all_of(_window_check(MONTH_FROM, None), _month_recheck(club, period, match_check)),
+                _all_of(_month_window_check, _month_recheck(club, period, match_check)),
                 render,
             )
         )

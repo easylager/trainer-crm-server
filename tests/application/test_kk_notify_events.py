@@ -381,7 +381,7 @@ async def test_month_conditions(db_session) -> None:
     await _close_november(db_session)
     assert len(await ev.produce_month(db_session, now=DEC1)) >= 1
     assert await ev.produce_month(db_session, now=at(9, 59, day=1, month=12)) == []  # раньше 10:00
-    assert await ev.produce_month(db_session, now=at(10, 0, day=2, month=12)) == []  # не первое число
+    assert await ev.produce_month(db_session, now=at(10, 0, day=3, month=12)) == []  # не первое число и не догон
     await seed_final(db_session, "Динамо-Минск", "Спартак", at(20, day=30), status="scheduled")
     assert await ev.produce_month(db_session, now=DEC1) == []  # есть неподтверждённый матч месяца
     await db_session.execute(text("DELETE FROM hockey_matches WHERE status = 'scheduled' AND starts_at < :t"), {"t": at(0, day=1, month=12)})
@@ -644,3 +644,145 @@ async def test_legacy_pushes_keep_working_until_the_consent_question_is_live(db_
         assert (await admit(db_session, kind=kind, player_key=SASHA, now=at(12), config=cfg)).allowed
     live = GateConfig(enabled=True, dry_run=False, texts_accepted=True, kinds=frozenset({"consent"}))
     assert (await admit(db_session, kind=kind, player_key=SASHA, now=at(12), config=live)).reason == gate.NO_CONSENT
+
+
+# ---------- итог месяца: догон 2-го числа ----------
+
+
+async def _november_ready(db):
+    await _month_table(db, me_points=30, others=[50, 50, 30, 20, 10])
+    await _close_november(db)
+
+
+@pytest.mark.asyncio
+async def test_month_catchup_second_day_until_eleven(db_session) -> None:
+    await _november_ready(db_session)
+    day2 = lambda h, m=0: at(h, m, day=2, month=12)  # noqa: E731
+    assert any(p.notice.player_key == SASHA for p in await ev.produce_month(db_session, now=day2(10, 30)))
+    assert any(p.notice.player_key == SASHA for p in await ev.produce_month(db_session, now=day2(0, 5)))
+    assert await ev.produce_month(db_session, now=day2(10, 59)) != []
+    assert await ev.produce_month(db_session, now=day2(11, 0)) == []  # после 11:00 второго числа не шлём
+    assert await ev.produce_month(db_session, now=at(10, 0, day=3, month=12)) == []
+
+
+@pytest.mark.asyncio
+async def test_month_catchup_does_not_duplicate_after_first_day_send(db_session, factory) -> None:
+    await _november_ready(db_session)
+    [p] = [x for x in await ev.produce_month(db_session, now=DEC1) if x.notice.player_key == SASHA]
+    out = Outbox()
+    sent = await dispatch(factory, p, phase="active", tick_at=DEC1, send=out, config=CFG, clock=lambda: DEC1)
+    assert sent.decision == "send" and len(out.sent) == 1
+    day2 = at(10, 30, day=2, month=12)
+    assert SASHA not in [x.notice.player_key for x in await ev.produce_month(db_session, now=day2)]
+    # даже если предложение всё же дошло до отправки, ключ строки тот же — второй раз не уйдёт
+    r = await dispatch(factory, p, phase="active", tick_at=day2, send=out, config=CFG, clock=lambda: day2 + timedelta(days=0))
+    assert r.decision == "skip" and len(out.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_month_catchup_sends_once_with_same_anchor_when_first_day_was_refused(db_session, factory) -> None:
+    await _november_ready(db_session)
+    [first] = [x for x in await ev.produce_month(db_session, now=DEC1) if x.notice.player_key == SASHA]
+    await db_session.execute(text("UPDATE hockey_player_prefs SET remind = false WHERE player_key = :k"), {"k": SASHA})
+    out = Outbox()
+    refused = await dispatch(factory, first, phase="active", tick_at=DEC1, send=out, config=CFG, clock=lambda: DEC1)
+    assert refused.reason == gate.OPTED_OUT and out.sent == []
+    await db_session.execute(text("UPDATE hockey_player_prefs SET remind = true WHERE player_key = :k"), {"k": SASHA})
+    day2 = at(10, 30, day=2, month=12)
+    [again] = [x for x in await ev.produce_month(db_session, now=day2) if x.notice.player_key == SASHA]
+    assert again.notice.match_id == first.notice.match_id  # тот же anchor
+    done = await dispatch(factory, again, phase="active", tick_at=day2, send=out, config=CFG, clock=lambda: day2)
+    assert done.decision == "send" and len(out.sent) == 1
+    late = at(11, 0, day=2, month=12)
+    stale = await dispatch(factory, again, phase="active", tick_at=late, send=out, config=CFG, clock=lambda: late)
+    assert stale.decision == "skip" and len(out.sent) == 1
+
+
+# ---------- итог недели только по понедельникам ----------
+
+
+@pytest.mark.asyncio
+async def test_week_summary_only_on_monday(db_session) -> None:
+    await _week_world(db_session)  # за прошлую неделю есть очки
+    assert len([p for p in await ev.produce_week(db_session, now=MON) if p.notice.player_key == SASHA]) == 1
+    for day in (17, 18, 19, 20, 21, 22):  # вторник … воскресенье
+        assert await ev.produce_week(db_session, now=at(10, 0, day=day)) == [], day
+
+
+@pytest.mark.asyncio
+async def test_week_counts_only_final_matches(db_session) -> None:
+    await _week_world(db_session)
+    cancelled = await seed_final(db_session, "Юность", "Шахтер", at(19, day=14), status="cancelled")
+    scheduled = await seed_final(db_session, "Юность", "Шахтер", at(20, day=14), status="scheduled")
+    await seed_scored(db_session, SASHA, cancelled, 50)
+    await seed_scored(db_session, SASHA, scheduled, 50)
+    [p] = [x for x in await ev.produce_week(db_session, now=MON) if x.notice.player_key == SASHA]
+    assert "3~хода и~60~очков" in plain(p.notice.text)  # матчи без итога в сумму не входят
+
+
+# ---------- согласие перепроверяется перед отправкой ----------
+
+
+@pytest.mark.asyncio
+async def test_consent_question_not_sent_if_player_already_answered(db_session, factory) -> None:
+    await seed_player(db_session, SASHA, registered=REG)
+    await seed_pick(db_session, SASHA, at(9, day=11))
+    [p] = await ev.produce_consent(db_session, now=WED)
+    await hn.set_consent(db_session, SASHA, True)  # ответил, пока вопрос ждал в очереди
+    out = Outbox()
+    r = await dispatch(factory, p, phase="active", tick_at=WED, send=out, config=CFG, clock=lambda: WED)
+    assert r.reason == "stale:answered" and out.sent == []
+
+
+# ---------- возврат: перепроверка ступени, «fresh», сбой = попытка ----------
+
+
+@pytest.mark.asyncio
+async def test_comeback_rechecked_when_player_returned_on_another_match(db_session, factory) -> None:
+    await active_player(db_session, days_ago=3)
+    await seed_match(db_session, at(19, day=13), home="Юность", away="Шахтер")
+    [p] = await ev.produce_comeback(db_session, now=WED)
+    await seed_pick(db_session, SASHA, at(9, 50, day=11))  # вернулся ходом на другой матч
+    out = Outbox()
+    r = await dispatch(factory, p, phase="cooling", tick_at=WED, send=out, config=CFG, clock=lambda: WED)
+    assert r.reason == "stale:step_changed" and out.sent == []
+
+
+@pytest.mark.asyncio
+async def test_comeback_rechecked_for_window_and_attempts_at_send_time(db_session, factory) -> None:
+    await active_player(db_session, days_ago=3)
+    await seed_match(db_session, at(19, day=13), home="Юность", away="Шахтер")
+    [p] = await ev.produce_comeback(db_session, now=WED)
+    out = Outbox()
+    late = at(11, 0, day=11)
+    assert (await dispatch(factory, p, phase="active", tick_at=WED, send=out, config=CFG, clock=lambda: late)).reason == "stale:out_of_window"
+    await seed_notice(db_session, SASHA, "comeback", None, failed=True, created_at=at(9, 59, day=11))  # ступень уже пробовали
+    assert (await dispatch(factory, p, phase="active", tick_at=WED, send=out, config=CFG, clock=lambda: WED)).reason == "stale:step_done"
+    assert out.sent == []
+
+
+@pytest.mark.asyncio
+async def test_comeback_does_not_offer_a_match_it_already_offered(db_session) -> None:
+    await active_player(db_session, days_ago=10)
+    first = await seed_match(db_session, at(19, day=12), home="Юность", away="Шахтер")
+    second = await seed_match(db_session, at(19, day=13), home="Юность", away="Шахтер")
+    await db_session.execute(
+        text("INSERT INTO hockey_notices (player_key, match_id, kind, sent_at, created_at) VALUES (:k, :m, 'comeback', :t, :t)"),
+        {"k": SASHA, "m": first, "t": at(10, day=1)},  # давнее предложение этого матча (до последнего хода)
+    )
+    [p] = await ev.produce_comeback(db_session, now=WED)
+    assert p.notice.match_id == second
+
+
+@pytest.mark.asyncio
+async def test_failed_comeback_counts_as_attempt_same_morning(db_session, factory) -> None:
+    await active_player(db_session, days_ago=3)
+    await seed_match(db_session, at(19, day=12), home="Юность", away="Шахтер")
+    await seed_match(db_session, at(19, day=13), home="Юность", away="Шахтер")
+    [p] = await ev.produce_comeback(db_session, now=WED)
+    out = Outbox(answer=hn.FAILED)
+    r = await dispatch(factory, p, phase="active", tick_at=WED, send=out, config=CFG, clock=lambda: WED)
+    assert (r.decision, r.result) == ("send", "failed")
+    # следующий проход того же утра не перебирает другие матчи
+    assert await ev.produce_comeback(db_session, now=WED + timedelta(minutes=10)) == []
+    assert len(out.sent) == 1
