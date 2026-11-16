@@ -32,9 +32,10 @@ def _local(value: datetime) -> datetime:
 
 
 def arena_title(raw_name: str) -> str:
-    """Имя катка для сообщения (HTML-экранировано): в ёлочках, если своих кавычек у имени нет."""
+    """Имя катка для сообщения (HTML-экранировано): в ёлочках, если своих кавычек у имени нет
+    («ЛД «Гранд Каньон Айс»» не оборачиваем второй раз)."""
     name = place_name(raw_name)
-    return name if name.startswith("«") and name.endswith("»") else f"«{name}»"
+    return name if "«" in name else f"«{name}»"
 
 
 def clock(value: time | datetime) -> str:
