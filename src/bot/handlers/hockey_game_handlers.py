@@ -25,6 +25,7 @@ from src.application.hockey_notices import (
     clear_blocked,
     next_move,
     picked_buttons,
+    set_consent,
     set_type,
 )
 from src.infrastructure.db import async_session_factory
@@ -151,6 +152,25 @@ async def on_off(cb: CallbackQuery) -> None:
         await session.commit()
     await cb.answer(f"Отключено: {TYPE_TITLES[kind]}. Остальные сообщения игры продолжат приходить.", show_alert=True)
     await _edit_markup(cb, _without(_current_rows(cb), f"{CB_OFF}:"))
+
+
+@router.callback_query(F.data == "kk:noall")
+async def on_off_all(cb: CallbackQuery) -> None:
+    """«Не присылать» в новых сообщениях: выключает все новые сообщения игры; итог хода остаётся."""
+    async with async_session_factory() as session:
+        await set_consent(session, cb.from_user.id, False)
+        await session.commit()
+    await cb.answer("Больше не пишу. Итог хода по-прежнему придёт.", show_alert=True)
+    await _edit_markup(cb, [])
+
+
+@router.callback_query(F.data == "kk:yes")
+async def on_consent_yes(cb: CallbackQuery) -> None:
+    async with async_session_factory() as session:
+        await set_consent(session, cb.from_user.id, True)
+        await session.commit()
+    await cb.answer("Хорошо")
+    await _edit_markup(cb, [])
 
 
 @router.callback_query(F.data.startswith(f"{CB_LEAVE}:"))

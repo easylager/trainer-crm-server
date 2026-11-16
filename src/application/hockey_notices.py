@@ -249,6 +249,20 @@ async def set_remind(session: AsyncSession, player_key: int, on: bool, *, displa
     return bool(on)
 
 
+_SET_CONSENT = text("""
+    INSERT INTO hockey_player_prefs (player_key, notify_consent) VALUES (:player_key, :value)
+    ON CONFLICT (player_key) DO UPDATE SET notify_consent = EXCLUDED.notify_consent, updated_at = now()
+    """)
+
+
+async def set_consent(session: AsyncSession, player_key: int, value: bool) -> None:
+    """Согласие на новые сообщения игры (напоминания о матчах, итоги недели и месяца, возврат).
+    «Не присылать» выключает их все сразу; итог хода, перенос и поправка итога от этого не зависят.
+    Вернуть согласие игрок может сам (кнопка «Присылать» в вопросе или настройки)."""
+    await session.execute(_ENSURE_PLAYER, {"player_key": player_key, "name": DEFAULT_PLAYER_NAME})
+    await session.execute(_SET_CONSENT, {"player_key": player_key, "value": bool(value)})
+
+
 async def get_prefs(session: AsyncSession, player_key: int) -> dict:
     row = (await session.execute(_PREFS, {"player_key": player_key})).one_or_none()
     return {
@@ -1529,6 +1543,7 @@ __all__ = [
     "scan_league_ranks",
     "send_via_client_bot",
     "send_via_client_bot_gone",
+    "set_consent",
     "set_fav_club",
     "set_remind",
     "set_type",

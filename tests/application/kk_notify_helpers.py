@@ -103,3 +103,26 @@ async def seed_notice(
         {"k": key, "m": mid, "kind": kind, "s": sent_at, "f": failed, "c": created_at},
     )
     return mid
+
+
+async def seed_final(db, home: str, away: str, starts_at: datetime, *, status: str = "final") -> int:
+    """Сыгранный матч: нужен таблицам и итогам. Статус можно задать (``scheduled`` для незавершённого)."""
+    mid = await seed_match(db, starts_at, home=home, away=away)
+    if status == "final":
+        await db.execute(
+            text("UPDATE hockey_matches SET status = 'final', home_score = 3, away_score = 2, decided_in = 'regulation', result_source = 'manual', "
+                 "finalized_at = :t WHERE id = :m"),
+            {"m": mid, "t": starts_at + timedelta(hours=3)},
+        )
+    elif status != "scheduled":
+        await db.execute(text("UPDATE hockey_matches SET status = :s WHERE id = :m"), {"m": mid, "s": status})
+    return mid
+
+
+async def seed_scored(db, key: int, match_id: int, points: int, *, side: str = "home", doubled: bool = False) -> None:
+    await db.execute(
+        text("""INSERT INTO hockey_picks (match_id, player_key, side, points, doubled, scored_at, picked_at)
+                SELECT :m, :k, :s, :p, :d, m.starts_at + interval '4 hours', m.starts_at - interval '2 hours'
+                FROM hockey_matches m WHERE m.id = :m"""),
+        {"m": match_id, "k": key, "s": side, "p": points, "d": doubled},
+    )
