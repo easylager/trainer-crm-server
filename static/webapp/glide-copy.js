@@ -243,7 +243,9 @@
     "kk_notify.month_prep_11": "ноябре",
     "kk_notify.month_nom_12": "декабрь",
     "kk_notify.month_gen_12": "декабря",
-    "kk_notify.month_prep_12": "декабре"
+    "kk_notify.month_prep_12": "декабре",
+    "kk_notify.off_done": "Больше не пишу. Придут только итог твоего хода, сообщения о переносе матча и о лигах.",
+    "kk_notify.on_done": "Хорошо, пишу про матчи, итоги недели и месяца. Не чаще раза в день."
   };
 
   function t(key, kw) {

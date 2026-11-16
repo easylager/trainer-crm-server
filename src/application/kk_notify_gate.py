@@ -83,9 +83,9 @@ KIND_POLICY: dict[str, KindPolicy] = {
     # «Лига продлена» — ответ на действие владельца лиги: вне бюджета и не зависит от согласия ``remind``
     # (письмо о лиге, в которой человек состоит, а не рассылка), но с тихими часами, блокировкой и отключением типа.
     "league": KindPolicy(budgeted=False, type_column="notify_league", respects_remind=False),
-    "mfinal": KindPolicy(budgeted=True, type_column="notify_mfinal", priority=0),
-    "overtook": KindPolicy(budgeted=True, type_column="notify_overtook", priority=1),
-    "nomove": KindPolicy(budgeted=True, type_column="notify_nomove", priority=2),
+    "mfinal": KindPolicy(budgeted=True, type_column="notify_mfinal", priority=0, needs_consent=True),
+    "overtook": KindPolicy(budgeted=True, type_column="notify_overtook", priority=1, needs_consent=True),
+    "nomove": KindPolicy(budgeted=True, type_column="notify_nomove", priority=2, needs_consent=True),
 }
 
 
@@ -137,6 +137,11 @@ class GateConfig:
             kinds=frozenset(p.lower() for p in _csv(getattr(settings, "kk_notify_kinds", ""))),
             whitelist=frozenset(keys),
         )
+
+
+def consent_question_active(cfg: GateConfig) -> bool:
+    """Вопрос «Присылать?» реально уходит игрокам: общий флаг, флаг повода, не сухой прогон, тексты приняты."""
+    return cfg.enabled and KIND_CONSENT in cfg.kinds and not cfg.dry_run and cfg.texts_accepted
 
 
 @dataclass(frozen=True)
@@ -266,8 +271,19 @@ async def _admit(
         return Admission(False, OPTED_OUT)
     if policy.type_column is not None and not getattr(prefs, policy.type_column):
         return Admission(False, TYPE_OFF)
-    if policy.needs_consent and prefs.notify_consent is not True:
-        return Admission(False, NO_CONSENT)  # не спрашивали, не ответил или нажал «Не присылать»
+    if policy.needs_consent:
+        consent = prefs.notify_consent
+        if consent is False:
+            return Admission(False, NO_CONSENT)  # нажал «Не присылать»: выключены все пуши игры, кроме итога хода и событий
+        if consent is None:
+            # Не спрашивали. Новые поводы без согласия не идут никогда. Прежние (nomove, mfinal, overtook) идут, пока
+            # вопрос о согласии никому не задаётся (флаги выключены или сухой прогон): иначе новые игроки молча
+            # потеряли бы пуши, которые у них работают сейчас. Как только вопрос реально уходит — нужен ответ.
+            if policy.new:
+                return Admission(False, NO_CONSENT)
+            cfg = cfg or GateConfig.from_settings()
+            if consent_question_active(cfg):
+                return Admission(False, NO_CONSENT)
     if policy.new and prefs.notify_paused_until is not None and _utc(prefs.notify_paused_until) > _utc(now):
         return Admission(False, PAUSED)
 

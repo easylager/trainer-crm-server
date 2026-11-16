@@ -608,3 +608,39 @@ async def test_comeback_and_week_text_rendered_at_send_time(db_session) -> None:
     await seed_match(db_session, at(19, day=17), home="Юность", away="Неман")
     [w] = [x for x in await ev.produce_week(db_session, now=MON) if x.notice.player_key == SASHA]
     assert "завтра" in w.notice.text and "сегодня" in w.render(at(10, 0, day=17)) and ids
+
+
+# ---------- «Не присылать» выключает все пуши игры, кроме итога и событий ----------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["nomove", "mfinal", "overtook"])
+async def test_do_not_send_switches_off_legacy_pushes_too(db_session, kind) -> None:
+    await seed_player(db_session, SASHA, registered=REG, notify_consent=False)
+    assert gate.KIND_POLICY[kind].needs_consent is True
+    # явное «Не присылать» действует всегда, при любых флагах
+    assert (await admit(db_session, kind=kind, player_key=SASHA, now=at(12))).reason == gate.NO_CONSENT
+    assert (await admit(db_session, kind=kind, player_key=SASHA, now=at(12), config=CFG)).reason == gate.NO_CONSENT
+    await hn.set_consent(db_session, SASHA, True)
+    assert (await admit(db_session, kind=kind, player_key=SASHA, now=at(12), config=CFG)).allowed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["result", "moved", "rescore", "mvfree", "league"])
+async def test_results_events_and_league_letters_ignore_the_off_switch(db_session, kind) -> None:
+    await seed_player(db_session, SASHA, registered=REG, notify_consent=False)
+    assert gate.KIND_POLICY[kind].needs_consent is False
+    assert (await admit(db_session, kind=kind, player_key=SASHA, now=at(12))).allowed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["nomove", "mfinal", "overtook"])
+async def test_legacy_pushes_keep_working_until_the_consent_question_is_live(db_session, kind) -> None:
+    """Нет ответа (NULL): пока вопрос не задаётся (флаги закрыты или сухой прогон), прежние пуши идут как раньше."""
+    await seed_player(db_session, SASHA, registered=REG)
+    closed = [GateConfig(), GateConfig(enabled=True, kinds=frozenset({"consent"})),
+              GateConfig(enabled=True, dry_run=False, texts_accepted=False, kinds=frozenset({"consent"}))]  # fmt: skip
+    for cfg in closed:
+        assert (await admit(db_session, kind=kind, player_key=SASHA, now=at(12), config=cfg)).allowed
+    live = GateConfig(enabled=True, dry_run=False, texts_accepted=True, kinds=frozenset({"consent"}))
+    assert (await admit(db_session, kind=kind, player_key=SASHA, now=at(12), config=live)).reason == gate.NO_CONSENT
