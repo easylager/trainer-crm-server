@@ -1004,32 +1004,26 @@ def _b_counts_line(view: Mapping[str, Any]) -> str:
 
 
 def city_hub_topic_line(view: Mapping[str, Any]) -> str:
-    """Подстрока героя: тема страницы и настоящие числа (TASK-420).
+    """Подстрока героя: тема страницы и настоящие числа (TASK-420, вариант B).
 
-    «Массовое катание в Минске: сегодня ещё 21 сеанс на 10 катках, от 7 до 15 BYN».
-    Окно — первое из «сегодня / завтра / в выходные», где есть сеансы; катки и цены считаются
-    в том же окне. Нет склонения города, окна с сеансами или хаб открыт в окне — прежняя строка.
+    «Массовое катание в Минске: сегодня 21 сеанс, от 7 BYN». Окно — первое из «сегодня / завтра /
+    в выходные», где есть сеансы; цена — минимальная в том же окне. Нет склонения города, окна с сеансами
+    или хаб открыт в окне — прежняя строка. Короткая: на телефоне одна–две строки, герой почти не растёт.
     """
     where = city_locative(str(view["city"]["name"]))
     key = next((k for k in _WINDOW_KEYS if int(view["skate_counts"].get(k) or 0)), None)
     if not where or key is None or view.get("when_explicit"):
         return _b_counts_line(view)
     n = int(view["skate_counts"][key])
-    rinks = int((view.get("skate_window_arena_counts") or {}).get(key) or 0)
     nb = "\u00a0"
-    lead = {"today": "сегодня ещё", "tomorrow": "завтра", "weekend": "в выходные"}[key]
+    lead = {"today": "сегодня", "tomorrow": "завтра", "weekend": "в выходные"}[key]
     text_ = f"Массовое катание в {where}: {lead} {n}{nb}{plural_ru(n, 'сеанс', 'сеанса', 'сеансов')}"
-    if rinks:
-        text_ += f" на {rinks}{nb}{plural_ru(rinks, 'катке', 'катках', 'катках')}"
     price = (view.get("skate_window_prices") or {}).get(key)
     if isinstance(price, Mapping) and price.get("lo"):
         currency = str(price.get("cur") or "BYN")
         lo, hi = int(price["lo"]), int(price["hi"] or price["lo"])
-        if hi > lo:
-            low = format_price_minor(lo, currency).rsplit(" ", 1)[0].replace(" ", nb)
-            text_ += f", от {low} до {format_price_minor(hi, currency).replace(' ', nb)}"
-        else:
-            text_ += f", {format_price_minor(lo, currency).replace(' ', nb)}"
+        shown = format_price_minor(lo, currency).replace(" ", nb)
+        text_ += f", от {shown}" if hi > lo else f", {shown}"
     return text_
 
 

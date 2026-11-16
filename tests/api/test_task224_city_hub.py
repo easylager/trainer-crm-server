@@ -540,13 +540,13 @@ def test_topic_line_uses_real_numbers_and_declension() -> None:
 
     nb = " "
     assert city_hub_topic_line(view(21, 10)) == (
-        f"Массовое катание в Минске: сегодня ещё 21{nb}сеанс на 10{nb}катках, от 7 до 15{nb}BYN"
+        f"Массовое катание в Минске: сегодня 21{nb}сеанс, от 7{nb}BYN"
     )
     assert city_hub_topic_line(view(2, 1, 850, 850)) == (
-        f"Массовое катание в Минске: сегодня ещё 2{nb}сеанса на 1{nb}катке, 8,50{nb}BYN"
+        f"Массовое катание в Минске: сегодня 2{nb}сеанса, 8,50{nb}BYN"
     )
     assert city_hub_topic_line(view(5, 2, None)) == (
-        f"Массовое катание в Минске: сегодня ещё 5{nb}сеансов на 2{nb}катках"
+        f"Массовое катание в Минске: сегодня 5{nb}сеансов"
     )
     tomorrow = view(0, 0)
     assert city_hub_topic_line(tomorrow).startswith("Массовое катание в Минске: завтра 5")
@@ -582,4 +582,4 @@ async def test_city_hub_itemlist_and_topic_line_in_html(app_use_test_db, db_sess
     line = sub.group(1).replace(" ", " ")
     assert line.startswith("Массовое катание в ") and ": " in line
     # Сегодня сеансов нет или есть — но числа завтра/сегодня настоящие и катков два.
-    assert "на 2 катках" in line and ", 12 BYN" in line
+    assert "катках" not in line and ", 12 BYN" in line  # вариант B: без числа катков, цена одна — без «от»
