@@ -12,9 +12,10 @@ from __future__ import annotations
 import html
 import re
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from src.application.hockey_teams import display_name as club_name
-from src.ingestion.hockey_sources import MINSK_TZ
+MINSK_TZ = ZoneInfo("Europe/Minsk")  # без импорта слоя данных: тексты и предпросмотр не трогают базу
 from src.shared.copy_ru import t
 from src.shared.ru_text import plural_ru
 

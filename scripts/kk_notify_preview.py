@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.application import kk_notify_texts as tx  # noqa: E402
-from src.ingestion.hockey_sources import MINSK_TZ  # noqa: E402
+MINSK_TZ = ZoneInfo("Europe/Minsk")
 from src.shared.copy_ru import t  # noqa: E402
 
 DINAMO = "Динамо-Минск"
