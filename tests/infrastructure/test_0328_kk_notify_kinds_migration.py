@@ -29,6 +29,7 @@ async def test_downgrade_and_upgrade_keep_consent_answers_and_notice_rows() -> N
     engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
     try:
         async with engine.begin() as c:
+            await c.execute(text("DELETE FROM hockey_player_prefs WHERE player_key = :k"), {"k": KEY})
             await c.execute(text("DELETE FROM hockey_players WHERE player_key = :k"), {"k": KEY})
             await c.execute(text("DELETE FROM hockey_matches WHERE source_match_id = 'kk426-mig'"))
             await c.execute(text("INSERT INTO hockey_players (player_key, display_name) VALUES (:k, 'М')"), {"k": KEY})
@@ -62,6 +63,7 @@ async def test_downgrade_and_upgrade_keep_consent_answers_and_notice_rows() -> N
     finally:
         _alembic("upgrade", "head")  # что бы ни случилось в тесте, база остаётся на голове
         async with engine.begin() as c:
+            await c.execute(text("DELETE FROM hockey_player_prefs WHERE player_key = :k"), {"k": KEY})
             await c.execute(text("DELETE FROM hockey_players WHERE player_key = :k"), {"k": KEY})
             await c.execute(text("DELETE FROM hockey_matches WHERE source_match_id = 'kk426-mig'"))
         await engine.dispose()
@@ -73,6 +75,7 @@ async def test_upgrade_backfill_fills_only_unanswered_players() -> None:
     keys = {"null": KEY + 1, "true": KEY + 2, "false": KEY + 3, "off": KEY + 4}
     try:
         async with engine.begin() as c:
+            await c.execute(text("DELETE FROM hockey_player_prefs WHERE player_key = ANY(:k)"), {"k": list(keys.values())})
             await c.execute(text("DELETE FROM hockey_players WHERE player_key = ANY(:k)"), {"k": list(keys.values())})
             await c.execute(text("DELETE FROM hockey_matches WHERE source_match_id = 'kk426-mig2'"))
             mid = (
@@ -98,6 +101,7 @@ async def test_upgrade_backfill_fills_only_unanswered_players() -> None:
     finally:
         _alembic("upgrade", "head")
         async with engine.begin() as c:
+            await c.execute(text("DELETE FROM hockey_player_prefs WHERE player_key = ANY(:k)"), {"k": list(keys.values())})
             await c.execute(text("DELETE FROM hockey_players WHERE player_key = ANY(:k)"), {"k": list(keys.values())})
             await c.execute(text("DELETE FROM hockey_matches WHERE source_match_id = 'kk426-mig2'"))
         await engine.dispose()
