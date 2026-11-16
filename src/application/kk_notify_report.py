@@ -155,6 +155,7 @@ _MATCHES = text("""
     """)
 _WEEKLY_CAP = text("""
     SELECT COUNT(*) FROM kk_notify_decisions WHERE reason = 'weekly_cap' AND tick_at >= :since AND tick_at < :until
+      AND (kind IS NULL OR kind NOT LIKE 'warm\\_%')  -- журнал общий с прогревом посетителей (TASK-428)
     """)
 _BLOCKED = text("""
     SELECT COUNT(*) FROM hockey_player_prefs WHERE bot_blocked_at >= :since AND bot_blocked_at < :until
