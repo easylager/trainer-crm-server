@@ -3547,13 +3547,19 @@ async def run_hockey_matches_loop() -> None:
                     close_client_bot,
                     deliver,
                     deliver_league_notices,
-                    send_via_client_bot,
+                    send_via_client_bot_gone,
                 )
 
                 try:
-                    counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot)
+                    counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot_gone)
                     counts["league_notices"] = await deliver_league_notices(
-                        async_session_factory, now=now, send=send_via_client_bot
+                        async_session_factory, now=now, send=send_via_client_bot_gone
+                    )
+                    # Новые поводы (TASK-426): закрыты флагами, без поводов — пустой проход.
+                    from src.application.kk_notify import run_tick as kk_notify_tick
+
+                    counts["kk_notify"] = await kk_notify_tick(
+                        async_session_factory, now=now, send=send_via_client_bot_gone
                     )
                     # Старые строки hockey_notices — редко (раз в 6 часов) и порциями.
                     from src.application.hockey_notices import cleanup_old_notices
@@ -3579,6 +3585,14 @@ async def run_hockey_matches_loop() -> None:
                     health.ok("гонки и короны месяца")
                 health.ok("цикл матчей")
                 logger.info("[hockey_matches_loop] %s", counts)
+                if settings.kk_report_enabled:
+                    # Недельный отчёт админу по игре (TASK-426): раз в неделю, сам себя «занимает».
+                    from src.application.kk_notify_report import send_weekly_report_if_due
+
+                    try:
+                        await send_weekly_report_if_due(async_session_factory, now=now, send=send_review_alert)
+                    except Exception:  # noqa: BLE001 — отчёт не должен ронять цикл матчей
+                        logger.warning("[hockey_matches_loop] weekly report failed", exc_info=True)
             notice = health.take_fallback_notice(extraliga=extraliga_via, dinamo=dinamo_via)
             if notice:
                 await send_review_alert(notice)
