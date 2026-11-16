@@ -16,6 +16,9 @@
 30 дней; без ходов поводов про команду нет. Включает сам игрок (``remind``), каждый тип отключается
 отдельно; заблокировавшему бота больше не пишем, пока он снова не зайдёт.
 
+Все правила допуска (тихие часы, бюджеты, блокировка, «не присылать», выключатели новых поводов) проверяет
+один модуль — ``kk_notify_gate``; ``deliver`` зовёт его перед каждой отправкой (TASK-426).
+
 Сообщение сначала «занимается» строкой в ``hockey_notices`` и только потом уходит: второй цикл
 или повтор тика не пришлёт его дважды. Постоянный сбой (BadRequest) не повторяем; временный (429, сеть, 5xx) освобождает
 строку, и сообщение уходит на следующем проходе — не более ``MAX_ATTEMPTS`` раз.
@@ -55,6 +58,7 @@ from src.application.hockey_slices import (
 )
 from src.application.hockey_slices_sql import SCOPE_SQL
 from src.application.hockey_teams import display_name as club_name
+from src.application.kk_notify_gate import QUIET_FROM, QUIET_TO, admit, day_bounds, in_quiet_hours  # noqa: F401
 from src.ingestion.hockey_sources import MINSK_TZ
 
 logger = logging.getLogger(__name__)
@@ -96,7 +100,6 @@ RESULT_FRESH_AFTER_NIGHT = timedelta(hours=16)
 # в итог в третьем периоде) успевают поймать и поправить до рассылки. Цикл в окне итога тикает раз в 2 минуты,
 # так что 5 минут — это пара тиков для второго взгляда, а клиент ждёт итог на пять минут дольше, чем раньше.
 RESULT_SEND_DELAY = timedelta(minutes=5)
-QUIET_FROM, QUIET_TO = 23, 9
 MFINAL_FROM_HOUR = 12
 # В «корону решится сегодня» зовём тех, у кого она ещё в досягаемости.
 MFINAL_TOP = 3
@@ -181,17 +184,6 @@ def _local(value: datetime) -> datetime:
     return _utc(value).astimezone(MINSK_TZ)
 
 
-def in_quiet_hours(now: datetime) -> bool:
-    hour = _local(now).hour
-    return hour >= QUIET_FROM or hour < QUIET_TO
-
-
-def day_bounds(now: datetime) -> tuple[datetime, datetime]:
-    """Сутки по Минску, в которые попадает ``now``, — в UTC."""
-    start = _local(now).replace(hour=0, minute=0, second=0, microsecond=0)
-    return start.astimezone(timezone.utc), (start + timedelta(days=1)).astimezone(timezone.utc)
-
-
 # ---------- настройки ----------
 
 _PREFS = text("""
@@ -219,8 +211,11 @@ _SET_FAV = text("""
     ON CONFLICT (player_key) DO UPDATE SET fav_club = EXCLUDED.fav_club, updated_at = now()
     """)
 
+# Строки настроек у игрока может не быть (тогда всё включено по умолчанию): блокировку записываем и в этом случае,
+# иначе заблокировавшему продолжали бы писать (TASK-426, гарантия 8).
 _MARK_BLOCKED = text("""
-    UPDATE hockey_player_prefs SET bot_blocked_at = :now, updated_at = now() WHERE player_key = :player_key
+    INSERT INTO hockey_player_prefs (player_key, bot_blocked_at) VALUES (:player_key, :now)
+    ON CONFLICT (player_key) DO UPDATE SET bot_blocked_at = EXCLUDED.bot_blocked_at, updated_at = now()
     """)
 
 _CLEAR_BLOCKED = text("""
@@ -1146,6 +1141,14 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
         await session.commit()
         notices = await due_notices(session, now=now, overtakes=overtakes)
     for notice in notices:
+        # Единая точка допуска (kk_notify_gate): тихие часы, бюджет, блокировка и «не присылать» перечитываются
+        # прямо перед отправкой. Неизвестный повод или сбой проверки — не пишем, строку не занимаем.
+        async with session_factory() as session:
+            admission = await admit(session, kind=notice.kind, player_key=notice.player_key, now=now)
+        if not admission.allowed:
+            logger.info("kto-kogo notice %s/%s not admitted: %s", notice.kind, notice.player_key, admission.reason)
+            counts["refused"] = counts.get("refused", 0) + 1
+            continue
         if not notice.preclaimed:
             async with session_factory() as session:
                 if not await claim(session, notice):
