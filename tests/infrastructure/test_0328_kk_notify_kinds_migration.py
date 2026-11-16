@@ -60,6 +60,7 @@ async def test_downgrade_and_upgrade_keep_consent_answers_and_notice_rows() -> N
         async with engine.begin() as c:  # новые виды снова принимаются
             await c.execute(text("INSERT INTO hockey_notices (player_key, match_id, kind) VALUES (:k, :m, 'invite')"), {"k": KEY, "m": mid})
     finally:
+        _alembic("upgrade", "head")  # что бы ни случилось в тесте, база остаётся на голове
         async with engine.begin() as c:
             await c.execute(text("DELETE FROM hockey_players WHERE player_key = :k"), {"k": KEY})
             await c.execute(text("DELETE FROM hockey_matches WHERE source_match_id = 'kk426-mig'"))
@@ -95,6 +96,7 @@ async def test_upgrade_backfill_fills_only_unanswered_players() -> None:
             }
         assert got == {keys["null"]: True, keys["true"]: True, keys["false"]: False, keys["off"]: None}
     finally:
+        _alembic("upgrade", "head")
         async with engine.begin() as c:
             await c.execute(text("DELETE FROM hockey_players WHERE player_key = ANY(:k)"), {"k": list(keys.values())})
             await c.execute(text("DELETE FROM hockey_matches WHERE source_match_id = 'kk426-mig2'"))
