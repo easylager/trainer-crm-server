@@ -622,6 +622,34 @@ async def run_tick(
     return counts
 
 
+async def run_pass(*, now: datetime | None = None) -> dict[str, int]:
+    """Фоновая точка входа: свой ``Bot`` клиентского бота на проход (создаётся только при первой отправке
+    и закрывается здесь же). Общий бот цикла матчей не трогаем: он закрывается в конце своего прохода."""
+    from aiogram import Bot
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+
+    from src.infrastructure.db.session import async_session_factory
+    from src.shared.config import Settings
+
+    bot: Bot | None = None
+
+    async def send(chat_id: int, body: str, buttons: list[list[dict]]) -> str:
+        nonlocal bot
+        if bot is None:
+            token = (Settings().telegram_bot_token_client or "").strip()  # type: ignore[call-arg]
+            if not token:
+                return hn.FAILED
+            bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        return await hn.send_via_client_bot(chat_id, body, buttons, detect_gone=True, bot=bot)
+
+    try:
+        return await run_tick(async_session_factory, now=now or _now(), send=send)
+    finally:
+        if bot is not None:
+            await bot.session.close()
+
+
 # Сутки/недели в ``warm_notices`` нужны, пока защищают от повтора; разовые (``once``) хранятся всегда:
 # второго приветствия и второго напоминания не бывает.
 NOTICES_KEEP = timedelta(days=90)
@@ -653,6 +681,7 @@ __all__ = [
     "off_button",
     "on_button",
     "parse_subscribe_callback",
+    "run_pass",
     "run_tick",
     "set_opt_out",
     "single_visit_known",

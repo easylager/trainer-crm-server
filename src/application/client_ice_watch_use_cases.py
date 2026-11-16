@@ -130,6 +130,10 @@ async def subscribe_ice_watch(
         city_id=city_id,
         baseline_horizon_date=baseline,
     )
+    # TASK-428: человек сам подписался — блокировка бота, замеченная прогревом, больше не действует.
+    from src.application.warm_notify import clear_blocked
+
+    await clear_blocked(session, int(telegram_id))
     await session.commit()
     return await enrich_watch_row(session, row)
 

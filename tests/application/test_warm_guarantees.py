@@ -350,3 +350,30 @@ async def test_gate_error_refuses(db_session, monkeypatch) -> None:
     monkeypatch.setattr(gate, "_limits", boom)
     result = await _ok(db_session, ANNA)
     assert not result.allowed and result.reason.startswith(gate.ERROR_PREFIX)
+
+
+# ---------- 6. свой бот на проход: общий бот цикла матчей не закрываем ----------
+
+
+@pytest.mark.asyncio
+async def test_run_pass_uses_its_own_bot(monkeypatch) -> None:
+    seen: dict = {}
+
+    async def fake_send(chat_id, body, buttons, *, detect_gone=False, bot=None):
+        seen.update(bot=bot, gone=detect_gone)
+        return "ok"
+
+    async def fake_tick(factory, *, now, send):
+        return {"ok": 1 if await send(ANNA, "x", []) == "ok" else 0}
+
+    closed: list[int] = []
+
+    async def fake_close():
+        closed.append(1)
+
+    monkeypatch.setattr(hn, "send_via_client_bot", fake_send)
+    monkeypatch.setattr(hn, "close_client_bot", fake_close)
+    monkeypatch.setattr(wn, "run_tick", fake_tick)
+    assert await wn.run_pass(now=at(10)) == {"ok": 1}
+    assert seen["bot"] is not None and seen["bot"] is not hn._bot and seen["gone"] is True
+    assert closed == []

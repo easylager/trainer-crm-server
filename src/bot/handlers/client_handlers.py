@@ -43,7 +43,7 @@ from src.application.booking_use_cases import (
 from src.application.subscription_tier_use_cases import trainer_allows_online_booking
 from src.application.certificate_use_cases import activate_certificate_by_code
 from src.application.catalog_deep_links import build_catalog_deep_link_reply, is_catalog_deep_link
-from src.application.ice_watch_bot_start import parse_watch_start, subscribe_from_bot_start
+from src.application.ice_watch_bot_start import parse_watch_start, subscribe_from_bot_start, watch_start_origin
 from src.application.place_suggestion_use_cases import (
     approved_place_public_url,
     bind_suggestion_author,
@@ -969,6 +969,7 @@ async def cmd_start(message: Message) -> None:
                 arena_id=watch_arena_id,
                 webapp_base_url=Settings().webapp_base_url or "",
                 telegram_username=(message.from_user.username if message.from_user else None),
+                origin=watch_start_origin(payload),
             )
         if watch_reply is None:
             await message.answer(msg.CLIENT_START_WELCOME)
@@ -3739,6 +3740,72 @@ async def ice_watch_off_callback(callback: CallbackQuery) -> None:
             await callback.message.edit_reply_markup(reply_markup=None)
         except Exception:  # noqa: BLE001 — сообщение могло устареть; тост уже показан
             pass
+
+
+def _warm_markup(rows: list[list[dict]]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=b["text"], callback_data=b["callback_data"]) for b in r] for r in rows]
+    )
+
+
+@router.callback_query(lambda c: c.data in ("warm:off", "warm:on"))
+async def warm_opt_callback(callback: CallbackQuery) -> None:
+    """TASK-428: «Не присылать» выключает все сообщения прогрева сразу; под сообщением остаётся «Присылать»."""
+    from src.application.warm_notify import CB_OFF, off_button, on_button, set_opt_out
+    from src.shared.copy_ru import t
+
+    if callback.from_user is None:
+        await callback.answer()
+        return
+    off = callback.data == CB_OFF
+    async with async_session_factory() as db_session:
+        await set_opt_out(db_session, int(callback.from_user.id), off)
+        await db_session.commit()
+    await callback.answer(t("warm.off_done" if off else "warm.on_done"), show_alert=True)
+    if callback.message:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=_warm_markup([[on_button() if off else off_button()]]))
+        except Exception:  # noqa: BLE001 — сообщение могло устареть; ответ уже показан
+            pass
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("warm:sub:"))
+async def warm_subscribe_callback(callback: CallbackQuery) -> None:
+    """TASK-428: «Сообщать о сеансах» из единственного напоминания — та же подписка, что ``/start watch_<id>``."""
+    from src.application.warm_notify import parse_subscribe_callback
+    from src.application.watch_offer import ORIGIN_NUDGE
+    from src.shared.copy_ru import t
+
+    arena_id = parse_subscribe_callback(callback.data)
+    if arena_id is None or callback.from_user is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as db_session:
+        reply = await subscribe_from_bot_start(
+            db_session,
+            telegram_id=int(callback.from_user.id),
+            arena_id=arena_id,
+            webapp_base_url=Settings().webapp_base_url or "",
+            telegram_username=callback.from_user.username,
+            origin=ORIGIN_NUDGE,
+        )
+    if reply is None:
+        await callback.answer(t("warm.sub_gone"), show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:  # noqa: BLE001
+            pass
+        markup = (
+            InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(text=reply["button_text"], web_app=WebAppInfo(url=reply["url"]))]]
+            )
+            if reply["url"]
+            else None
+        )
+        await callback.message.answer(reply["text"], parse_mode=ParseMode.HTML, reply_markup=markup)
 
 
 @router.callback_query(lambda c: c.data == "ice_forecast:optout")

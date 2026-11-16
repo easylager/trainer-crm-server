@@ -17,7 +17,8 @@ from src.application.client_ice_watch_use_cases import subscribe_ice_watch
 from src.application.client_session_use_cases import get_or_create_session
 from src.application.client_use_cases import get_or_create_client
 from src.application.ice_watch_message import compose_watch_subscribed_reply, open_ice_in_city_button
-from src.application.place_links import parse_watch_start_param
+from src.application.place_links import is_offer_watch_start, parse_watch_start_param
+from src.application.watch_offer import ORIGIN_NUDGE, ORIGIN_OFFER, SURFACE_NUDGE, SURFACE_SITE, record_subscribed_from
 from src.infrastructure.db.models import ICE_WATCH_KIND_SESSIONS
 
 # Как у кнопки в Mini App: подписка на любые новые сеансы катка.
@@ -29,6 +30,11 @@ def parse_watch_start(payload: str | None) -> int | None:
     return parse_watch_start_param(payload)
 
 
+def watch_start_origin(payload: str | None) -> str | None:
+    """``watch_<id>_o`` — подписка из предложения на странице катка (TASK-428), иначе ``None``."""
+    return ORIGIN_OFFER if is_offer_watch_start(payload) else None
+
+
 async def subscribe_from_bot_start(
     session: AsyncSession,
     *,
@@ -36,8 +42,12 @@ async def subscribe_from_bot_start(
     arena_id: int,
     webapp_base_url: str,
     telegram_username: str | None = None,
+    origin: str | None = None,
 ) -> dict[str, Any] | None:
     """Создать или переоткрыть ``sessions``-подписку; ``None`` — катка нет в каталоге.
+
+    ``origin`` (TASK-428): ``offer`` — из предложения на странице катка, ``nudge`` — кнопкой из напоминания;
+    такая подписка пишется событием воронки ``watch_offer_subscribed``.
 
     Ответ: ``{"text", "button_text", "url"}``; ``url`` — ``None``, если Mini App
     недоступен (не HTTPS), тогда ответ без кнопки.
@@ -56,6 +66,13 @@ async def subscribe_from_bot_start(
         watch_kind=ICE_WATCH_KIND_SESSIONS,
         filter_json=dict(WATCH_START_FILTER),
         city_id=card.get("city_id"),
+    )
+    await record_subscribed_from(
+        session,
+        telegram_id=int(telegram_id),
+        arena_id=int(card["id"]),
+        origin=origin,
+        surface=SURFACE_NUDGE if origin == ORIGIN_NUDGE else SURFACE_SITE,
     )
     name = str(card.get("name") or "")
     city = str(card.get("city_name") or "")

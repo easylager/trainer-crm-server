@@ -81,6 +81,17 @@ KIND_OUTBOUND_429 = "outbound_429"
 KIND_ME_OPEN = "me_open"
 KIND_ME_NAME_SET = "me_name_set"
 KIND_ME_HOME_ARENA_SET = "me_home_arena_set"
+# TASK-428: предложение подписки на каток после просмотра — показ, нажатие, «Закрыть», подписка.
+KIND_WATCH_OFFER_SHOWN = "watch_offer_shown"
+KIND_WATCH_OFFER_CLICK = "watch_offer_click"
+KIND_WATCH_OFFER_CLOSED = "watch_offer_closed"
+KIND_WATCH_OFFER_SUBSCRIBED = "watch_offer_subscribed"
+WATCH_OFFER_KINDS = (
+    KIND_WATCH_OFFER_SHOWN,
+    KIND_WATCH_OFFER_CLICK,
+    KIND_WATCH_OFFER_CLOSED,
+    KIND_WATCH_OFFER_SUBSCRIBED,
+)
 
 INVITE_FUNNEL_KINDS = (
     KIND_INVITE_CREATE,
@@ -109,6 +120,7 @@ CATALOG_CONSUMER_KINDS = (
     KIND_ME_OPEN,
     KIND_ME_NAME_SET,
     KIND_ME_HOME_ARENA_SET,
+    *WATCH_OFFER_KINDS,
 )
 
 SURFACE_PLACE_PAGE = "place_page"

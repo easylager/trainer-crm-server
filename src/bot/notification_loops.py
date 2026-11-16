@@ -3620,6 +3620,44 @@ async def run_hockey_matches_loop() -> None:
             break
 
 
+WARM_INTERVAL_SEC = 600
+WARM_CLEANUP_EVERY = timedelta(hours=6)
+
+
+async def run_warm_loop() -> None:
+    """Прогрев посетителей катков (TASK-428): раз в 10 минут проход поводов через общий допуск с игрой.
+
+    Молчит, пока ``WARM_ENABLED`` выключен (по умолчанию); сухой прогон включён, пока его не выключат явно.
+    Раз в 6 часов чистит старые суточные и недельные строки ``warm_notices`` и журнал решений (90 дней).
+    """
+    from src.application.kk_notify_journal import cleanup_journal
+    from src.application.warm_notify import cleanup_old_notices, run_pass
+    from src.shared.config import get_settings
+
+    logger.info("[warm_loop] started")
+    last_cleanup: datetime | None = None
+    while True:
+        try:
+            if get_settings().warm_enabled:
+                now = datetime.now(timezone.utc)
+                counts = await run_pass(now=now)  # свой бот на проход: общий бот цикла матчей не закрываем
+                if counts:
+                    logger.info("[warm_loop] %s", counts)
+                if last_cleanup is None or now - last_cleanup >= WARM_CLEANUP_EVERY:
+                    last_cleanup = now
+                    await cleanup_old_notices(async_session_factory, now=now)
+                    await cleanup_journal(async_session_factory, now=now)
+        except asyncio.CancelledError:
+            logger.info("[warm_loop] cancelled")
+            break
+        except Exception:  # noqa: BLE001 — сбой прохода не роняет цикл
+            logger.exception("[warm_loop] pass failed")
+        try:
+            await asyncio.sleep(WARM_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            break
+
+
 PLACE_SUGGESTION_PURGE_FIRST_DELAY_SEC = 600
 PLACE_SUGGESTION_PURGE_INTERVAL_SEC = 24 * 3600
 
