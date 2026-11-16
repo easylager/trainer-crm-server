@@ -563,3 +563,48 @@ async def test_new_kinds_are_registered_with_limits() -> None:
         assert policy.new and policy.budgeted and policy.weekly
         assert policy.needs_consent == (kind != "consent")
         assert len(kind) <= 12
+
+
+@pytest.mark.asyncio
+async def test_comeback_place_line_only_on_ten_day_step(db_session) -> None:
+    await _month_table(db_session, me_points=30, others=[50, 50, 30, 20, 10])  # место есть
+    await seed_match(db_session, at(19, day=13), home="Динамо-Минск", away="Спартак")
+    for days_ago in (3, 30):
+        await db_session.execute(text("UPDATE hockey_picks SET picked_at = :t WHERE player_key = :k"), {"t": WED - timedelta(days=days_ago), "k": SASHA})
+        [p] = [x for x in await ev.produce_comeback(db_session, now=WED) if x.notice.player_key == SASHA]
+        assert len(p.notice.text.splitlines()) == 1, days_ago
+
+
+@pytest.mark.asyncio
+async def test_pause_judges_invites_older_than_a_day_and_needs_two(db_session) -> None:
+    await seed_player(db_session, SASHA, registered=REG, notify_consent=True)
+    await seed_notice(db_session, SASHA, "invite", WED - timedelta(days=3))
+    await seed_notice(db_session, SASHA, "invite", WED - timedelta(hours=24, minutes=1))  # уже созрело
+    assert await ev.apply_silence_pause(db_session, now=WED) == 1
+    await seed_player(db_session, KATYA, registered=REG, notify_consent=True)
+    await seed_notice(db_session, KATYA, "invite", WED - timedelta(days=3))  # одно приглашение — мало
+    assert await ev.apply_silence_pause(db_session, now=WED) == 0
+
+
+@pytest.mark.asyncio
+async def test_text_is_rendered_at_send_time_not_build_time(db_session, factory) -> None:
+    await active_player(db_session)
+    await seed_match(db_session, at(17, day=12), home="Юность", away="Шахтер")
+    [p] = await ev.produce_invite(db_session, now=WED)
+    assert "завтра" in p.notice.text
+    out = Outbox()
+    later = at(10, 0, day=12)  # отправка на следующие сутки: матч уже «сегодня»
+    r = await dispatch(factory, p, phase="active", tick_at=WED, send=out, config=CFG, clock=lambda: later)
+    assert r.decision == "send" and "сегодня" in out.sent[0][1] and "завтра" not in out.sent[0][1]
+
+
+@pytest.mark.asyncio
+async def test_comeback_and_week_text_rendered_at_send_time(db_session) -> None:
+    await active_player(db_session, days_ago=3)
+    await seed_match(db_session, at(19, day=12), home="Юность", away="Шахтер")
+    [c] = await ev.produce_comeback(db_session, now=WED)
+    assert "завтра" in c.notice.text and "сегодня" in c.render(at(10, 0, day=12))
+    ids = await _week_world(db_session)
+    await seed_match(db_session, at(19, day=17), home="Юность", away="Неман")
+    [w] = [x for x in await ev.produce_week(db_session, now=MON) if x.notice.player_key == SASHA]
+    assert "завтра" in w.notice.text and "сегодня" in w.render(at(10, 0, day=17)) and ids
