@@ -48,7 +48,7 @@ async def test_downgrade_and_upgrade_keep_consent_answers_and_notice_rows() -> N
                 text("INSERT INTO hockey_notices (player_key, match_id, kind, sent_at) VALUES (:k, :m, 'week', now())"),
                 {"k": KEY, "m": mid},
             )
-        _alembic("downgrade", "-1")
+        _alembic("downgrade", "0327_kk_notify_journal")  # под 0328, какая бы голова ни была
         async with engine.connect() as c:
             kept = (
                 await c.execute(
@@ -133,7 +133,7 @@ async def test_upgrade_backfill_fills_only_unanswered_players() -> None:
             await c.execute(
                 text("INSERT INTO hockey_player_prefs (player_key, remind) VALUES (:k, false)"), {"k": keys["off"]}
             )
-        _alembic("downgrade", "-1")
+        _alembic("downgrade", "0327_kk_notify_journal")  # под 0328, какая бы голова ни была
         _alembic("upgrade", "head")
         async with engine.connect() as c:
             got = {

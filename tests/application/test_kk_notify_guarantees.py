@@ -203,7 +203,13 @@ async def test_g2_type_off_and_legacy_weekly_not_applied(db_session) -> None:
 
 def test_g2_no_sender_bypasses_the_gate() -> None:
     """Трипвайр: к Telegram-отправке игроку ведут только известные места. Новый путь — осознанная правка этого списка."""
-    allowed = {"src/application/hockey_notices.py", "src/bot/notification_loops.py", "src/application/kk_notify.py"}
+    allowed = {
+        "src/application/hockey_notices.py",
+        "src/bot/notification_loops.py",
+        "src/application/kk_notify.py",
+        # TASK-428: прогрев посетителей — свой Bot на проход, но отправка только через kk_notify.dispatch.
+        "src/application/warm_notify.py",
+    }
     found = set()
     for path in (ROOT / "src").rglob("*.py"):
         body = path.read_text(encoding="utf-8")
@@ -212,6 +218,8 @@ def test_g2_no_sender_bypasses_the_gate() -> None:
     assert found <= allowed, f"новый отправитель вне допуска: {found - allowed}"
     kk = (ROOT / "src/application/kk_notify.py").read_text(encoding="utf-8")
     assert "admit(" in kk and kk.index("admit(") < kk.index("await send("), "dispatch обязан звать допуск до отправки"
+    warm = (ROOT / "src/application/warm_notify.py").read_text(encoding="utf-8")
+    assert "await dispatch(" in warm and "await send(" not in warm, "прогрев отправляет только через dispatch"
     deliver_src = (ROOT / "src/application/hockey_notices.py").read_text(encoding="utf-8")
     body = deliver_src[deliver_src.index("async def deliver(") : deliver_src.index("# ---------- ход и")]
     assert body.index("await admit(") < body.index("await send("), "deliver обязан звать допуск до отправки"
