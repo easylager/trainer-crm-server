@@ -34,12 +34,11 @@ from src.application.kk_notify_gate import (
     Recheck,
     admit,
 )
+from src.application.kk_notify_journal import UNKNOWN_PHASE, write_journal
 from src.application.kk_notify_phase import Phase, PlayerFacts, load_player_facts
 
 logger = logging.getLogger(__name__)
 
-JOURNAL_DEDUPE = timedelta(hours=1)
-UNKNOWN_PHASE = "unknown"
 
 
 @dataclass(frozen=True)
@@ -54,54 +53,6 @@ class Proposal:
 Producer = Callable[..., Awaitable[list[Proposal]]]
 # Сюда срезы 2–4 добавляют поводы; сейчас пусто.
 PRODUCERS: dict[str, Producer] = {}
-
-
-# ---------- журнал ----------
-
-_JOURNAL_RECENT = text("""
-    SELECT 1 FROM kk_notify_decisions
-    WHERE player_key = :player_key AND kind IS NOT DISTINCT FROM :kind AND decision = :decision
-      AND reason IS NOT DISTINCT FROM :reason AND tick_at >= :since
-    LIMIT 1
-    """)
-
-_JOURNAL_INSERT = text("""
-    INSERT INTO kk_notify_decisions (tick_at, player_key, phase, kind, decision, reason, result)
-    VALUES (:tick_at, :player_key, :phase, :kind, :decision, :reason, :result)
-    """)
-
-
-async def write_journal(
-    session_factory,
-    *,
-    tick_at: datetime,
-    player_key: int,
-    phase: str,
-    kind: str | None,
-    decision: str,
-    reason: str | None = None,
-    result: str | None = None,
-) -> None:
-    """Записать решение. Сбой журнала не должен ни остановить рассылку, ни отправить лишнего — только лог."""
-    try:
-        params = {
-            "tick_at": tick_at,
-            "player_key": player_key,
-            "phase": phase,
-            "kind": kind,
-            "decision": decision,
-            "reason": reason,
-            "result": result,
-        }
-        async with session_factory() as session:
-            if decision != "send":
-                recent = await session.execute(_JOURNAL_RECENT, {**params, "since": tick_at - JOURNAL_DEDUPE})
-                if recent.first() is not None:
-                    return
-            await session.execute(_JOURNAL_INSERT, params)
-            await session.commit()
-    except Exception:  # noqa: BLE001
-        logger.warning("kk_notify journal write failed for %s", player_key, exc_info=True)
 
 
 # ---------- проверка свежести ----------
@@ -149,6 +100,9 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+LOCK_SQL = text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))")
+
+
 async def dispatch(
     session_factory,
     proposal: Proposal,
@@ -159,7 +113,11 @@ async def dispatch(
     config: GateConfig,
     clock: Callable[[], datetime] = _now,
 ) -> Outcome:
-    """Допуск → занять строку → отправить → отметить → записать в журнал. Единственный путь нового повода к Telegram."""
+    """Допуск → занять строку → отправить → отметить → записать в журнал. Единственный путь нового повода к Telegram.
+
+    Допуск и занятие строки идут в одной транзакции под ``pg_advisory_xact_lock(player_key)``: два цикла (или два
+    процесса) не пройдут допуск одновременно по одному игроку, поэтому дневной и недельный лимиты не обходятся гонкой.
+    Строка «занято» коммитится до вызова Telegram."""
     notice = proposal.notice
     kind, player_key = notice.kind, notice.player_key
 
@@ -178,6 +136,7 @@ async def dispatch(
 
     try:
         async with session_factory() as session:
+            await session.execute(LOCK_SQL, {"lock_key": f"kk_notify:{player_key}"})
             admission: Admission = await admit(
                 session,
                 kind=kind,
@@ -186,21 +145,21 @@ async def dispatch(
                 config=config,
                 recheck=proposal.recheck,
             )
-        if not admission.allowed:
-            return await finish(Outcome("dry_run" if admission.dry_run else "skip", admission.reason))
-        if kind not in KIND_POLICY or not KIND_POLICY[kind].new:
-            return await finish(Outcome("skip", "not_a_new_kind"))
-
-        async with session_factory() as session:
+            if not admission.allowed:
+                return await finish(Outcome("dry_run" if admission.dry_run else "skip", admission.reason))
+            if kind not in KIND_POLICY or not KIND_POLICY[kind].new:
+                return await finish(Outcome("skip", "not_a_new_kind"))
             if not await hn.claim(session, notice):
                 return await finish(Outcome("skip", "already_claimed"))
-            await session.commit()
+            await session.commit()  # «занято» видно всем до вызова Telegram; блокировка снята
 
         try:
             outcome = hn._outcome(await send(player_key, notice.text, notice.buttons))
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
             logger.warning("kk_notify %s/%s send failed", kind, notice.match_id, exc_info=True)
             outcome = hn.FAILED
+        if outcome == hn.GONE:  # чат не найден / аккаунт удалён: недостижим, как после блокировки
+            outcome = hn.BLOCKED
         retry_key = (kind, player_key, notice.match_ids)
         if outcome == hn.RETRY and not hn._attempt(retry_key):
             outcome = hn.FAILED
@@ -220,6 +179,14 @@ async def dispatch(
         return await finish(Outcome("error", f"{type(exc).__name__}"))
 
 
+_LAST_PRIORITY = 10**6
+
+
+def _priority(proposal: Proposal) -> int:
+    policy = KIND_POLICY.get(proposal.notice.kind)
+    return policy.priority if policy is not None else _LAST_PRIORITY
+
+
 async def run_tick(
     session_factory,
     *,
@@ -229,18 +196,22 @@ async def run_tick(
     config: GateConfig | None = None,
     clock: Callable[[], datetime] = _now,
 ) -> dict[str, int]:
-    """Один проход: по каждому игроку выбрать повод и провести его через допуск. Сбой одного игрока не мешает остальным."""
-    cfg = config or GateConfig.from_settings()
+    """Один проход: по каждому игроку выбрать повод и провести его через допуск. Сбой одного игрока, повода или
+    всего подготовительного шага не мешает остальным и не пробрасывается в цикл матчей: проход вернёт ``error``."""
     counts: dict[str, int] = {}
-    if not cfg.enabled:
-        return counts
-    producers = PRODUCERS if producers is None else producers
-    active = [k for k in producers if k in cfg.kinds and k in KIND_POLICY]
-    if not active:
-        return counts
-
-    async with session_factory() as session:
-        facts: dict[int, PlayerFacts] = {f.player_key: f for f in await load_player_facts(session, as_of=now)}
+    try:
+        cfg = config or GateConfig.from_settings()
+        if not cfg.enabled:
+            return counts
+        producers = PRODUCERS if producers is None else producers
+        active = [k for k in producers if k in cfg.kinds and k in KIND_POLICY]
+        if not active:
+            return counts
+        async with session_factory() as session:
+            facts: dict[int, PlayerFacts] = {f.player_key: f for f in await load_player_facts(session, as_of=now)}
+    except Exception:  # noqa: BLE001
+        logger.warning("kk_notify tick: setup failed", exc_info=True)
+        return {"error": 1}
 
     by_player: dict[int, list[Proposal]] = {}
     for kind in active:
@@ -252,11 +223,25 @@ async def run_tick(
             counts["producer_errors"] = counts.get("producer_errors", 0) + 1
             continue
         for proposal in proposals:
+            if proposal.notice.kind != kind:  # повод подсунул сообщение чужого вида: не отправляем
+                logger.warning("kk_notify producer %s returned kind %s", kind, proposal.notice.kind)
+                counts["kind_mismatch"] = counts.get("kind_mismatch", 0) + 1
+                await write_journal(
+                    session_factory,
+                    tick_at=now,
+                    player_key=proposal.notice.player_key,
+                    phase=UNKNOWN_PHASE,
+                    kind=kind,
+                    decision="error",
+                    reason="kind_mismatch",
+                )
+                continue
             by_player.setdefault(proposal.notice.player_key, []).append(proposal)
 
     for player_key, proposals in sorted(by_player.items()):
-        chosen = min(proposals, key=lambda p: KIND_POLICY[p.notice.kind].priority)
+        chosen = proposals[0]
         try:
+            chosen = min(proposals, key=_priority)
             player = facts.get(player_key)
             phase = player.phase(now).value if player is not None else Phase.OFF.value
             if player is None:

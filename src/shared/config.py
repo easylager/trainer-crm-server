@@ -10,6 +10,16 @@ from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
+def _env_dry_run(v: Any) -> bool:
+    """Обратная логика для сухого прогона: выключить его можно только явным 0/false/no/off.
+    Пусто, опечатка, ``dry`` и всё прочее — сухой прогон остаётся (безопасная сторона)."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() not in ("0", "false", "no", "off")
+    return True if v is None else bool(v)
+
+
 def _env_bool_benchmark(v: Any) -> bool:
     """Railway/hosting sometimes exposes flags as strings; accept common truthy tokens."""
     if isinstance(v, bool):
@@ -424,7 +434,7 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     kk_notify_enabled: bool = False
     # Сухой прогон: решение пишется в журнал, игроку ничего не уходит. Включён по умолчанию, чтобы один
     # флаг KK_NOTIFY_ENABLED=1 не начал писать людям; реальная отправка — только при KK_NOTIFY_DRY_RUN=0.
-    kk_notify_dry_run: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = True
+    kk_notify_dry_run: Annotated[bool, BeforeValidator(_env_dry_run)] = True
     # Владелец принял тексты целиком. Пока 0 — новые поводы уходят только игрокам из белого списка.
     kk_notify_texts_accepted: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # Включённые поводы через запятую. Пусто — ни один.

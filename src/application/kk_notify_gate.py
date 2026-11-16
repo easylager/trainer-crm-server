@@ -73,6 +73,8 @@ KIND_POLICY: dict[str, KindPolicy] = {
     "moved": KindPolicy(budgeted=False),
     "mvfree": KindPolicy(budgeted=False),
     "rescore": KindPolicy(budgeted=False, type_column="notify_result"),
+    # «Лига продлена» — ответ на действие владельца лиги: вне бюджета, но с тихими часами, блокировкой и отключением.
+    "league": KindPolicy(budgeted=False, type_column="notify_league"),
     "mfinal": KindPolicy(budgeted=True, type_column="notify_mfinal", priority=0),
     "overtook": KindPolicy(budgeted=True, type_column="notify_overtook", priority=1),
     "nomove": KindPolicy(budgeted=True, type_column="notify_nomove", priority=2),
@@ -80,9 +82,12 @@ KIND_POLICY: dict[str, KindPolicy] = {
 # Новые поводы регистрируются в срезах 2–4 через ``register_kind``; пока их нет.
 
 
-def register_kind(kind: str, policy: KindPolicy) -> None:
+def register_kind(kind: str, policy: KindPolicy, *, allow_unbudgeted: bool = False) -> None:
+    """Зарегистрировать новый повод. Он обязан быть в дневном и недельном лимитах; вне бюджета — только по явному флагу."""
     if not policy.new:
         raise ValueError("register_kind принимает только новые поводы (new=True)")
+    if not (policy.budgeted and policy.weekly) and not allow_unbudgeted:
+        raise ValueError("новый повод должен быть budgeted=True и weekly=True (исключение — allow_unbudgeted=True)")
     KIND_POLICY[kind] = policy
 
 
@@ -160,7 +165,8 @@ def week_bounds(now: datetime) -> tuple[datetime, datetime]:
 _PREFS = text("""
     SELECT COALESCE(pr.remind, true) AS remind, pr.bot_blocked_at, pr.notify_paused_until,
            COALESCE(pr.notify_nomove, true) AS notify_nomove, COALESCE(pr.notify_result, true) AS notify_result,
-           COALESCE(pr.notify_overtook, true) AS notify_overtook, COALESCE(pr.notify_mfinal, true) AS notify_mfinal
+           COALESCE(pr.notify_overtook, true) AS notify_overtook, COALESCE(pr.notify_mfinal, true) AS notify_mfinal,
+           COALESCE(pr.notify_league, true) AS notify_league
     FROM (SELECT CAST(:player_key AS BIGINT) AS player_key) AS q
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = q.player_key
     """)
