@@ -417,6 +417,28 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # «Кто кого» на матчах Экстралиги с сайта: пока игровая ветка не влита, там строка «скоро откроем».
     site_matches_game_extraliga: bool = False
 
+    # «Кто кого», уведомления игрокам (TASK-426). Всё закрыто по умолчанию; меняется переменными окружения
+    # без релиза кода. Действует только на НОВЫЕ поводы: итоги хода, «нет хода», «обошли» и прочие прежние
+    # живут по своим правилам.
+    # Общий выключатель.
+    kk_notify_enabled: bool = False
+    # Сухой прогон: решение пишется в журнал, игроку ничего не уходит. Включён по умолчанию, чтобы один
+    # флаг KK_NOTIFY_ENABLED=1 не начал писать людям; реальная отправка — только при KK_NOTIFY_DRY_RUN=0.
+    kk_notify_dry_run: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = True
+    # Владелец принял тексты целиком. Пока 0 — новые поводы уходят только игрокам из белого списка.
+    kk_notify_texts_accepted: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
+    # Включённые поводы через запятую. Пусто — ни один.
+    kk_notify_kinds: str = ""
+    # Белый список player_key для пробной отправки, через запятую.
+    kk_notify_whitelist: str = ""
+    # Недельный отчёт админу (TASK-426, срез 1) и пороги аномалий: тревога только при выходе за порог.
+    kk_report_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = True
+    kk_report_fail_share: float = 0.2  # доля недоставленных за неделю выше этой — сбой
+    kk_report_fail_min_sample: int = 10  # меньше стольких отправок долю не судим
+    kk_report_drop_share: float = 0.33  # число активных упало на треть и больше за неделю
+    kk_report_drop_min_base: int = 6  # от какой базы падение считаем
+    kk_report_stall_min_prev: int = 5  # на прошлой неделе ушло не меньше стольких, а на этой ноль — рассылка встала
+
     # Подборка «Для вас». Пусто — ряда нет ни в одном городе. Закрепы при этом хранятся.
     # FOR_YOU_CITY_IDS=2,12
     for_you_city_ids: str = ""
