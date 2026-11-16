@@ -626,36 +626,29 @@
         return html;
       }
 
-      function renderIceWatch(pulse) {
-        if (!pulse) return '';
+      function renderIceWatch(rows) {
+        rows = rows || [];
+        var total = rows.reduce(function (n, r) { return n + (+r.subscribers || 0); }, 0);
         var html = '<div class="adm-section"><div class="adm-section-title">Подписки на расписание</div>';
-        html += '<div class="adm-card cat-card">';
-        html += '<div class="cat-chips">';
-        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.clicks_7d) + '</b>' +
-          '<span>кликов за 7 дн</span></div>';
-        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.clickers_7d) + '</b>' +
-          '<span>людей за 7 дн</span></div>';
-        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.clicks_1d) + '</b>' +
-          '<span>кликов за сутки</span></div>';
-        html += '</div>';
-        html += '<div class="cat-divider"></div>';
-        html += '<div class="cat-chips">';
-        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.active) + '</b>' +
-          '<span>активных сейчас</span></div>';
-        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.cancelled) + '</b>' +
-          '<span>отключённых</span></div>';
-        html += '<div class="cat-chip"><b>' + A.formatNum(pulse.new_active_7d) + '</b>' +
-          '<span>новых за 7 дн</span></div>';
-        html += '</div>';
-        html += '<div class="cat-foot">Клики — кнопки «сообщать…» / «Сообщить, когда появится» ' +
-          '(start_param watch_*). Отключённые — все когда-либо снятые подписки на расписание.</div>';
-        html += '</div></div>';
+        if (!rows.length) {
+          html += '<div class="adm-card"><div class="cat-foot">Активных подписок нет.</div></div></div>';
+          return html;
+        }
+        html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
+        html += '<th>Арена</th><th class="num">Подписок</th></tr></thead><tbody>';
+        rows.forEach(function (r) {
+          var name = r.city_name ? r.city_name + ' · ' + r.arena_name : r.arena_name;
+          html += '<tr><td>' + A.escapeHtml(name) + '</td><td class="num">' + A.formatNum(+r.subscribers || 0) + '</td></tr>';
+        });
+        html += '</tbody></table></div></div>';
+        html += '<div class="adm-hint">Активных подписок: ' + A.formatNum(total) + ' на ' + A.formatNum(rows.length) +
+          '. Тестовые подписки владельца не считаются.</div></div>';
         return html;
       }
 
       function render(d) {
         var html = renderCatalogDemand(d.catalog_demand_pulse);
-        html += renderIceWatch(d.ice_watch_pulse);
+        html += renderIceWatch(d.ice_watch_by_arena);
         html += renderBookingSources(d.booking_sources);
         html += renderKkPromo(d.kk_promo);
         html += renderActions(d);

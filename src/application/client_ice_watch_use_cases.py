@@ -271,6 +271,36 @@ async def get_ice_watch_admin_pulse(
     }
 
 
+# Тестовые подписки владельца в «Статистике» не считаем.
+ICE_WATCH_STATS_EXCLUDED_TELEGRAM_IDS: tuple[int, ...] = (1304982166,)
+
+
+async def get_ice_watch_by_arena(session: AsyncSession) -> list[dict[str, Any]]:
+    """Активные подписки на расписание по аренам (больше подписок — выше), без тестовых аккаунтов владельца."""
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT a.id AS arena_id, a.name AS arena_name, c.name AS city_name, COUNT(*)::int AS subscribers
+                FROM client_ice_watches w
+                JOIN arenas a ON a.id = w.arena_id
+                LEFT JOIN cities c ON c.id = a.city_id
+                WHERE w.active
+                  AND w.watch_kind = ANY(:kinds)
+                  AND w.telegram_id <> ALL(:excluded)
+                GROUP BY a.id, a.name, c.name
+                ORDER BY subscribers DESC, c.name NULLS LAST, a.name
+                """
+            ),
+            {
+                "kinds": [ICE_WATCH_KIND_SESSIONS, ICE_WATCH_KIND_SCHEDULE_FRESH],
+                "excluded": list(ICE_WATCH_STATS_EXCLUDED_TELEGRAM_IDS),
+            },
+        )
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
 async def _trainer_slot_watch_rows(session: AsyncSession, client_id: int) -> list[dict[str, Any]]:
     r = await session.execute(
         text(
