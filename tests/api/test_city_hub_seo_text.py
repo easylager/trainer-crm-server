@@ -1,4 +1,4 @@
-"""TASK-422: серверный текст хаба /c/minsk — расписание по каткам, цены, ответы; другие города не меняются."""
+"""TASK-425: хаб /c/minsk — лента «Лёд» по каткам и свёрнутые «Частые вопросы»; другие города не меняются."""
 
 from __future__ import annotations
 
@@ -11,14 +11,12 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event, text
 
 from src.api.app import app
-from src.application.city_hub_seo import SEO_RICH_HUB_CITIES, build_seo_model, seo_blocks_html
+from src.application.city_hub_seo import SEO_RICH_HUB_CITIES, build_seo_model, faq_card_html
 from src.application.ice_city_day import city_slug, invalidate_public_city_cache
 from src.application.ice_session_use_cases import create_ice_session
 from tests.api.test_public_arenas import _insert_arena, _insert_city
 
-SCHEDULE_H2 = "Расписание массового катания в Минске по каткам"
-PRICES_H2 = "Сколько стоит покататься в Минске"
-FAQ_H2 = "Частые вопросы про катание в Минске"
+FAQ_SUMMARY = "Частые вопросы · "
 
 
 def _client() -> AsyncClient:
@@ -62,69 +60,63 @@ def test_only_minsk_is_listed() -> None:
     assert SEO_RICH_HUB_CITIES == {"minsk"}
 
 
+def _ribbon(html: str) -> str:
+    return html.split('<div class="b-scroll">')[1].split("</section>")[0]
+
+
 @pytest.mark.asyncio
-async def test_minsk_hub_has_server_blocks(app_use_test_db, db_session) -> None:
+async def test_minsk_ribbon_is_one_tile_per_rink_and_faq_is_folded(app_use_test_db, db_session) -> None:
     cid = await _minsk(db_session)
-    cheap = await _insert_arena(db_session, cid, name="Дешёвый каток", address="пр. Победителей, 1")
+    cheap = await _insert_arena(db_session, cid, name="Дешёвый каток")
     dear = await _insert_arena(db_session, cid, name="Дорогой каток")
-    bare = await _insert_arena(db_session, cid, name="Каток без цен")
-    d1, d2 = _tomorrow(), _tomorrow() + timedelta(days=1)
+    solo = await _insert_arena(db_session, cid, name="Одиночный каток")
+    day = _tomorrow()
     for hh in ("10:00", "12:00", "08:30"):
-        await _session(db_session, cheap, day=d1, hhmm=hh, minutes=45, adult=700, child=500, rental=300)
-    await _session(db_session, cheap, day=d2, hhmm="11:00", minutes=45, adult=800, child=500, rental=300)
-    await _session(db_session, dear, day=d1, hhmm="18:00", minutes=90, adult=1500, child=900)
-    await _session(db_session, bare, day=d1, hhmm="20:00", minutes=45)
-    await _session(db_session, dear, day=d1, hhmm="21:00", kind="hockey_practice", adult=2000)
+        await _session(db_session, cheap, day=day, hhmm=hh, minutes=45, adult=700, child=500, rental=300)
+    await _session(db_session, dear, day=day, hhmm="18:00", minutes=90, adult=1500, child=900)
+    await _session(db_session, dear, day=day, hhmm="20:00", minutes=90, adult=1500, child=900)
+    await _session(db_session, solo, day=day, hhmm="22:00", minutes=45)
     await db_session.commit()
 
     html = await _get("/c/minsk")
-    assert f"<h2 class=\"b-h2\">{SCHEDULE_H2}</h2>" in html
-    assert PRICES_H2 in html and FAQ_H2 in html
-    sched = html.split(SCHEDULE_H2)[1].split(PRICES_H2)[0]
-    # время — по возрастанию, без ведущего нуля у часа, через запятую
-    assert "8:30, 10:00, 12:00" in sched
-    assert "взрослый 7 BYN · детский 5 BYN" in sched.replace(" ", " ")
-    assert re.search(r'<a href="/p/[^"]+/[^"]+" title="Расписание и цены: Дешёвый каток">Дешёвый каток</a>', sched)
-    prices = html.split(PRICES_H2)[1].split(FAQ_H2)[0]
-    assert prices.index("Дешёвый каток") < prices.index("Дорогой каток")
-    assert "Каток без цен" not in prices  # ни одной цены - нет строки в таблице цен
-    assert "Каток без цен" in sched  # но в расписании остаётся
-    assert "пр. Победителей, 1" in prices
-    assert prices.count("уточняйте у катка") == 1  # только прокат у «Дорогого»; у «Дешёвого» все три цены
-    faq = html.split(FAQ_H2)[1]
+    ribbon = _ribbon(html)
+    assert ribbon.count('class="b-tile"') == 3  # три катка, а не восемь сеансов
+    assert ribbon.index("Дешёвый каток") < ribbon.index("Дорогой каток") < ribbon.index("Одиночный каток")
+    assert "ещё 2 сеанса" in ribbon and "ещё 1 сеанс<" in ribbon
+    assert ribbon.count("b-tile__more") == 2  # у одиночного сеанса строки нет
+    assert "8:30" in ribbon  # бейдж — ближайший сеанс катка
+    # FAQ: одна свёрнутая карточка, три вопроса, без FAQPage и без «сегодня/завтра»
+    assert f"{FAQ_SUMMARY}3" in html and html.count("<details") >= 1
+    faq = html.split(FAQ_SUMMARY)[1].split("</details>")[0]
     assert "Чаще всего — 45 минут" in faq and "от 45 до 90" in faq
-    assert "Где в Минске взять коньки напрокат?" in faq and "Дешёвый каток" in faq
-    assert "(ОХМ)" in faq
-    # основной текст виден поисковику: ни одного data-nosnippet внутри блоков, нет FAQPage-разметки
-    seo_text = html.split(SCHEDULE_H2)[1].split("Все места города")[0]
-    assert "data-nosnippet" not in seo_text
+    assert "от 7 BYN до 15 BYN" in faq.replace("\u00a0", " ")
+    assert "Дешёвый каток" in faq.split("напрокат")[1]
+    assert "сегодня" not in faq.lower() and "завтра" not in faq.lower()
     assert "FAQPage" not in html
+    assert html.index(FAQ_SUMMARY) < html.index("Все места города")
 
 
 @pytest.mark.asyncio
-async def test_empty_day_falls_to_next_day_with_sessions(app_use_test_db, db_session) -> None:
+async def test_minsk_faq_skips_questions_without_data(app_use_test_db, db_session) -> None:
     cid = await _minsk(db_session)
-    a = await _insert_arena(db_session, cid, name="Единственный каток")
-    b = await _insert_arena(db_session, cid, name="Второй каток")
-    far = _today() + timedelta(days=4)
-    await _session(db_session, a, day=far, hhmm="10:00", adult=900)
-    await _session(db_session, b, day=far, hhmm="11:00", adult=900)
+    a = await _insert_arena(db_session, cid, name="Каток 1")
+    b = await _insert_arena(db_session, cid, name="Каток 2")
+    await _session(db_session, a, day=_tomorrow(), hhmm="10:00", adult=900)
+    await _session(db_session, b, day=_tomorrow(), hhmm="11:00", adult=900)
     await db_session.commit()
     html = await _get("/c/minsk")
-    sched = html.split(SCHEDULE_H2)[1].split(PRICES_H2)[0]
-    assert "Сегодня" not in sched and "Завтра" not in sched
-    assert sched.count('<h3 class="b-seo__h3">') == 1
-    assert "10:00" in sched and "11:00" in sched
+    assert f"{FAQ_SUMMARY}2" in html  # прокат не указан - вопроса о прокате нет
+    assert "взять коньки напрокат" not in html
 
 
 @pytest.mark.asyncio
-async def test_minsk_without_sessions_has_no_blocks(app_use_test_db, db_session) -> None:
+async def test_minsk_without_sessions_has_no_faq(app_use_test_db, db_session) -> None:
     cid = await _minsk(db_session)
     await _insert_arena(db_session, cid, name="Каток 1")
     await _insert_arena(db_session, cid, name="Каток 2")
     await db_session.commit()
     html = await _get("/c/minsk")
-    assert SCHEDULE_H2 not in html and PRICES_H2 not in html and FAQ_H2 not in html
+    assert FAQ_SUMMARY not in html
 
 
 @pytest.mark.asyncio
@@ -136,8 +128,8 @@ async def test_other_city_page_is_unchanged(app_use_test_db, db_session) -> None
         await _session(db_session, arena, day=_tomorrow(), hhmm="10:00", adult=900, rental=300)
     await db_session.commit()
     html = await _get(f"/c/{city_slug('Молодечно')}")
-    assert "b-seo" not in html
-    assert "Частые вопросы про катание" not in html and "Расписание массового катания" not in html
+    assert "b-seo" not in html and "b-tile__more" not in html
+    assert FAQ_SUMMARY not in html
 
 
 def _row(arena_id, day, hh, **kw):
@@ -167,23 +159,18 @@ def _view(places, model):
     }
 
 
-def test_many_times_are_cut_and_no_prices_means_no_price_line() -> None:
+def test_no_prices_no_rental_means_only_duration_question() -> None:
     day = date(2026, 11, 20)
     places = [{"id": 1, "name": "А", "slug": "a", "address": ""}, {"id": 2, "name": "Б", "slug": "b", "address": ""}]
-    rows = [_row(1, day, f"{h}:00") for h in range(6, 21)]  # 15 сеансов
-    rows.append(_row(2, day, "10:00"))
-    model = build_seo_model(rows, places, today=day)
-    html = seo_blocks_html(_view(places, model))
-    assert "6:00, 7:00" in html and "19:00 и ещё 1" in html
-    assert "b-seo__price" not in html  # цен нет нигде — строки цен нет
-    assert "взять коньки напрокат" not in html  # прокат не указан — вопроса нет
-    assert "открытые тренировки" not in html  # ОХМ нет — вопроса нет
-    assert "расписание на выходные" not in html
+    model = build_seo_model([_row(1, day, "10:00"), _row(2, day, "11:00")], places)
+    html = faq_card_html(_view(places, model))
+    assert "Частые вопросы · 1" in html and "Сколько длится сеанс" in html
+    assert "Сколько стоит" not in html and "напрокат" not in html
 
 
 def test_no_sessions_no_model_no_html() -> None:
-    assert build_seo_model([], [{"id": 1, "name": "А", "slug": "a"}], today=date(2026, 11, 20)) is None
-    assert seo_blocks_html(_view([], None)) == ""
+    assert build_seo_model([], [{"id": 1, "name": "А", "slug": "a"}]) is None
+    assert faq_card_html(_view([], None)) == ""
 
 
 @pytest.mark.asyncio

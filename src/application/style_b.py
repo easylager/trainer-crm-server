@@ -250,6 +250,7 @@ def tile_html(
     photo_variants: Mapping[str, Any] | None = None,
     vt_name: str = "",
     extra_attrs: str = "",
+    more_line: str = "",
 ) -> str:
     """Карточка с фото (или разметкой катка) и двумя строками — для сеток и каруселей."""
     src = photo_url
@@ -283,7 +284,9 @@ def tile_html(
     return (
         f'<a class="b-tile" href="{esc(href)}"{vt}{extra}>{media}'
         f'<span class="b-tile__body"><span class="b-tile__name">{esc(name)}</span>'
-        f'<span class="b-tile__line">{esc(line)}</span></span></a>'
+        f'<span class="b-tile__line">{esc(line)}</span>'
+        + (f'<span class="b-tile__more">{esc(more_line)}</span>' if more_line else "")
+        + "</span></a>"
     )
 
 

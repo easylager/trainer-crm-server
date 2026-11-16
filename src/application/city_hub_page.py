@@ -30,7 +30,7 @@ from src.application.arena_public_use_cases import (
     city_hockey_center_count,
 )
 from src.application.catalog_home_page import _USER_UPCOMING_SQL, _session_card
-from src.application.city_hub_seo import build_seo_model, is_seo_rich, load_seo_sessions, seo_blocks_html
+from src.application.city_hub_seo import build_seo_model, faq_card_html, is_seo_rich, load_seo_sessions
 from src.application.city_place_counts import (
     city_hub_place_groups,
     city_place_counts_from_places,
@@ -89,6 +89,8 @@ _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "pla
 _UPCOMING_DAYS = 7
 _UPCOMING_LIMIT = 3
 _UPCOMING_FETCH = 24
+_RIBBON_FETCH = 600  # TASK-425: лента по каткам считает «ещё N сеансов» по всем сеансам окна
+_RIBBON_LIMIT = 12
 _WINDOW_KEYS = ("today", "tomorrow", "weekend")
 # Окна, в которых открывается хаб (``/c/{город}?w=…``, PDEC-026). Остальные ``w`` — список.
 HUB_WINDOW_KEYS = _WINDOW_KEYS
@@ -385,6 +387,7 @@ async def load_city_hub_view(
             (tw.ends_at - timedelta(microseconds=1)).astimezone(local_tz).date(),
         )
 
+    rink_ribbon = bool(seo_text) and is_seo_rich(city_slug(city_name))
     upcoming_rows = (
         (
             await session.execute(
@@ -395,7 +398,7 @@ async def load_city_hub_view(
                     "ends_at": upcoming_to,
                     "now": now,
                     "st": STATUS_ACTIVE,
-                    "lim": _UPCOMING_FETCH,
+                    "lim": _RIBBON_FETCH if rink_ribbon else _UPCOMING_FETCH,
                     **scope,
                 },
             )
@@ -406,14 +409,24 @@ async def load_city_hub_view(
     # Три ближайших — по разным каткам: три сеанса одного ТЦ подряд ничего не говорят о городе.
     upcoming: list[dict[str, Any]] = []
     seen_arenas: set[str] = set()
+    ribbon_extra: dict[str, int] = {}
     for row in upcoming_rows:
         key = str(row.get("arena_slug") or row.get("arena_name") or "")
         if key in seen_arenas:
+            ribbon_extra[key] = ribbon_extra.get(key, 0) + 1
             continue
         seen_arenas.add(key)
-        upcoming.append(_session_card(row, now=now))
-        if len(upcoming) >= _UPCOMING_LIMIT:
-            break
+        if len(upcoming) >= (_RIBBON_LIMIT if rink_ribbon else _UPCOMING_LIMIT):
+            if not rink_ribbon:
+                break
+            continue
+        card = _session_card(row, now=now)
+        card["_ribbon_key"] = key
+        upcoming.append(card)
+    if rink_ribbon:
+        # Плитка = каток: бейдж — ближайший сеанс, «ещё N» — остальные сеансы окна.
+        for card in upcoming:
+            card["more_sessions"] = ribbon_extra.get(card.pop("_ribbon_key"), 0)
 
     next_ohm = None
     if ohm["all"]:
@@ -511,13 +524,12 @@ async def load_city_hub_view(
     selected_day = date.fromisoformat(day_key) if day_key else None
     seo_model = None
     if seo_text and variant not in (VARIANT_ONE, VARIANT_PHONE) and is_seo_rich(city_slug(city_name)):
-        # TASK-422: один запрос сеансов на неделю — расписание, цены и ответы текстом (только Минск).
+        # TASK-425: один запрос сеансов на неделю — ответы свёрнутой карточки «Частые вопросы» (только Минск).
         seo_model = build_seo_model(
             await load_seo_sessions(
                 session, city_id=city_id, now=now, today=local_now.date(), status=STATUS_ACTIVE
             ),
             places,
-            today=local_now.date(),
         )
     return {
         "seo_text": seo_model,
@@ -1111,10 +1123,12 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
         if arena_slug and arena_slug not in seen_slugs:
             seen_slugs.add(arena_slug)
             vt_name = place_vt_name(arena_slug)
+        more_n = int(card.get("more_sessions") or 0)
         tile = tile_html(
             href=href,
             name=name,
             line=_price_bits(card) or day,
+            more_line=f"ещё {more_n} {plural_ru(more_n, 'сеанс', 'сеанса', 'сеансов')}" if more_n > 0 else "",
             photo_url=place.get("photo_url"),
             photo_alt=name,
             toned=bool(place.get("display_tone")),
@@ -1712,7 +1726,7 @@ def _b_body(
             matches_block,
             _b_routes(view),
             _b_for_you(view),
-            seo_blocks_html(view),
+            faq_card_html(view),
             empty,
             _b_all_places(view),
             _b_city_suggest(view),
