@@ -366,21 +366,15 @@ class MogilevDsParser(IceParser):
         age_note = job.config.get("age_note")
         adult, child, rental = _mogilev_prices(prices_html)
 
-        # ByCard продаёт билеты и держит расписание на неделю вперёд; таблица hockey.by —
-        # запасной источник, когда ByCard не ответил или сеансов в нём нет.
+        # Полное расписание — таблица hockey.by. ByCard продаёт билеты не на все сеансы (сегодня там один
+        # из восьми), поэтому он не источник сетки, а ссылка на покупку: сеанс с тем же днём и временем
+        # получает ``external_url`` и ``source_id``. Сеанс только из ByCard остаётся: на него продаются билеты.
         bycard = await _load_mogilev_bycard(job)
         bycard_slots = (
             mogilev_slots_from_bycard(bycard, job.config, adult=adult, child=child, rental=rental)
             if bycard is not None
             else []
         )
-        if bycard_slots:
-            return Extraction(
-                arena_id=job.arena_id,
-                parser_key=self.parser_key,
-                snapshot={"bycard": bycard, "uslugi": prices_html},
-                slots=bycard_slots,
-            )
 
         slots: list[ExtractedSlot] = []
         current_date: date | None = None
@@ -423,10 +417,18 @@ class MogilevDsParser(IceParser):
                         age_note=age_note,
                     )
                 )
+        by_start = {(str(x.local_date), str(x.starts_at_local)): x for x in bycard_slots}
+        for slot in slots:
+            match = by_start.pop((str(slot.local_date), str(slot.starts_at_local)), None)
+            if match is not None:
+                slot.external_url = match.external_url
+                slot.source_id = match.source_id
+        slots.extend(by_start.values())
+        slots.sort(key=lambda x: (str(x.local_date), str(x.starts_at_local)))
         return Extraction(
             arena_id=job.arena_id,
             parser_key=self.parser_key,
-            snapshot={"raspisanie": schedule, "uslugi": prices_html},
+            snapshot={"raspisanie": schedule, "uslugi": prices_html, "bycard": bycard},
             slots=slots,
         )
 
