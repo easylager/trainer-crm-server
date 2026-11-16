@@ -135,3 +135,50 @@ async def test_leave_button_leaves_the_extended_league(db_session) -> None:
     again = _callback(f"kk:lv:{league.id}")
     await h.on_leave(again)
     assert again.answer.await_args.args[0] == "Тебя уже нет в этой лиге"
+
+
+@pytest.mark.asyncio
+async def test_do_not_send_button_switches_off_new_messages_only(db_session) -> None:
+    from src.application.hockey_notices import get_prefs
+
+    cb = _callback("kk:noall", [[("Таблица", "x")], [("Не присылать", "kk:noall")]])
+    await h.on_off_all(cb)
+    row = (
+        await db_session.execute(
+            text("SELECT notify_consent, remind FROM hockey_player_prefs WHERE player_key = :p"), {"p": ME}
+        )
+    ).one()
+    assert row.notify_consent is False and row.remind is True  # итог хода (remind) остаётся
+    assert (await get_prefs(db_session, ME))["types"]["result"] is True
+    cb.message.edit_reply_markup.assert_awaited()
+    markup = cb.message.edit_reply_markup.await_args.kwargs["reply_markup"]
+    assert [[(b.text, b.callback_data) for b in row] for row in markup.inline_keyboard] == [[("Присылать", "kk:yes")]]
+    toast = cb.answer.await_args.args[0]
+    assert "итог твоего хода" in toast and "переносе матча" in toast and "лигах" in toast and "!" not in toast
+
+
+@pytest.mark.asyncio
+async def test_consent_yes_button_records_consent_and_can_be_revoked(db_session) -> None:
+    await h.on_consent_yes(_callback("kk:yes"))
+    q = text("SELECT notify_consent FROM hockey_player_prefs WHERE player_key = :p")
+    assert (await db_session.execute(q, {"p": ME})).scalar_one() is True
+    await h.on_off_all(_callback("kk:noall"))
+    assert (await db_session.execute(q, {"p": ME})).scalar_one() is False
+
+
+@pytest.mark.asyncio
+async def test_off_then_on_cycle_reopens_admission(db_session) -> None:
+    from src.application.kk_notify_gate import GateConfig, admit
+
+    cfg = GateConfig(enabled=True, dry_run=False, texts_accepted=True, kinds=frozenset({"invite", "consent"}))
+    now = datetime(2026, 11, 10, 12, tzinfo=timezone.utc)
+    await h.on_consent_yes(_callback("kk:yes"))
+    assert (await admit(db_session, kind="invite", player_key=ME, now=now, config=cfg)).allowed
+    off = _callback("kk:noall")
+    await h.on_off_all(off)
+    assert (await admit(db_session, kind="invite", player_key=ME, now=now, config=cfg)).reason == "no_consent"
+    back = _callback("kk:yes", [[("Присылать", "kk:yes")]])
+    await h.on_consent_yes(back)  # кнопка «Присылать» под ответом на «Не присылать»
+    assert (await admit(db_session, kind="invite", player_key=ME, now=now, config=cfg)).allowed
+    markup = back.message.edit_reply_markup.await_args.kwargs["reply_markup"]
+    assert [[b.text for b in row] for row in markup.inline_keyboard] == [["Не присылать"]]

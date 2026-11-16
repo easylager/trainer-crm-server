@@ -25,9 +25,11 @@ from src.application.hockey_notices import (
     clear_blocked,
     next_move,
     picked_buttons,
+    set_consent,
     set_type,
 )
 from src.infrastructure.db import async_session_factory
+from src.shared.copy_ru import t
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +153,26 @@ async def on_off(cb: CallbackQuery) -> None:
         await session.commit()
     await cb.answer(f"Отключено: {TYPE_TITLES[kind]}. Остальные сообщения игры продолжат приходить.", show_alert=True)
     await _edit_markup(cb, _without(_current_rows(cb), f"{CB_OFF}:"))
+
+
+@router.callback_query(F.data == "kk:noall")
+async def on_off_all(cb: CallbackQuery) -> None:
+    """«Не присылать»: выключает все пуши игры, кроме итога хода, переноса матча, поправки итога и писем лиг.
+    Под сообщением остаётся одна кнопка «Присылать» — вернуть можно тут же."""
+    async with async_session_factory() as session:
+        await set_consent(session, cb.from_user.id, False)
+        await session.commit()
+    await cb.answer(t("kk_notify.off_done"), show_alert=True)
+    await _edit_markup(cb, [[{"text": t("kk_notify.btn.yes"), "callback_data": "kk:yes"}]])
+
+
+@router.callback_query(F.data == "kk:yes")
+async def on_consent_yes(cb: CallbackQuery) -> None:
+    async with async_session_factory() as session:
+        await set_consent(session, cb.from_user.id, True)
+        await session.commit()
+    await cb.answer(t("kk_notify.on_done"), show_alert=True)
+    await _edit_markup(cb, [[{"text": t("kk_notify.btn.no"), "callback_data": "kk:noall"}]])
 
 
 @router.callback_query(F.data.startswith(f"{CB_LEAVE}:"))
