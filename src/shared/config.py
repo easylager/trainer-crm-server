@@ -441,6 +441,17 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     kk_notify_kinds: str = ""
     # Белый список player_key для пробной отправки, через запятую.
     kk_notify_whitelist: str = ""
+    # Прогрев разовых посетителей (TASK-428): серия подписчикам катка и одно напоминание «знающим нас». Те же
+    # правила, что у игры (kk_notify_gate), и общий с ней бюджет на человека. Всё закрыто по умолчанию.
+    warm_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
+    # Сухой прогон: только журнал. Выключается лишь явным WARM_DRY_RUN=0.
+    warm_dry_run: Annotated[bool, BeforeValidator(_env_dry_run)] = True
+    # Владелец принял тексты прогрева. Пока 0 — уходит только белому списку.
+    warm_texts_accepted: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
+    # Включённые поводы через запятую: warm_welcome, warm_today, warm_week, warm_nudge. Пусто — ни один.
+    warm_kinds: str = ""
+    # Белый список telegram_id для пробной отправки, через запятую.
+    warm_whitelist: str = ""
     # Недельный отчёт админу (TASK-426, срез 1) и пороги аномалий: тревога только при выходе за порог.
     kk_report_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = True
     kk_report_fail_share: float = 0.2  # доля недоставленных за неделю выше этой — сбой
