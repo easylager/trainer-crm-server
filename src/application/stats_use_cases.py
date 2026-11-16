@@ -2,6 +2,7 @@
 Stats for trainers (subscription value) and platform (admin).
 Read-only aggregates; no side effects.
 """
+import logging
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -17,6 +18,8 @@ from src.application.demand_signals_use_cases import get_signals_lifetime_totals
 from src.application.trainer_client_invite_tracking import sql_trainer_shared_client_invite
 from src.application.trainer_schedule_use_cases import this_week_monday
 from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTION_STATUS_TRIAL
+
+logger = logging.getLogger(__name__)
 
 # Short day names for charts (Mon–Sun)
 STATS_DAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
@@ -1701,6 +1704,14 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     from src.application.hockey_promo import promo_report
 
     kk_promo = await promo_report(session)
+    from src.application.warm_report import admin_slice as warm_admin_slice
+
+    try:
+        async with session.begin_nested():  # точка сохранения: сбой среза не портит транзакцию «Статистики»
+            warm_visitors = await warm_admin_slice(session)
+    except Exception:  # noqa: BLE001 — срез прогрева не роняет «Статистику»
+        logger.warning("admin stats: warm slice failed", exc_info=True)
+        warm_visitors = None
 
     return {
         "catalog_demand_pulse": catalog_demand_pulse,
@@ -1708,6 +1719,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         "ice_watch_by_arena": ice_watch_by_arena,
         "booking_sources": booking_sources,
         "kk_promo": kk_promo,
+        "warm_visitors": warm_visitors,
         "trainers_by_status": trainers_by_status,
         "trainers_total": trainers_total,
         "trainers_pending_moderation": trainers_pending_moderation,

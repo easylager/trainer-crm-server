@@ -326,6 +326,20 @@ _CLAIM = text("""
 _DONE = text("UPDATE kk_notify_runs SET done_at = :now WHERE name = :name AND period = :period")
 
 
+async def _warm_section(session_factory, data: ReportData) -> str:
+    """Блок прогрева посетителей (TASK-428) за ту же неделю. Его сбой отчёт игры не останавливает."""
+    try:
+        from src.application.warm_report import collect as warm_collect
+        from src.application.warm_report import render_section
+
+        async with session_factory() as session:
+            warm = await warm_collect(session, since=data.week_start, until=data.week_end)
+        return "\n\n" + render_section(warm)
+    except Exception:  # noqa: BLE001
+        logger.warning("kk weekly report: warm section failed", exc_info=True)
+        return ""
+
+
 async def send_weekly_report_if_due(
     session_factory,
     *,
@@ -349,6 +363,7 @@ async def send_weekly_report_if_due(
     async with session_factory() as session:
         data = await collect(session, now=now)
     body = render_report(data, thresholds or Thresholds.from_settings())
+    body += await _warm_section(session_factory, data)
     delivered = await send(body)
     if delivered is False:
         logger.warning("kk weekly report: delivery failed, will retry")
