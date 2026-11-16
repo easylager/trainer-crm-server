@@ -48,9 +48,10 @@ def test_no_anomalies_on_quiet_week() -> None:
 
 
 def test_stall_needs_previous_week_volume() -> None:
-    assert detect_anomalies(data(sent_prev_total=5), TH)  # было 5, стало 0 — встала
-    assert detect_anomalies(data(sent_prev_total=4), TH) == []  # на малой базе не тревожим
-    assert detect_anomalies(data(sent_prev_total=50, sent={"result": 1}), TH) == []
+    assert detect_anomalies(data(sent_prev_total=5, matches_in_week=3), TH)  # было 5, стало 0 — встала
+    assert detect_anomalies(data(sent_prev_total=4, matches_in_week=3), TH) == []  # на малой базе не тревожим
+    assert detect_anomalies(data(sent_prev_total=50, sent={"result": 1}, matches_in_week=3), TH) == []
+    assert detect_anomalies(data(sent_prev_total=50, matches_in_week=0), TH) == []  # межсезонье: матчей не было
 
 
 def test_failure_share_threshold_and_min_sample() -> None:

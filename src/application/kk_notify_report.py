@@ -86,6 +86,10 @@ class ReportData:
     failed: dict[str, int] = field(default_factory=dict)
     sent_prev_total: int = 0
     blocked_players: int = 0
+    # Матчи за отчётную неделю (кроме отменённых): нет матчей — тишина в рассылке не аномалия (межсезонье).
+    matches_in_week: int = 0
+    # Отказов допуска по недельному лимиту за неделю (записей журнала; повтор в течение часа не пишется заново).
+    weekly_cap_refusals: int = 0
     invites: dict[str, tuple[int, int]] = field(default_factory=dict)  # kind -> (отправлено, с ходом за сутки)
 
     @property
@@ -129,7 +133,17 @@ _NOTICES_SENT = text("""
     """)
 _NOTICES_FAILED = text("""
     SELECT kind, COUNT(*) AS n FROM hockey_notices
-    WHERE failed AND created_at >= :since AND created_at < :until GROUP BY kind
+    WHERE failed AND created_at >= :since AND created_at < :until
+      -- блокировка бота — не сбой доставки: игроков, ставших недостижимыми, не считаем
+      AND NOT EXISTS (SELECT 1 FROM hockey_player_prefs AS pr
+                      WHERE pr.player_key = hockey_notices.player_key AND pr.bot_blocked_at IS NOT NULL)
+    GROUP BY kind
+    """)
+_MATCHES = text("""
+    SELECT COUNT(*) FROM game_matches WHERE starts_at >= :since AND starts_at < :until AND status <> 'cancelled'
+    """)
+_WEEKLY_CAP = text("""
+    SELECT COUNT(*) FROM kk_notify_decisions WHERE reason = 'weekly_cap' AND tick_at >= :since AND tick_at < :until
     """)
 _BLOCKED = text("""
     SELECT COUNT(*) FROM hockey_player_prefs WHERE bot_blocked_at >= :since AND bot_blocked_at < :until
@@ -186,7 +200,11 @@ async def collect(session, *, now: datetime) -> ReportData:
             )
         ).all()
     }
+    matches = int((await session.execute(_MATCHES, window)).scalar_one())
+    capped = int((await session.execute(_WEEKLY_CAP, window)).scalar_one())
     return ReportData(
+        matches_in_week=matches,
+        weekly_cap_refusals=capped,
         week_start=start,
         week_end=end,
         phases_now=phases_now,
@@ -211,7 +229,7 @@ def percent(part: int, whole: int) -> int:
 def detect_anomalies(data: ReportData, th: Thresholds) -> list[str]:
     """Что вышло за порог. Пустой список — отклонений нет. Пороги — только из ``th``."""
     out: list[str] = []
-    if data.sent_prev_total >= th.stall_min_prev and data.sent_total == 0:
+    if data.matches_in_week > 0 and data.sent_prev_total >= th.stall_min_prev and data.sent_total == 0:
         out.append(
             f"Рассылка встала: на прошлой неделе ушло {data.sent_prev_total}, на этой — ни одного сообщения."
         )
@@ -272,6 +290,7 @@ def render_report(data: ReportData, th: Thresholds) -> str:
             f"Не дошло: {data.failed_total} из {attempts} ({percent(data.failed_total, attempts)}{NBSP}%)."
         )
     lines.append(f"Заблокировали бота: {data.blocked_players}.")
+    lines.append(f"Отказов по недельному лимиту: {data.weekly_cap_refusals}.")
     lines.append("")
     lines.append("Ход в течение суток после сообщения:")
     for kind in INVITE_KINDS:
