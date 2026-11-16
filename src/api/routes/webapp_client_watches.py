@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +24,16 @@ from src.application.client_ice_watch_use_cases import (
     unsubscribe_ice_watch,
     watches_summary,
 )
+from src.application.catalog_consumer_events import telegram_actor_hash
 from src.application.client_profile_use_cases import resolve_acting_client_id
+from src.application.watch_offer import ACTIONS as OFFER_ACTIONS
+from src.application.watch_offer import (
+    ORIGIN_OFFER,
+    SURFACE_MINIAPP,
+    offer_state,
+    record_offer_event,
+    record_subscribed_from,
+)
 from src.application.client_trainer_edge_use_cases import unsubscribe_notify_slots as uc_unsubscribe_notify_slots
 from src.infrastructure.db.models import (
     ICE_WATCH_KIND_SCHEDULE_FRESH,
@@ -44,6 +53,8 @@ class IceWatchBody(BaseModel):
     when: str | None = None
     day: str | None = None
     intent: str | None = "skate"
+    # TASK-428: ``offer`` — подписка из предложения на карточке (событие воронки). Прочее игнорируется.
+    origin: str | None = Field(default=None, max_length=16)
 
 
 @router.get("/client/watches/summary")
@@ -115,7 +126,48 @@ async def post_client_ice_watch(
         )
     except IceWatchChannelUnsupported as exc:
         raise HTTPException(status_code=409, detail=CHANNEL_UNSUPPORTED) from exc
+    if (body.origin or "").strip().lower() == ORIGIN_OFFER and kind == ICE_WATCH_KIND_SESSIONS:
+        await record_subscribed_from(
+            session, telegram_id=catalog_tid, arena_id=int(body.arena_id), origin=ORIGIN_OFFER, surface=SURFACE_MINIAPP
+        )
     return {"watch": watch}
+
+
+class WatchOfferEventBody(BaseModel):
+    arena_id: int = Field(..., ge=1, lt=2**31)
+    action: str = Field(..., max_length=16)
+
+
+@router.get("/client/watch-offer")
+async def get_client_watch_offer(
+    arena_id: int,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """TASK-428: показать ли предложение подписки на этом катке (один раз; подписанным — нет). Только Telegram."""
+    response.headers["Cache-Control"] = "no-store"
+    if principal.platform != MiniAppPlatform.TELEGRAM:
+        return {"show": False}
+    tid = client_catalog_telegram_key(principal)
+    return await offer_state(session, arena_id=int(arena_id), actor_hash=telegram_actor_hash(tid), telegram_id=tid)
+
+
+@router.post("/client/watch-offer")
+async def post_client_watch_offer(
+    body: WatchOfferEventBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """TASK-428: показ / нажатие / «Закрыть» предложения — событие воронки (одно каждого вида на актёра и каток)."""
+    kind = OFFER_ACTIONS.get((body.action or "").strip().lower())
+    if kind is None:
+        raise HTTPException(status_code=400, detail="Unknown action")
+    tid = client_catalog_telegram_key(principal)
+    recorded = await record_offer_event(
+        session, kind=kind, surface=SURFACE_MINIAPP, arena_id=int(body.arena_id), actor_hash=telegram_actor_hash(tid)
+    )
+    return {"ok": True, "recorded": recorded}
 
 
 class BellFollowBody(BaseModel):

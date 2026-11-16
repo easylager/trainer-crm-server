@@ -10,6 +10,7 @@ from src.api.middleware.http_limits import client_ip_from_request
 from src.application.catalog_consumer_events import (
     KIND_PUBLIC_TELEGRAM_CTA,
     classify_user_agent,
+    is_prefetch_navigation_request,
     normalize_public_page_path,
     public_actor_hash,
     record_catalog_consumer_event,
@@ -162,6 +163,51 @@ async def public_page_view_beacon(
             "i": "1" if invite else None,
             "src": clean_share_src(src),
         },
+    )
+    return Response(status_code=204)
+
+
+@router.get("/watch-offer")
+async def public_watch_offer_state(
+    request: Request,
+    response: Response,
+    arena_id: int = Query(..., ge=1, lt=2**31),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """TASK-428: показать ли на /p/… предложение подписки (один раз на актёра и каток). Ошибка — нет."""
+    from src.application.watch_offer import offer_state
+
+    response.headers["Cache-Control"] = "no-store"
+    if is_prefetch_navigation_request(request):
+        return {"show": False}
+    actor = public_actor_hash(
+        client_ip=client_ip_from_request(request), user_agent=request.headers.get("user-agent")
+    )
+    return await offer_state(session, arena_id=int(arena_id), actor_hash=actor)
+
+
+@router.post("/watch-offer")
+async def public_watch_offer_event(
+    request: Request,
+    arena_id: int = Query(..., ge=1, lt=2**31),
+    action: str = Query(..., min_length=1, max_length=16),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """TASK-428: показ / нажатие / «Закрыть» предложения на сайте (``sendBeacon``)."""
+    from src.application.watch_offer import ACTIONS, SURFACE_SITE, record_offer_event
+
+    kind = ACTIONS.get(action.strip().lower())
+    if kind is None:
+        return Response(status_code=400)
+    user_agent = request.headers.get("user-agent")
+    actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
+    await record_offer_event(
+        session,
+        kind=kind,
+        surface=SURFACE_SITE,
+        arena_id=int(arena_id),
+        actor_hash=actor,
+        payload={"ua_class": classify_user_agent(user_agent)},
     )
     return Response(status_code=204)
 
