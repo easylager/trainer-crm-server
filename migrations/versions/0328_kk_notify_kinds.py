@@ -9,11 +9,16 @@ Create Date: 2026-11-16
   после первого хода.
 * ``hockey_player_prefs.notify_consent`` (nullable): ``NULL`` — не спрашивали, ``true`` — согласен, ``false`` —
   нажал «Не присылать». Игрокам, которые уже делали ходы и не выключили бота (``remind`` и нет блокировки), согласие
-  ставится по умолчанию (решение владельца 2026-11-16); остальным оно остаётся ``NULL`` до ответа.
-  Для игроков с ходами без строки настроек строка создаётся (``remind`` по умолчанию включён, как и раньше при её отсутствии).
+  ставится по умолчанию (решение владельца 2026-11-16), но только там, где ответа ещё нет: ``false`` и ``true``,
+  уже записанные игроком, миграция не трогает. Для игроков с ходами без строки настроек строка создаётся.
+
+Откат намеренно НЕ теряет данные: колонка ``notify_consent`` остаётся (ответы игроков не пропадают, а повторный
+накат не обнуляет их), строки новых видов в ``hockey_notices`` не удаляются (иначе после повторного наката пропала
+бы защита от повторной отправки). Прежний CHECK возвращается как ``NOT VALID``: старый код новые виды вставить не
+сможет, а уже лежащие строки не мешают. Повторный накат пересоздаёт CHECK с новыми видами и проверяет все строки.
 """
 
-import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0328_kk_notify_kinds"
@@ -30,21 +35,21 @@ def _in(kinds: tuple[str, ...]) -> str:
 
 
 def upgrade() -> None:
-    op.add_column("hockey_player_prefs", sa.Column("notify_consent", sa.Boolean(), nullable=True))
-    op.drop_constraint("ck_hockey_notices_kind", "hockey_notices", type_="check")
+    op.execute("ALTER TABLE hockey_player_prefs ADD COLUMN IF NOT EXISTS notify_consent boolean")
+    op.execute("ALTER TABLE hockey_notices DROP CONSTRAINT IF EXISTS ck_hockey_notices_kind")
     op.create_check_constraint("ck_hockey_notices_kind", "hockey_notices", _in(OLD_KINDS + NEW_KINDS))
     op.execute("""
         INSERT INTO hockey_player_prefs (player_key, notify_consent)
         SELECT DISTINCT player_key, true FROM hockey_picks
         ON CONFLICT (player_key) DO UPDATE
         SET notify_consent = CASE
-            WHEN hockey_player_prefs.remind AND hockey_player_prefs.bot_blocked_at IS NULL THEN true
+            WHEN hockey_player_prefs.notify_consent IS NULL
+                 AND hockey_player_prefs.remind AND hockey_player_prefs.bot_blocked_at IS NULL THEN true
             ELSE hockey_player_prefs.notify_consent END
         """)
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM hockey_notices WHERE kind IN ('invite', 'comeback', 'week', 'month', 'consent')")
-    op.drop_constraint("ck_hockey_notices_kind", "hockey_notices", type_="check")
-    op.create_check_constraint("ck_hockey_notices_kind", "hockey_notices", _in(OLD_KINDS))
-    op.drop_column("hockey_player_prefs", "notify_consent")
+    # Данные не трогаем (см. докстринг): колонка и строки новых видов остаются, CHECK — мягкий.
+    op.execute("ALTER TABLE hockey_notices DROP CONSTRAINT IF EXISTS ck_hockey_notices_kind")
+    op.execute(f"ALTER TABLE hockey_notices ADD CONSTRAINT ck_hockey_notices_kind CHECK ({_in(OLD_KINDS)}) NOT VALID")
