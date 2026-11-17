@@ -270,3 +270,15 @@ def test_today_window_boundaries() -> None:
     assert wn.week_ref(at(9, day=19)) == "w2026-W47" and wn.day_ref(at(0, 5, day=19) - timedelta(minutes=10)) == (
         "d2026-11-18"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("column", ["remind", "notify_consent"])
+async def test_nudge_skips_game_opt_out(db_session, column) -> None:
+    """Ревью п. 1: нажал «Не присылать» в игре — напоминание C не планируется."""
+    arena = await seed_arena(db_session)
+    await _known(db_session, ANNA, at(18, day=15), arena=arena)
+    await seed_player(db_session, ANNA, remind=True)
+    assert [p.notice.player_key for p in await wn.produce_nudge(db_session, now=at(9, 30, day=19))] == [ANNA]
+    await db_session.execute(text(f"UPDATE hockey_player_prefs SET {column} = false WHERE player_key = :k"), {"k": ANNA})
+    assert await wn.produce_nudge(db_session, now=at(9, 30, day=19)) == []

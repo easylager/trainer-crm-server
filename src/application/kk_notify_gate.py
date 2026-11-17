@@ -16,8 +16,9 @@
 считается: игрок-подписчик суммарно получает не больше 1 сообщения в сутки и 3 в неделю от поводов с допуском.
 
 Семья ``warm`` (TASK-428) не знает про ``remind``, согласие игры и паузы: её согласие — явная подписка на каток
-(повод перепроверяет её перед отправкой) или единственное напоминание с «Не присылать». Её «Не присылать» —
-``warm_prefs.opted_out_at``, блокировка — ``warm_prefs.bot_blocked_at`` или блокировка, замеченная игрой.
+(повод перепроверяет её перед отправкой) или единственное напоминание с «Не присылать». «Не присылать» для неё —
+``warm_prefs.opted_out_at`` и любое «Не присылать» игры (``remind = false`` или ``notify_consent = false``), блокировка —
+``warm_prefs.bot_blocked_at`` или блокировка, замеченная игрой.
 
 Прежние поводы (итог хода, ``moved``, ``rescore``, ``nomove``, ``mfinal``, ``overtook``) проходят ту же проверку
 со своей политикой: итоги и события вне бюджета, как раньше; ``nomove``/``mfinal``/``overtook`` — в дневном, но
@@ -263,7 +264,8 @@ for _priority, _kind in enumerate(WARM_KINDS):
     register_kind(_kind, KindPolicy(budgeted=True, weekly=True, new=True, priority=_priority, family=FAMILY_WARM))
 
 _WARM_PREFS = text("""
-    SELECT wp.opted_out_at, COALESCE(wp.bot_blocked_at, hp.bot_blocked_at) AS bot_blocked_at
+    SELECT wp.opted_out_at, COALESCE(wp.bot_blocked_at, hp.bot_blocked_at) AS bot_blocked_at,
+           (hp.remind IS FALSE OR hp.notify_consent IS FALSE) AS game_opted_out
     FROM (SELECT CAST(:player_key AS BIGINT) AS k) AS q
     LEFT JOIN warm_prefs AS wp ON wp.telegram_id = q.k
     LEFT JOIN hockey_player_prefs AS hp ON hp.player_key = q.k
@@ -325,7 +327,8 @@ async def _admit(
         warm = (await session.execute(_WARM_PREFS, {"player_key": player_key})).one()
         if warm.bot_blocked_at is not None:
             return Admission(False, BLOCKED)
-        if warm.opted_out_at is not None:
+        # Любое «Не присылать» действует на все поводы прогрева: своё (warm:off) и игры (remind, согласие).
+        if warm.opted_out_at is not None or warm.game_opted_out:
             return Admission(False, OPTED_OUT)
         return await _limits(session, policy, kind=kind, player_key=player_key, now=now, cfg=cfg, recheck=recheck)
 

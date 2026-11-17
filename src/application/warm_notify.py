@@ -417,7 +417,8 @@ async def produce_week(session: AsyncSession, *, now: datetime) -> list[Proposal
 
 # ---------- C. одно напоминание «знающим нас» ----------
 
-# Достижимые: запускали бота, не заблокировали, не нажимали «Не присылать», ни на что не подписаны, напоминания
+# Достижимые: запускали бота, не заблокировали, не нажимали «Не присылать» (ни в прогреве, ни в игре), ни на что не
+# подписаны, напоминания
 # не получали. Служебные аккаунты каталога в событиях не пишутся, поэтому и сюда не попадут.
 _KNOWN = text("""
     SELECT DISTINCT c.telegram_id FROM clients AS c
@@ -427,7 +428,7 @@ _KNOWN = text("""
       AND NOT EXISTS (SELECT 1 FROM warm_prefs AS p WHERE p.telegram_id = c.telegram_id
                       AND (p.opted_out_at IS NOT NULL OR p.bot_blocked_at IS NOT NULL))
       AND NOT EXISTS (SELECT 1 FROM hockey_player_prefs AS hp WHERE hp.player_key = c.telegram_id
-                      AND hp.bot_blocked_at IS NOT NULL)
+                      AND (hp.bot_blocked_at IS NOT NULL OR hp.remind IS FALSE OR hp.notify_consent IS FALSE))
     """)
 
 # Визиты в Mini App каталога по актёру: дни по Минску и самый частый каток.

@@ -398,3 +398,14 @@ async def test_send_raising_marks_failed_and_journals_it(db_session, factory) ->
         )
     ).all()
     assert [tuple(r) for r in journal] == [("send", hn.FAILED)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("column", ["remind", "notify_consent"])
+@pytest.mark.parametrize("kind", gate.WARM_KINDS)
+async def test_game_opt_out_stops_every_warm_kind(db_session, column, kind) -> None:
+    """Ревью п. 1: «Не присылать» в игре (remind или согласие = false) — тоже «Не присылать» для прогрева."""
+    await seed_player(db_session, ANNA, remind=True)
+    assert (await _ok(db_session, ANNA, kind=kind)).allowed
+    await db_session.execute(text(f"UPDATE hockey_player_prefs SET {column} = false WHERE player_key = :k"), {"k": ANNA})
+    assert (await _ok(db_session, ANNA, kind=kind)).reason == gate.OPTED_OUT
