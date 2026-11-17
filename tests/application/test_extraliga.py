@@ -169,9 +169,9 @@ def test_details_cadence() -> None:
     # За 4 дня до матча — раз в сутки.
     assert not details_due(starts, _minsk(2026, 10, 25, 1, 0), now=_minsk(2026, 10, 25, 12, 0))
     assert details_due(starts, _minsk(2026, 10, 24, 11, 0), now=_minsk(2026, 10, 25, 12, 0))
-    # В день матча — каждые 15 минут.
-    assert not details_due(starts, _minsk(2026, 10, 29, 20, 0), now=_minsk(2026, 10, 29, 20, 10))
-    assert details_due(starts, _minsk(2026, 10, 29, 20, 0), now=_minsk(2026, 10, 29, 20, 16))
+    # В день матча — каждые 5 минут.
+    assert not details_due(starts, _minsk(2026, 10, 29, 20, 0), now=_minsk(2026, 10, 29, 20, 4))
+    assert details_due(starts, _minsk(2026, 10, 29, 20, 0), now=_minsk(2026, 10, 29, 20, 6))
 
 
 async def test_standings_by_team_id(db_session) -> None:
@@ -337,12 +337,12 @@ async def test_result_needs_two_stable_polls_when_there_are_picks(db_session) ->
     source = FakeSource([], {match_page_url("441964"): _page("hockeyby-gamecenter-441964-ot.html")})
     await sync_details(db_session, source, now=now)
     assert (await _match(db_session, "441964")).status == "scheduled"  # первый опрос: запомнили
-    # Слишком скоро (меньше 15 минут) — ещё не публикуем
+    # Слишком скоро (меньше 5 минут) — ещё не публикуем
     await db_session.execute(text("UPDATE hockey_matches SET details_checked_at = NULL"))
-    await sync_details(db_session, source, now=now + timedelta(minutes=5))
+    await sync_details(db_session, source, now=now + timedelta(minutes=3))
     assert (await _match(db_session, "441964")).status == "scheduled"
     await db_session.execute(text("UPDATE hockey_matches SET details_checked_at = NULL"))
-    await sync_details(db_session, source, now=now + timedelta(minutes=16))
+    await sync_details(db_session, source, now=now + timedelta(minutes=6))
     done = await _match(db_session, "441964")
     assert (done.status, done.home_score, done.away_score, done.decided_in) == ("final", 3, 2, "ot")
 
@@ -420,11 +420,11 @@ async def test_live_score_is_polled_every_15_minutes_and_never_touches_the_resul
     ).one()
     assert tuple(live) == (1, 0)
 
-    # Раньше чем через 15 минут страницу не читаем; позже — счёт обновляется.
+    # Раньше чем через 5 минут страницу не читаем; позже — счёт обновляется.
     quiet = FakeSource([], {url: _live_page((2, 0))})
-    assert (await sync_details(db_session, quiet, now=now + timedelta(minutes=5)))["checked"] == 0
+    assert (await sync_details(db_session, quiet, now=now + timedelta(minutes=3)))["checked"] == 0
     assert quiet.asked == []
-    assert (await sync_details(db_session, quiet, now=now + timedelta(minutes=16)))["live"] == 1
+    assert (await sync_details(db_session, quiet, now=now + timedelta(minutes=6)))["live"] == 1
     live = (
         await db_session.execute(text("SELECT live_home_score FROM hockey_matches WHERE source_match_id = '441964'"))
     ).scalar_one()
@@ -494,3 +494,15 @@ def test_match_ice_before_links_to_rink_with_descriptive_anchor() -> None:
     assert '<a href="/p/minsk/chizhovka">массовое катание: Чижовка-арена</a>' in html
     assert "здесь же" not in html
     assert "здесь же" in _where_card(base)
+
+
+async def test_result_window_opens_two_to_five_hours_after_start(db_session) -> None:
+    from src.application.extraliga import result_window_open
+
+    start = _minsk(2026, 10, 27, 19, 0)
+    await upsert_calendar_match(db_session, _yunost_neman("441964", start), now=start - timedelta(days=1))
+    await db_session.execute(text("UPDATE hockey_matches SET status = 'scheduled' WHERE source_match_id = '441964'"))
+    assert not await result_window_open(db_session, now=start + timedelta(hours=1))
+    assert await result_window_open(db_session, now=start + timedelta(hours=2, minutes=5))
+    assert await result_window_open(db_session, now=start + timedelta(hours=4, minutes=50))
+    assert not await result_window_open(db_session, now=start + timedelta(hours=5, minutes=10))

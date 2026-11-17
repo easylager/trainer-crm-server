@@ -66,14 +66,14 @@ MAX_CALENDAR_PAGES = 45
 REQUEST_PAUSE_SEC = 2.0
 DETAILS_AHEAD = timedelta(days=7)
 DETAILS_EVERY = timedelta(hours=24)
-# День матча: за 12 часов до начала и 5 часов после — страница матча каждые 15 минут.
+# День матча: за 12 часов до начала и 5 часов после — страница матча каждые 5 минут.
 MATCH_DAY_BEFORE = timedelta(hours=12)
 MATCH_DAY_AFTER = timedelta(hours=5)
-MATCH_DAY_EVERY = timedelta(minutes=15)
+MATCH_DAY_EVERY = timedelta(minutes=5)
 # Страница матча так и не сказала «официально» — берём счёт из календаря.
 CALENDAR_RESULT_AFTER = timedelta(hours=6)
 # Итог без второго источника: один и тот же счёт и способ в двух опросах не ближе друг к другу, чем это.
-RESULT_STABLE_AFTER = timedelta(minutes=15)
+RESULT_STABLE_AFTER = timedelta(minutes=5)
 _DECIDED = ("regulation", "ot", "so")
 # Сыгранный матч без официального протокола — страницу дочитываем раз в час, до трёх дней.
 POST_MATCH_WINDOW = timedelta(days=3)
@@ -604,6 +604,25 @@ def details_json(g: GameCenter) -> dict:
         "attendance": g.attendance,
         "video_url": g.video_url,
     }
+
+
+# Окно, когда итог матча Экстралиги уже может быть на hockey.by: цикл матчей ходит чаще (раз в две минуты),
+# иначе пятиминутный опрос и пятиминутная выдержка на десятиминутных тиках превращаются в 10–20 минут.
+RESULT_WINDOW_FROM = timedelta(hours=2)
+
+_RESULT_WINDOW = text("""
+    SELECT 1 FROM hockey_matches
+    WHERE source = 'hockeyby' AND status IN ('scheduled', 'review')
+      AND starts_at <= :hot_from AND starts_at >= :hot_to
+    LIMIT 1
+    """)
+
+
+async def result_window_open(session: AsyncSession, *, now: datetime) -> bool:
+    """Есть матч Экстралиги без итога, который начался от 2 до 5 часов назад (``MATCH_DAY_AFTER``)."""
+    now = _utc(now)
+    params = {"hot_from": now - RESULT_WINDOW_FROM, "hot_to": now - MATCH_DAY_AFTER}
+    return (await session.execute(_RESULT_WINDOW, params)).first() is not None
 
 
 def details_due(starts_at: datetime, checked_at: datetime | None, *, now: datetime) -> bool:

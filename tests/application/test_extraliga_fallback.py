@@ -290,14 +290,14 @@ async def _played_row(db_session, *, pick: bool = True) -> int:
     return row.id
 
 
-async def test_result_needs_two_equal_polls_15_minutes_apart(db_session) -> None:
+async def test_result_needs_two_equal_polls_5_minutes_apart(db_session) -> None:
     mid = await _played_row(db_session)
     now = _minsk(2026, 11, 9, 22, 0)
     first = await sync_fallback(db_session, _flashscore(), now=now)
     assert first["pending"] == 1 and (await _row(db_session, "id = :i", i=mid)).status == "scheduled"
-    await sync_fallback(db_session, _flashscore(), now=now + timedelta(minutes=10))
-    assert (await _row(db_session, "id = :i", i=mid)).status == "scheduled"  # 10 минут — рано
-    done = await sync_fallback(db_session, _flashscore(), now=now + timedelta(minutes=20))
+    await sync_fallback(db_session, _flashscore(), now=now + timedelta(minutes=3))
+    assert (await _row(db_session, "id = :i", i=mid)).status == "scheduled"  # 3 минуты — рано
+    done = await sync_fallback(db_session, _flashscore(), now=now + timedelta(minutes=10))
     assert done["final"] == 1
     row = await _row(db_session, "id = :i", i=mid)
     assert (row.status, row.home_score, row.away_score, row.decided_in) == ("final", 6, 3, "regulation")

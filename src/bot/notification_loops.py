@@ -3512,11 +3512,16 @@ async def run_hockey_matches_loop() -> None:
                 )
                 # Матч с ходами остался scheduled без итога дольше 4 часов (ни ручной проверки, ни алерта) —
                 # одно сообщение админам с кнопкой «Поправить» (TASK-359).
+                from src.application.extraliga import result_window_open as extraliga_window_open
                 from src.application.hockey_stuck import notify_stuck_results
 
                 await notify_stuck_results(
                     async_session_factory, now=datetime.now(timezone.utc), send=send_card_to_admins
                 )
+                # Матч Экстралиги закончился или вот-вот: ходим раз в две минуты, чтобы итог не ждал десятиминутного тика.
+                async with async_session_factory() as window_session:
+                    if await extraliga_window_open(window_session, now=datetime.now(timezone.utc)):
+                        delay = HOCKEY_RESULT_WINDOW_INTERVAL_SEC
             if settings.hockey_matches_enabled:
                 now = datetime.now(timezone.utc)
                 calendar_due = last_calendar is None or now - last_calendar >= HOCKEY_CALENDAR_EVERY
