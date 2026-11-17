@@ -14,6 +14,8 @@
   var icon = K.icon;
   var NBSP = ' ';
   var MINI_LOGOS = 6;
+  // «Сравнить с моим стендом» собрано, но в релиз пока не идёт (решение владельца 2026-11-18): включить = true.
+  var COMPARE_ENABLED = false;
 
   function model() {
     return S.standModel((state.profile && state.profile.crowns) || [], state.clubs || []);
@@ -132,10 +134,10 @@
         return [h('main', { class: 'kk-main' }, [K.topbar('Стенд', null), a.failed ? K.emptyCard('Стенд', 'Игрок не найден или стенд сейчас не открывается.') : K.loading()])];
       }
       var m = S.standModel(a.data.crowns, state.clubs || []);
-      var mine = a.compare && state.profile ? model() : null;
+      var mine = COMPARE_ENABLED && a.compare && state.profile ? model() : null;
       var who = a.data.display_name || 'Игрок';
       var main = h('main', { class: 'kk-main' }, [K.topbar(a.data.display_name || 'Игрок', S.standCountLabel(m.total))]);
-      if (!a.data.is_me) {
+      if (COMPARE_ENABLED && !a.data.is_me) {
         main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--alt', 'aria-pressed': a.compare ? 'true' : 'false', onclick: function () { a.compare = !a.compare; K.render(); }, text: a.compare ? 'Скрыть сравнение' : 'Сравнить с моим стендом' }));
       }
       if (mine) {
