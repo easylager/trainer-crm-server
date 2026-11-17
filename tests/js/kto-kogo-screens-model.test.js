@@ -548,9 +548,11 @@ describe('шторка «Как считаются очки»', () => {
   it('числа — из POINTS, слова — из макета, минута закрытия сходится', () => {
     const M = require('../../static/webapp/kto-kogo-model.js');
     const r = S.pointsRules();
-    assert.deepEqual(r.rows.map((x) => x.value), [String(M.POINTS.winner), '+' + M.POINTS.diff, String(M.POINTS.exact)]);
-    assert.equal(M.POINTS.diff, M.POINTS.goals); // одна строка «+10» говорит и про разницу, и про голы
-    assert.equal(r.rows[2].gold, true);
+    assert.deepEqual(r.rows.map((x) => x.value), [String(M.POINTS.winner), '+' + M.POINTS.diff, '+' + M.POINTS.goals, '+' + M.POINTS.goals, String(M.POINTS.exact)]);
+    // Точный счёт = победитель + разница + шайбы хозяев + шайбы гостей.
+    assert.equal(M.POINTS.winner + M.POINTS.diff + 2 * M.POINTS.goals, M.POINTS.exact);
+    assert.deepEqual(r.rows.map((x) => x.text).slice(1, 4), ['Угадал разницу шайб.', 'Угадал шайбы хозяев.', 'Угадал шайбы гостей.']);
+    assert.equal(r.rows[4].gold, true);
     assert.equal(r.rows[0].text, 'Угадал победителя.');
     assert.equal(r.trumpTitle, 'Козырь');
     assert.match(r.trumpText, /удвоятся/);

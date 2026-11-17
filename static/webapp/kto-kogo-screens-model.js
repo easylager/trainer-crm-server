@@ -537,8 +537,10 @@
     return {
       rows: [
         { value: String(P.winner), text: 'Угадал победителя.', gold: false },
-        { value: '+' + P.diff, text: 'За совпавшую разницу, шайбы хозяев или гостей.', gold: false },
-        { value: String(P.exact), text: 'Угадал точный счёт — это «в точку».', gold: true },
+        { value: '+' + P.diff, text: 'Угадал разницу шайб.', gold: false },
+        { value: '+' + P.goals, text: 'Угадал шайбы хозяев.', gold: false },
+        { value: '+' + P.goals, text: 'Угадал шайбы гостей.', gold: false },
+        { value: String(P.exact), text: 'Угадал точный счёт — все четыре сразу, это «в точку».', gold: true },
       ],
       trumpTitle: 'Козырь',
       trumpText: 'Один на неделю. Выбери матч для козыря — очки за него удвоятся. Передумаешь — перенеси его на другой матч недели, пока игра не началась.',
