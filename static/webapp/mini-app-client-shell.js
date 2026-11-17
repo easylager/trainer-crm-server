@@ -1686,19 +1686,19 @@
    */
   var KK_BASE = '/static/webapp/';
   var KK_ASSET_VERSIONS = [
-    ['kto-kogo.css', '202611176'],
-    ['kto-kogo-model.js', '202611176'],
-    ['kto-kogo-screens-model.js', '202611176'],
-    ['kto-kogo.js', '202611176'],
-    ['kto-kogo-views.js', '202611176'],
-    ['kto-kogo-hub-cards.js', '202611176'],
-    ['kto-kogo-board.js', '202611176'],
-    ['kto-kogo-leagues.js', '202611176'],
-    ['kto-kogo-coin-model.js', '202611176'],
-    ['kto-kogo-coin.js', '202611176'],
-    ['kto-kogo-matches.js', '202611176'],
-    ['kto-kogo-league-identity.js', '202611176'],
-    ['kto-kogo-boot.js', '202611176'],
+    ['kto-kogo.css', '202611177'],
+    ['kto-kogo-model.js', '202611177'],
+    ['kto-kogo-screens-model.js', '202611177'],
+    ['kto-kogo.js', '202611177'],
+    ['kto-kogo-views.js', '202611177'],
+    ['kto-kogo-hub-cards.js', '202611177'],
+    ['kto-kogo-board.js', '202611177'],
+    ['kto-kogo-leagues.js', '202611177'],
+    ['kto-kogo-coin-model.js', '202611177'],
+    ['kto-kogo-coin.js', '202611177'],
+    ['kto-kogo-matches.js', '202611177'],
+    ['kto-kogo-league-identity.js', '202611177'],
+    ['kto-kogo-boot.js', '202611177'],
   ];
   /* Сервер подставляет в html всех страниц одну метку ?v= (asset_stamp.py), а не литерал из kto-kogo.html.
      Поэтому берём метку самой оболочки (ASSET_V — из её же <script src>); литерал из списка — запасной,
