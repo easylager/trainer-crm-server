@@ -34,6 +34,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
+from typing import Any
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
@@ -1454,10 +1455,13 @@ async def send_via_client_bot_gone(chat_id: int, text_body: str, buttons: list[l
 
 
 async def send_via_client_bot(
-    chat_id: int, text_body: str, buttons: list[list[dict]], *, detect_gone: bool = False
+    chat_id: int, text_body: str, buttons: list[list[dict]], *, detect_gone: bool = False, bot: Any = None
 ) -> str:
     """Личное сообщение клиентским ботом: ``ok``, ``blocked`` (запретил писать), ``retry`` (429, сеть, 5xx —
-    повторим позже) или ``failed`` (BadRequest и прочее постоянное)."""
+    повторим позже) или ``failed`` (BadRequest и прочее постоянное).
+
+    ``bot`` — свой экземпляр у другого цикла (прогрев, TASK-428): общий ``_bot`` закрывает цикл матчей в конце
+    прохода, и чужая отправка в этот момент упала бы на закрытой сессии."""
     from aiogram.exceptions import (
         TelegramBadRequest,
         TelegramForbiddenError,
@@ -1467,7 +1471,7 @@ async def send_via_client_bot(
     )
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-    bot = await _client_bot()
+    bot = bot if bot is not None else await _client_bot()
     if bot is None:
         return FAILED
     markup = (

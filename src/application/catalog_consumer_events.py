@@ -27,6 +27,7 @@ import hmac
 import json
 import logging
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
 from urllib.parse import parse_qsl
@@ -81,6 +82,17 @@ KIND_OUTBOUND_429 = "outbound_429"
 KIND_ME_OPEN = "me_open"
 KIND_ME_NAME_SET = "me_name_set"
 KIND_ME_HOME_ARENA_SET = "me_home_arena_set"
+# TASK-428: предложение подписки на каток после просмотра — показ, нажатие, «Закрыть», подписка.
+KIND_WATCH_OFFER_SHOWN = "watch_offer_shown"
+KIND_WATCH_OFFER_CLICK = "watch_offer_click"
+KIND_WATCH_OFFER_CLOSED = "watch_offer_closed"
+KIND_WATCH_OFFER_SUBSCRIBED = "watch_offer_subscribed"
+WATCH_OFFER_KINDS = (
+    KIND_WATCH_OFFER_SHOWN,
+    KIND_WATCH_OFFER_CLICK,
+    KIND_WATCH_OFFER_CLOSED,
+    KIND_WATCH_OFFER_SUBSCRIBED,
+)
 
 INVITE_FUNNEL_KINDS = (
     KIND_INVITE_CREATE,
@@ -109,6 +121,7 @@ CATALOG_CONSUMER_KINDS = (
     KIND_ME_OPEN,
     KIND_ME_NAME_SET,
     KIND_ME_HOME_ARENA_SET,
+    *WATCH_OFFER_KINDS,
 )
 
 SURFACE_PLACE_PAGE = "place_page"
@@ -123,7 +136,65 @@ _MINIAPP_DEDUP_GROUP = "miniapp"
 
 _missing_secret_logged = False
 
-_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src"})
+_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src", "utm_source"})
+
+# TASK-428: метка источника платной ссылки. Сайт — ``?utm_source=<метка>``, Mini App — ``startapp=src_<метка>``.
+# Пишется в ``payload.source`` события и разводит дедуп: органический заход в тот же день не съедает рекламный.
+_SOURCE_LABEL_RE = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
+SOURCE_START_PREFIX = "src_"
+
+
+def clean_source_label(value: Any) -> str | None:
+    """Метка источника: 2–32 латиница, цифры, «_», «-», в нижнем регистре; всё прочее — ``None``."""
+    raw = str(value or "").strip()
+    return raw.lower() if _SOURCE_LABEL_RE.fullmatch(raw) else None
+
+
+def source_from_start_param(start_param: str | None) -> str | None:
+    """``src_ig1124`` → ``ig1124``. Другие параметры запуска (каток, город, игра) меткой не считаются."""
+    sp = (start_param or "").strip()
+    if not sp.startswith(SOURCE_START_PREFIX):
+        return None
+    return clean_source_label(sp[len(SOURCE_START_PREFIX) :])
+
+
+#: Разных меток на актёра, вид события и сутки — не больше этого; дальше метка не разводит дедуп (перебор
+#: ``?utm_source=`` не раздувает таблицу).
+MAX_SOURCES_PER_DAY = 3
+
+_SOURCES_TODAY = text("""
+    SELECT COUNT(DISTINCT payload->>'source') FROM catalog_consumer_events
+    WHERE kind = :kind AND actor_hash = :actor AND occurred_at >= :since AND payload ? 'source'
+      AND payload->>'source' <> :source
+    """)
+
+
+async def _cap_sources(session: AsyncSession, *, kind: str, actor_hash: str | None, body: dict[str, Any]) -> None:
+    """Метка сверх ``MAX_SOURCES_PER_DAY`` за сутки по Минску выкидывается из события (просмотр остаётся)."""
+    source = body.get("source")
+    if not source:
+        return
+    if not actor_hash:
+        return
+    since = minsk_day_start_utc(catalog_event_day_minsk())
+    params = {"kind": kind, "actor": actor_hash, "since": since, "source": str(source)}
+    try:
+        async with session.begin_nested():
+            seen = int((await session.execute(_SOURCES_TODAY, params)).scalar_one())
+    except Exception:  # noqa: BLE001 — сомнение: событие пишем, но без метки
+        logger.warning("catalog source cap check failed kind=%s", kind, exc_info=True)
+        seen = MAX_SOURCES_PER_DAY
+    if seen >= MAX_SOURCES_PER_DAY:
+        body.pop("source", None)
+
+
+def _dedup_variant(body: Mapping[str, Any]) -> str | None:
+    parts = []
+    if body.get("src") in SHARE_SRC_VALUES:
+        parts.append(str(body["src"]))
+    if body.get("source"):
+        parts.append(f"source:{body['source']}")
+    return "|".join(parts) or None
 
 
 def _actor_hmac_secret() -> bytes | None:
@@ -408,6 +479,7 @@ async def record_catalog_consumer_event(
         sp = None
     day = catalog_event_day_minsk()
     body = dict(payload or {})
+    await _cap_sources(session, kind=kind, actor_hash=actor_hash, body=body)
     dedup_key = dedup_key or (
         event_dedup_hash(
             kind=kind,
@@ -416,7 +488,7 @@ async def record_catalog_consumer_event(
             day=day,
             city_id=city_id,
             arena_id=arena_id,
-            variant=str(body["src"]) if body.get("src") in SHARE_SRC_VALUES else None,
+            variant=_dedup_variant(body),
         )
         if dedup
         else None
@@ -764,6 +836,10 @@ def public_page_view_attribution_payload(extra_payload: dict[str, Any] | None) -
         elif key == "i":
             if str(value).strip().lower() in ("1", "true", "yes"):
                 out["i"] = "1"
+        elif key == "utm_source":
+            label = clean_source_label(value)
+            if label:
+                out["source"] = label
     return out
 
 

@@ -334,6 +334,71 @@
       });
   }
 
+  /* TASK-428: подписка из предложения на карточке — тот же путь, что у колокольчика (разрешение писать,
+     POST /client/ice-watches), но с origin=offer для воронки и без алертов: итог показывает сама плашка. */
+  function subscribeFromOffer() {
+    var id = initData();
+    return new Promise(function (resolve) {
+      if (!id || !state.card || watchBusy.sessions) {
+        resolve(false);
+        return;
+      }
+      watchBusy.sessions = true;
+      ensureWriteAccess(function (granted) {
+        if (!granted) {
+          watchBusy.sessions = false;
+          resolve(false);
+          return;
+        }
+        fetch('/api/webapp/client/ice-watches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': id },
+          body: JSON.stringify({
+            arena_id: state.card.id,
+            city_id: state.card.city_id || null,
+            watch_kind: 'sessions',
+            when: 'any',
+            intent: 'skate',
+            origin: 'offer',
+          }),
+        })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function (body) {
+            watchBusy.sessions = false;
+            state.iceWatchKinds = state.iceWatchKinds || {};
+            state.iceWatchIds = state.iceWatchIds || {};
+            state.iceWatchKinds.sessions = true;
+            if (body && body.watch && body.watch.id != null) state.iceWatchIds.sessions = Number(body.watch.id);
+            paint();
+            resolve(true);
+          })
+          .catch(function () {
+            watchBusy.sessions = false;
+            resolve(false);
+          });
+      });
+    });
+  }
+
+  var watchOfferStarted = false;
+
+  /* TASK-428: один раз на человека и каток, после содержательного просмотра (см. watch-offer.js). */
+  function startWatchOffer() {
+    var W = global.GlideWatchOffer;
+    if (watchOfferStarted || !W || !state.card || !initData()) return;
+    if (seasonRemindActive()) return;
+    watchOfferStarted = true;
+    W.mountMiniApp({
+      arenaId: Number(state.card.id),
+      hasSkating: !!state.card.has_skating,
+      initData: initData(),
+      subscribed: function () {
+        return !!(state.iceWatchKinds && state.iceWatchKinds.sessions);
+      },
+      subscribe: subscribeFromOffer,
+    });
+  }
+
   function unsubscribeIceWatch(kind) {
     var id = initData();
     if (!id || !state.card) return;
@@ -2930,6 +2995,7 @@
           loadHereMatches(card);
           syncIceWatches().then(function () {
             paint();
+            startWatchOffer();
           });
           trainersP.then(function (tr) {
             state.trainers = tr.ok ? tr.data : { items: [], groups: [] };

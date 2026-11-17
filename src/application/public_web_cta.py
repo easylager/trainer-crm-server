@@ -100,7 +100,7 @@ _TRAINER_CARD_VIEW_BEACON = r"""<script>
 })(typeof globalThis !== 'undefined' ? globalThis : window);
 </script>"""
 
-PAGE_VIEW_BEACON_VERSION = "2"
+PAGE_VIEW_BEACON_VERSION = "3"  # TASK-428: маячок передаёт utm_source
 
 
 def public_page_view_beacon_script(

@@ -21,6 +21,7 @@ import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
+from typing import Any, Protocol
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application import hockey_notices as hn
 from src.application.hockey_game import PICK_CLOSES_BEFORE
 from src.application.kk_notify_gate import (
+    FAMILY_KK,
     KIND_POLICY,
     Admission,
     GateConfig,
@@ -41,11 +43,47 @@ from src.application.kk_notify_phase import Phase, PlayerFacts, load_player_fact
 logger = logging.getLogger(__name__)
 
 
+class NoticeStore(Protocol):
+    """Где сообщение «занимается» до отправки и где отмечается итог. У игры — ``hockey_notices``, у прогрева
+    посетителей (TASK-428) — ``warm_notices``. Семья хранилища должна совпадать с семьёй повода."""
+
+    family: str
+
+    async def claim(self, session: AsyncSession, notice: Any) -> bool: ...
+
+    async def release(self, session: AsyncSession, notice: Any) -> None: ...
+
+    async def mark_done(self, session: AsyncSession, notice: Any, *, ok: bool, now: datetime) -> None: ...
+
+    async def mark_blocked(self, session: AsyncSession, player_key: int, *, now: datetime) -> None: ...
+
+
+class _HockeyStore:
+    family = FAMILY_KK
+
+    async def claim(self, session: AsyncSession, notice: Any) -> bool:
+        return await hn.claim(session, notice)
+
+    async def release(self, session: AsyncSession, notice: Any) -> None:
+        await hn.release(session, notice)
+
+    async def mark_done(self, session: AsyncSession, notice: Any, *, ok: bool, now: datetime) -> None:
+        await hn.mark_done(session, notice, ok=ok, now=now)
+
+    async def mark_blocked(self, session: AsyncSession, player_key: int, *, now: datetime) -> None:
+        await hn.mark_blocked(session, player_key, now=now)
+
+
+HOCKEY_STORE: NoticeStore = _HockeyStore()
+
+
 @dataclass(frozen=True)
 class Proposal:
-    """Предложение повода: готовое сообщение и (необязательно) проверка, что оно ещё актуально."""
+    """Предложение повода: готовое сообщение и (необязательно) проверка, что оно ещё актуально.
+    ``notice`` — ``hn.Notice`` у игры или ``warm_notify.WarmNotice`` у прогрева: ``kind``, ``player_key``,
+    ``text``, ``buttons``, ``match_ids``."""
 
-    notice: hn.Notice
+    notice: Any
     recheck: Recheck | None = None
     # Текст на момент отправки (день недели и «сегодня/завтра» считаются тогда, а не при сборке). ``None`` — как в notice.
     render: Callable[[datetime], str] | None = None
@@ -112,8 +150,10 @@ async def dispatch(
     send: hn.Sender,
     config: GateConfig,
     clock: Callable[[], datetime] = _now,
+    store: NoticeStore = HOCKEY_STORE,
 ) -> Outcome:
-    """Допуск → занять строку → отправить → отметить → записать в журнал. Единственный путь нового повода к Telegram.
+    """Допуск → занять строку → отправить → отметить → записать в журнал. Единственный путь нового повода к Telegram
+    (и игры, и прогрева посетителей: у них разные только хранилища «занято», ``store``).
 
     Допуск и занятие строки идут в одной транзакции под ``pg_advisory_xact_lock(player_key)``: два цикла (или два
     процесса) не пройдут допуск одновременно по одному игроку, поэтому дневной и недельный лимиты не обходятся гонкой.
@@ -149,16 +189,18 @@ async def dispatch(
                 return await finish(Outcome("dry_run" if admission.dry_run else "skip", admission.reason))
             if kind not in KIND_POLICY or not KIND_POLICY[kind].new:
                 return await finish(Outcome("skip", "not_a_new_kind"))
+            if KIND_POLICY[kind].family != store.family:  # повод не той семьи не занимает чужую таблицу
+                return await finish(Outcome("skip", "store_mismatch"))
             if proposal.render is not None:
                 notice = replace(notice, text=proposal.render(clock()))
-            if not await hn.claim(session, notice):
+            if not await store.claim(session, notice):
                 return await finish(Outcome("skip", "already_claimed"))
             await session.commit()  # «занято» видно всем до вызова Telegram; блокировка снята
 
         try:
             outcome = hn._outcome(await send(player_key, notice.text, notice.buttons))
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
-            logger.warning("kk_notify %s/%s send failed", kind, notice.match_id, exc_info=True)
+            logger.warning("kk_notify %s/%s send failed", kind, notice.match_ids, exc_info=True)
             outcome = hn.FAILED
         if outcome == hn.GONE:  # чат не найден / аккаунт удалён: недостижим, как после блокировки
             outcome = hn.BLOCKED
@@ -168,12 +210,12 @@ async def dispatch(
         done_at = clock()
         async with session_factory() as session:
             if outcome == hn.RETRY:
-                await hn.release(session, notice)
+                await store.release(session, notice)
             else:
                 hn._RETRIES.pop(retry_key, None)
-                await hn.mark_done(session, notice, ok=outcome == hn.SENT, now=done_at)
+                await store.mark_done(session, notice, ok=outcome == hn.SENT, now=done_at)
                 if outcome == hn.BLOCKED:
-                    await hn.mark_blocked(session, player_key, now=done_at)
+                    await store.mark_blocked(session, player_key, now=done_at)
             await session.commit()
         return await finish(Outcome("send", None, outcome))
     except Exception as exc:  # noqa: BLE001 — закрыто по умолчанию: ничего не шлём, причину пишем
@@ -289,4 +331,15 @@ async def run_tick(
     return counts
 
 
-__all__ = ["Outcome", "PRODUCERS", "Producer", "Proposal", "dispatch", "match_still_open", "run_tick", "write_journal"]
+__all__ = [
+    "HOCKEY_STORE",
+    "NoticeStore",
+    "Outcome",
+    "PRODUCERS",
+    "Producer",
+    "Proposal",
+    "dispatch",
+    "match_still_open",
+    "run_tick",
+    "write_journal",
+]

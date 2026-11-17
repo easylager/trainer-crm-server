@@ -2745,6 +2745,16 @@ def _b_matches_here(view: Mapping[str, Any]) -> str:
     return here_section(matches, today=view.get("today"))
 
 
+def watch_offer_site_html(arena_id: int, href: str) -> str:
+    """TASK-428: скрипт предложения подписки на каток (сам решает, показывать ли; см. watch-offer.js)."""
+    wv = _esc(_webapp_bundle_version())
+    return (
+        f'<link rel="stylesheet" href="/static/webapp/watch-offer.css?v={wv}" />'
+        f'<script defer src="/static/webapp/watch-offer.js?v={wv}" data-surface="site" '
+        f'data-arena-id="{int(arena_id)}" data-skating="1" data-href="{_esc(href)}"></script>'
+    )
+
+
 def render_place_body_b(
     view: Mapping[str, Any],
     *,
@@ -2771,6 +2781,7 @@ def render_place_body_b(
         body = "".join(parts)
         return body + phone_beacon_script(body)
     from src.application.place_links import public_telegram_cta_url, watch_start_param
+    offer_html = ""
     from src.application.place_visit_blocks import (
         facts_html,
         more_html,
@@ -2792,6 +2803,13 @@ def render_place_body_b(
         )
         if watch:
             links["watch"] = watch
+        # TASK-428: предложение подписки после содержательного просмотра — в бота с пометкой «из предложения».
+        offer = public_telegram_cta_url(
+            base_url, start_param=watch_start_param(int(card["id"]), offer=True), surface="place_page",
+            city_id=city_id, arena_id=int(card["id"]),
+        )
+        if offer:
+            offer_html = watch_offer_site_html(int(card["id"]), offer)
     vv = _place_visit(view)
     food = _food_partner(card)
     trainers_listed = bool(view.get("trainers"))
@@ -2821,4 +2839,4 @@ def render_place_body_b(
         _b_nearby(view),
     ]
     body = "".join(parts)
-    return body + phone_beacon_script(body)
+    return body + phone_beacon_script(body) + offer_html
