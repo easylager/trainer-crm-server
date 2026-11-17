@@ -23,10 +23,10 @@ def _secret(monkeypatch) -> None:
     monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", SECRET)
 
 
-async def _event(db, kind: str, arena: int, when) -> None:
+async def _event(db, kind: str, arena: int, when, surface: str = "miniapp_arena") -> None:
     await db.execute(
-        text("INSERT INTO catalog_consumer_events (kind, surface, arena_id, occurred_at) VALUES (:k, 'x', :a, :w)"),
-        {"k": kind, "a": arena, "w": when},
+        text("INSERT INTO catalog_consumer_events (kind, surface, arena_id, occurred_at) VALUES (:k, :s, :a, :w)"),
+        {"k": kind, "s": surface, "a": arena, "w": when},
     )
 
 
@@ -44,6 +44,7 @@ async def _seed(db) -> int:
     for kind, n in (("watch_offer_shown", 3), ("watch_offer_click", 2), ("watch_offer_subscribed", 1)):
         for i in range(n):
             await _event(db, kind, arena, at(12, day=10 + i))
+    await _event(db, "watch_offer_subscribed", arena, at(12, day=14), surface="warm_nudge")  # из напоминания C
     await seed_warm_notice(db, ANNA, "warm_nudge", at(10, day=13), ref="once")
     await seed_warm_notice(db, BORIS, "warm_today", None, created_at=at(10, day=13), failed=True)
     await db.execute(
@@ -60,8 +61,10 @@ async def _seed(db) -> int:
 async def test_collect_counts(db_session) -> None:
     await _seed(db_session)
     data = await wr.collect(db_session, since=SINCE, until=UNTIL)
-    assert (data.one_time, data.reachable) == (3, 1)  # Анна, Вера, сайт; написать можно только Анне
-    assert data.offer == {"shown": 3, "click": 2, "closed": 0, "subscribed": 1}
+    assert (data.one_time, data.with_telegram) == (3, 1)  # Анна, Вера, сайт; с Telegram и без отписки — Анна
+    # подписки из предложения и из напоминания — отдельно: «из предложения» не больше «нажали»
+    assert data.offer == {"shown": 3, "click": 2, "closed": 0, "subscribed_offer": 1, "subscribed_nudge": 1}
+    assert data.offer["subscribed_offer"] <= data.offer["click"]
     assert data.sent == {"warm_nudge": 1} and data.failed == 1
     assert (data.blocked, data.opted_out) == (0, 1)
     assert data.dry_run == {"warm_nudge": 1}  # разные люди, не записи журнала
@@ -73,15 +76,15 @@ async def test_no_secret_means_nobody_reachable(db_session, monkeypatch) -> None
     monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", "")
     monkeypatch.setattr("src.shared.config.get_settings", lambda: type("S", (), {"catalog_actor_hmac_secret": ""})())
     data = await wr.collect(db_session, since=SINCE, until=UNTIL)
-    assert data.reachable == 0
+    assert data.with_telegram == 0
 
 
 @pytest.mark.asyncio
 async def test_section_text(db_session) -> None:
     await _seed(db_session)
     body = wr.render_section(await wr.collect(db_session, since=SINCE, until=UNTIL))
-    assert "Разовых за неделю: 3, из них можно написать: 1." in body
-    assert "показано 3, нажали 2, подписались 1, закрыли 0" in body
+    assert "Разовых за неделю: 3, из них вошли через Telegram и не отписывались: 1" in body
+    assert "показано 3, нажали 2, подписались 1, закрыли 0. Подписались из напоминания: 1." in body
     assert "Отправлено 1: напоминание 1." in body
     assert "Нажали «Не присылать»: 1." in body
     assert "!" not in body
@@ -114,7 +117,7 @@ async def test_admin_stats_has_warm_slice(db_session, monkeypatch) -> None:
     monkeypatch.setattr(wr, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: UNTIL)}))
     data = await get_platform_stats(db_session)
     warm = data["warm_visitors"]
-    assert warm["one_time"] == 3 and warm["reachable"] == 1 and warm["sent_total"] == 1
+    assert warm["one_time"] == 3 and warm["with_telegram"] == 1 and warm["sent_total"] == 1
 
     async def boom(*a, **kw):
         raise RuntimeError("warm down")

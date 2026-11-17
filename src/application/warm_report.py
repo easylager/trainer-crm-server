@@ -2,10 +2,13 @@
 
 * Разовые — актёры (люди, не боты и не служебные аккаунты) с просмотром сайта или входом в Mini App за окно, у кого
   за 30 суток до конца окна ровно один день визита по Минску.
-* Из них достижимые — те, чей ``actor_hash`` совпал с ``telegram_actor_hash`` клиента, который запускал бота, не
-  заблокировал его и не нажимал «Не присылать». Совпадение считается в памяти и нигде не хранится. Веб-посетителей
-  так не достать: у них хэш от IP и браузера.
+* Из них «вошли через Telegram» — те, чей ``actor_hash`` совпал с ``telegram_actor_hash`` клиента с Telegram id,
+  который не заблокировал бота и нигде не нажимал «Не присылать». Это верхняя оценка тех, кому можно написать:
+  бот пишет только тому, кто его запускал или разрешил писать, а этого по событиям не видно. Совпадение считается
+  в памяти и нигде не хранится. Веб-посетителей так не достать: у них хэш от IP и браузера.
 * Воронка предложения подписки — события ``watch_offer_*`` за окно (по одному каждого вида на актёра и каток).
+  Подписки разделены: из предложения (сайт и Mini App) и из напоминания C — иначе «подписались» могло бы
+  превысить «нажали».
 * Отправлено / не дошло — ``warm_notices``; заблокировали и «Не присылать» — ``warm_prefs`` за окно; «ушло бы в сухом
   прогоне» — журнал решений (разные люди и поводы).
 """
@@ -30,6 +33,7 @@ from src.application.catalog_consumer_events import (
 )
 from src.application.client_ice_watch_use_cases import ICE_WATCH_STATS_EXCLUDED_TELEGRAM_IDS
 from src.application.kk_notify_gate import WARM_KINDS
+from src.application.watch_offer import SURFACE_NUDGE
 
 LOOKBACK = timedelta(days=30)
 KIND_LABELS = {
@@ -45,8 +49,8 @@ class WarmStats:
     since: datetime
     until: datetime
     one_time: int = 0
-    reachable: int = 0
-    offer: dict[str, int] = field(default_factory=dict)  # shown / click / closed / subscribed
+    with_telegram: int = 0  # разовые, вошедшие через Telegram, без блока и «Не присылать» — верхняя оценка
+    offer: dict[str, int] = field(default_factory=dict)  # shown / click / closed / subscribed_offer / subscribed_nudge
     sent: dict[str, int] = field(default_factory=dict)
     failed: int = 0
     blocked: int = 0
@@ -63,7 +67,7 @@ class WarmStats:
             "since": self.since.isoformat(),
             "until": self.until.isoformat(),
             "one_time": self.one_time,
-            "reachable": self.reachable,
+            "with_telegram": self.with_telegram,
             "offer": dict(self.offer),
             "sent": dict(self.sent),
             "sent_total": self.sent_total,
@@ -127,18 +131,20 @@ async def collect(session: AsyncSession, *, since: datetime, until: datetime) ->
         KIND_WATCH_OFFER_SHOWN: "shown",
         KIND_WATCH_OFFER_CLICK: "click",
         KIND_WATCH_OFFER_CLOSED: "closed",
-        KIND_WATCH_OFFER_SUBSCRIBED: "subscribed",
+        KIND_WATCH_OFFER_SUBSCRIBED: "subscribed_offer",
     }
     offer_rows = await session.execute(
         text("""
-            SELECT kind, COUNT(*) FROM catalog_consumer_events
-            WHERE kind = ANY(:kinds) AND occurred_at >= :since AND occurred_at < :until GROUP BY kind
+            SELECT kind, surface = :nudge AS from_nudge, COUNT(*) FROM catalog_consumer_events
+            WHERE kind = ANY(:kinds) AND occurred_at >= :since AND occurred_at < :until GROUP BY 1, 2
             """),
-        {**window, "kinds": list(offer_kinds)},
+        {**window, "kinds": list(offer_kinds), "nudge": SURFACE_NUDGE},
     )
     offer = {name: 0 for name in offer_kinds.values()}
-    for kind, n in offer_rows.all():
-        offer[offer_kinds[kind]] = int(n)
+    offer["subscribed_nudge"] = 0
+    for kind, from_nudge, n in offer_rows.all():
+        name = "subscribed_nudge" if kind == KIND_WATCH_OFFER_SUBSCRIBED and from_nudge else offer_kinds[kind]
+        offer[name] += int(n)
     sent = {
         str(k): int(n)
         for k, n in (
@@ -193,7 +199,7 @@ async def collect(session: AsyncSession, *, since: datetime, until: datetime) ->
         since=since,
         until=until,
         one_time=len(one_time),
-        reachable=sum(1 for h in one_time if h in reachable_hashes),
+        with_telegram=sum(1 for h in one_time if h in reachable_hashes),
         offer=offer,
         sent=sent,
         failed=int(failed or 0),
@@ -220,11 +226,15 @@ def render_section(data: WarmStats) -> str:
     o = data.offer
     lines = [
         "<b>Разовые посетители</b>",
-        f"Разовых за неделю: {data.one_time}, из них можно написать: {data.reachable}.",
+        (
+            f"Разовых за неделю: {data.one_time}, из них вошли через Telegram и не отписывались: {data.with_telegram}"
+            " (написать бот может не всем из них)."
+        ),
         f"Подписок на катки активно: {data.active_watches}.",
         (
             f"Предложение подписки: показано {o.get('shown', 0)}, нажали {o.get('click', 0)}, "
-            f"подписались {o.get('subscribed', 0)}, закрыли {o.get('closed', 0)}."
+            f"подписались {o.get('subscribed_offer', 0)}, закрыли {o.get('closed', 0)}. "
+            f"Подписались из напоминания: {o.get('subscribed_nudge', 0)}."
         ),
     ]
     if data.sent_total:
