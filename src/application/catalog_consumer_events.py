@@ -20,6 +20,7 @@ TASK-189:
 * **Сопоставимый ряд** начинается с первой строки нового формата (``dedup_key IS NOT NULL``)
   или с ``CATALOG_METRICS_COMPARABLE_SINCE`` — см. :func:`metrics_comparable_since`.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -438,9 +439,7 @@ async def resolve_entry_scope(
         if target is not None and target[0] is not None:
             city_id = int(target[0])
     if arena_id is not None:
-        row = (
-            await session.execute(text("SELECT city_id FROM arenas WHERE id = :id"), {"id": int(arena_id)})
-        ).first()
+        row = (await session.execute(text("SELECT city_id FROM arenas WHERE id = :id"), {"id": int(arena_id)})).first()
         if row is None:
             arena_id = None
         elif row[0] is not None:
@@ -495,16 +494,14 @@ async def record_catalog_consumer_event(
     )
     try:
         result = await session.execute(
-            text(
-                """
+            text("""
                 INSERT INTO catalog_consumer_events
                     (kind, surface, actor_hash, city_id, arena_id, start_param, payload, dedup_key)
                 VALUES
                     (:kind, :surface, :actor, :city_id, :arena_id, :start_param, CAST(:payload AS jsonb), :dedup_key)
                 ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
                 RETURNING id
-                """
-            ),
+                """),
             {
                 "kind": kind,
                 "surface": surface,
@@ -541,9 +538,7 @@ async def metrics_comparable_since(session: AsyncSession) -> datetime | None:
         except ValueError:
             logger.warning("bad %s=%r; falling back to first dedup row", COMPARABLE_SINCE_ENV, raw)
     value = (
-        await session.execute(
-            text("SELECT MIN(occurred_at) FROM catalog_consumer_events WHERE dedup_key IS NOT NULL")
-        )
+        await session.execute(text("SELECT MIN(occurred_at) FROM catalog_consumer_events WHERE dedup_key IS NOT NULL"))
     ).scalar()
     if value is None:
         return None
@@ -577,8 +572,7 @@ async def get_catalog_wau(
     ex_sql, ex_params = catalog_actor_exclusion_sql()
     row = (
         await session.execute(
-            text(
-                f"""
+            text(f"""
                 SELECT COUNT(DISTINCT actor_hash) AS wau
                 FROM catalog_consumer_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
@@ -586,8 +580,7 @@ async def get_catalog_wau(
                   AND kind IN (:pv, :mini)
                   AND COALESCE(payload->>'ua_class', 'human') = 'human'
                   {ex_sql}
-                """
-            ),
+                """),
             {
                 "since": since,
                 "as_of": as_of_dt,
@@ -698,17 +691,13 @@ async def _record_trainer_write_click(
 
     if not isinstance(request, Request) or trainer_id is None or not 0 < int(trainer_id) < 2**31:
         return
-    exists = (
-        await session.execute(text("SELECT 1 FROM trainers WHERE id = :id"), {"id": int(trainer_id)})
-    ).first()
+    exists = (await session.execute(text("SELECT 1 FROM trainers WHERE id = :id"), {"id": int(trainer_id)})).first()
     if exists is None:
         return
     src = source_from_via(via)
     surf = (surface or "").strip().lower()[:40]
     code = src.code if src else (SOURCE_SITE_TRAINER if surf == "trainer_page" else None)
-    scope_city, scope_arena = await resolve_entry_scope(
-        session, start_param=None, city_id=city_id, arena_id=arena_id
-    )
+    scope_city, scope_arena = await resolve_entry_scope(session, start_param=None, city_id=city_id, arena_id=arena_id)
     user_agent = request.headers.get("user-agent")
     actor = public_actor_hash(client_ip=client_ip_from_request(request), user_agent=user_agent)
     await record_catalog_consumer_event(
@@ -790,16 +779,14 @@ async def resolve_public_page_view_scope(
     if aid is not None:
         row = (
             await session.execute(
-                text(
-                    f"""
+                text(f"""
                     SELECT a.city_id
                     FROM arenas a
                     JOIN cities c ON c.id = a.city_id
                     LEFT JOIN arena_profiles p ON p.arena_id = a.id
                     WHERE a.id = :id AND {PUBLIC_ARENA_VISIBLE_SQL}
                     LIMIT 1
-                    """
-                ),
+                    """),
                 {"id": aid, **public_scope_params()},
             )
         ).first()
@@ -915,9 +902,9 @@ async def get_catalog_weekly_unique_by_city(
     since = max(as_of_dt - timedelta(weeks=weeks), comparable)
     ex_sql, ex_params = catalog_actor_exclusion_sql("e.actor_hash")
     rows = (
-        await session.execute(
-            text(
-                f"""
+        (
+            await session.execute(
+                text(f"""
                 SELECT (date_trunc('week', e.occurred_at AT TIME ZONE 'Europe/Minsk'))::date AS week_start,
                        e.city_id,
                        c.name AS city_name,
@@ -932,17 +919,19 @@ async def get_catalog_weekly_unique_by_city(
                   {ex_sql}
                 GROUP BY 1, 2, 3
                 ORDER BY 1 DESC, 4 DESC
-                """
-            ),
-            {
-                "since": since,
-                "as_of": as_of_dt,
-                "pv": KIND_PUBLIC_PAGE_VIEW,
-                "mini": KIND_MINIAPP_CATALOG_ENTRY,
-                **ex_params,
-            },
+                """),
+                {
+                    "since": since,
+                    "as_of": as_of_dt,
+                    "pv": KIND_PUBLIC_PAGE_VIEW,
+                    "mini": KIND_MINIAPP_CATALOG_ENTRY,
+                    **ex_params,
+                },
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [
         {
             "week_start": row["week_start"].isoformat() if row["week_start"] else None,
@@ -970,9 +959,9 @@ async def get_catalog_top_arenas_by_events(
     since = max(as_of_dt - timedelta(days=days), comparable)
     ex_sql, ex_params = catalog_actor_exclusion_sql("e.actor_hash")
     rows = (
-        await session.execute(
-            text(
-                f"""
+        (
+            await session.execute(
+                text(f"""
                 SELECT e.arena_id,
                        a.name AS arena_name,
                        e.city_id,
@@ -988,18 +977,20 @@ async def get_catalog_top_arenas_by_events(
                 GROUP BY e.arena_id, a.name, e.city_id
                 ORDER BY events DESC, e.arena_id
                 LIMIT :lim
-                """
-            ),
-            {
-                "since": since,
-                "as_of": as_of_dt,
-                "pv": KIND_PUBLIC_PAGE_VIEW,
-                "mini": KIND_MINIAPP_CATALOG_ENTRY,
-                "lim": limit,
-                **ex_params,
-            },
+                """),
+                {
+                    "since": since,
+                    "as_of": as_of_dt,
+                    "pv": KIND_PUBLIC_PAGE_VIEW,
+                    "mini": KIND_MINIAPP_CATALOG_ENTRY,
+                    "lim": limit,
+                    **ex_params,
+                },
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [
         {
             "arena_id": row["arena_id"],
@@ -1031,8 +1022,7 @@ async def get_catalog_virality_cb_metrics(
 
     shares = (
         await session.execute(
-            text(
-                f"""
+            text(f"""
                 SELECT COUNT(*) AS events,
                        COUNT(DISTINCT actor_hash) AS sharers
                 FROM client_share_events
@@ -1040,16 +1030,14 @@ async def get_catalog_virality_cb_metrics(
                   AND kind IN ('place', 'selection', 'ice_city_day')
                   {share_ex_sql}
                   {stable_ex_sql}
-                """
-            ),
+                """),
             {"since": since, "as_of": as_of_dt, **share_ex_params, **stable_ex_params},
         )
     ).first()
 
     deeplink_opens = (
         await session.execute(
-            text(
-                f"""
+            text(f"""
                 SELECT COUNT(*) AS events,
                        COUNT(DISTINCT actor_hash) AS actors
                 FROM catalog_consumer_events
@@ -1057,8 +1045,7 @@ async def get_catalog_virality_cb_metrics(
                   AND kind = :kind
                   AND COALESCE((payload->>'share_deeplink')::boolean, false)
                   {open_ex_sql}
-                """
-            ),
+                """),
             {
                 "since": since,
                 "as_of": as_of_dt,
@@ -1070,22 +1057,20 @@ async def get_catalog_virality_cb_metrics(
 
     cta_clicks = (
         await session.execute(
-            text(
-                """
+            text("""
                 SELECT COUNT(*) FROM catalog_consumer_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND kind = :kind
                   AND COALESCE(payload->>'ua_class', 'human') = 'human'
-                """
-            ),
+                """),
             {"since": since, "as_of": as_of_dt, "kind": KIND_PUBLIC_TELEGRAM_CTA},
         )
     ).scalar_one()
 
     page_view_by_src_rows = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT payload->>'src' AS src, COUNT(*) AS n
                 FROM catalog_consumer_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
@@ -1093,29 +1078,29 @@ async def get_catalog_virality_cb_metrics(
                   AND payload->>'src' IS NOT NULL
                   AND payload->>'src' != ''
                 GROUP BY payload->>'src'
-                """
-            ),
-            {"since": since, "as_of": as_of_dt, "pv": KIND_PUBLIC_PAGE_VIEW},
+                """),
+                {"since": since, "as_of": as_of_dt, "pv": KIND_PUBLIC_PAGE_VIEW},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     page_view_with_session = (
         await session.execute(
-            text(
-                """
+            text("""
                 SELECT COUNT(*) FROM catalog_consumer_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
                   AND kind = :pv
                   AND payload->>'s' IS NOT NULL
                   AND payload->>'s' != ''
-                """
-            ),
+                """),
             {"since": since, "as_of": as_of_dt, "pv": KIND_PUBLIC_PAGE_VIEW},
         )
     ).scalar_one()
     cta_by_src_rows = (
-        await session.execute(
-            text(
-                """
+        (
+            await session.execute(
+                text("""
                 SELECT payload->>'src' AS src, COUNT(*) AS n
                 FROM catalog_consumer_events
                 WHERE occurred_at >= :since AND occurred_at < :as_of
@@ -1124,11 +1109,13 @@ async def get_catalog_virality_cb_metrics(
                   AND payload->>'src' IS NOT NULL
                   AND payload->>'src' != ''
                 GROUP BY payload->>'src'
-                """
-            ),
-            {"since": since, "as_of": as_of_dt, "cta": KIND_PUBLIC_TELEGRAM_CTA},
+                """),
+                {"since": since, "as_of": as_of_dt, "cta": KIND_PUBLIC_TELEGRAM_CTA},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
     wau = await get_catalog_wau(session, days=days, as_of=as_of_dt)
     share_events = int(shares[0] or 0) if shares else 0
@@ -1226,9 +1213,9 @@ async def get_catalog_demand_pulse(
     top_arenas: list[dict[str, Any]] = []
     if comparable is not None:
         city_rows = (
-            await session.execute(
-                text(
-                    f"""
+            (
+                await session.execute(
+                    text(f"""
                     SELECT e.city_id,
                            c.name AS city_name,
                            COUNT(DISTINCT e.actor_hash) FILTER (
@@ -1249,11 +1236,13 @@ async def get_catalog_demand_pulse(
                       {comparable_sql}
                       {ex_sql}
                     GROUP BY e.city_id, c.name
-                    """
-                ),
-                base,
+                    """),
+                    base,
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         for row in city_rows:
             item = {
                 "city_id": int(row["city_id"]),
@@ -1274,8 +1263,7 @@ async def get_catalog_demand_pulse(
             returning = int(
                 (
                     await session.execute(
-                        text(
-                            f"""
+                        text(f"""
                             SELECT COUNT(*) FROM (
                                 SELECT e.actor_hash
                                 FROM catalog_consumer_events e
@@ -1297,8 +1285,7 @@ async def get_catalog_demand_pulse(
                                   {comparable_sql}
                                   {ex_sql}
                             ) returning_actors
-                            """
-                        ),
+                            """),
                         {**base, "minsk": minsk_id},
                     )
                 ).scalar_one()
@@ -1308,8 +1295,7 @@ async def get_catalog_demand_pulse(
         browsers = int(
             (
                 await session.execute(
-                    text(
-                        f"""
+                    text(f"""
                         SELECT COUNT(DISTINCT e.actor_hash)
                         FROM catalog_consumer_events e
                         WHERE e.occurred_at >= :week AND e.occurred_at < :as_of
@@ -1317,17 +1303,16 @@ async def get_catalog_demand_pulse(
                           AND e.kind = :pv
                           AND {human}
                           {comparable_sql}
-                        """
-                    ),
+                        """),
                     base,
                 )
             ).scalar_one()
             or 0
         )
         arena_rows = (
-            await session.execute(
-                text(
-                    f"""
+            (
+                await session.execute(
+                    text(f"""
                     SELECT e.arena_id,
                            a.name AS arena_name,
                            c.name AS city_name,
@@ -1345,11 +1330,13 @@ async def get_catalog_demand_pulse(
                     GROUP BY e.arena_id, a.name, c.name
                     ORDER BY unique_actors DESC, e.arena_id
                     LIMIT 5
-                    """
-                ),
-                base,
+                    """),
+                    base,
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         top_arenas = [
             {
                 "arena_id": row["arena_id"],
@@ -1367,8 +1354,7 @@ async def get_catalog_demand_pulse(
         tickets = int(
             (
                 await session.execute(
-                    text(
-                        f"""
+                    text(f"""
                         SELECT COUNT(DISTINCT e.actor_hash)
                         FROM catalog_consumer_events e
                         WHERE e.occurred_at >= :week AND e.occurred_at < :as_of
@@ -1377,8 +1363,7 @@ async def get_catalog_demand_pulse(
                           AND e.payload->>'action' = 'tickets'
                           AND {human}
                           {comparable_sql}
-                        """
-                    ),
+                        """),
                     {**base, "tickets": KIND_PUBLIC_CONTACT_CLICK},
                 )
             ).scalar_one()
@@ -1389,8 +1374,7 @@ async def get_catalog_demand_pulse(
         share_people = int(
             (
                 await session.execute(
-                    text(
-                        f"""
+                    text(f"""
                         SELECT COUNT(DISTINCT actor_hash)
                         FROM client_share_events
                         WHERE occurred_at >= :since AND occurred_at < :as_of
@@ -1398,8 +1382,7 @@ async def get_catalog_demand_pulse(
                           AND actor_hash IS NOT NULL
                           {share_ex_sql}
                           {stable_ex_sql}
-                        """
-                    ),
+                        """),
                     {"since": week_start, "as_of": as_of_dt, **share_ex_params, **stable_ex_params},
                 )
             ).scalar_one()
@@ -1409,8 +1392,7 @@ async def get_catalog_demand_pulse(
         share_opens = int(
             (
                 await session.execute(
-                    text(
-                        f"""
+                    text(f"""
                         SELECT COUNT(DISTINCT actor_hash)
                         FROM catalog_consumer_events
                         WHERE occurred_at >= :since AND occurred_at < :as_of
@@ -1420,8 +1402,7 @@ async def get_catalog_demand_pulse(
                           AND COALESCE((payload->>'share_deeplink')::boolean, false)
                           {comparable_sql.replace("e.", "")}
                           {open_ex_sql}
-                        """
-                    ),
+                        """),
                     {
                         "since": week_start,
                         "as_of": as_of_dt,
@@ -1480,7 +1461,17 @@ async def purge_old_catalog_consumer_events(
 ) -> int:
     """Удаляет события старше ``keep_days`` (400 дней: год неделя-к-неделе + запас)."""
     result = await session.execute(
-        text("DELETE FROM catalog_consumer_events WHERE occurred_at < :cutoff"),
-        {"cutoff": now - timedelta(days=keep_days)},
+        text("DELETE FROM catalog_consumer_events" " WHERE occurred_at < :cutoff AND kind <> ALL(:keep_kinds)"),
+        # watch_offer_* — единственная память «уже показывали/закрыл» для offer_seen;
+        # удалять их значит показать предложение повторно (ревью PR #267).
+        {
+            "cutoff": now - timedelta(days=keep_days),
+            "keep_kinds": [
+                KIND_WATCH_OFFER_SHOWN,
+                KIND_WATCH_OFFER_CLOSED,
+                KIND_WATCH_OFFER_SUBSCRIBED,
+                KIND_WATCH_OFFER_CLICK,
+            ],
+        },
     )
     return int(result.rowcount or 0)
