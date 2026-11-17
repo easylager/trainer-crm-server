@@ -315,3 +315,31 @@ async def test_nudge_skips_cancelled_subscription_and_closed_offer(db_session) -
         {"h": telegram_actor_hash(VERA), "a": arena, "w": at(9, 31, day=19)},
     )
     assert await proposals[0].recheck(db_session, VERA, at(9, 32, day=19)) == "offer_closed"
+
+
+@pytest.mark.asyncio
+async def test_today_recheck_requires_morning(db_session) -> None:
+    """Ревью п. 11: «сегодня лёд», собранное в 10:59, после 11:00 уже не уходит."""
+    arena = await seed_arena(db_session)
+    await seed_watch(db_session, ANNA, arena, created_at=at(10, day=1))
+    await seed_session(db_session, arena, at(19, 30, day=20))
+    [p] = await wn.produce_today(db_session, now=at(10, 59, day=20))
+    assert await p.recheck(db_session, ANNA, at(10, 59, day=20)) is None
+    assert await p.recheck(db_session, ANNA, at(11, 0, day=20)) == "out_of_window"
+
+
+@pytest.mark.asyncio
+async def test_known_excludes_blocked_optout_sandbox(db_session) -> None:
+    """Ревью п. 11: напоминание C не планируется заблокировавшим бота (прогрев или игра), нажавшим «Не присылать»,
+    песочнице."""
+    from warm_helpers import seed_warm_prefs
+
+    arena = await seed_arena(db_session)
+    people = [ANNA, BORIS, VERA, 9428004, 9428005]
+    for tid in people:
+        await _known(db_session, tid, at(18, day=15), arena=arena)
+    await seed_warm_prefs(db_session, ANNA, bot_blocked_at=at(9, day=16))
+    await seed_warm_prefs(db_session, BORIS, opted_out_at=at(9, day=16))
+    await seed_player(db_session, VERA, blocked_at=at(9, day=16))
+    await db_session.execute(text("UPDATE clients SET is_sandbox = true WHERE telegram_id = 9428004"))
+    assert [p.notice.player_key for p in await wn.produce_nudge(db_session, now=at(9, 30, day=19))] == [9428005]

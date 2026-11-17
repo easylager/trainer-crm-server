@@ -145,3 +145,35 @@ def test_site_script_tag_points_to_offer_start() -> None:
     html = watch_offer_site_html(42, "/api/public/catalog/open-telegram?startapp=watch_42_o&amp;x=1")
     assert 'data-surface="site"' in html and 'data-arena-id="42"' in html and "watch_42_o" in html
     assert "/static/webapp/watch-offer.js?v=" in html and "/static/webapp/watch-offer.css?v=" in html
+
+
+@pytest.mark.asyncio
+async def test_plain_bell_subscriber_never_sees_offer(app_use_test_db, db_session) -> None:
+    """Ревью п. 11: подписан обычным колокольчиком (не из предложения) — сервер говорит show=false."""
+    tid = _fresh_client_telegram_id()
+    await _insert_client(db_session, telegram_id=tid)
+    arena = await _arena(db_session)
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            h = _client_auth_headers()
+            assert (await client.get(f"/api/webapp/client/watch-offer?arena_id={arena}", headers=h)).json()["show"]
+            await client.post(
+                "/api/webapp/client/ice-watches", headers=h, json={"arena_id": arena, "watch_kind": "sessions"}
+            )
+            state = await client.get(f"/api/webapp/client/watch-offer?arena_id={arena}", headers=h)
+    assert state.json() == {"show": False, "subscribed": True}
+    assert await _events(db_session, arena) == []  # и в воронку предложения это не попало
+
+
+@pytest.mark.asyncio
+async def test_offer_state_error_hides_offer(app_use_test_db, db_session, monkeypatch) -> None:
+    """Ревью п. 11: сбой проверки на сервере — предложение не показываем (закрыто по умолчанию)."""
+    from src.application import watch_offer
+
+    arena = await _arena(db_session)
+
+    async def boom(*a, **kw):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(watch_offer, "_arena_city", boom)
+    assert await watch_offer.offer_state(db_session, arena_id=arena, actor_hash="x") == {"show": False}
