@@ -119,6 +119,15 @@ class Scope:
 ALL = Scope()
 
 
+def match_clubs(home: str, away: str, league: str | None) -> tuple[str | None, ...]:
+    """Срезы, в которых матч считается: клубы Экстралиги и Динамо-Минск, плюс «все» (``None``).
+
+    Соперники Динамо по КХЛ в срез по клубу не попадают: таблиц по ним нет (как и корон, см. ``crown_clubs``).
+    """
+    clubs = [c for c in (home, away) if league == "extraliga" or c == DINAMO]
+    return (*clubs, None)
+
+
 def club_scope(club: str | None) -> Scope:
     return ALL if not club else Scope(clubs=(club,))
 
@@ -373,7 +382,7 @@ _PEAKS = text("""
     WITH scored AS (
         SELECT p.player_key, p.points * (1 + p.doubled::int) AS pts,
                (p.points = :exact) AS is_exact, (p.points >= :winner) AS is_ok,
-               m.home_team, m.away_team,
+               m.home_team, m.away_team, m.league AS match_league,
                to_char(m.starts_at AT TIME ZONE 'Europe/Minsk', 'YYYY-MM') AS month_key,
                m.starts_at
         FROM hockey_picks AS p
@@ -384,6 +393,7 @@ _PEAKS = text("""
         FROM scored AS s
         CROSS JOIN LATERAL (VALUES (s.home_team), (s.away_team), (CAST(NULL AS text))) AS c(club)
         CROSS JOIN LATERAL (VALUES ('season'), (s.month_key)) AS per(period)
+        WHERE c.club IS NULL OR s.match_league = 'extraliga' OR c.club = :dinamo
     ), totals AS (
         SELECT club, period, player_key, SUM(pts)::int AS points,
                COUNT(*) FILTER (WHERE is_exact)::int AS exact, COUNT(*)::int AS played
@@ -457,6 +467,7 @@ async def _peaks_uncached(session: AsyncSession, *, player_key: int, now: dateti
         "player_key": player_key,
         "exact": POINTS_EXACT,
         "winner": POINTS_WINNER,
+        "dinamo": DINAMO,
         "season_since": season.since,
         "season_until": season.until,
     }
@@ -537,7 +548,7 @@ async def stakes(session: AsyncSession, *, player_key: int, match_id: int, now: 
     month = month_period(_utc(match.starts_at).astimezone(MINSK_TZ).date())
     season = season_period(match.starts_at)
     out: list[dict] = []
-    for club in (match.home_team, match.away_team, None):
+    for club in match_clubs(match.home_team, match.away_team, match.league):
         for period in (month, season):
             rows = await slice_rows_cached(session, scope=club_scope(club), period=period)
             if not crown_eligible(rows):
@@ -606,6 +617,7 @@ __all__ = [
     "Scope",
     "SliceTable",
     "club_scope",
+    "match_clubs",
     "correct_percent",
     "crown_eligible",
     "crown_leaders",

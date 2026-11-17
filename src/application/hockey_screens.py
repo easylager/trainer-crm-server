@@ -24,6 +24,7 @@ from src.application.hockey_slices import (
     Row,
     club_scope,
     crown_eligible,
+    match_clubs,
     league_rows,
     league_scope,
     month_period,
@@ -117,7 +118,7 @@ async def match_movement(session: AsyncSession, *, player_key: int, match_id: in
     month = month_period(starts.astimezone(MINSK_TZ).date())
     season = season_period(starts)
     found: list[dict] = []
-    for club in (match.home_team, match.away_team, None):
+    for club in match_clubs(match.home_team, match.away_team, match.league):
         for period in (month, season):
             rows = await slice_rows_cached(session, scope=club_scope(club), period=period)
             if not crown_eligible(rows):

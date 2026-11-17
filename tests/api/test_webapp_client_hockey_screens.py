@@ -22,15 +22,15 @@ ME, B, C = 880_335_001, 880_335_002, 880_335_003
 API = "/api/webapp/client/hockey"
 
 
-async def _match(db, starts_at, *, home="Юность", away="Неман", status="scheduled") -> int:
+async def _match(db, starts_at, *, home="Юность", away="Неман", status="scheduled", source="hockeyby", league="extraliga") -> int:
     return int(
         (
             await db.execute(
                 text("""
                     INSERT INTO hockey_matches (source, league, source_match_id, home_team, away_team, starts_at, status)
-                    VALUES ('hockeyby', 'extraliga', :mid, :h, :a, :t, :st) RETURNING id
+                    VALUES (:src, :lg, :mid, :h, :a, :t, :st) RETURNING id
                     """),
-                {"mid": uuid.uuid4().hex, "h": home, "a": away, "t": starts_at, "st": status},
+                {"mid": uuid.uuid4().hex, "h": home, "a": away, "t": starts_at, "st": status, "src": source, "lg": league},
             )
         ).scalar_one()
     )
@@ -227,3 +227,24 @@ async def test_profile_respects_chosen_club(app_use_test_db, db_session) -> None
     )
     unknown, _sql = await load()
     assert unknown["club"]["name"] == "Юность" and unknown["club_place"]["club"] == "Юность"
+
+
+@pytest.mark.asyncio
+async def test_khl_opponent_gets_no_slice_but_dinamo_and_all_do(app_use_test_db, db_session) -> None:
+    from src.application.hockey_slices import match_clubs
+
+    assert match_clubs("Нефтехимик", "Динамо-Минск", "khl") == ("Динамо-Минск", None)
+    assert match_clubs("Юность", "Неман", "extraliga") == ("Юность", "Неман", None)
+
+    start = datetime.now(timezone.utc) - timedelta(days=2)
+    khl = await _play(
+        db_session, start, {ME: (1, 2), B: (0, 2), C: (1, 0)}, result=(1, 2),
+        home="Нефтехимик", away="Динамо-Минск", source="hcdinamo", league="khl",
+    )
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            move = (await client.get(f"{API}/matches/{khl}/movement")).json()
+    clubs = {x["club"] for x in move["items"] if x["kind"] == "slice"}
+    # Срезы Динамо и «все» есть (в них трое с очками), среза соперника по КХЛ нет.
+    assert {"Динамо-Минск", None} <= clubs and "Нефтехимик" not in clubs
