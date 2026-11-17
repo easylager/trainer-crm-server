@@ -81,7 +81,10 @@ def _at(days: int, hour: int, minute: int = 0) -> datetime:
 
 
 _SUB = "подписчику катка (подписка на новые сеансы)"
-_MORNING = "утром 9:00–11:00, в бюджете (не больше 1 в день и 3 в неделю вместе с игрой)"
+_MORNING = (
+    "утром 9:00–11:00, в бюджете (не больше 1 в день и 3 в неделю вместе с игрой); "
+    "игроку в день матча не уходит — день за игрой"
+)
 
 
 def scenarios() -> list[tuple[str, str, str, str, list[list[dict]]]]:
@@ -105,7 +108,7 @@ def scenarios() -> list[tuple[str, str, str, str, list[list[dict]]]]:
         (
             "сегодня лёд, один сеанс",
             _SUB,
-            f"{_MORNING}; до сеанса не меньше часа",
+            f"{_MORNING}; до сеанса не меньше часа; «сегодня лёд» — не чаще 2 раз за 7 суток",
             wt.today_text(arena_name=chizh, starts=[_at(0, 19, 30)], now=NOW) or "",
             _schedule_buttons(),
         ),
