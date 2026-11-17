@@ -493,6 +493,57 @@ describe('итог и «мимо»', () => {
   });
 });
 
+describe('с какой таблицы открыть «Таблицу»', () => {
+  it('выбор руками, иначе вершина от десяти, иначе общая', () => {
+    assert.deepEqual(S.tableStartArgs(null, null), { club: null, period: 'season' });
+    assert.deepEqual(S.tableStartArgs(null, { club: 'Юность', period: '2026-11' }), { club: 'Юность', period: '2026-11' });
+    assert.deepEqual(S.tableStartArgs({ club: null, period: 'season' }, { club: 'Юность', period: '2026-11' }), { club: null, period: 'season' });
+  });
+  it('общая — все матчи за сезон', () => {
+    assert.equal(S.isGeneralTable({ club: null, period: 'season' }), true);
+    assert.equal(S.isGeneralTable({}), true);
+    assert.equal(S.isGeneralTable({ club: null, period: '2026-11' }), false);
+    assert.equal(S.isGeneralTable({ club: 'Юность', period: 'season' }), false);
+  });
+});
+
+describe('«Трибуна» в итоге', () => {
+  const match = (pick, sides, result, extra) => Object.assign({ home: { name: 'Неман' }, away: { name: 'Шахтер' }, my_pick: pick, sides: sides, result: result || { home_score: 2, away_score: 3 } }, extra || {});
+  it('угадал, мимо с большинством, мимо в меньшинстве', () => {
+    const t = S.tribune(match({ side: 'away', points: 20 }, { home: 114, away: 34 }));
+    assert.deepEqual([t.home, t.away, t.total, t.side, t.soft], [77, 23, 148, 'away', false]);
+    assert.equal(t.line, 'Победителя угадали 23% игроков — и ты в их числе.');
+    assert.equal(S.tribune(match({ side: 'home', points: 0 }, { home: 114, away: 34 })).line, 'Трибуна тоже промахнулась: 77% были за Неман.');
+    assert.equal(S.tribune(match({ side: 'away', points: 0 }, { home: 5, away: 15 }, { home_score: 4, away_score: 1 })).line, 'Трибуна тоже промахнулась: 75% были за Шахтёр.');
+    assert.equal(S.tribune(match({ side: 'away', points: 0 }, { home: 114, away: 34 }, { home_score: 4, away_score: 1 })).line, 'Победителя угадали 77% игроков.');
+  });
+  it('точный счёт — чип и строка, как в боте', () => {
+    const alone = S.tribune(match({ side: 'away', points: 50 }, { home: 114, away: 34 }, null, { same_exact: 0 }));
+    assert.equal(alone.chip, 'Больше никто из 148');
+    assert.equal(alone.line, 'Такой счёт больше никто из 148 не назвал.');
+    const three = S.tribune(match({ side: 'away', points: 50 }, { home: 114, away: 34 }, null, { same_exact: 3 }));
+    assert.equal(three.chip, 'Так сходили ещё 3');
+    assert.equal(three.line, 'Такой счёт назвали ещё 3 из 148.');
+  });
+  it('точный счёт, а same_exact ещё не пришёл (запись из списка) — блока нет, а не «никто не назвал»', () => {
+    assert.equal(S.tribune(match({ side: 'away', points: 50 }, { home: 114, away: 34 }, null, { same_exact: null })), null);
+    assert.equal(S.tribune(match({ side: 'away', points: 50 }, { home: 114, away: 34 })), null);
+  });
+  it('гости — остаток до 100, как в боте: 1 из 40 за хозяев → 97%', () => {
+    assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 1, away: 39 })).line, 'Победителя угадали 97% игроков — и ты в их числе.');
+  });
+  it('меньше 8 ходов, очки не посчитаны или хода нет — блока нет', () => {
+    assert.equal(S.TRIBUNE_MIN, 8);
+    assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 4, away: 3 })), null);
+    assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 4, away: 4 })).line, 'Победителя угадали 50% игроков — и ты в их числе.');
+    assert.equal(S.tribune(match({ side: 'away', points: null }, { home: 114, away: 34 })), null);
+    assert.equal(S.tribune(match(null, { home: 114, away: 34 })), null);
+  });
+  it('половина вверх, как в боте', () => {
+    assert.equal(S.tribune(match({ side: 'home', points: 20 }, { home: 1, away: 39 }, { home_score: 3, away_score: 2 })).line, 'Победителя угадали 3% игроков — и ты в их числе.');
+  });
+});
+
 describe('шторка «Как считаются очки»', () => {
   it('числа — из POINTS, слова — из макета, минута закрытия сходится', () => {
     const M = require('../../static/webapp/kto-kogo-model.js');
@@ -611,5 +662,21 @@ describe('срок формы «Новая лига» (TASK-362)', () => {
 
   it('открытых сроков нет совсем — остаются «Свои даты»', () => {
     assert.equal(S.settleTerm('season', { items: [], season_ends_at: '2027-04-30T21:00:00Z' }), 'dates');
+  });
+});
+
+describe('пьедестал лиги', () => {
+  it('меньше троих — пьедестала нет; иначе порядок 2-е, 1-е, 3-е', () => {
+    assert.equal(S.podiumOrder([]), null);
+    assert.equal(S.podiumOrder([{ rank: 1 }, { rank: 2 }]), null);
+    const top = S.podiumOrder([{ rank: 1 }, { rank: 2 }, { rank: 3 }, { rank: 4 }]);
+    assert.deepEqual(top.map((r) => r.rank), [2, 1, 3]);
+  });
+  it('пояснение к званиям: только о тех, что висят на таблице', () => {
+    assert.equal(S.titlesNote([{ title: null }, {}]), '');
+    assert.match(S.titlesNote([{ title: { id: 'scarf' } }]), /^Шарф — за ход против Динамо/);
+    const both = S.titlesNote([{ title: { id: 'cap' } }, { title: { id: 'scarf' } }]);
+    assert.match(both, /Шарф/);
+    assert.match(both, /Кепка — тому, кто в последнем матче лиги не угадал победителя/);
   });
 });

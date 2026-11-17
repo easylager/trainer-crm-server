@@ -308,3 +308,47 @@ async def get_empty_via_share(session: Any, *, days: int = 30, as_of: Any = None
         "share": share,
         "no_source": int(row.no_source or 0),
     }
+
+
+async def get_booking_origin_split(session: Any, *, as_of: Any = None) -> dict[str, Any]:
+    """Админское «Откуда записи»: клиент записался сам или запись создал тренер, 7 и 30 дней.
+
+    Сам — ``source`` не NULL (запись из Mini App). Тренер — ``source`` NULL, кроме записей
+    постоянных клиентов (их создаёт материализация, а не тренер руками). Без демо-записей
+    онбординга и без тренера-партнёра Александра Гаевского: его записи искажают картину.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import text
+
+    now = as_of or datetime.now(timezone.utc)
+    params = {"now": now, "s7": now - timedelta(days=7), "s30": now - timedelta(days=30)}
+    row = (
+        await session.execute(
+            text("""
+                SELECT
+                  COUNT(*) FILTER (WHERE b.source IS NOT NULL AND b.created_at >= :s7)::int,
+                  COUNT(*) FILTER (WHERE b.source IS NOT NULL)::int,
+                  COUNT(*) FILTER (WHERE b.source IS NULL AND b.created_at >= :s7)::int,
+                  COUNT(*) FILTER (WHERE b.source IS NULL)::int
+                FROM bookings b
+                WHERE NOT b.is_sandbox
+                  AND (b.source IS NOT NULL OR b.recurring_client_slot_id IS NULL)
+                  AND b.created_at >= :s30 AND b.created_at < :now
+                  AND NOT EXISTS (
+                    SELECT 1 FROM trainer_profiles tp
+                    WHERE tp.trainer_id = b.trainer_id
+                      AND tp.last_name ILIKE 'Гаевск%'
+                      AND tp.first_name ILIKE 'Александр%'
+                  )
+                """),
+            params,
+        )
+    ).one()
+    s7, s30, t7, t30 = (int(x or 0) for x in row)
+    rows = [
+        {"source": "client", "label": "Клиент записался сам", "bookings_7d": s7, "bookings_30d": s30},
+        {"source": "trainer", "label": "Тренер записал клиента", "bookings_7d": t7, "bookings_30d": t30},
+    ]
+    totals = {"bookings_7d": s7 + t7, "bookings_30d": s30 + t30}
+    return {"metric": "booking_origin", "as_of": now.isoformat(), "rows": rows, "totals": totals}

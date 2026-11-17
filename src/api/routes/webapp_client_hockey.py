@@ -48,6 +48,7 @@ from src.application.hockey_slices import (
     slice_row_of,
     slice_rows_cached,
     stakes,
+    table_start,
     table_view,
 )
 from src.application.hockey_leagues import friends_moves, friends_picks
@@ -186,6 +187,8 @@ def _match_out(
         ),
         "my_pick": my_pick,
         "sides": {"home": row["home_picks"], "away": row["away_picks"]},
+        # Сколько ещё игроков назвали тот же счёт, что и ты, — для «Трибуны» в итоге. Есть только у одного матча.
+        "same_exact": row.get("same_exact"),
         "friends": friends,
         "race_final": row["id"] == final_id,
         # Серверная фаза (TASK-359): upcoming | live | waiting | done | cancelled. «stale» — итога нет больше трёх суток.
@@ -360,9 +363,14 @@ async def get_client_hockey_peaks(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """«Твои вершины»: три среза, где у игрока лучшее место. Пусто, пока нет среза с тремя игроками и тремя ходами."""
+    """«Твои вершины»: три среза, где у игрока лучшее место. Пусто, пока нет среза с тремя игроками и тремя ходами.
+
+    ``start`` — срез, на котором открывается «Таблица» (вершина, где от десяти с очками); ``null`` — общая таблица.
+    """
+    key, now = client_catalog_telegram_key(principal), datetime.now(timezone.utc)
     return {
-        "items": await peaks(session, player_key=client_catalog_telegram_key(principal), now=datetime.now(timezone.utc))
+        "items": await peaks(session, player_key=key, now=now),
+        "start": await table_start(session, player_key=key, now=now),
     }
 
 

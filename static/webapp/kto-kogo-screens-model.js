@@ -472,6 +472,42 @@
     return cap(Base.verdict(points == null ? 0 : points).head);
   }
 
+  // «Трибуна» — с какой долей игроков совпал ход. Те же правила и порог, что tribune_line в hockey_notices.py.
+  var TRIBUNE_MIN = 8;
+
+  /** Доли сторон и строка под итогом; меньше TRIBUNE_MIN ходов или итога нет — null. */
+  function tribune(m) {
+    var mine = m && m.my_pick;
+    var r = m && m.result;
+    var sides = m && m.sides;
+    if (!mine || !r || !sides || mine.points == null) return null;
+    var total = (sides.home || 0) + (sides.away || 0);
+    if (total < TRIBUNE_MIN) return null;
+    var home = Math.round((100 * sides.home) / total);
+    var out = { total: total, home: home, away: 100 - home, side: mine.side, line: '', chip: '', soft: false };
+    if (mine.points === Base.EXACT) {
+      // same_exact есть только в ответе по одному матчу; у записи из списка он null — «никто не назвал» писать нельзя.
+      if (m.same_exact == null) return null;
+      var same = m.same_exact;
+      out.chip = same ? 'Так сходили ещё ' + same : 'Больше никто из ' + total;
+      out.line = same ? 'Такой счёт назвали ещё ' + same + ' из ' + total + '.' : 'Такой счёт больше никто из ' + total + ' не назвал.';
+      return out;
+    }
+    var winner = r.home_score > r.away_score ? 'home' : 'away';
+    var won = winner === 'home' ? out.home : out.away;
+    var minePct = mine.side === 'home' ? out.home : out.away;
+    var mineCount = mine.side === 'home' ? sides.home : sides.away;
+    if (mine.side === winner) out.line = 'Победителя угадали ' + won + '% игроков — и ты в их числе.';
+    else if (2 * mineCount > total) {
+      out.line = 'Трибуна тоже промахнулась: ' + minePct + '% были за ' + clubName(m[mine.side].name) + '.';
+      out.soft = true;
+    } else {
+      out.line = 'Победителя угадали ' + won + '% игроков.';
+      out.soft = true;
+    }
+    return out;
+  }
+
   /** После промаха: «Бывает — следующий матч Динамо — Торпедо в субботу.» Нет матча — отсылка к хабу. */
   function missLine(next, now) {
     if (!next) return 'Бывает. Следующий ход — на главной игры.';
@@ -515,6 +551,22 @@
       ],
       foot: 'Ход можно изменить до минуты перед стартом матча. Очки приходят после финальной сирены.',
     };
+  }
+
+  /** Пояснение под таблицей лиги: что значат звания, которые на ней висят (шарф, кепка). Нет званий — нет строки. */
+  function titlesNote(items) {
+    var has = {};
+    (items || []).forEach(function (r) { if (r.title && r.title.id) has[r.title.id] = true; });
+    var parts = [];
+    if (has.scarf) parts.push('Шарф — за ход против Динамо на ближайший матч.');
+    if (has.cap) parts.push('Кепка — тому, кто в последнем матче лиги не угадал победителя, когда кто-то из друзей угадал. Снимается со следующим матчем.');
+    return parts.join(' ');
+  }
+
+  /** Пьедестал лиги: [2-е, 1-е, 3-е] места; меньше троих — пьедестала нет, остаётся обычная таблица. */
+  function podiumOrder(items) {
+    if (!items || items.length < 3) return null;
+    return [items[1], items[0], items[2]];
   }
 
   /** Строки «куда сдвинулась» по ответу /movement. */
@@ -679,6 +731,17 @@
 
   function peakChip(p) {
     return sliceLabel(p.club, p.period_title) + ' · ' + p.rank + NBSP + 'место';
+  }
+
+  /** Какую таблицу открыть кнопкой «Таблица»: выбранную руками, иначе лучшую вершину, иначе общую. */
+  function tableStartArgs(choice, start) {
+    var s = choice || start;
+    return { club: (s && s.club) || null, period: (s && s.period) || 'season' };
+  }
+
+  /** Общая таблица — все матчи за сезон. */
+  function isGeneralTable(a) {
+    return !a.club && (a.period || 'season') === 'season';
   }
 
   /** Плитка «Твоя вершина» на хабе. */
@@ -1334,6 +1397,8 @@
     noMeLine: noMeLine,
     peakChip: peakChip,
     peakTile: peakTile,
+    tableStartArgs: tableStartArgs,
+    isGeneralTable: isGeneralTable,
     crownCount: crownCount,
     scopeText: scopeText,
     termText: termText,
@@ -1375,6 +1440,10 @@
     writeAskMemo: writeAskMemo,
     shouldAskWrite: shouldAskWrite,
     answerWriteAsk: answerWriteAsk,
+    tribune: tribune,
+    podiumOrder: podiumOrder,
+    titlesNote: titlesNote,
+    TRIBUNE_MIN: TRIBUNE_MIN,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

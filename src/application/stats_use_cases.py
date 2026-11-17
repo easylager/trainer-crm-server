@@ -1695,10 +1695,10 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         )
 
     catalog_demand_pulse = await get_catalog_demand_pulse(session)
-    from src.application.booking_source import get_booking_source_breakdown
+    from src.application.booking_source import get_booking_origin_split
     from src.application.client_ice_watch_use_cases import get_ice_watch_admin_pulse, get_ice_watch_by_arena
 
-    booking_sources = await get_booking_source_breakdown(session)
+    booking_sources = await get_booking_origin_split(session)
     ice_watch_pulse = await get_ice_watch_admin_pulse(session)
     ice_watch_by_arena = await get_ice_watch_by_arena(session)
     from src.application.hockey_promo import promo_report
@@ -1713,6 +1713,15 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         logger.warning("admin stats: warm slice failed", exc_info=True)
         warm_visitors = None
 
+    from src.application.visitor_retention import get_visitor_retention
+
+    try:
+        async with session.begin_nested():
+            visitor_retention = await get_visitor_retention(session)
+    except Exception:  # noqa: BLE001 — срез возвратов не роняет «Статистику»
+        logger.warning("admin stats: visitor retention failed", exc_info=True)
+        visitor_retention = None
+
     return {
         "catalog_demand_pulse": catalog_demand_pulse,
         "ice_watch_pulse": ice_watch_pulse,
@@ -1720,6 +1729,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         "booking_sources": booking_sources,
         "kk_promo": kk_promo,
         "warm_visitors": warm_visitors,
+        "visitor_retention": visitor_retention,
         "trainers_by_status": trainers_by_status,
         "trainers_total": trainers_total,
         "trainers_pending_moderation": trainers_pending_moderation,

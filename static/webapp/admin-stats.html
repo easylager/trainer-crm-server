@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Сейчас · Админ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=202611172"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611172" />
-  <link rel="stylesheet" href="theme.css?v=202611172" />
-  <link rel="stylesheet" href="admin-analytics-shared.css?v=202611172" />
+  <script src="mini-app-telegram-chrome.js?v=202611174"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611174" />
+  <link rel="stylesheet" href="theme.css?v=202611174" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=202611174" />
   <style>
     .pulse-action { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.12); }
     .pulse-action.danger { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); }
@@ -314,7 +314,7 @@
   <div id="content">
     <div class="adm-loading">Загрузка…</div>
   </div>
-  <script src="admin-analytics-shared.js?v=202611172"></script>
+  <script src="admin-analytics-shared.js?v=202611174"></script>
   <script>
     (function () {
       var A = window.AdmAnalytics;
@@ -588,21 +588,21 @@
         var rows = bs.rows || [];
         var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">Откуда записи · 7 / 30 дней</div>';
         if (!rows.length) {
-          return html + '<div class="adm-card"><div class="adm-empty">Пока нет записей с источником и нажатий «Написать»</div></div></div>';
+          return html + '<div class="adm-card"><div class="adm-empty">Пока нет записей</div></div></div>';
         }
         html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
-        html += '<th>Источник</th><th class="num">Записи 7</th><th class="num">30</th><th class="num">«Написать» 7</th><th class="num">30</th>';
+        html += '<th>Кто записал</th><th class="num">7 дней</th><th class="num">30 дней</th>';
         html += '</tr></thead><tbody>';
         rows.concat([Object.assign({ label: 'Всего' }, bs.totals || {})]).forEach(function (r, i) {
           var b = i === rows.length ? ['<b>', '</b>'] : ['', ''];
           html += '<tr><td>' + b[0] + A.escapeHtml(r.label || r.source) + b[1] + '</td>';
-          ['bookings_7d', 'bookings_30d', 'writes_7d', 'writes_30d'].forEach(function (k) {
+          ['bookings_7d', 'bookings_30d'].forEach(function (k) {
             html += '<td class="num">' + b[0] + A.formatNum(+r[k] || 0) + b[1] + '</td>';
           });
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
-        html += '<div class="adm-hint">Записи — клиенты записались сами, по дате записи, с отменёнными. «Написать» — нажатия на сайте, без ботов.</div></div>';
+        html += '<div class="adm-hint">По дате создания записи, с отменёнными. «Сам» — запись из Mini App; «тренер» — созданная в кабинете тренера, без постоянных клиентов. Без демо-записей и без Александра Гаевского.</div></div>';
         return html;
       }
 
@@ -646,47 +646,41 @@
         return html;
       }
 
-      /** TASK-428: разовые посетители — кого можно достать, воронка предложения подписки, что ушло. 7 дней. */
-      function renderWarm(w) {
-        if (!w) return '';
-        var n = function (v) { return A.formatNum(+v || 0); };
-        var o = w.offer || {};
-        var labels = { warm_welcome: 'после подписки', warm_today: '«сегодня лёд»', warm_week: 'на неделю', warm_nudge: 'напоминание' };
-        var kinds = function (m) {
-          var parts = Object.keys(m || {}).filter(function (k) { return +m[k]; }).map(function (k) {
-            return A.escapeHtml(labels[k] || k) + ' ' + n(m[k]);
-          });
-          return parts.length ? parts.join(', ') : '—';
+      /** Возвраты посетителей: по неделям и за всё время, сколько людей заходило в 1 / 2 / 3–4 / 5+ разных дней. */
+      function renderRetention(v) {
+        if (!v) return '';
+        var n = function (x) { return A.formatNum(+x || 0); };
+        var MON = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+        var day = function (iso) { var p = String(iso).split('-'); return (+p[2]) + ' ' + MON[+p[1] - 1]; };
+        var pct = function (part, total) { return total ? Math.round(100 * part / total) + '%' : '—'; };
+        var cell = function (part, total) {
+          return '<td class="num">' + n(part) + '<div class="adm-sub">' + pct(part, total) + '</div></td>';
         };
-        var rows = [
-          ['Разовые посетители', n(w.one_time)],
-          ['Из них вошли через Telegram', n(w.with_telegram)],
-          ['Активных подписок на катки', n(w.active_watches)],
-          ['Предложение: показано', n(o.shown)],
-          ['Нажали', n(o.click)],
-          ['Подписались из предложения', n(o.subscribed_offer)],
-          ['Подписались из напоминания', n(o.subscribed_nudge)],
-          ['Закрыли', n(o.closed)],
-          ['Отправлено', n(w.sent_total) + (w.sent_total ? ' · ' + kinds(w.sent) : '')],
-          ['Ушло бы в сухом прогоне', kinds(w.dry_run)],
-          ['Не дошло', n(w.failed)],
-          ['Заблокировали бота', n(w.blocked)],
-          ['«Не присылать»', n(w.opted_out)],
-        ];
-        var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">Разовые посетители · 7 дней</div>';
-        html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><tbody>';
-        rows.forEach(function (r) {
-          html += '<tr><td>' + r[0] + '</td><td class="num">' + r[1] + '</td></tr>';
+        var line = function (label, r) {
+          return '<tr><td>' + label + '</td><td class="num">' + n(r.total) + '</td>' +
+            cell(r.d1, r.total) + cell(r.d2, r.total) + cell(r.d3_4, r.total) + cell(r.d5p, r.total) +
+            cell(r.returned, r.total) + '</tr>';
+        };
+        var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">Возвраты посетителей · по неделям</div>';
+        html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
+        html += '<th>Неделя</th><th class="num">Людей</th><th class="num">1 день</th><th class="num">2 дня</th>' +
+          '<th class="num">3–4 дня</th><th class="num">5+ дней</th><th class="num">Вернулись</th>';
+        html += '</tr></thead><tbody>';
+        (v.weeks || []).forEach(function (w) {
+          var label = day(w.week_start) + ' – ' + day(w.week_end) + (w.current ? ' <span class="adm-sub">идёт</span>' : '');
+          html += line(label, w);
         });
+        html += line('<b>За всё время</b>', v.all_time || {});
         html += '</tbody></table></div></div>';
-        html += '<div class="adm-hint">Разовые — один день визита за 30 дней. «Вошли через Telegram» — без блока и «Не присылать»; это верхняя оценка: бот пишет только тем, кто его запускал. Веб-посетителей не достать.</div></div>';
+        html += '<div class="adm-hint">Человек — посетитель сайта или Mini App без ботов; в скольких разных днях недели он заходил. ' +
+          '«Вернулись» — 2 дня и больше. Один человек с двух устройств считается дважды, входы из Telegram-бота на сайте не видны.</div></div>';
         return html;
       }
 
       function render(d) {
         var html = renderCatalogDemand(d.catalog_demand_pulse);
         html += renderIceWatch(d.ice_watch_by_arena);
-        html += renderWarm(d.warm_visitors);
+        html += renderRetention(d.visitor_retention);
         html += renderBookingSources(d.booking_sources);
         html += renderKkPromo(d.kk_promo);
         html += renderActions(d);
