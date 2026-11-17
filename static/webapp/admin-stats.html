@@ -281,6 +281,9 @@
       background: rgba(255,255,255,0.08);
     }
 
+    .ret-sw { display: flex; gap: 6px; margin: 0 0 8px; }
+    .ret-sw button { flex: 1; min-height: 36px; border: 0; border-radius: 10px; background: rgba(255,255,255,0.06); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+    .ret-sw button[aria-pressed="true"] { background: rgba(255,255,255,0.18); font-weight: 700; }
     .adm-platform-fold {
       margin-top: 8px;
       border-radius: 14px;
@@ -646,7 +649,7 @@
         return html;
       }
 
-      /** Возвраты посетителей: по неделям и за всё время, сколько людей заходило в 1 / 2 / 3–4 / 5+ разных дней. */
+      /** Возвраты посетителей: по неделям и за всё время; «новые» и «вернувшиеся» как в Метрике, каналы — сайт / Mini App. */
       function renderRetention(v) {
         if (!v) return '';
         var n = function (x) { return A.formatNum(+x || 0); };
@@ -656,26 +659,49 @@
         var cell = function (part, total) {
           return '<td class="num">' + n(part) + '<div class="adm-sub">' + pct(part, total) + '</div></td>';
         };
-        var line = function (label, r) {
+        var dash = '<td class="num">—</td>';
+        var line = function (label, r, allTime) {
           return '<tr><td>' + label + '</td><td class="num">' + n(r.total) + '</td>' +
-            cell(r.d1, r.total) + cell(r.d2, r.total) + cell(r.d3_4, r.total) + cell(r.d5p, r.total) +
-            cell(r.returned, r.total) + '</tr>';
+            (allTime ? dash + dash : cell(r.new, r.total) + cell(r.came_back, r.total)) +
+            cell(r.d1, r.total) + cell(r.d2, r.total) + cell(r.d3_4, r.total) + cell(r.d5p, r.total) + '</tr>';
         };
+        var table = function (block, id, hidden) {
+          var t = '<div data-ret-pane="' + id + '"' + (hidden ? ' hidden' : '') + '><div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
+          t += '<th>Неделя</th><th class="num">Людей</th><th class="num">Новые</th><th class="num">Вернув&shy;шиеся</th>' +
+            '<th class="num">1 день</th><th class="num">2 дня</th><th class="num">3–4 дня</th><th class="num">5+ дней</th>';
+          t += '</tr></thead><tbody>';
+          (block.weeks || []).forEach(function (w) {
+            var label = day(w.week_start) + ' – ' + day(w.week_end) + (w.current ? ' <span class="adm-sub">идёт</span>' : '');
+            t += line(label, w, false);
+          });
+          t += line('<b>За всё время</b>', block.all_time || {}, true);
+          return t + '</tbody></table></div></div></div>';
+        };
+        var ch = v.channels || {};
+        var tabs = [['all', 'Всего'], ['site', 'Сайт'], ['app', 'Mini App']];
         var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">Возвраты посетителей · по неделям</div>';
-        html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
-        html += '<th>Неделя</th><th class="num">Людей</th><th class="num">1 день</th><th class="num">2 дня</th>' +
-          '<th class="num">3–4 дня</th><th class="num">5+ дней</th><th class="num">Вернулись</th>';
-        html += '</tr></thead><tbody>';
-        (v.weeks || []).forEach(function (w) {
-          var label = day(w.week_start) + ' – ' + day(w.week_end) + (w.current ? ' <span class="adm-sub">идёт</span>' : '');
-          html += line(label, w);
-        });
-        html += line('<b>За всё время</b>', v.all_time || {});
-        html += '</tbody></table></div></div>';
-        html += '<div class="adm-hint">Человек — посетитель сайта или Mini App без ботов; в скольких разных днях недели он заходил. ' +
-          '«Вернулись» — 2 дня и больше. Один человек с двух устройств считается дважды, входы из Telegram-бота на сайте не видны.</div></div>';
+        html += '<div class="ret-sw" role="group" aria-label="Канал">' + tabs.map(function (t, i) {
+          return '<button type="button" data-ret-ch="' + t[0] + '" aria-pressed="' + (i === 0 ? 'true' : 'false') + '">' + t[1] + '</button>';
+        }).join('') + '</div>';
+        html += table(v, 'all', false) + table(ch.site || {}, 'site', true) + table(ch.app || {}, 'app', true);
+        html += '<div class="adm-hint">Человек — посетитель сайта или Mini App без ботов. «Новые» — первый визит за всю историю событий пришёлся на эту неделю, ' +
+          '«вернувшиеся» — был раньше (как в Метрике, но по IP и браузеру на сайте и по Telegram-аккаунту в приложении). Столбцы «1 день» и дальше — ' +
+          'в скольких разных днях этой недели заходил. Один человек на сайте и в приложении считается дважды; у первых недель истории «новых» больше, чем на деле.</div></div>';
         return html;
       }
+
+      document.addEventListener('click', function (e) {
+        var b = e.target && e.target.closest ? e.target.closest('[data-ret-ch]') : null;
+        if (!b) return;
+        var id = b.getAttribute('data-ret-ch');
+        var root = b.parentNode.parentNode;
+        Array.prototype.forEach.call(root.querySelectorAll('[data-ret-ch]'), function (x) {
+          x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+        });
+        Array.prototype.forEach.call(root.querySelectorAll('[data-ret-pane]'), function (x) {
+          x.hidden = x.getAttribute('data-ret-pane') !== id;
+        });
+      });
 
       function render(d) {
         var html = renderCatalogDemand(d.catalog_demand_pulse);
