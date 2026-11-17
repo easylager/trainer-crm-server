@@ -525,6 +525,13 @@ describe('«Трибуна» в итоге', () => {
     assert.equal(three.chip, 'Так сходили ещё 3');
     assert.equal(three.line, 'Такой счёт назвали ещё 3 из 148.');
   });
+  it('точный счёт, а same_exact ещё не пришёл (запись из списка) — блока нет, а не «никто не назвал»', () => {
+    assert.equal(S.tribune(match({ side: 'away', points: 50 }, { home: 114, away: 34 }, null, { same_exact: null })), null);
+    assert.equal(S.tribune(match({ side: 'away', points: 50 }, { home: 114, away: 34 })), null);
+  });
+  it('гости — остаток до 100, как в боте: 1 из 40 за хозяев → 97%', () => {
+    assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 1, away: 39 })).line, 'Победителя угадали 97% игроков — и ты в их числе.');
+  });
   it('меньше 20 ходов, очки не посчитаны или хода нет — блока нет', () => {
     assert.equal(S.TRIBUNE_MIN, 20);
     assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 10, away: 9 })), null);

@@ -546,14 +546,16 @@ def tribune_line(
             return f"Такой счёт больше никто из {total} не назвал."
         return f"Такой счёт назвали ещё {same_exact} из {total}."
     winner = "home" if final_home > final_away else "away"
-    won = home_picks if winner == "home" else away_picks
+    # Как в Mini App: доля хозяев округляется, гостей — остаток до 100, чтобы бот и экран писали одно число.
+    home_pct = _percent(home_picks, total)
+    pct = {"home": home_pct, "away": 100 - home_pct}
     if side == winner:
-        return f"Победителя угадали {_percent(won, total)}% игроков — и ты в их числе."
+        return f"Победителя угадали {pct[winner]}% игроков — и ты в их числе."
     mine = home_picks if side == "home" else away_picks
     if 2 * mine > total:
         club = html.escape(club_name(home if side == "home" else away))
-        return f"Трибуна тоже промахнулась: {_percent(mine, total)}% были за {club}."
-    return f"Победителя угадали {_percent(won, total)}% игроков."
+        return f"Трибуна тоже промахнулась: {pct[side]}% были за {club}."
+    return f"Победителя угадали {pct[winner]}% игроков."
 
 
 def summary_text(lines: list[str]) -> str:

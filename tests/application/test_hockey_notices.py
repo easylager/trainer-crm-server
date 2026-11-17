@@ -767,6 +767,10 @@ def test_tribune_line_cases() -> None:
     assert _tribune(home_picks=5, away_picks=15, side="away", final_home=4, final_away=1, points=0) == (
         "Трибуна тоже промахнулась: 75% были за Шахтёр."
     )
+    # Гости — остаток до 100 после округлённой доли хозяев, как в Mini App: 1 из 40 хозяев → 3%, гостей 97%, не 98%.
+    assert _tribune(home_picks=1, away_picks=39, final_home=2, final_away=3, side="away") == (
+        "Победителя угадали 97% игроков — и ты в их числе."
+    )
     # Половина вверх, как Math.round в Mini App.
     assert _tribune(home_picks=1, away_picks=39, final_home=3, final_away=2, side="home") == (
         "Победителя угадали 3% игроков — и ты в их числе."

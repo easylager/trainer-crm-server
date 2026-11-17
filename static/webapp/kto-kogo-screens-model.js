@@ -486,7 +486,9 @@
     var home = Math.round((100 * sides.home) / total);
     var out = { total: total, home: home, away: 100 - home, side: mine.side, line: '', chip: '', soft: false };
     if (mine.points === Base.EXACT) {
-      var same = m.same_exact || 0;
+      // same_exact есть только в ответе по одному матчу; у записи из списка он null — «никто не назвал» писать нельзя.
+      if (m.same_exact == null) return null;
+      var same = m.same_exact;
       out.chip = same ? 'Так сходили ещё ' + same : 'Больше никто из ' + total;
       out.line = same ? 'Такой счёт назвали ещё ' + same + ' из ' + total + '.' : 'Такой счёт больше никто из ' + total + ' не назвал.';
       return out;
