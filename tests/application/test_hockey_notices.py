@@ -762,9 +762,9 @@ def test_tribune_line_cases() -> None:
     assert _tribune(final_home=4, final_away=1, side="away", points=0) == "Победителя угадали 77% игроков."
     assert _tribune(points=50) == "Такой счёт больше никто из 148 не назвал."
     assert _tribune(points=50, same_exact=3) == "Такой счёт назвали ещё 3 из 148."
-    # Меньше 10 ходов — строки нет, ровно 10 — есть; «Шахтер» из базы — «Шахтёр» в тексте.
-    assert _tribune(home_picks=5, away_picks=4) == ""
-    assert _tribune(home_picks=5, away_picks=5, side="away", final_home=2, final_away=3, points=20) == (
+    # Меньше 8 ходов — строки нет, ровно 8 — есть; «Шахтер» из базы — «Шахтёр» в тексте.
+    assert _tribune(home_picks=4, away_picks=3) == ""
+    assert _tribune(home_picks=4, away_picks=4, side="away", final_home=2, final_away=3, points=20) == (
         "Победителя угадали 50% игроков — и ты в их числе."
     )
     assert _tribune(home_picks=5, away_picks=15, side="away", final_home=4, final_away=1, points=0) == (
