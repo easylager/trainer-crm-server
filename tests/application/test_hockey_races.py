@@ -90,14 +90,22 @@ async def _finish(db, match_id: int, starts_at: datetime, score=(3, 1)) -> datet
     return done
 
 
-async def _three_players_game(db, starts: datetime, *, mid: str, home=DINAMO, away="Барыс", extraliga=False) -> int:
-    """Трое с очками: P0 — точный счёт (50), P1 — победитель и разница (30), P2 — победитель (20)."""
-    m = await _match(db, mid, starts, home=home, away=away, extraliga=extraliga)
-    await _pick(db, m, P[0], (3, 1))
-    await _pick(db, m, P[1], (2, 0))
-    await _pick(db, m, P[2], side="home")
-    await _finish(db, m, starts)
-    return m
+async def _three_players_game(
+    db, starts: datetime, *, mid: str, home=DINAMO, away="Барыс", extraliga=False, games: int = 1
+) -> int:
+    """Трое с очками: P0 — точный счёт (50), P1 — победитель и разница (30), P2 — победитель (20).
+
+    ``games`` — сколько таких матчей подряд (по минуте разницы): короне клубного среза нужны три хода (TASK-428)."""
+    first = 0
+    for i in range(games):
+        at = starts + timedelta(minutes=i)
+        m = await _match(db, mid if i == 0 else f"{mid}-{i}", at, home=home, away=away, extraliga=extraliga)
+        await _pick(db, m, P[0], (3, 1))
+        await _pick(db, m, P[1], (2, 0))
+        await _pick(db, m, P[2], side="home")
+        await _finish(db, m, at)
+        first = first or m
+    return first
 
 
 def _ranks(rows) -> list[tuple[int, int]]:
@@ -221,6 +229,28 @@ def test_crown_rules_threshold_ties_and_zero() -> None:
     assert crown_leaders([row(1, 1, 0), row(2, 1, 0), row(3, 1, 0)]) == []  # ноль очков — без короны
 
 
+def test_crown_needs_three_moves_for_club_slices() -> None:
+    from src.application.hockey_slices import CROWN_MIN_MOVES, Row
+
+    assert CROWN_MIN_MOVES == 3
+
+    def row(key, rank, pts, played):
+        return Row(rank, key, f"p{key}", pts, 0, played, 0)
+
+    rows = [row(1, 1, 50, 1), row(2, 2, 40, 4), row(3, 3, 30, 3)]
+    # Лидер с одним ходом короны не получает: она уходит второму, у кого ходов хватает.
+    assert [r.player_key for r in crown_leaders(rows, min_moves=3)] == [2]
+    # Без порога по ходам (лиги друзей) всё как раньше.
+    assert [r.player_key for r in crown_leaders(rows)] == [1]
+    # Порог игроков считается по всем с очками: не дотянувшие по ходам в него входят.
+    assert [r.player_key for r in crown_leaders([row(1, 1, 50, 1), row(2, 2, 40, 1), row(3, 3, 30, 3)], min_moves=3)] == [3]
+    # Никто не дотянул по ходам: короны нет.
+    assert crown_leaders([row(1, 1, 50, 1), row(2, 2, 40, 2), row(3, 3, 30, 2)], min_moves=3) == []
+    # Ничья среди дотянувших — всем.
+    tie = crown_leaders([row(1, 1, 50, 5), row(2, 1, 50, 5), row(3, 3, 10, 1)], min_moves=3)
+    assert [r.player_key for r in tie] == [1, 2]
+
+
 def test_league_crown_threshold_is_two_players_with_points_slices_stay_at_three() -> None:
     from src.application.hockey_slices import Row
 
@@ -245,7 +275,7 @@ def test_league_crown_threshold_is_two_players_with_points_slices_stay_at_three(
 async def test_month_crowns_for_each_belarusian_club_once_and_none_for_all_after_the_correction_window(db_session) -> None:
     await ensure_races(db_session, now=NOV)
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
-    await _three_players_game(db_session, t, mid="c1", home="Юность", away="Неман", extraliga=True)
+    await _three_players_game(db_session, t, mid="c1", home="Юность", away="Неман", extraliga=True, games=3)
     await mark_calendar_synced(db_session, now=SYNC)
     # Окно исправления итога — 2 суток: через сутки после матча короны ещё нет.
     assert await close_due_races(db_session, now=t + timedelta(days=1)) == []
@@ -271,7 +301,7 @@ async def test_no_crown_for_dinamo_opponents_or_for_the_whole_table(db_session) 
     """Соперники Динамо по КХЛ и общая таблица: срез закрывается, но корон и званий нет."""
     await ensure_races(db_session, now=NOV)
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
-    await _three_players_game(db_session, t, mid="k1", home=DINAMO, away="СКА")
+    await _three_players_game(db_session, t, mid="k1", home=DINAMO, away="СКА", games=3)
     await mark_calendar_synced(db_session, now=SYNC)
     closed = await close_due_races(db_session, now=t + timedelta(days=3))
     assert len(closed) == 3  # Все, Динамо, СКА: гонка закрывается как раньше
@@ -285,7 +315,7 @@ async def test_correction_window_is_two_days_after_the_last_result_not_seven(db_
     assert CORRECTION_WINDOW == timedelta(days=2)
     await ensure_races(db_session, now=NOV)
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
-    await _three_players_game(db_session, t, mid="cw")
+    await _three_players_game(db_session, t, mid="cw", games=3)
     await mark_calendar_synced(db_session, now=SYNC)
     final_at = (await db_session.execute(text("SELECT MAX(finalized_at) FROM game_matches"))).scalar_one()
     # Минутой раньше двух суток — срез ещё ждёт.
@@ -301,11 +331,13 @@ async def test_correction_window_is_two_days_after_the_last_result_not_seven(db_
 async def test_full_tie_on_all_three_criteria_shares_place_and_crown(db_session) -> None:
     await ensure_races(db_session, now=NOV)
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
-    m = await _match(db_session, "ft", t)
-    await _pick(db_session, m, P[0], (3, 1))  # 50, точный, 1 ход
-    await _pick(db_session, m, P[1], (3, 1))  # то же самое
-    await _pick(db_session, m, P[2], side="home")  # 20
-    await _finish(db_session, m, t)
+    for i in range(3):  # три хода у каждого: без этого корону клубного среза не дают (TASK-428)
+        at = t + timedelta(minutes=i)
+        m = await _match(db_session, f"ft{i}", at)
+        await _pick(db_session, m, P[0], (3, 1))  # 50, точный
+        await _pick(db_session, m, P[1], (3, 1))  # то же самое
+        await _pick(db_session, m, P[2], side="home")  # 20
+        await _finish(db_session, m, at)
     rows = await slice_rows(db_session, scope=club_scope(None), period=parse_period("2026-11", NOV))
     assert _ranks(rows)[:2] == [(P[0], 1), (P[1], 1)] and rows[2].rank == 3
     await mark_calendar_synced(db_session, now=SYNC)
@@ -383,7 +415,7 @@ async def test_cancelled_match_is_out_of_points_and_the_month_close(db_session) 
 async def test_manual_confirm_closes_before_the_window(db_session) -> None:
     race = await ensure_races(db_session, now=NOV)
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
-    await _three_players_game(db_session, t, mid="mc")
+    await _three_players_game(db_session, t, mid="mc", games=3)
     assert await confirm_close_month(db_session, period_start=race.starts_at, club=DINAMO, now=t + timedelta(days=1))
     assert (
         await confirm_close_month(db_session, period_start=race.starts_at, club=DINAMO, now=t + timedelta(days=1)) is None
@@ -394,7 +426,7 @@ async def test_manual_confirm_closes_before_the_window(db_session) -> None:
 @pytest.mark.asyncio
 async def test_season_titles_after_the_season_and_window_only_once(db_session) -> None:
     t = datetime(2027, 3, 20, 19, 0, tzinfo=MINSK_TZ)
-    await _three_players_game(db_session, t, mid="z1")
+    await _three_players_game(db_session, t, mid="z1", games=3)
     await mark_calendar_synced(db_session, now=datetime(2027, 7, 20, tzinfo=MINSK_TZ))
     await db_session.execute(text("UPDATE hockey_races SET calendar_synced_at = '2027-07-20'"))
     assert await close_due_races(db_session, now=datetime(2027, 6, 1, tzinfo=MINSK_TZ)) == []  # сезон ещё идёт
@@ -610,7 +642,7 @@ async def test_league_month_crown_goes_to_the_leader_and_badge_counts_all_crowns
         text("UPDATE hockey_league_members SET joined_at = :t"), {"t": datetime(2026, 11, 1, tzinfo=MINSK_TZ)}
     )
     t = datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ)
-    await _three_players_game(db_session, t, mid="lm")
+    await _three_players_game(db_session, t, mid="lm", games=3)
     await mark_calendar_synced(db_session, now=SYNC)
     await close_due_races(db_session, now=datetime(2026, 12, 3, tzinfo=MINSK_TZ))
     row = (

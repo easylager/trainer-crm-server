@@ -41,6 +41,9 @@ CROWN_MIN_PLAYERS = 3
 # трёх; 2026-11-11 владелец вернул лигам порог из двоих (минимума ходов за период нет).
 LEAGUE_CROWN_MIN_MEMBERS = 2
 PEAK_MIN_MOVES = 3
+# Корона клубного среза: победитель сыграл в нём не меньше стольких ходов (TASK-428). Один удачный ход короны не даёт;
+# если лидер не дотянул, корона уходит следующему, у кого ходов хватает. Лиг друзей это не касается.
+CROWN_MIN_MOVES = 3
 PEAKS_LIMIT = 3
 # «Таблица» открывается на лучшей вершине, только если там соревнуются хотя бы десятеро с очками.
 TABLE_START_MIN_PLAYERS = 10
@@ -272,12 +275,20 @@ def crown_eligible(rows: list[Row], *, min_players: int = CROWN_MIN_PLAYERS) -> 
     return len(with_points(rows)) >= min_players
 
 
-def crown_leaders(rows: list[Row], *, min_players: int = CROWN_MIN_PLAYERS) -> list[Row]:
-    """Лидеры, которым положена корона: порог ``min_players``, ничья по всем критериям — всем, ноль очков — никому."""
+def crown_leaders(
+    rows: list[Row], *, min_players: int = CROWN_MIN_PLAYERS, min_moves: int = 0
+) -> list[Row]:
+    """Лидеры, которым положена корона: порог ``min_players``, ничья по всем критериям — всем, ноль очков — никому.
+
+    ``min_moves`` — у победителя не меньше стольких ходов в срезе: не дотянувший пропускается, корона идёт следующему.
+    Порог игроков считается по всем с очками, а не только по тем, у кого хватает ходов."""
     if not crown_eligible(rows, min_players=min_players):
         return []
-    top = min(r.rank for r in rows)
-    return [r for r in rows if r.rank == top and r.points > 0]
+    qualified = [r for r in rows if r.played >= min_moves and r.points > 0]
+    if not qualified:
+        return []
+    top = min(r.rank for r in qualified)
+    return [r for r in qualified if r.rank == top]
 
 
 def better_than(points: int, exact: int, played: int, other: Row) -> bool:
@@ -620,6 +631,7 @@ __all__ = [
     "match_clubs",
     "correct_percent",
     "crown_eligible",
+    "CROWN_MIN_MOVES",
     "crown_leaders",
     "crown_totals",
     "current_month_period",

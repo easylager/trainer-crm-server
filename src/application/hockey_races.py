@@ -31,6 +31,7 @@ from src.application.hockey_matches import DINAMO
 from src.application.hockey_slices import (
     SCOPE_SQL,
     KIND_MONTH as PERIOD_MONTH,
+    CROWN_MIN_MOVES,
     CROWN_MIN_PLAYERS,
     LEAGUE_CROWN_MIN_MEMBERS,
     Period,
@@ -256,7 +257,8 @@ async def _award(
         return None
     # Лига — круг друзей: корону разыгрывают двое с очками; срезы «все» и «клуб» — трое.
     min_players = CROWN_MIN_PLAYERS if league_id is None else LEAGUE_CROWN_MIN_MEMBERS
-    leaders = crown_leaders(rows, min_players=min_players) if crowns else []
+    min_moves = CROWN_MIN_MOVES if league_id is None else 0
+    leaders = crown_leaders(rows, min_players=min_players, min_moves=min_moves) if crowns else []
     for r in leaders:
         await session.execute(
             _INSERT_CROWN,
@@ -450,7 +452,7 @@ async def _close_seasons(session: AsyncSession, *, now: datetime, closed: list[i
             if closure is None:
                 continue
             rows = await slice_rows(session, scope=club_scope(state.club), period=season)
-            leaders = crown_leaders(rows) if state.club in eligible else []
+            leaders = crown_leaders(rows, min_moves=CROWN_MIN_MOVES) if state.club in eligible else []
             for r in leaders:
                 await session.execute(
                     _INSERT_TITLE,
@@ -554,7 +556,7 @@ async def pending_month_closures(session: AsyncSession, *, now: datetime, limit:
                     "race_id": race.id,
                     "club": club,
                     "title": race.title,
-                    "leaders": [(r.display_name, r.points) for r in crown_leaders(rows)],
+                    "leaders": [(r.display_name, r.points) for r in crown_leaders(rows, min_moves=CROWN_MIN_MOVES)],
                     "auto_at": _utc(state.last_final_at) + CORRECTION_WINDOW,
                 }
             )
