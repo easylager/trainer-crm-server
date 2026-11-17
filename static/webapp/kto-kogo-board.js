@@ -299,17 +299,33 @@
     ]);
   }
 
+  /**
+   * Кнопка «Таблица» приходит без среза (auto): срез выбираем, когда известны вершины. Первый кадр рисуется до enter:
+   * без умолчаний закешированная таблица падала на period === undefined.
+   */
+  function settle(a) {
+    if (a.auto === undefined) a.auto = !('club' in a) && !('period' in a);
+    if (a.auto && state.peaks) {
+      var s = S.tableStartArgs(state.tableChoice, state.tableStart);
+      a.club = s.club;
+      a.period = s.period;
+      a.auto = false;
+    }
+    if (a.auto) return;
+    a.club = a.club || null;
+    a.period = a.period || 'season';
+  }
+
   K.register('table', {
     enter: function (a) {
-      a.club = a.club || null;
-      a.period = a.period || 'season';
+      settle(a);
       a.failed = false;
-      Promise.all([loadTable(a), K.loadClubs().catch(function () {}), K.loadPeaks(), K.loadProfile()]).then(K.render, function (e) { a.failed = true; K.render(); K.fail(e); });
+      var table = a.auto ? K.loadPeaks().then(function () { settle(a); return loadTable(a); }) : loadTable(a);
+      Promise.all([table, K.loadClubs().catch(function () {}), K.loadPeaks(), K.loadProfile()]).then(K.render, function (e) { a.failed = true; K.render(); K.fail(e); });
     },
     render: function (a) {
-      // Первый кадр рисуется до enter: без умолчаний закешированная таблица падала на period === undefined.
-      a.club = a.club || null;
-      a.period = a.period || 'season';
+      settle(a);
+      if (a.auto) return [h('main', { class: 'kk-main' }, [K.topbar('Таблица', ' '), K.loading()])];
       var view = state.tables[tableKey(a)];
       var seasonTitle = state.seasonTitle || S.seasonTitleFor(nowIso());
       var peaks = (state.peaks || []).map(function (p) {
@@ -322,6 +338,7 @@
           chipTeam(a),
           h('button', { type: 'button', class: 'kk-chip kk-chip--alt', 'aria-haspopup': 'dialog', onclick: function () { state.sheet = { kind: 'period' }; K.render(); } }, [S.periodLabel(a.period, seasonTitle), icon(I.down, 16)]),
         ]),
+        S.isGeneralTable(a) ? null : h('button', { type: 'button', class: 'kk-btn kk-btn--alt kk-btn--sm', onclick: function () { a.club = null; a.period = 'season'; load(a); }, text: 'Общая таблица' }),
         peaks.length ? h('div', { class: 'kk-scs' }, [h('span', { class: 'kk-sub kk-nowrap', text: 'Твои вершины:' })].concat(peaks)) : null,
       ]);
       if (!view) {
@@ -381,6 +398,7 @@
 
   /** Сменили фильтр: показываем то, что есть, и догружаем таблицу. */
   function load(a) {
+    state.tableChoice = { club: a.club, period: a.period };
     K.render();
     if (!state.tables[tableKey(a)]) loadTable(a).then(K.render, function (e) { a.failed = true; K.render(); K.fail(e); });
   }

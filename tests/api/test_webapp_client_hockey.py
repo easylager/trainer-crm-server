@@ -372,3 +372,22 @@ async def test_bot_prefs_types_and_fav_club(app_use_test_db, db_session) -> None
             assert bad_type.status_code == 400
             cleared = await client.put("/api/webapp/client/hockey/bot-prefs", json={"clear_fav_club": True})
             assert cleared.json()["fav_club"] is None
+
+
+@pytest.mark.asyncio
+async def test_one_match_counts_others_with_the_same_exact_score(app_use_test_db, db_session) -> None:
+    now = datetime.now(timezone.utc)
+    mid = await _insert_match(db_session, starts_at=now + timedelta(days=1))
+    await db_session.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for who in (ME, OTHER):
+            with patch_client_principal(who):
+                ok = await client.put(f"/api/webapp/client/hockey/matches/{mid}/pick", json={"home_score": 2, "away_score": 1})
+                assert ok.status_code == 200, ok.text
+        await set_manual_result(db_session, mid, home_score=2, away_score=1, decided_in="regulation", now=now)
+        await db_session.commit()
+        with patch_client_principal(ME):
+            one = await client.get(f"/api/webapp/client/hockey/matches/{mid}")
+        assert one.status_code == 200, one.text
+        assert one.json()["same_exact"] == 1
+        assert one.json()["sides"] == {"home": 2, "away": 0}

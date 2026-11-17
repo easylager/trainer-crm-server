@@ -472,6 +472,40 @@
     return cap(Base.verdict(points == null ? 0 : points).head);
   }
 
+  // «Трибуна» — с какой долей игроков совпал ход. Те же правила и порог, что tribune_line в hockey_notices.py.
+  var TRIBUNE_MIN = 20;
+
+  /** Доли сторон и строка под итогом; меньше TRIBUNE_MIN ходов или итога нет — null. */
+  function tribune(m) {
+    var mine = m && m.my_pick;
+    var r = m && m.result;
+    var sides = m && m.sides;
+    if (!mine || !r || !sides || mine.points == null) return null;
+    var total = (sides.home || 0) + (sides.away || 0);
+    if (total < TRIBUNE_MIN) return null;
+    var home = Math.round((100 * sides.home) / total);
+    var out = { total: total, home: home, away: 100 - home, side: mine.side, line: '', chip: '', soft: false };
+    if (mine.points === Base.EXACT) {
+      var same = m.same_exact || 0;
+      out.chip = same ? 'Так сходили ещё ' + same : 'Больше никто из ' + total;
+      out.line = same ? 'Такой счёт назвали ещё ' + same + ' из ' + total + '.' : 'Такой счёт больше никто из ' + total + ' не назвал.';
+      return out;
+    }
+    var winner = r.home_score > r.away_score ? 'home' : 'away';
+    var won = winner === 'home' ? out.home : out.away;
+    var minePct = mine.side === 'home' ? out.home : out.away;
+    var mineCount = mine.side === 'home' ? sides.home : sides.away;
+    if (mine.side === winner) out.line = 'Победителя угадали ' + won + '% игроков — и ты в их числе.';
+    else if (2 * mineCount > total) {
+      out.line = 'Трибуна тоже промахнулась: ' + minePct + '% были за ' + clubName(m[mine.side].name) + '.';
+      out.soft = true;
+    } else {
+      out.line = 'Победителя угадали ' + won + '% игроков.';
+      out.soft = true;
+    }
+    return out;
+  }
+
   /** После промаха: «Бывает — следующий матч Динамо — Торпедо в субботу.» Нет матча — отсылка к хабу. */
   function missLine(next, now) {
     if (!next) return 'Бывает. Следующий ход — на главной игры.';
@@ -679,6 +713,17 @@
 
   function peakChip(p) {
     return sliceLabel(p.club, p.period_title) + ' · ' + p.rank + NBSP + 'место';
+  }
+
+  /** Какую таблицу открыть кнопкой «Таблица»: выбранную руками, иначе лучшую вершину, иначе общую. */
+  function tableStartArgs(choice, start) {
+    var s = choice || start;
+    return { club: (s && s.club) || null, period: (s && s.period) || 'season' };
+  }
+
+  /** Общая таблица — все матчи за сезон. */
+  function isGeneralTable(a) {
+    return !a.club && (a.period || 'season') === 'season';
   }
 
   /** Плитка «Твоя вершина» на хабе. */
@@ -1334,6 +1379,8 @@
     noMeLine: noMeLine,
     peakChip: peakChip,
     peakTile: peakTile,
+    tableStartArgs: tableStartArgs,
+    isGeneralTable: isGeneralTable,
     crownCount: crownCount,
     scopeText: scopeText,
     termText: termText,
@@ -1375,6 +1422,8 @@
     writeAskMemo: writeAskMemo,
     shouldAskWrite: shouldAskWrite,
     answerWriteAsk: answerWriteAsk,
+    tribune: tribune,
+    TRIBUNE_MIN: TRIBUNE_MIN,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

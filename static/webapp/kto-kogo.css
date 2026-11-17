@@ -386,6 +386,17 @@ body:not(.kk-dark) .kk-puck { box-shadow: inset 0 -3px 0 #3a4756; }
 .kk-cf.is-me { background: var(--kk-gold); color: var(--kk-on-gold); }
 .kk-cf--more { background: var(--kk-chip); color: var(--kk-soft); font-size: 12px; }
 .kk-crowd__c { font: 500 14px/1.3 var(--kk-text); color: var(--kk-soft); min-width: 0; }
+/* «Трибуна» в итоге матча: за кого ходили, твоя сторона — жёлтая. */
+.kk-trib { border-radius: 20px; background: var(--kk-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.kk-trib__h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.kk-trib__bar { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; }
+.kk-trib__seg { background: var(--kk-chip); min-width: 4px; }
+.kk-trib__seg.is-mine { background: var(--kk-gold); }
+.kk-trib__lg { display: flex; justify-content: space-between; gap: 8px; font: 500 13px/1.2 var(--kk-text); color: var(--kk-soft); }
+.kk-trib__side { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.kk-trib__lg b { font-weight: 700; color: var(--kk-ink); }
+.kk-trib__t { font: 700 15px/1.3 var(--kk-text); color: var(--kk-ink); }
+.kk-trib__t--soft { font-weight: 500; color: var(--kk-soft); }
 
 /* «В точку!»: главный момент игры */
 .kk-cel { position: relative; overflow: hidden; border-radius: 28px; padding: 28px 16px 20px; min-height: 400px; display: flex; flex-direction: column; align-items: center; gap: 14px; }

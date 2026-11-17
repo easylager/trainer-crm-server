@@ -351,7 +351,12 @@ _DUE_NOMOVE = text(f"""
 _DUE_RESULT = text(f"""
     SELECT p.player_key, m.id AS match_id, m.home_team, m.away_team, m.starts_at,
            m.home_score AS final_home, m.away_score AS final_away,
-           p.side, p.home_score, p.away_score, p.doubled, p.points
+           p.side, p.home_score, p.away_score, p.doubled, p.points,
+           (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
+           (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'away')::int AS away_picks,
+           (SELECT COUNT(*) FROM hockey_picks x
+            WHERE x.match_id = m.id AND x.player_key <> p.player_key
+              AND x.home_score = p.home_score AND x.away_score = p.away_score)::int AS same_exact
     FROM hockey_picks AS p
     JOIN hockey_players AS pl ON pl.player_key = p.player_key
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = p.player_key
@@ -509,6 +514,46 @@ def result_text(
     head_line = f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))} {final_home}:{final_away}.</b>"
     move = _your_move(home, away, side, pick_home, pick_away)
     return " ".join(part for part in (head_line, move, verdict) if part)
+
+
+# «Трибуна» — с какой долей игроков совпал ход. На паре ходов проценты ничего не значат.
+TRIBUNE_MIN = 20
+
+
+def _percent(part: int, total: int) -> int:
+    """Половина вверх, как ``Math.round`` в Mini App: бот и экран итога пишут одно число."""
+    return (200 * part + total) // (2 * total)
+
+
+def tribune_line(
+    *,
+    home: str,
+    away: str,
+    final_home: int,
+    final_away: int,
+    side: str | None,
+    points: int,
+    home_picks: int,
+    away_picks: int,
+    same_exact: int,
+) -> str:
+    """Строка «Трибуны» под итогом; меньше ``TRIBUNE_MIN`` ходов — пусто. Те же правила, что ``tribune`` в Mini App."""
+    total = home_picks + away_picks
+    if total < TRIBUNE_MIN or side not in ("home", "away"):
+        return ""
+    if points == POINTS_EXACT:
+        if not same_exact:
+            return f"Такой счёт больше никто из {total} не назвал."
+        return f"Такой счёт назвали ещё {same_exact} из {total}."
+    winner = "home" if final_home > final_away else "away"
+    won = home_picks if winner == "home" else away_picks
+    if side == winner:
+        return f"Победителя угадали {_percent(won, total)}% игроков — и ты в их числе."
+    mine = home_picks if side == "home" else away_picks
+    if 2 * mine > total:
+        club = html.escape(club_name(home if side == "home" else away))
+        return f"Трибуна тоже промахнулась: {_percent(mine, total)}% были за {club}."
+    return f"Победителя угадали {_percent(won, total)}% игроков."
 
 
 def summary_text(lines: list[str]) -> str:
@@ -758,7 +803,22 @@ async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) 
         # В пачке место одно: лучший срез среди этих матчей, уже после всех ходов.
         place = min(places)[1] if places else None
         if len(rows) == 1:
+            r = rows[0]
             body = texts[0]
+            # В сводке нескольких итогов «Трибуну» не пишем: строк и так много.
+            tribune = tribune_line(
+                home=r.home_team,
+                away=r.away_team,
+                final_home=r.final_home,
+                final_away=r.final_away,
+                side=r.side,
+                points=r.points,
+                home_picks=r.home_picks,
+                away_picks=r.away_picks,
+                same_exact=r.same_exact,
+            )
+            if tribune:
+                body += "\n" + tribune
         else:
             body = summary_text(texts)
         if place:

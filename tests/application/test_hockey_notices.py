@@ -29,6 +29,7 @@ from src.application.hockey_notices import (
     set_fav_club,
     set_remind,
     set_type,
+    tribune_line,
 )
 from src.application.hockey_races import mark_calendar_synced
 from src.ingestion.hockey_sources import MINSK_TZ
@@ -743,3 +744,48 @@ async def test_blocked_player_gets_no_correction_and_unchanged_points_are_not_me
     assert by_player[KATYA] == "Мы ошиблись с итогом: Юность — Шахтёр закончился 4:2, а не 3:2."
     assert "очки" not in by_player[KATYA]
     assert "очки" in by_player[SASHA]
+
+
+# ---------- «Трибуна» в итоге ----------
+
+
+def _tribune(**kw) -> str:
+    base = dict(home="Неман", away="Шахтер", final_home=2, final_away=3, side="away", points=20,
+                home_picks=114, away_picks=34, same_exact=0)
+    base.update(kw)
+    return tribune_line(**base)
+
+
+def test_tribune_line_cases() -> None:
+    assert _tribune() == "Победителя угадали 23% игроков — и ты в их числе."
+    assert _tribune(side="home", points=0) == "Трибуна тоже промахнулась: 77% были за Неман."
+    assert _tribune(final_home=4, final_away=1, side="away", points=0) == "Победителя угадали 77% игроков."
+    assert _tribune(points=50) == "Такой счёт больше никто из 148 не назвал."
+    assert _tribune(points=50, same_exact=3) == "Такой счёт назвали ещё 3 из 148."
+    # Меньше 20 ходов — строки нет; «Шахтер» из базы — «Шахтёр» в тексте.
+    assert _tribune(home_picks=10, away_picks=9) == ""
+    assert _tribune(home_picks=5, away_picks=15, side="away", final_home=4, final_away=1, points=0) == (
+        "Трибуна тоже промахнулась: 75% были за Шахтёр."
+    )
+    # Половина вверх, как Math.round в Mini App.
+    assert _tribune(home_picks=1, away_picks=39, final_home=3, final_away=2, side="home") == (
+        "Победителя угадали 3% игроков — и ты в их числе."
+    )
+
+
+@pytest.mark.asyncio
+async def test_result_message_has_tribune_line_from_twenty_moves(db_session) -> None:
+    await _fan(db_session, SASHA, name="Саша")
+    m = await _match(db_session, "trib", at(19))
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="away", now=at(10))
+    await make_pick(db_session, player_key=KATYA, display_name="Катя", match_id=m, side="away", now=at(10))
+    for i in range(18):
+        await make_pick(db_session, player_key=9361000 + i, display_name=f"Игрок {i}", match_id=m, side="home", now=at(10))
+    done = at(21, 40)
+    await _finish(db_session, m, 2, 3, done)
+    notices = await due_notices(db_session, now=done + hockey_notices.RESULT_SEND_DELAY)
+    sasha = next(n for n in notices if n.player_key == SASHA)
+    assert sasha.text.startswith(
+        "<b>Юность — Шахтёр 2:3.</b> Твой ход — Шахтёр. Угадал победителя: +20.\n"
+        "Победителя угадали 10% игроков — и ты в их числе."
+    )
