@@ -588,21 +588,21 @@
         var rows = bs.rows || [];
         var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">Откуда записи · 7 / 30 дней</div>';
         if (!rows.length) {
-          return html + '<div class="adm-card"><div class="adm-empty">Пока нет записей с источником и нажатий «Написать»</div></div></div>';
+          return html + '<div class="adm-card"><div class="adm-empty">Пока нет записей</div></div></div>';
         }
         html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
-        html += '<th>Источник</th><th class="num">Записи 7</th><th class="num">30</th><th class="num">«Написать» 7</th><th class="num">30</th>';
+        html += '<th>Кто записал</th><th class="num">7 дней</th><th class="num">30 дней</th>';
         html += '</tr></thead><tbody>';
         rows.concat([Object.assign({ label: 'Всего' }, bs.totals || {})]).forEach(function (r, i) {
           var b = i === rows.length ? ['<b>', '</b>'] : ['', ''];
           html += '<tr><td>' + b[0] + A.escapeHtml(r.label || r.source) + b[1] + '</td>';
-          ['bookings_7d', 'bookings_30d', 'writes_7d', 'writes_30d'].forEach(function (k) {
+          ['bookings_7d', 'bookings_30d'].forEach(function (k) {
             html += '<td class="num">' + b[0] + A.formatNum(+r[k] || 0) + b[1] + '</td>';
           });
           html += '</tr>';
         });
         html += '</tbody></table></div></div>';
-        html += '<div class="adm-hint">Записи — клиенты записались сами, по дате записи, с отменёнными. «Написать» — нажатия на сайте, без ботов.</div></div>';
+        html += '<div class="adm-hint">По дате создания записи, с отменёнными. «Сам» — запись из Mini App; «тренер» — созданная в кабинете тренера, без постоянных клиентов. Без демо-записей и без Александра Гаевского.</div></div>';
         return html;
       }
 

@@ -265,5 +265,6 @@ async def test_admin_stats_endpoint_returns_booking_sources(app_use_test_db, db_
     from src.application.stats_use_cases import get_platform_stats
 
     data = await get_platform_stats(db_session)
-    assert data["booking_sources"]["metric"] == "booking_sources"
-    assert set(data["booking_sources"]["totals"]) == {"bookings_7d", "bookings_30d", "writes_7d", "writes_30d"}
+    assert data["booking_sources"]["metric"] == "booking_origin"
+    assert [r["source"] for r in data["booking_sources"]["rows"]] == ["client", "trainer"]
+    assert set(data["booking_sources"]["totals"]) == {"bookings_7d", "bookings_30d"}
