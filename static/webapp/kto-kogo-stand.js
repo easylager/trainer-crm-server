@@ -35,9 +35,14 @@
   function strip(label) {
     var m = model();
     var mini = S.standMini(m, MINI_LOGOS);
+    // Без корон строка не пустая: бледные логотипы клубов и подсказка, как получить первую корону.
+    var empty = m.clubs.slice(0, MINI_LOGOS - 1);
     var body = m.total
       ? h('span', { class: 'kk-strip__logos' }, mini.shown.map(function (e) { return clubDisc(e, 40, true); }).concat(mini.more ? [h('span', { class: 'kk-sub', text: '+' + mini.more })] : []))
-      : h('span', { class: 'kk-sub', text: 'Корона — за первое место месяца в клубе. Загляни на стенд, там видно все клубы' });
+      : h('span', { class: 'kk-col' }, [
+          h('span', { class: 'kk-strip__logos' }, empty.map(function (e) { return clubDisc(e, 40, true); })),
+          h('span', { class: 'kk-sub', text: 'Первая корона — за 1-е место месяца в клубе: очки хотя бы у троих игроков и не меньше трёх ходов у тебя.' }),
+        ]);
     return h('button', { type: 'button', class: 'kk-strip', onclick: function () { K.go('stand', {}); } }, [
       h('span', { class: 'kk-strip__top' }, [
         h('span', { class: 'kk-strip__t', text: label || 'Мой стенд' }),
