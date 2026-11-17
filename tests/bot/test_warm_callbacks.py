@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiogram.types import Message
 from sqlalchemy import text
 
 from src.application.catalog_consumer_events import telegram_actor_hash
@@ -24,10 +25,13 @@ def _secret(monkeypatch) -> None:
     monkeypatch.setenv("CATALOG_ACTOR_HMAC_SECRET", SECRET)
 
 
-def _cb(data: str, tid: int) -> MagicMock:
+def _cb(data: str, tid: int, *, accessible: bool = True) -> MagicMock:
     cb = MagicMock(data=data, from_user=SimpleNamespace(id=tid, username="u"))
     cb.answer = AsyncMock()
-    cb.message = MagicMock(edit_reply_markup=AsyncMock(), answer=AsyncMock())
+    # Telegram отдаёт InaccessibleMessage вместо Message, если сообщение старое: его не правим.
+    cb.message = MagicMock(spec=Message) if accessible else MagicMock()
+    cb.message.edit_reply_markup = AsyncMock()
+    cb.message.answer = AsyncMock()
     return cb
 
 
@@ -119,3 +123,13 @@ async def test_start_from_offer_records_subscription(app_use_test_db, db_session
     await client_handlers.cmd_start(_message(f"watch_{plain_arena}", tid))
     assert await _events(db_session, arena_id) == [("watch_offer_subscribed", "place_page", telegram_actor_hash(tid))]
     assert await _events(db_session, plain_arena) == []  # обычный колокольчик в воронку предложения не пишется
+
+
+@pytest.mark.asyncio
+async def test_inaccessible_message_is_not_edited(app_use_test_db, _test_db_core, monkeypatch) -> None:
+    """Ревью п. 12: старое сообщение (InaccessibleMessage) — ответ во всплывающем окне, без правки кнопок."""
+    monkeypatch.setattr(client_handlers, "async_session_factory", _test_db_core["factory"])
+    cb = _cb("warm:off", _tid(), accessible=False)
+    await client_handlers.warm_opt_callback(cb)
+    cb.answer.assert_awaited_once()
+    cb.message.edit_reply_markup.assert_not_awaited()

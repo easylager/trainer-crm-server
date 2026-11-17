@@ -3762,7 +3762,7 @@ async def warm_opt_callback(callback: CallbackQuery) -> None:
         await set_opt_out(db_session, int(callback.from_user.id), off)
         await db_session.commit()
     await callback.answer(t("warm.off_done" if off else "warm.on_done"), show_alert=True)
-    if callback.message:
+    if isinstance(callback.message, Message):  # InaccessibleMessage (старое сообщение) не правим
         try:
             await callback.message.edit_reply_markup(reply_markup=_warm_markup([[on_button() if off else off_button()]]))
         except Exception:  # noqa: BLE001 — сообщение могло устареть; ответ уже показан
@@ -3793,7 +3793,7 @@ async def warm_subscribe_callback(callback: CallbackQuery) -> None:
         await callback.answer(t("warm.sub_gone"), show_alert=True)
         return
     await callback.answer()
-    if callback.message:
+    if isinstance(callback.message, Message):  # InaccessibleMessage (старое сообщение) не правим
         try:
             await callback.message.edit_reply_markup(reply_markup=None)
         except Exception:  # noqa: BLE001
