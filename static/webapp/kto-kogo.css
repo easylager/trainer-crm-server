@@ -689,6 +689,17 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .kk-crch { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 16px; background: var(--kk-crownbg); color: var(--kk-crownink); font: 600 13px/1 var(--kk-text); }
 
+/* Момент «корона получена» (TASK-430): три анимации — отскок плашки, блик, свечение; при reduce-motion стоят. */
+@keyframes kk-mom-pop { 0% { transform: scale(0) rotate(-35deg); opacity: 0; } 55% { transform: scale(1.25) rotate(10deg); opacity: 1; } 100% { transform: scale(1) rotate(6deg); opacity: 1; } }
+@keyframes kk-mom-halo { 0%, 100% { opacity: 0.35; transform: scale(1); } 50% { opacity: 0.65; transform: scale(1.1); } }
+@keyframes kk-mom-shine { 0% { transform: translateX(-160%) skewX(-20deg); } 35%, 100% { transform: translateX(280%) skewX(-20deg); } }
+.kk-mom { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 132px; height: 132px; }
+.kk-mom__halo { position: absolute; inset: -20px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 210, 63, 0.45) 0%, rgba(255, 210, 63, 0) 68%); animation: kk-mom-halo 2.8s ease-in-out infinite; }
+.kk-mom__stk { position: relative; overflow: hidden; display: inline-flex; padding: 16px; border-radius: 26px; background: var(--kk-gold); color: var(--kk-on-gold); box-shadow: 0 3px 0 rgba(90, 60, 0, 0.55); transform: rotate(6deg); animation: kk-mom-pop 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.2s both; }
+.kk-mom__stk .kk-crown-ic { color: var(--kk-on-gold); }
+.kk-mom__shine { position: absolute; top: 0; left: 0; width: 40%; height: 100%; background: rgba(255, 255, 255, 0.55); animation: kk-mom-shine 3.2s ease-in-out 1.2s infinite; }
+@media (prefers-reduced-motion: reduce) { .kk-mom__halo, .kk-mom__stk, .kk-mom__shine { animation: none; } }
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.

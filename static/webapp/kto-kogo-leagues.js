@@ -725,7 +725,7 @@
       return [h('main', { class: 'kk-main' }, [
         K.topbar('Итоги: ' + res.title, res.league ? '«' + res.league.name + '»' : 'общая таблица'),
         h('section', { class: 'kk-card kk-card--hero kk-center' }, [
-          won ? K.crownIcon(64) : h('span', { class: 'kk-big', text: res.rank ? String(res.rank) : '–' }),
+          won ? (K.stand ? K.stand.moment() : K.crownIcon(64)) : h('span', { class: 'kk-big', text: res.rank ? String(res.rank) : '–' }),
           h('h2', { class: 'kk-h2 kk-h2--xl', text: M.monthHead(res) }),
           h('span', { class: 'kk-hero-tx', text: M.monthLine(res) }),
         ]),

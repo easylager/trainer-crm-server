@@ -156,6 +156,14 @@
     },
   });
 
+  /** Момент «корона получена»: золотая плашка с короной «прилипает» с отскоком, по ней проходит блик, вокруг свечение. */
+  function moment() {
+    return h('span', { class: 'kk-mom' }, [
+      h('span', { class: 'kk-mom__halo', 'aria-hidden': 'true' }),
+      h('span', { class: 'kk-mom__stk' }, [K.crownIcon(48, 'Корона'), h('span', { class: 'kk-mom__shine', 'aria-hidden': 'true' })]),
+    ]);
+  }
+
   K.standStrip = strip;
-  K.stand = { model: model, sticker: sticker, clubDisc: clubDisc };
+  K.stand = { model: model, sticker: sticker, clubDisc: clubDisc, moment: moment };
 })();
