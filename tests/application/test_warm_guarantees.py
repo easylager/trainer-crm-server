@@ -183,12 +183,30 @@ async def test_ice_watch_delivery_counts_in_budget(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_season_open_reminder_counts_in_budget(db_session) -> None:
-    arena = await seed_arena(db_session)
-    watch = await seed_watch(db_session, ANNA, arena, created_at=at(10, day=1), kind="season_open", active=False)
+async def test_season_open_counts_only_when_actually_sent(db_session) -> None:
+    """Ревью п. 7: тихая деактивация сезонной подписки (без отправки) бюджет не тратит, настоящая отправка — тратит."""
+    from src.application.client_ice_watch_use_cases import notify_season_open_watches
+
+    quiet_arena = await seed_arena(db_session)
+    quiet = await seed_watch(db_session, BORIS, quiet_arena, created_at=at(10, day=1), kind="season_open", active=False)
     await db_session.execute(
-        text("UPDATE client_ice_watches SET last_notified_at = :t WHERE id = :w"), {"t": at(9, 5), "w": watch}
+        text("UPDATE client_ice_watches SET last_notified_at = :t WHERE id = :w"), {"t": at(9, 5), "w": quiet}
     )
+    assert (await _ok(db_session, BORIS)).allowed
+
+    arena = await seed_arena(db_session)
+    await db_session.execute(
+        text("UPDATE arena_profiles SET season_start_month = 11, season_end_month = 3 WHERE arena_id = :a"),
+        {"a": arena},
+    )
+    await seed_watch(db_session, ANNA, arena, created_at=at(10, day=1), kind="season_open")
+    sent: list[int] = []
+
+    async def send_fn(chat_id, body, markup):
+        sent.append(chat_id)
+
+    assert await notify_season_open_watches(db_session, now=at(9, 5), send_fn=send_fn) == 1
+    assert sent == [ANNA]
     assert (await _ok(db_session, ANNA)).reason == gate.DAILY_LIMIT
 
 

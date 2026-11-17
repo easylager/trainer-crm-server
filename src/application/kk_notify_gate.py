@@ -11,8 +11,8 @@
   семьи свои (``KK_NOTIFY_*`` и ``WARM_*``), конфиг чужой семьи — отказ.
 
 Бюджет считается по всему, что человек получил от бота: строки ``hockey_notices`` (кроме итогов и событий),
-``warm_notices`` и доставленные напоминания колокольчика катка (``client_ice_watch_deliveries``, сезонное
-напоминание по ``last_notified_at``). Колокольчик сам допуск не проходит (ответ на явную подписку), но в бюджете
+``warm_notices`` и доставленные напоминания колокольчика катка (``client_ice_watch_deliveries``: и о новом
+расписании, и сезонное «пора проверять коньки» — тихая деактивация сезонной подписки без отправки туда не пишется). Колокольчик сам допуск не проходит (ответ на явную подписку), но в бюджете
 считается: игрок-подписчик суммарно получает не больше 1 сообщения в сутки и 3 в неделю от поводов с допуском.
 
 Семья ``warm`` (TASK-428) не знает про ``remind``, согласие игры и паузы: её согласие — явная подписка на каток
@@ -232,9 +232,6 @@ _SPENT = text("""
     + (SELECT COUNT(*) FROM client_ice_watch_deliveries AS d
        JOIN client_ice_watches AS w ON w.id = d.watch_id
        WHERE w.telegram_id = :player_key AND d.ok AND d.attempted_at >= :since AND d.attempted_at < :until)
-    + (SELECT COUNT(*) FROM client_ice_watches
-       WHERE telegram_id = :player_key AND watch_kind = 'season_open'
-         AND last_notified_at >= :since AND last_notified_at < :until)
     """)
 
 

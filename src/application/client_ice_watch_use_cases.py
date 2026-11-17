@@ -538,6 +538,15 @@ async def notify_season_open_watches(
             try:
                 await send_fn(int(watch["telegram_id"]), text_msg, markup)
                 await repo.mark_notified_and_deactivate(int(watch["id"]))
+                # TASK-428: журнал доставок — по нему общий бюджет считает, что сообщение действительно ушло
+                # (last_notified_at ставит и тихая деактивация без отправки).
+                await repo.record_delivery(
+                    watch_id=int(watch["id"]),
+                    client_id=int(watch["client_id"]),
+                    arena_id=arena_id,
+                    attempted_at=now,
+                    ok=True,
+                )
                 sent += 1
                 changed = True
             except Exception:
