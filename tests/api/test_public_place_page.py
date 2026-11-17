@@ -1015,8 +1015,8 @@ async def test_place_page_shows_nearby_cities_block_at_the_bottom(app_use_test_d
         latitude=51.20,
         longitude=24.20,
     )
-    # Поздний вечер: days_ahead=0 + дневное время фейлит CI после этого часа по Минску.
-    await _add_future_session(db_session, near_arena, days_ahead=0, starts_at_local="22:45")
+    # Завтра: окно «Льда рядом» — от начала сегодняшнего дня на двое суток, так что тест не зависит от часа запуска.
+    await _add_future_session(db_session, near_arena, days_ahead=1, starts_at_local="12:45")
     far_city = f"Далёск {uuid.uuid4().hex[:6]}"
     far_city_id = await _insert_city(db_session, name=far_city)
     far_arena = await _insert_arena(
@@ -1026,7 +1026,7 @@ async def test_place_page_shows_nearby_cities_block_at_the_bottom(app_use_test_d
         latitude=55.20,
         longitude=30.20,
     )
-    await _add_future_session(db_session, far_arena, days_ahead=0, starts_at_local="23:00")
+    await _add_future_session(db_session, far_arena, days_ahead=1, starts_at_local="13:00")
     await db_session.commit()
 
     async with _client() as client:
@@ -1061,7 +1061,7 @@ async def test_place_page_nearby_prefers_other_rinks_in_same_city(app_use_test_d
     peer_slug = (
         await db_session.execute(text("SELECT slug FROM arena_profiles WHERE arena_id = :id"), {"id": peer_id})
     ).scalar_one()
-    await _add_future_session(db_session, peer_id, days_ahead=0, starts_at_local="22:15")
+    await _add_future_session(db_session, peer_id, days_ahead=1, starts_at_local="12:15")
 
     other_city = f"Раубичи {uuid.uuid4().hex[:6]}"
     other_city_id = await _insert_city(db_session, name=other_city)
@@ -1072,7 +1072,7 @@ async def test_place_page_nearby_prefers_other_rinks_in_same_city(app_use_test_d
         latitude=54.05,
         longitude=27.70,
     )
-    await _add_future_session(db_session, other_arena, days_ahead=0, starts_at_local="22:30")
+    await _add_future_session(db_session, other_arena, days_ahead=1, starts_at_local="12:30")
     await db_session.commit()
 
     async with _client() as client:
