@@ -158,6 +158,36 @@ def source_from_start_param(start_param: str | None) -> str | None:
     return clean_source_label(sp[len(SOURCE_START_PREFIX) :])
 
 
+#: Разных меток на актёра, вид события и сутки — не больше этого; дальше метка не разводит дедуп (перебор
+#: ``?utm_source=`` не раздувает таблицу).
+MAX_SOURCES_PER_DAY = 3
+
+_SOURCES_TODAY = text("""
+    SELECT COUNT(DISTINCT payload->>'source') FROM catalog_consumer_events
+    WHERE kind = :kind AND actor_hash = :actor AND occurred_at >= :since AND payload ? 'source'
+      AND payload->>'source' <> :source
+    """)
+
+
+async def _cap_sources(session: AsyncSession, *, kind: str, actor_hash: str | None, body: dict[str, Any]) -> None:
+    """Метка сверх ``MAX_SOURCES_PER_DAY`` за сутки по Минску выкидывается из события (просмотр остаётся)."""
+    source = body.get("source")
+    if not source:
+        return
+    if not actor_hash:
+        return
+    since = minsk_day_start_utc(catalog_event_day_minsk())
+    params = {"kind": kind, "actor": actor_hash, "since": since, "source": str(source)}
+    try:
+        async with session.begin_nested():
+            seen = int((await session.execute(_SOURCES_TODAY, params)).scalar_one())
+    except Exception:  # noqa: BLE001 — сомнение: событие пишем, но без метки
+        logger.warning("catalog source cap check failed kind=%s", kind, exc_info=True)
+        seen = MAX_SOURCES_PER_DAY
+    if seen >= MAX_SOURCES_PER_DAY:
+        body.pop("source", None)
+
+
 def _dedup_variant(body: Mapping[str, Any]) -> str | None:
     parts = []
     if body.get("src") in SHARE_SRC_VALUES:
@@ -449,6 +479,7 @@ async def record_catalog_consumer_event(
         sp = None
     day = catalog_event_day_minsk()
     body = dict(payload or {})
+    await _cap_sources(session, kind=kind, actor_hash=actor_hash, body=body)
     dedup_key = dedup_key or (
         event_dedup_hash(
             kind=kind,
