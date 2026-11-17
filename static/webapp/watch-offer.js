@@ -164,9 +164,12 @@
 
   /** Спокойная плашка снизу экрана: заголовок, пояснение, одно действие и «Закрыть». Не модальная. */
   function renderPanel(doc, opts) {
-    var box = el(doc, 'aside', 'watch-offer');
+    // Сайт: свой отступ над плавающими «Открыть в Telegram» и «Приложение» (style-b.css, z-index 9).
+    var box = el(doc, 'aside', opts.href ? 'watch-offer watch-offer--site' : 'watch-offer');
     box.setAttribute('role', 'region');
     box.setAttribute('aria-label', copy('watch_offer.title'));
+    // Плашка появляется сама, без действия человека: читалка экрана объявит её, не перебивая.
+    box.setAttribute('aria-live', 'polite');
     var title = el(doc, 'p', 'watch-offer__title', copy('watch_offer.title'));
     var note = el(doc, 'p', 'watch-offer__note', copy('watch_offer.note'));
     var row = el(doc, 'div', 'watch-offer__row');

@@ -18,6 +18,11 @@
   animation: watch-offer-in 0.18s ease-out;
 }
 
+/* Сайт: выше плавающих «Открыть в Telegram» (~62 px) и «Приложение» (~68 px) из static/share/style-b.css. */
+.watch-offer--site {
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
 .watch-offer__title {
   margin: 0;
   font-weight: 600;

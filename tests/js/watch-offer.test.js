@@ -188,3 +188,52 @@ describe('watch offer: texts', () => {
     for (const key of keys) assert.equal(W.FALLBACK[key], COPY[key], key);
   });
 });
+
+/** Минимальный DOM для renderPanel: атрибуты, классы, дети, обработчики. */
+function fakeDoc() {
+  function node(tag) {
+    return {
+      tag,
+      attrs: {},
+      children: [],
+      className: '',
+      textContent: '',
+      setAttribute(k, v) {
+        this.attrs[k] = String(v);
+      },
+      appendChild(c) {
+        this.children.push(c);
+        c.parentNode = this;
+      },
+      removeChild(c) {
+        this.children = this.children.filter((x) => x !== c);
+        c.parentNode = null;
+      },
+      addEventListener() {},
+    };
+  }
+  const body = node('body');
+  return { body, createElement: node };
+}
+
+describe('watch offer: panel', () => {
+  it('announces itself politely to screen readers', () => {
+    const doc = fakeDoc();
+    W.renderPanel(doc, { href: null, onCta() {}, onClose() {} });
+    const box = doc.body.children[0];
+    assert.equal(box.attrs['aria-live'], 'polite');
+    assert.equal(box.className, 'watch-offer');
+  });
+
+  it('site panel gets its own offset above the floating Telegram and app buttons', () => {
+    const doc = fakeDoc();
+    W.renderPanel(doc, { href: 'https://example/x', onCta() {}, onClose() {} });
+    assert.equal(doc.body.children[0].className, 'watch-offer watch-offer--site');
+    const css = require('node:fs').readFileSync(require.resolve('../../static/webapp/watch-offer.css'), 'utf8');
+    const rule = css.slice(css.indexOf('.watch-offer--site'));
+    const m = /bottom:\s*calc\((\d+)px/.exec(rule);
+    assert.ok(m, 'нет отступа у .watch-offer--site');
+    // плавающая «Открыть в Telegram» ~62 px, «Приложение» ~68 px от нижнего края (static/share/style-b.css)
+    assert.ok(Number(m[1]) >= 80, m[1]);
+  });
+});
