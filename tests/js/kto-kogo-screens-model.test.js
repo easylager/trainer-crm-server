@@ -532,9 +532,10 @@ describe('«Трибуна» в итоге', () => {
   it('гости — остаток до 100, как в боте: 1 из 40 за хозяев → 97%', () => {
     assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 1, away: 39 })).line, 'Победителя угадали 97% игроков — и ты в их числе.');
   });
-  it('меньше 20 ходов, очки не посчитаны или хода нет — блока нет', () => {
-    assert.equal(S.TRIBUNE_MIN, 20);
-    assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 10, away: 9 })), null);
+  it('меньше 10 ходов, очки не посчитаны или хода нет — блока нет', () => {
+    assert.equal(S.TRIBUNE_MIN, 10);
+    assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 5, away: 4 })), null);
+    assert.equal(S.tribune(match({ side: 'away', points: 20 }, { home: 5, away: 5 })).line, 'Победителя угадали 50% игроков — и ты в их числе.');
     assert.equal(S.tribune(match({ side: 'away', points: null }, { home: 114, away: 34 })), null);
     assert.equal(S.tribune(match(null, { home: 114, away: 34 })), null);
   });

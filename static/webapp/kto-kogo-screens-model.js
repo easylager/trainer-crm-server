@@ -473,7 +473,7 @@
   }
 
   // «Трибуна» — с какой долей игроков совпал ход. Те же правила и порог, что tribune_line в hockey_notices.py.
-  var TRIBUNE_MIN = 20;
+  var TRIBUNE_MIN = 10;
 
   /** Доли сторон и строка под итогом; меньше TRIBUNE_MIN ходов или итога нет — null. */
   function tribune(m) {

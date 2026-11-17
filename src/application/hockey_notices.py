@@ -517,7 +517,7 @@ def result_text(
 
 
 # «Трибуна» — с какой долей игроков совпал ход. На паре ходов проценты ничего не значат.
-TRIBUNE_MIN = 20
+TRIBUNE_MIN = 10
 
 
 def _percent(part: int, total: int) -> int:
