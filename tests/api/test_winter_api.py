@@ -1,7 +1,7 @@
 """Публичный API зимних точек и отметка с сайта (TASK-343: W1, W4, W5, Z1, список/сорт)."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -161,7 +161,10 @@ async def test_site_sheet_companions_recorded_under_one_rate_limit(on, client, d
 
 @pytest.mark.asyncio
 async def test_point_api_gives_time_of_live_marks(on, client, db_session):
-    aid = await make_point(db_session, state="flooded", state_source="admin")
+    # state_at по реальным часам: решение админа держится 7 суток (ADMIN_STATE_HOLD), а фикстурный NOW закреплён.
+    aid = await make_point(
+        db_session, state="flooded", state_source="admin", state_at=datetime.now(timezone.utc) - timedelta(hours=1)
+    )
     tok = (await client.get(f"/api/public/winter/points/{aid}")).json()["mark_token"]
     body = {"kind": "ice", "value": "flooded", "token": tok, "companions": [{"kind": "crowd", "value": "few"}]}
     assert (await client.post(f"/api/public/winter/points/{aid}/marks", json=body, headers=HDR)).status_code == 200
