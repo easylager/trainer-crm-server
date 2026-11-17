@@ -674,10 +674,10 @@ describe('пьедестал лиги', () => {
     const top = S.podiumOrder([{ rank: 1 }, { rank: 2 }, { rank: 3 }, { rank: 4 }]);
     assert.deepEqual(top.map((r) => r.rank), [2, 1, 3]);
   });
-  it('значок звания: кепка и шарф есть, остальным званиям значка нет', () => {
-    assert.equal(S.titleMark({ id: 'cap' }), '🧢');
-    assert.equal(S.titleMark({ id: 'scarf' }), '🧣');
-    assert.equal(S.titleMark({ id: 'vanga' }), '');
+  it('значок есть у каждого звания; без звания или с неизвестным — пусто', () => {
+    const marks = { cap: '🧢', scarf: '🧣', vanga: '🔮', streak: '🔥', optimist: '☀️' };
+    Object.keys(marks).forEach((id) => assert.equal(S.titleMark({ id }), marks[id]));
+    assert.equal(S.titleMark({ id: 'unknown' }), '');
     assert.equal(S.titleMark(null), '');
   });
   it('пояснение к званиям: только о тех, что висят на таблице', () => {
