@@ -200,7 +200,7 @@ async def dispatch(
         try:
             outcome = hn._outcome(await send(player_key, notice.text, notice.buttons))
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
-            logger.warning("kk_notify %s/%s send failed", kind, notice.match_id, exc_info=True)
+            logger.warning("kk_notify %s/%s send failed", kind, notice.match_ids, exc_info=True)
             outcome = hn.FAILED
         if outcome == hn.GONE:  # чат не найден / аккаунт удалён: недостижим, как после блокировки
             outcome = hn.BLOCKED

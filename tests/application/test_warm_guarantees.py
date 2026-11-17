@@ -377,3 +377,24 @@ async def test_run_pass_uses_its_own_bot(monkeypatch) -> None:
     assert await wn.run_pass(now=at(10)) == {"ok": 1}
     assert seen["bot"] is not None and seen["bot"] is not hn._bot and seen["gone"] is True
     assert closed == []
+
+
+@pytest.mark.asyncio
+async def test_send_raising_marks_failed_and_journals_it(db_session, factory) -> None:
+    """Ревью п. 5: исключение отправителя у прогрева не оставляет строку «в пути» навсегда и пишет итог в журнал."""
+
+    async def raising(chat_id, body, buttons):
+        raise RuntimeError("telegram down")
+
+    result = await _go(factory, _notice(ANNA), send=raising)
+    assert (result.decision, result.result) == ("send", hn.FAILED)
+    row = (
+        await db_session.execute(text("SELECT sent_at, failed FROM warm_notices WHERE telegram_id = :k"), {"k": ANNA})
+    ).one()
+    assert row.sent_at is None and row.failed is True
+    journal = (
+        await db_session.execute(
+            text("SELECT decision, result FROM kk_notify_decisions WHERE player_key = :k"), {"k": ANNA}
+        )
+    ).all()
+    assert [tuple(r) for r in journal] == [("send", hn.FAILED)]
