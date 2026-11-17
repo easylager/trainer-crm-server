@@ -21,12 +21,12 @@
 
   /** Наклейка: корона и число, чуть повёрнута — «приклеена» к логотипу. */
   function sticker(n, small) {
-    return h('span', { class: 'kk-stk' + (small ? ' kk-stk--s' : ''), role: 'img', 'aria-label': S.crownCount(n) }, [K.crownIcon(small ? 11 : 14), String(n)]);
+    return h('span', { class: 'kk-crst' + (small ? ' kk-crst--s' : ''), role: 'img', 'aria-label': S.crownCount(n) }, [K.crownIcon(small ? 11 : 14), String(n)]);
   }
 
   /** Логотип клуба с наклейкой; у клуба без корон логотип бледный и без наклейки. */
   function clubDisc(entry, size, small) {
-    var wrap = h('span', { class: 'kk-stkw' + (entry.count ? '' : ' is-dim') }, [K.logoDisc(entry.club, size)]);
+    var wrap = h('span', { class: 'kk-crstw' + (entry.count ? '' : ' is-dim') }, [K.logoDisc(entry.club, size)]);
     if (entry.count) wrap.appendChild(sticker(entry.count, small));
     return wrap;
   }
@@ -145,7 +145,7 @@
       main.appendChild(h('div', { class: 'kk-sec' }, [
         h('span', { class: 'kk-lbl', text: 'ТВОИ КОРОНЫ В КЛУБЕ' }),
         months.length
-          ? h('div', { class: 'kk-chips' }, months.map(function (t) { return h('span', { class: 'kk-crch' }, [K.crownIcon(14), t]); }))
+          ? h('div', { class: 'kk-crchs' }, months.map(function (t) { return h('span', { class: 'kk-crch' }, [K.crownIcon(14), t]); }))
           : h('span', { class: 'kk-sub', text: 'Корона — за первое место месяца: очки хотя бы у троих и не меньше трёх ходов у тебя в этом клубе.' }),
       ]));
       main.appendChild(h('div', { class: 'kk-two' }, [

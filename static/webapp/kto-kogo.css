@@ -665,11 +665,11 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-r--btn { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 
 /* Стенд наград (TASK-430): наклейка-корона на логотипе клуба, полки и строка «Мой стенд». */
-.kk-stkw { position: relative; display: inline-flex; flex: none; }
-.kk-stkw.is-dim .kk-disc { opacity: 0.45; }
-.kk-stk { position: absolute; top: -6px; right: -9px; display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px 3px 5px; border-radius: 10px; background: var(--kk-gold); color: var(--kk-on-gold); font: 700 14px/1 var(--kk-text); font-variant-numeric: tabular-nums; transform: rotate(8deg); box-shadow: 0 2px 0 rgba(90, 60, 0, 0.55); }
-.kk-stk .kk-crown-ic { color: var(--kk-on-gold); }
-.kk-stk--s { top: -5px; right: -8px; padding: 2px 6px 2px 4px; font-size: 11px; border-radius: 8px; box-shadow: 0 1px 0 rgba(90, 60, 0, 0.55); }
+.kk-crstw { position: relative; display: inline-flex; flex: none; }
+.kk-crstw.is-dim .kk-disc { opacity: 0.45; }
+.kk-crst { position: absolute; top: -6px; right: -9px; display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px 3px 5px; border-radius: 10px; background: var(--kk-gold); color: var(--kk-on-gold); font: 700 14px/1 var(--kk-text); font-variant-numeric: tabular-nums; transform: rotate(8deg); box-shadow: 0 2px 0 rgba(90, 60, 0, 0.55); }
+.kk-crst .kk-crown-ic { color: var(--kk-on-gold); }
+.kk-crst--s { top: -5px; right: -8px; padding: 2px 6px 2px 4px; font-size: 11px; border-radius: 8px; box-shadow: 0 1px 0 rgba(90, 60, 0, 0.55); }
 .kk-strip { display: flex; flex-direction: column; gap: 12px; width: 100%; min-height: 44px; padding: 14px 16px; border: 1px solid var(--kk-line); border-radius: 16px; background: var(--kk-card); color: var(--kk-ink); text-align: left; cursor: pointer; font: 500 13px/1.3 var(--kk-text); }
 .kk-strip__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .kk-strip__t { font: 700 16px/1.2 var(--kk-text); }
@@ -680,13 +680,13 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-plq .kk-crown-ic { color: var(--kk-gold); }
 .kk-plq.is-dim .kk-crown-ic { color: var(--kk-line); }
 .kk-plq__t { font: 700 14px/1.2 var(--kk-text); }
-.kk-plq .kk-stk { top: -8px; right: -4px; font-size: 15px; }
+.kk-plq .kk-crst { top: -8px; right: -4px; font-size: 15px; }
 .kk-ledge { display: block; height: 8px; margin-top: 2px; border-radius: 4px; background: var(--kk-chip); border-top: 2px solid var(--kk-line); }
 .kk-shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px; }
 .kk-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 44px; padding: 8px 6px 14px; border: 0; background: transparent; color: var(--kk-soft); cursor: pointer; font: 600 12px/1.2 var(--kk-text); text-align: center; }
 .kk-tile .kk-ledge { position: absolute; left: 0; right: 0; bottom: 0; }
 .kk-clubhead { display: flex; justify-content: center; padding: 12px 0; }
-.kk-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.kk-crchs { display: flex; flex-wrap: wrap; gap: 8px; }
 .kk-crch { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 16px; background: var(--kk-crownbg); color: var(--kk-crownink); font: 600 13px/1 var(--kk-text); }
 
 /* Момент «корона получена» (TASK-430): три анимации — отскок плашки, блик, свечение; при reduce-motion стоят. */
