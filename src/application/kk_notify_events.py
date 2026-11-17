@@ -170,6 +170,17 @@ def _buttons(match: dict | None) -> list[list[dict]]:
     return hn._rows(*rows)
 
 
+def _buttons_play(match: dict | None) -> list[list[dict]]:
+    """Приглашающие пуши (TASK-429): вместо двух кнопок хода одна «Сыграть» в игру; счёт выбирают там."""
+    rows: list = []
+    start = f"{hn.START_PICK}_{match['match_id']}" if match is not None else hn.START_PICK
+    if match is not None:
+        rows.append([hn.url_button(t("kk_notify.btn.play"), start)])
+    rows.append([hn.url_button(t("kk_notify.btn.table"), start)])
+    rows.append(off_all_button())
+    return hn._rows(*rows)
+
+
 def off_all_button() -> list[dict]:
     """«Не присылать» — выключает все новые сообщения игры (не итог хода)."""
     return [{"text": t("kk_notify.btn.no"), "callback_data": CB_NOALL}]
@@ -216,7 +227,7 @@ async def produce_invite(session: AsyncSession, *, now: datetime) -> list[Propos
             f.player_key,
             m["match_id"],
             render(now),
-            _buttons(m),
+            _buttons_play(m),
         )
         out.append(
             Proposal(
@@ -308,7 +319,7 @@ async def produce_comeback(session: AsyncSession, *, now: datetime) -> list[Prop
 
         out.append(
             Proposal(
-                hn.Notice(KIND_COMEBACK, f.player_key, m["match_id"], render(now), _buttons(m)),
+                hn.Notice(KIND_COMEBACK, f.player_key, m["match_id"], render(now), _buttons_play(m)),
                 _all_of(
                     _window_check(MORNING_FROM, MORNING_TO),
                     _comeback_still_due(step),

@@ -124,10 +124,9 @@ async def test_no_move_reminder_three_hours_before_fan_club_match(db_session, fa
     notices = await due_notices(db_session, now=at(16, 5))
     assert [(n.kind, n.player_key, n.match_id) for n in notices] == [("nomove", SASHA, mine)]
     n = notices[0]
-    assert n.text == "<b>Юность — Шахтёр</b> сегодня в 19:00. Хода ещё нет — тапни прямо здесь."
-    assert [b["text"] for b in n.buttons[0]] == ["Юность", "Шахтёр"]
-    assert n.buttons[0][0]["callback_data"] == f"kk:p:{mine}:h"
-    assert n.buttons[0][1]["callback_data"] == f"kk:p:{mine}:a"
+    assert n.text == "<b>Юность — Шахтёр</b> сегодня в 19:00. КТО КОГО? 🏒"
+    assert [b["text"] for b in n.buttons[0]] == ["Сыграть"]
+    assert n.buttons[0][0]["url"].endswith(f"?start=kkn_{mine}") or "kkn" in n.buttons[0][0]["url"]
     assert other not in [x.match_id for x in notices]
 
     out = Outbox()
@@ -285,9 +284,7 @@ async def test_a_day_with_three_matches_sends_at_most_reminder_plus_summary(db_s
     # Остальные напоминания в тот же день не уходят, даже если хода нет.
     await deliver(factory, now=at(13, 10), send=out)
     await deliver(factory, now=at(17, 10), send=out)
-    assert [text for _, text, _ in out.sent] == [
-        "<b>Юность — Шахтёр</b> сегодня в 12:00. Хода ещё нет — тапни прямо здесь."
-    ]
+    assert [text for _, text, _ in out.sent] == ["<b>Юность — Шахтёр</b> сегодня в 12:00. КТО КОГО? 🏒"]
     # Он сделал ходы и дождался итогов всех трёх.
     for m in ms:
         await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(9, 30))
@@ -388,7 +385,8 @@ async def test_month_final_message_at_noon_for_top_players(db_session, factory) 
         "Ты на 1-м месте, Лёша позади на 20 очков."
     )
     assert "до короны 30 очков" in by_player[KATYA].text
-    assert by_player[SASHA].buttons[0][0]["callback_data"] == f"kk:p:{last}:h"
+    assert by_player[SASHA].buttons[0][0]["text"] == "Сыграть"
+    assert "kkn" in by_player[SASHA].buttons[0][0]["url"]
     # Не в день финала — тишина.
     assert [n for n in await due_notices(db_session, now=at(12, 5, day=29)) if n.kind == "mfinal"] == []
 
@@ -456,7 +454,9 @@ async def test_retries_are_capped_then_notice_is_failed_for_good(db_session, fac
         assert (await deliver(factory, now=at(16, 5 + minute), send=out))["retry"] == 1
     last = await deliver(factory, now=at(16, 20), send=out)
     assert last["failed"] == 1 and "retry" not in last
-    assert (await deliver(factory, now=at(16, 30), send=out))["failed"] == 0 and out.calls == hockey_notices.MAX_ATTEMPTS
+    assert (await deliver(factory, now=at(16, 30), send=out))[
+        "failed"
+    ] == 0 and out.calls == hockey_notices.MAX_ATTEMPTS
 
 
 @pytest.mark.asyncio
@@ -604,7 +604,7 @@ async def test_next_move_is_nearest_open_match_of_fan_club(db_session) -> None:
     mine = await _match(db_session, "n2", at(19, day=12))
     nxt = await next_move(db_session, player_key=SASHA, now=at(22))
     assert nxt is not None and nxt.match_id == mine
-    assert nxt.buttons[0][0]["callback_data"] == f"kk:p:{mine}:h"
+    assert nxt.buttons[0][0]["text"] == "Сыграть"
     await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=mine, side="home", now=at(22))
     # «Своя» команда закрыта — берём любой открытый матч.
     fallback = await next_move(db_session, player_key=SASHA, now=at(22))
@@ -670,7 +670,9 @@ async def _resent_world(db_session, factory):
         await _fan(db_session, player, name=name)
     await set_type(db_session, LESHA, "result", False)
     m = await _match(db_session, "rs1", at(19))
-    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, home_score=3, away_score=2, now=at(10))
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=m, home_score=3, away_score=2, now=at(10)
+    )
     await make_pick(db_session, player_key=KATYA, display_name="Катя", match_id=m, side="home", now=at(10))
     await make_pick(db_session, player_key=LESHA, display_name="Лёша", match_id=m, side="home", now=at(10))
     await make_pick(db_session, player_key=VOVA, display_name="Вова", match_id=m, side="away", now=at(10))

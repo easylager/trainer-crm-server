@@ -107,7 +107,7 @@ def render_all() -> list[tuple[str, str]]:
 
 def buttons_overview() -> list[str]:
     return [
-        "Ход: названия двух команд (кнопки хода)",
+        f"Приглашения: «{t('kk_notify.btn.play')}» (ссылка в игру; счёт выбирают там, TASK-429)",
         f"«{t('kk_notify.btn.table')}» (ссылка в игру)",
         f"«{t('kk_notify.btn.no')}» (выключает все пуши игры, кроме итога хода, поправок итога, переноса матча и писем лиг)",
         f"Согласие: «{t('kk_notify.btn.yes')}» / «{t('kk_notify.btn.no')}»",

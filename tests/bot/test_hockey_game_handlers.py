@@ -19,6 +19,9 @@ ME, OTHER = 9370001, 9370002
 @pytest.fixture(autouse=True)
 def _db(monkeypatch, _test_db_core):
     monkeypatch.setattr(h, "async_session_factory", _test_db_core["factory"])
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_test_bot")
+    monkeypatch.setenv("CLIENT_BOT_MAIN_MINI_APP", "1")
+    monkeypatch.delenv("CLIENT_MINI_APP_SHORT_NAME", raising=False)
 
 
 def _callback(data: str, rows: list[list[tuple[str, str]]] | None = None, user_id: int = ME) -> MagicMock:
@@ -94,16 +97,16 @@ async def test_garbage_and_missing_match_are_harmless(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_next_move_sends_a_fresh_prompt_with_pick_buttons(db_session) -> None:
+async def test_next_move_sends_a_fresh_prompt_with_play_button(db_session) -> None:
     nxt = await _match(db_session, datetime.now(timezone.utc) + timedelta(hours=5), home="Динамо-Минск", away="Трактор")
     cb = _callback("kk:n")
     await h.on_next(cb)
     cb.message.answer.assert_awaited_once()
     body = cb.message.answer.await_args.args[0]
     markup = cb.message.answer.await_args.kwargs["reply_markup"]
-    assert "Твой ход?" in body
-    callbacks = [b.callback_data for row in markup.inline_keyboard for b in row]
-    assert f"kk:p:{nxt}:h" in callbacks or any(c and c.startswith("kk:p:") for c in callbacks)
+    assert "КТО КОГО? 🏒" in body
+    buttons = [b for row in markup.inline_keyboard for b in row]
+    assert [b.text for b in buttons] == ["Сыграть"] and "kkn" in (buttons[0].url or "")
 
 
 @pytest.mark.asyncio

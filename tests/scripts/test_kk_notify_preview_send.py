@@ -199,8 +199,8 @@ def test_buttons_are_inert_previews() -> None:
                 if "callback_data" in b:
                     assert b["callback_data"] == "kk:preview"
                 else:
-                    assert b["url"].startswith("https://t.me/") and b["text"] == "Таблица"
-    assert {"Таблица", "Не присылать", "Присылать"} <= texts
+                    assert b["url"].startswith("https://t.me/") and b["text"] in ("Таблица", "Сыграть")
+    assert {"Сыграть", "Таблица", "Не присылать", "Присылать"} <= texts
     assert not any(
         re.match(r"^kk:(p|n|yes|noall|off|lv)\b", b.get("callback_data", ""))
         for m in mod.build_messages()

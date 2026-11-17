@@ -467,7 +467,7 @@ def _ordinal(n: int) -> str:
 def nomove_text(*, home: str, away: str, starts_at: datetime, now: datetime) -> str:
     return (
         f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))}</b> {_day_word(starts_at, now)} в {_hhmm(starts_at)}. "
-        "Хода ещё нет — тапни прямо здесь."
+        "КТО КОГО? 🏒"
     )
 
 
@@ -505,9 +505,7 @@ def result_text(
         verdict = f"{head} +{total}{x2}."
     else:
         verdict = f"{head}: +{total}{x2}."
-    head_line = (
-        f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))} {final_home}:{final_away}.</b>"
-    )
+    head_line = f"<b>{html.escape(club_name(home))} — {html.escape(club_name(away))} {final_home}:{final_away}.</b>"
     move = _your_move(home, away, side, pick_home, pick_away)
     return " ".join(part for part in (head_line, move, verdict) if part)
 
@@ -706,10 +704,10 @@ async def _overtook_notice(session: AsyncSession, o: Overtake, *, now: datetime)
     if nxt is not None:
         body += (
             f"\n{html.escape(club_name(nxt.home_team))} — {html.escape(club_name(nxt.away_team))}, "
-            f"{_day_word(nxt.starts_at, now)} в {_hhmm(nxt.starts_at)} — шанс вернуть."
+            f"{_day_word(nxt.starts_at, now)} в {_hhmm(nxt.starts_at)} — шанс вернуть. КТО КОГО? 🏒"
         )
         if not (await session.execute(_HAS_PICK, {"match_id": nxt.match_id, "player_key": o.player_key})).first():
-            rows.append(list(pick_buttons(nxt.match_id, nxt.home_team, nxt.away_team)))
+            rows.append([url_button("Сыграть", f"{START_PICK}_{nxt.match_id}")])
     rows.append([url_button("Таблица лиги", f"{START_LEAGUE}_{await _invite_code(session, o.league_id)}")])
     rows.append(off_button(KIND_OVERTOOK))
     return Notice(KIND_OVERTOOK, o.player_key, o.anchor_match_id, body, _rows(*rows))
@@ -727,7 +725,11 @@ async def _invite_code(session: AsyncSession, league_id: int) -> str:
 async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) -> list[Notice]:
     fresh = now - (RESULT_FRESH if _local(now).hour >= 15 else RESULT_FRESH_AFTER_NIGHT)
     by_player: dict[int, list] = {}
-    for r in (await session.execute(_DUE_RESULT, {"fresh": _utc(fresh), "ready": _utc(now) - RESULT_SEND_DELAY, "ready_now": _utc(now)})).all():
+    for r in (
+        await session.execute(
+            _DUE_RESULT, {"fresh": _utc(fresh), "ready": _utc(now) - RESULT_SEND_DELAY, "ready_now": _utc(now)}
+        )
+    ).all():
         by_player.setdefault(r.player_key, []).append(r)
     out: list[Notice] = []
     for player_key, rows in by_player.items():
@@ -785,7 +787,7 @@ async def _nomove_candidates(session: AsyncSession, *, now: datetime) -> dict[in
         if r.player_key in out:
             continue
         body = nomove_text(home=r.home_team, away=r.away_team, starts_at=r.starts_at, now=now)
-        buttons = _rows(list(pick_buttons(r.match_id, r.home_team, r.away_team)), off_button(KIND_NOMOVE))
+        buttons = _rows([url_button("Сыграть", f"{START_PICK}_{r.match_id}")], off_button(KIND_NOMOVE))
         out[r.player_key] = Notice(KIND_NOMOVE, r.player_key, r.match_id, body, buttons)
     return out
 
@@ -838,9 +840,10 @@ async def _mfinal_candidates(session: AsyncSession, *, now: datetime, cache: dic
                 if gap
                 else f"Ты на {mine.rank}-м месте — в очках вровень с первым."
             )
+        body += " КТО КОГО? 🏒"
         has_pick = (await session.execute(_HAS_PICK, {"match_id": final.id, "player_key": fan.player_key})).first()
         buttons = _rows(
-            [] if has_pick else list(pick_buttons(final.id, final.home_team, final.away_team)),
+            [] if has_pick else [url_button("Сыграть", f"{START_PICK}_{final.id}")],
             [url_button("Таблица", f"{START_PICK}_{final.id}")],
             off_button(KIND_MFINAL),
         )
@@ -979,9 +982,7 @@ _RESCORE_PENDING = text("""
     """)
 
 
-async def queue_rescore(
-    session: AsyncSession, match_id: int, *, old: tuple[int, int], new: tuple[int, int]
-) -> int:
+async def queue_rescore(session: AsyncSession, match_id: int, *, old: tuple[int, int], new: tuple[int, int]) -> int:
     """Итог поправили с ``old`` на ``new``: поставить исправление тем, кто получил старый. Вызывать ДО пересчёта очков.
 
     Тот же счёт — ничего. Возвращает, сколько игроков теперь ждут исправления."""
@@ -1273,14 +1274,14 @@ async def next_move(session: AsyncSession, *, player_key: int, now: datetime) ->
         return None
     body = (
         f"<b>{html.escape(club_name(nxt['home_team']))} — {html.escape(club_name(nxt['away_team']))}</b> "
-        f"{_day_word(nxt['starts_at'], now)} в {_hhmm(nxt['starts_at'])}. Твой ход?"
+        f"{_day_word(nxt['starts_at'], now)} в {_hhmm(nxt['starts_at'])}. КТО КОГО? 🏒"
     )
     return Notice(
         "next",
         player_key,
         nxt["match_id"],
         body,
-        _rows(list(pick_buttons(nxt["match_id"], nxt["home_team"], nxt["away_team"]))),
+        _rows([url_button("Сыграть", f"{START_PICK}_{nxt['match_id']}")]),
     )
 
 
@@ -1386,7 +1387,9 @@ async def deliver_league_notices(session_factory, *, now: datetime, send: Sender
             outcome = FAILED
         async with session_factory() as session:
             if outcome == RETRY:
-                await session.execute(_RELEASE_LEAGUE_NOTICE, params)  # claimed_at снова NULL — уйдёт в следующий проход
+                await session.execute(
+                    _RELEASE_LEAGUE_NOTICE, params
+                )  # claimed_at снова NULL — уйдёт в следующий проход
             else:
                 _RETRIES.pop(key, None)
                 await session.execute(
