@@ -1,11 +1,26 @@
-"""«Кто кого»: единая точка допуска отправки игроку (TASK-426, срез 0).
+"""Единая точка допуска отправки человеку: «Кто кого» (TASK-426) и прогрев посетителей катков (TASK-428).
 
-Все правила «можно ли сейчас писать этому человеку» живут здесь и больше нигде:
+Все правила «можно ли сейчас писать этому человеку» живут здесь и больше нигде. Человек — это Telegram-аккаунт:
+``player_key`` игры и ``telegram_id`` клиента катка — одно и то же число (пишет один клиентский бот), поэтому
+бюджет, замок и тихие часы общие для обеих семей поводов (``KindPolicy.family``):
 
 * тихие часы 23:00–09:00 по Минску;
 * дневной бюджет (1 сообщение в сутки по Минску) и недельный (3 за последние 7 суток по Минску);
 * пауза игрока, «не присылать» (``remind``), отключённый тип, блокировка бота;
-* выключатели новых поводов: общий флаг, флаг повода, белый список, «тексты приняты», сухой прогон.
+* выключатели новых поводов: общий флаг, флаг повода, белый список, «тексты приняты», сухой прогон — у каждой
+  семьи свои (``KK_NOTIFY_*`` и ``WARM_*``), конфиг чужой семьи — отказ.
+
+Бюджет считается по всему, что человек получил от бота: строки ``hockey_notices`` (кроме итогов и событий),
+``warm_notices`` и доставленные напоминания колокольчика катка (``client_ice_watch_deliveries``: и о новом
+расписании, и сезонное «пора проверять коньки» — тихая деактивация сезонной подписки без отправки туда не пишется). Колокольчик сам допуск не проходит (ответ на явную подписку), но в бюджете
+считается: игрок-подписчик суммарно получает не больше 1 сообщения в сутки и 3 в неделю от поводов с допуском.
+
+Семья ``warm`` (TASK-428) уступает игре: человеку «в игре» в день матча прогрев не пишет (``GAME_PRIORITY``);
+«сегодня лёд» — не чаще ``WARM_TODAY_WEEKLY_CAP`` раз за скользящую неделю. Паузы игры её не касаются; её
+согласие — явная подписка на каток (повод перепроверяет её перед отправкой) или единственное напоминание
+с «Не присылать». «Не присылать» для неё —
+``warm_prefs.opted_out_at`` и любое «Не присылать» игры (``remind = false`` или ``notify_consent = false``), блокировка —
+``warm_prefs.bot_blocked_at`` или блокировка, замеченная игрой.
 
 Прежние поводы (итог хода, ``moved``, ``rescore``, ``nomove``, ``mfinal``, ``overtook``) проходят ту же проверку
 со своей политикой: итоги и события вне бюджета, как раньше; ``nomove``/``mfinal``/``overtook`` — в дневном, но
@@ -50,8 +65,17 @@ DAILY_LIMIT = "daily_cap"
 WEEKLY_LIMIT = "weekly_cap"
 DRY_RUN = "dry_run"
 OK = "ok"
+FAMILY_MISMATCH = "family_mismatch"
+GAME_PRIORITY = "game_priority"  # прогрев уступает день игре (решение владельца, TASK-428)
+KIND_WEEKLY_LIMIT = "kind_weekly_cap"  # свой недельный лимит повода (``KindPolicy.kind_weekly_cap``)
 STALE_PREFIX = "stale:"
 ERROR_PREFIX = "error:"
+
+
+FAMILY_KK = "kk"
+FAMILY_WARM = "warm"
+# Префикс настроек каждой семьи: ``{prefix}_enabled``, ``_dry_run``, ``_texts_accepted``, ``_kinds``, ``_whitelist``.
+FAMILY_SETTINGS_PREFIX = {FAMILY_KK: "kk_notify", FAMILY_WARM: "warm"}
 
 
 @dataclass(frozen=True)
@@ -72,6 +96,11 @@ class KindPolicy:
     # Нужно ли согласие на новые сообщения (``notify_consent``: ответ на первое сообщение или согласие по умолчанию
     # для игравших до выкатки). Итоги и события его не требуют.
     needs_consent: bool = False
+    # Семья поводов: ``kk`` — игра (настройки ``hockey_player_prefs``, флаги ``KK_NOTIFY_*``), ``warm`` — прогрев
+    # посетителей катков (``warm_prefs``, флаги ``WARM_*``).
+    family: str = FAMILY_KK
+    # Свой лимит повода за скользящие 7 суток по Минску (только отправленные этого вида), сверх общего недельного.
+    kind_weekly_cap: int | None = None
 
 
 KIND_POLICY: dict[str, KindPolicy] = {
@@ -117,25 +146,28 @@ class GateConfig:
     texts_accepted: bool = False
     kinds: frozenset[str] = field(default_factory=frozenset)
     whitelist: frozenset[int] = field(default_factory=frozenset)
+    family: str = FAMILY_KK
 
     @classmethod
-    def from_settings(cls, settings=None) -> "GateConfig":
+    def from_settings(cls, settings=None, *, family: str = FAMILY_KK) -> "GateConfig":
+        prefix = FAMILY_SETTINGS_PREFIX[family]  # неизвестная семья — KeyError: закрыто
         if settings is None:
             from src.shared.config import Settings
 
             settings = Settings()  # type: ignore[call-arg]
         keys: set[int] = set()
-        for part in _csv(getattr(settings, "kk_notify_whitelist", "")):
+        for part in _csv(getattr(settings, f"{prefix}_whitelist", "")):
             try:
                 keys.add(int(part))
             except ValueError:
-                logger.warning("kk_notify whitelist: %r не число, пропущено", part)
+                logger.warning("%s whitelist: %r не число, пропущено", prefix, part)
         return cls(
-            enabled=bool(getattr(settings, "kk_notify_enabled", False)),
-            dry_run=bool(getattr(settings, "kk_notify_dry_run", True)),
-            texts_accepted=bool(getattr(settings, "kk_notify_texts_accepted", False)),
-            kinds=frozenset(p.lower() for p in _csv(getattr(settings, "kk_notify_kinds", ""))),
+            enabled=bool(getattr(settings, f"{prefix}_enabled", False)),
+            dry_run=bool(getattr(settings, f"{prefix}_dry_run", True)),
+            texts_accepted=bool(getattr(settings, f"{prefix}_texts_accepted", False)),
+            kinds=frozenset(p.lower() for p in _csv(getattr(settings, f"{prefix}_kinds", ""))),
             whitelist=frozenset(keys),
+            family=family,
         )
 
 
@@ -191,12 +223,21 @@ _PREFS = text("""
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = q.player_key
     """)
 
-# Сообщения, что уже ушли или заняты и ещё в пути, за окно. Итоги и события в бюджет не входят.
+# Сообщения, что уже ушли или заняты и ещё в пути, за окно — всё, что человек получил от клиентского бота:
+# игра (кроме итогов и событий), прогрев и доставленные напоминания колокольчика катка.
 _SPENT = text("""
-    SELECT COUNT(*) FROM hockey_notices
-    WHERE player_key = :player_key AND NOT (kind = ANY(:exempt))
-      AND ((sent_at >= :since AND sent_at < :until)
-           OR (sent_at IS NULL AND NOT failed AND created_at >= :since AND created_at < :until))
+    SELECT
+      (SELECT COUNT(*) FROM hockey_notices
+       WHERE player_key = :player_key AND NOT (kind = ANY(:exempt))
+         AND ((sent_at >= :since AND sent_at < :until)
+              OR (sent_at IS NULL AND NOT failed AND created_at >= :since AND created_at < :until)))
+    + (SELECT COUNT(*) FROM warm_notices
+       WHERE telegram_id = :player_key
+         AND ((sent_at >= :since AND sent_at < :until)
+              OR (sent_at IS NULL AND NOT failed AND created_at >= :since AND created_at < :until)))
+    + (SELECT COUNT(*) FROM client_ice_watch_deliveries AS d
+       JOIN client_ice_watches AS w ON w.id = d.watch_id
+       WHERE w.telegram_id = :player_key AND d.ok AND d.attempted_at >= :since AND d.attempted_at < :until)
     """)
 
 
@@ -215,12 +256,65 @@ register_kind(KIND_INVITE, KindPolicy(budgeted=True, weekly=True, new=True, prio
 register_kind(KIND_COMEBACK, KindPolicy(budgeted=True, weekly=True, new=True, priority=4, needs_consent=True))
 
 
+# Прогрев посетителей (TASK-428): те же правила и тот же бюджет. Приоритет внутри прохода: меньше — важнее.
+KIND_WARM_WELCOME = "warm_welcome"  # сразу после подписки на каток, один раз
+KIND_WARM_TODAY = "warm_today"  # утром в день сеанса на подписанном катке
+KIND_WARM_WEEK = "warm_week"  # недельная подборка сеансов катка
+KIND_WARM_NUDGE = "warm_nudge"  # одно напоминание тому, кто запускал бота и смотрел каток, но не подписан
+# Порядок = приоритет: в четверг подборка недели важнее «сегодня» (в ней есть и сегодняшние сеансы).
+WARM_KINDS = (KIND_WARM_WELCOME, KIND_WARM_WEEK, KIND_WARM_TODAY, KIND_WARM_NUDGE)
+# «Сегодня лёд» — не чаще 2 раз за скользящие 7 суток (решение владельца); неделя и приветствие — без своего лимита.
+WARM_TODAY_WEEKLY_CAP = 2
+for _priority, _kind in enumerate(WARM_KINDS):
+    register_kind(
+        _kind,
+        KindPolicy(
+            budgeted=True,
+            weekly=True,
+            new=True,
+            priority=_priority,
+            family=FAMILY_WARM,
+            kind_weekly_cap=WARM_TODAY_WEEKLY_CAP if _kind == KIND_WARM_TODAY else None,
+        ),
+    )
+
+# Приоритет у игры (решение владельца, TASK-428): человек «в игре» и в эти сутки по Минску есть матч — прогрев день
+# не берёт. Нарочно шире любого повода игры (``nomove`` за 3 часа до матча своей команды, ``mfinal`` с 12:00, «обошли»
+# после итога любого матча, приглашение и возврат утром): не повторяем окна каждого повода, а уступаем весь день, если
+# игра в этот день вообще может написать. «В игре» — как «своя команда» у игры: «болею за» или ход за 31 сутки.
+GAME_FAN_DAYS = 31
+_GAME_DAY = text("""
+    SELECT EXISTS (
+        SELECT 1 FROM hockey_players AS pl
+        LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key
+        WHERE pl.player_key = :player_key
+          AND (pr.fav_club IS NOT NULL OR EXISTS (
+                SELECT 1 FROM hockey_picks AS p WHERE p.player_key = pl.player_key AND p.picked_at >= :fan_since))
+    ) AND EXISTS (
+        SELECT 1 FROM game_matches AS m
+        WHERE m.starts_at >= :day_start AND m.starts_at < :day_end AND m.status <> 'cancelled'
+    )
+    """)
+_KIND_SENT = text("""
+    SELECT COUNT(*) FROM warm_notices
+    WHERE telegram_id = :player_key AND kind = :kind AND sent_at >= :since AND sent_at < :until
+    """)
+
+_WARM_PREFS = text("""
+    SELECT wp.opted_out_at, COALESCE(wp.bot_blocked_at, hp.bot_blocked_at) AS bot_blocked_at,
+           (hp.remind IS FALSE OR hp.notify_consent IS FALSE) AS game_opted_out
+    FROM (SELECT CAST(:player_key AS BIGINT) AS k) AS q
+    LEFT JOIN warm_prefs AS wp ON wp.telegram_id = q.k
+    LEFT JOIN hockey_player_prefs AS hp ON hp.player_key = q.k
+    """)
+
+
 _LOCK = text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))")
 
 
 async def lock_player(session: AsyncSession, player_key: int) -> None:
-    """Замок на игрока до конца транзакции: допуск и занятие строки идут под ним, так что два цикла (или процесса)
-    не пройдут допуск по одному игроку одновременно. Один ключ для всех путей отправки."""
+    """Замок на человека до конца транзакции: допуск и занятие строки идут под ним, так что два цикла (или процесса)
+    не пройдут допуск по одному человеку одновременно. Один ключ для всех путей отправки и обеих семей поводов."""
     await session.execute(_LOCK, {"lock_key": f"kk_notify:{player_key}"})
 
 
@@ -255,7 +349,9 @@ async def _admit(
         return Admission(False, UNKNOWN_KIND)
     cfg = config
     if policy.new:
-        cfg = cfg or GateConfig.from_settings()
+        cfg = cfg or GateConfig.from_settings(family=policy.family)
+        if cfg.family != policy.family:  # выключатели чужой семьи не открывают этот повод
+            return Admission(False, FAMILY_MISMATCH)
         if not cfg.enabled:
             return Admission(False, DISABLED)
         if kind not in cfg.kinds:
@@ -263,6 +359,32 @@ async def _admit(
         # Тексты не приняты: только белый список. Сухой прогон ничего не отправляет, поэтому его аудитория не режется.
         if not cfg.texts_accepted and player_key not in cfg.whitelist and not cfg.dry_run:
             return Admission(False, TEXTS_NOT_ACCEPTED)
+
+    if policy.family == FAMILY_WARM:
+        warm = (await session.execute(_WARM_PREFS, {"player_key": player_key})).one()
+        if warm.bot_blocked_at is not None:
+            return Admission(False, BLOCKED)
+        # Любое «Не присылать» действует на все поводы прогрева: своё (warm:off) и игры (remind, согласие).
+        if warm.opted_out_at is not None or warm.game_opted_out:
+            return Admission(False, OPTED_OUT)
+        day_start, day_end = day_bounds(now)
+        game_day = await session.execute(
+            _GAME_DAY,
+            {
+                "player_key": player_key,
+                "fan_since": _utc(now) - timedelta(days=GAME_FAN_DAYS),
+                "day_start": day_start,
+                "day_end": day_end,
+            },
+        )
+        if game_day.scalar_one():
+            return Admission(False, GAME_PRIORITY)
+        if policy.kind_weekly_cap is not None:
+            week_start, week_end = week_bounds(now)
+            params = {"player_key": player_key, "kind": kind, "since": week_start, "until": week_end}
+            if int((await session.execute(_KIND_SENT, params)).scalar_one()) >= policy.kind_weekly_cap:
+                return Admission(False, KIND_WEEKLY_LIMIT)
+        return await _limits(session, policy, kind=kind, player_key=player_key, now=now, cfg=cfg, recheck=recheck)
 
     prefs = (await session.execute(_PREFS, {"player_key": player_key})).one()
     if prefs.bot_blocked_at is not None:
@@ -288,7 +410,20 @@ async def _admit(
                 return Admission(False, NO_CONSENT)
     if policy.new and prefs.notify_paused_until is not None and _utc(prefs.notify_paused_until) > _utc(now):
         return Admission(False, PAUSED)
+    return await _limits(session, policy, kind=kind, player_key=player_key, now=now, cfg=cfg, recheck=recheck)
 
+
+async def _limits(
+    session: AsyncSession,
+    policy: KindPolicy,
+    *,
+    kind: str,
+    player_key: int,
+    now: datetime,
+    cfg: GateConfig | None,
+    recheck: Recheck | None,
+) -> Admission:
+    """Общая часть для обеих семей: тихие часы, бюджеты, свежесть повода, сухой прогон."""
     if in_quiet_hours(now):
         return Admission(False, QUIET)
 
@@ -314,6 +449,12 @@ async def _admit(
 __all__ = [
     "Admission",
     "DAILY_CAP",
+    "FAMILY_KK",
+    "FAMILY_WARM",
+    "GAME_PRIORITY",
+    "KIND_WEEKLY_LIMIT",
+    "WARM_KINDS",
+    "WARM_TODAY_WEEKLY_CAP",
     "GateConfig",
     "KIND_POLICY",
     "KindPolicy",

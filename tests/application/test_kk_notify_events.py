@@ -73,9 +73,10 @@ async def test_invite_today_text_and_buttons(db_session) -> None:
     mid = await seed_match(db_session, at(19, 30, day=11), home="Юность", away="Шахтер")
     [p] = await ev.produce_invite(db_session, now=WED)
     assert (p.notice.kind, p.notice.player_key, p.notice.match_id) == ("invite", SASHA, mid)
-    assert plain(p.notice.text) == "<b>Юность~— Шахтёр</b> сегодня в~19:30. Твой ход?"
+    assert plain(p.notice.text) == "<b>Юность~— Шахтёр</b> сегодня в~19:30. КТО КОГО? 🏒"
     first = [b["text"] for b in p.notice.buttons[0]]
-    assert first == ["Юность", "Шахтёр"]
+    assert first == ["Сыграть"]
+    assert p.notice.buttons[0][0]["url"]
     flat = [b["text"] for row in p.notice.buttons for b in row]
     assert flat[-1] == "Не присылать" and "Таблица" in flat
 
@@ -85,7 +86,7 @@ async def test_invite_tomorrow_wording(db_session) -> None:
     await active_player(db_session)
     await seed_match(db_session, at(17, day=12), home="Юность", away="Шахтер")
     [p] = await ev.produce_invite(db_session, now=WED)
-    assert plain(p.notice.text) == "<b>Юность~— Шахтёр</b> завтра в~17:00. Твой ход?"
+    assert plain(p.notice.text) == "<b>Юность~— Шахтёр</b> завтра в~17:00. КТО КОГО? 🏒"
 
 
 @pytest.mark.asyncio
@@ -178,7 +179,7 @@ async def test_comeback_three_days_text_with_weekday(db_session) -> None:
     await seed_match(db_session, at(17, day=14), home="Юность", away="Шахтер")  # суббота
     [p] = await ev.produce_comeback(db_session, now=WED)
     assert p.notice.kind == "comeback"
-    assert plain(p.notice.text) == "<b>Юность~— Шахтёр</b> в~субботу в~17:00. Твой ход?"
+    assert plain(p.notice.text) == "<b>Юность~— Шахтёр</b> в~субботу в~17:00. КТО КОГО? 🏒"
 
 
 @pytest.mark.asyncio

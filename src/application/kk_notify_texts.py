@@ -98,13 +98,26 @@ def match_line(home: str, away: str, starts_at: datetime, now: datetime) -> str:
     )
 
 
+def match_cta_line(home: str, away: str, starts_at: datetime, now: datetime) -> str:
+    """Строка матча с призывом игры («КТО КОГО? 🏒», TASK-429 — осознанное исключение из craft-guide)."""
+    return typo(
+        t(
+            "kk_notify.match_cta",
+            home=club_text(home),
+            away=club_text(away),
+            day=day_phrase(starts_at, now),
+            time=hhmm(starts_at),
+        )
+    )
+
+
 def _join(*parts: str | None) -> str:
     return "\n".join(p for p in parts if p)
 
 
 def invite_text(*, home: str, away: str, starts_at: datetime, now: datetime) -> str:
     """Повод 1: матч сегодня или завтра, хода нет."""
-    return match_line(home, away, starts_at, now)
+    return match_cta_line(home, away, starts_at, now)
 
 
 def comeback_text(
@@ -116,7 +129,7 @@ def comeback_text(
     place_line_text: str | None = None,
 ) -> str:
     """Повод 2: возврат. ``place_line_text`` — первая строка десятидневного шага, только по правилу места."""
-    return _join(place_line_text, match_line(home, away, starts_at, now))
+    return _join(place_line_text, match_cta_line(home, away, starts_at, now))
 
 
 def place_line(*, club: str, month: int, rank: int, size: int) -> str | None:
@@ -212,6 +225,7 @@ __all__ = [
     "day_phrase",
     "hhmm",
     "invite_text",
+    "match_cta_line",
     "match_line",
     "month_text",
     "place_line",

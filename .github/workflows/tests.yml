@@ -14,8 +14,8 @@ concurrency:
 env:
   DATABASE_URL: postgresql+asyncpg://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm_test
   DATABASE_URL_SYNC: postgresql://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm_test
-  TELEGRAM_BOT_TOKEN_CLIENT: ci-placeholder
-  TELEGRAM_BOT_TOKEN_TRAINER: ci-placeholder
+  TELEGRAM_BOT_TOKEN_CLIENT: 123456789:AAEhBOvwikEQtd5bvG4g6mZv0mX8y3k9f0a1
+  TELEGRAM_BOT_TOKEN_TRAINER: 123456789:AAEhBOvwikEQtd5bvG4g6mZv0mX8y3k9f0a1
   TELEGRAM_BOT_TOKEN_ORG: ci-placeholder
   ORG_BOT_USERNAME: ci_placeholder_org_bot
 

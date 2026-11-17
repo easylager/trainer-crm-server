@@ -205,11 +205,17 @@ def _cb(label: str) -> dict:
     return {"text": label, "callback_data": PREVIEW_CALLBACK}
 
 
+def play_button() -> dict:
+    """«Сыграть» — URL-кнопка в игру, как в настоящем сообщении (без номера настоящего матча)."""
+    url = public_telegram_entry_link(_LinkSettings(), start_param="kkn") or "https://t.me/kk_preview_bot?start=kkn"
+    return {"text": t("kk_notify.btn.play"), "url": url}
+
+
 def match_buttons(match: tuple[str, str] | None) -> list[list[dict]]:
-    """Те же ряды, что у настоящих сообщений: кнопки хода (названия команд), «Таблица», «Не присылать»."""
+    """Те же ряды, что у настоящих приглашающих сообщений (TASK-429): «Сыграть», «Таблица», «Не присылать»."""
     rows: list[list[dict]] = []
     if match is not None:
-        rows.append([_cb(club_name(match[0])), _cb(club_name(match[1]))])
+        rows.append([play_button()])
     rows.append([table_button()])
     rows.append([_cb(t("kk_notify.btn.no"))])
     return rows

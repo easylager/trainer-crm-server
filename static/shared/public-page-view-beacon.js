@@ -28,7 +28,8 @@
     }
     try {
       var sp = new URLSearchParams(root.location.search || '');
-      ['s', 'src', 'i'].forEach(function (k) {
+      // utm_source — метка платной ссылки (TASK-428): сервер чистит и пишет в payload.source.
+      ['s', 'src', 'i', 'utm_source'].forEach(function (k) {
         var v = sp.get(k);
         if (v) q.set(k, v);
       });

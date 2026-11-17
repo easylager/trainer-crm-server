@@ -130,6 +130,10 @@ async def subscribe_ice_watch(
         city_id=city_id,
         baseline_horizon_date=baseline,
     )
+    # TASK-428: человек сам подписался — блокировка бота, замеченная прогревом, больше не действует.
+    from src.application.warm_notify import clear_blocked
+
+    await clear_blocked(session, int(telegram_id))
     await session.commit()
     return await enrich_watch_row(session, row)
 
@@ -534,6 +538,15 @@ async def notify_season_open_watches(
             try:
                 await send_fn(int(watch["telegram_id"]), text_msg, markup)
                 await repo.mark_notified_and_deactivate(int(watch["id"]))
+                # TASK-428: журнал доставок — по нему общий бюджет считает, что сообщение действительно ушло
+                # (last_notified_at ставит и тихая деактивация без отправки).
+                await repo.record_delivery(
+                    watch_id=int(watch["id"]),
+                    client_id=int(watch["client_id"]),
+                    arena_id=arena_id,
+                    attempted_at=now,
+                    ok=True,
+                )
                 sent += 1
                 changed = True
             except Exception:

@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Сейчас · Админ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=202611162"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611162" />
-  <link rel="stylesheet" href="theme.css?v=202611162" />
-  <link rel="stylesheet" href="admin-analytics-shared.css?v=202611162" />
+  <script src="mini-app-telegram-chrome.js?v=202611172"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611172" />
+  <link rel="stylesheet" href="theme.css?v=202611172" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=202611172" />
   <style>
     .pulse-action { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.12); }
     .pulse-action.danger { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); }
@@ -314,7 +314,7 @@
   <div id="content">
     <div class="adm-loading">Загрузка…</div>
   </div>
-  <script src="admin-analytics-shared.js?v=202611162"></script>
+  <script src="admin-analytics-shared.js?v=202611172"></script>
   <script>
     (function () {
       var A = window.AdmAnalytics;
@@ -646,9 +646,47 @@
         return html;
       }
 
+      /** TASK-428: разовые посетители — кого можно достать, воронка предложения подписки, что ушло. 7 дней. */
+      function renderWarm(w) {
+        if (!w) return '';
+        var n = function (v) { return A.formatNum(+v || 0); };
+        var o = w.offer || {};
+        var labels = { warm_welcome: 'после подписки', warm_today: '«сегодня лёд»', warm_week: 'на неделю', warm_nudge: 'напоминание' };
+        var kinds = function (m) {
+          var parts = Object.keys(m || {}).filter(function (k) { return +m[k]; }).map(function (k) {
+            return A.escapeHtml(labels[k] || k) + ' ' + n(m[k]);
+          });
+          return parts.length ? parts.join(', ') : '—';
+        };
+        var rows = [
+          ['Разовые посетители', n(w.one_time)],
+          ['Из них вошли через Telegram', n(w.with_telegram)],
+          ['Активных подписок на катки', n(w.active_watches)],
+          ['Предложение: показано', n(o.shown)],
+          ['Нажали', n(o.click)],
+          ['Подписались из предложения', n(o.subscribed_offer)],
+          ['Подписались из напоминания', n(o.subscribed_nudge)],
+          ['Закрыли', n(o.closed)],
+          ['Отправлено', n(w.sent_total) + (w.sent_total ? ' · ' + kinds(w.sent) : '')],
+          ['Ушло бы в сухом прогоне', kinds(w.dry_run)],
+          ['Не дошло', n(w.failed)],
+          ['Заблокировали бота', n(w.blocked)],
+          ['«Не присылать»', n(w.opted_out)],
+        ];
+        var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">Разовые посетители · 7 дней</div>';
+        html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><tbody>';
+        rows.forEach(function (r) {
+          html += '<tr><td>' + r[0] + '</td><td class="num">' + r[1] + '</td></tr>';
+        });
+        html += '</tbody></table></div></div>';
+        html += '<div class="adm-hint">Разовые — один день визита за 30 дней. «Вошли через Telegram» — без блока и «Не присылать»; это верхняя оценка: бот пишет только тем, кто его запускал. Веб-посетителей не достать.</div></div>';
+        return html;
+      }
+
       function render(d) {
         var html = renderCatalogDemand(d.catalog_demand_pulse);
         html += renderIceWatch(d.ice_watch_by_arena);
+        html += renderWarm(d.warm_visitors);
         html += renderBookingSources(d.booking_sources);
         html += renderKkPromo(d.kk_promo);
         html += renderActions(d);

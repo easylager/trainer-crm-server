@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -41,6 +43,11 @@ async def _friday_waves(db_session, arena_id: int) -> None:
         )
 
 
+def _plain_watch_links(html: str, arena_id: int) -> int:
+    """Ссылки колокольчика ``watch_<id>`` без суффикса предложения ``_o`` (TASK-428)."""
+    return len(re.findall(rf"startapp={re.escape(watch_start_param(arena_id))}(?![_0-9])", html))
+
+
 @pytest.mark.asyncio
 async def test_empty_tracked_rink_shows_habit_and_bell(app_use_test_db, db_session) -> None:
     place = await _place(db_session)
@@ -54,7 +61,9 @@ async def test_empty_tracked_rink_shows_habit_and_bell(app_use_test_db, db_sessi
     assert "Ждём новое расписание" in html
     assert f"Каток обычно выкладывает расписание по{NB}пятницам" in html  # про публикацию, не про сеансы
     # Кнопка в блоке и колокольчик на обложке — одна и та же подписка.
-    assert html.count(f"startapp={watch_start_param(place['arena_id'])}") == 2
+    assert _plain_watch_links(html, place["arena_id"]) == 2
+    # TASK-428: отдельная ссылка предложения подписки (watch_<id>_o) — та же подписка, помеченная для воронки.
+    assert html.count(f"startapp={watch_start_param(place['arena_id'], offer=True)}") == 1
     assert 'class="b-watch"' in html
     assert "Сообщить, когда появится" in html
     assert "Будем писать в" in html and "Telegram" in html
@@ -86,7 +95,7 @@ async def test_untracked_or_phone_only_rink_keeps_old_empty_block(app_use_test_d
             html = (await client.get(place["path"])).text
             assert 'class="b-wait"' not in html, place["path"]
             # Колокольчик на обложке ставит ту же подписку через бота — на любой карточке.
-            assert html.count(f"startapp={watch_start_param(place['arena_id'])}") == 1
+            assert _plain_watch_links(html, place["arena_id"]) == 1
 
 
 @pytest.mark.asyncio

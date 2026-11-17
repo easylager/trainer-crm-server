@@ -175,11 +175,13 @@ def is_valid_start_param(value: str) -> bool:
 
 # TASK-330: колокольчик с сайта — ``/start watch_<arena_id>`` в чат бота (TASK-328 AC7).
 WATCH_START_PREFIX = "watch_"
-_WATCH_START_RE = re.compile(r"^watch_(\d{1,9})$")
+# TASK-428: ``watch_<id>_o`` — та же подписка, но из предложения на странице катка (для воронки).
+WATCH_OFFER_SUFFIX = "_o"
+_WATCH_START_RE = re.compile(r"^watch_(\d{1,9})(_o)?$")
 
 
-def watch_start_param(arena_id: int) -> str:
-    return f"{WATCH_START_PREFIX}{int(arena_id)}"
+def watch_start_param(arena_id: int, *, offer: bool = False) -> str:
+    return f"{WATCH_START_PREFIX}{int(arena_id)}{WATCH_OFFER_SUFFIX if offer else ''}"
 
 
 def parse_watch_start_param(value: str | None) -> int | None:
@@ -187,6 +189,12 @@ def parse_watch_start_param(value: str | None) -> int | None:
     if not match or int(match.group(1)) <= 0:
         return None
     return int(match.group(1))
+
+
+def is_offer_watch_start(value: str | None) -> bool:
+    """``watch_<id>_o`` — подписка пришла из предложения на странице катка."""
+    match = _WATCH_START_RE.match((value or "").strip())
+    return bool(match and match.group(2) and int(match.group(1)) > 0)
 
 
 # Колокольчик сайта: ``follow_arena_<id>`` открывает мини-апп, оформляет подписку на каток и просит
