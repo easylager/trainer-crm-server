@@ -169,8 +169,11 @@ async def set_opt_out(session: AsyncSession, telegram_id: int, off: bool, *, now
 
 
 async def clear_blocked(session: AsyncSession, telegram_id: int) -> None:
-    """Человек снова сам что-то сделал в боте (подписался): блокировка, замеченная прогревом, снята."""
+    """Человек сам подписался на каток (бот ``/start watch_…``, кнопка напоминания, Mini App с разрешением писать,
+    колокольчик сайта): блокировка, замеченная прогревом или игрой, снята. Зовётся только из ``subscribe_ice_watch``,
+    то есть только по явному действию человека; фоновые проходы блокировку не снимают никогда."""
     await session.execute(_CLEAR_BLOCKED, {"k": int(telegram_id)})
+    await hn.clear_blocked(session, int(telegram_id))
 
 
 def off_button() -> dict:

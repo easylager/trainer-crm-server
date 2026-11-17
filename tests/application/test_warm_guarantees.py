@@ -429,3 +429,32 @@ async def test_game_opt_out_stops_every_warm_kind(db_session, column, kind) -> N
         text(f"UPDATE hockey_player_prefs SET {column} = false WHERE player_key = :k"), {"k": ANNA}
     )
     assert (await _ok(db_session, ANNA, kind=kind)).reason == gate.OPTED_OUT
+
+
+@pytest.mark.asyncio
+async def test_explicit_resubscribe_clears_both_blocks(db_session) -> None:
+    """Ревью п. 6: человек сам подписался снова — снята и блокировка прогрева, и блокировка, замеченная игрой."""
+    from src.application.client_ice_watch_use_cases import subscribe_ice_watch
+    from warm_helpers import seed_client
+
+    arena = await seed_arena(db_session)
+    client_id = await seed_client(db_session, ANNA)
+    await seed_player(db_session, ANNA, blocked_at=at(9, day=10))
+    await seed_warm_prefs(db_session, ANNA, bot_blocked_at=at(9, day=11))
+    assert (await _ok(db_session, ANNA)).reason == gate.BLOCKED
+    await subscribe_ice_watch(
+        db_session,
+        client_id=client_id,
+        telegram_id=ANNA,
+        arena_id=arena,
+        watch_kind="sessions",
+        filter_json={"when": "any"},
+        city_id=None,
+    )
+    game = (
+        await db_session.execute(
+            text("SELECT bot_blocked_at FROM hockey_player_prefs WHERE player_key = :k"), {"k": ANNA}
+        )
+    ).scalar_one()
+    assert game is None
+    assert (await _ok(db_session, ANNA)).allowed
