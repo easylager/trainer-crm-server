@@ -52,6 +52,7 @@ from src.application.kk_notify_gate import (
 )
 from src.application.kk_notify_journal import UNKNOWN_PHASE, write_journal
 from src.shared.copy_ru import t
+from src.shared.venue_types import has_public_skating
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +227,10 @@ _SESSIONS = text("""
     SELECT id, arena_id, starts_at_utc FROM ice_sessions
     WHERE arena_id = ANY(:arenas) AND status = 'active' AND kind = ANY(:kinds)
       AND starts_at_utc >= :from_ AND starts_at_utc < :until
+      AND NOT EXISTS (
+          SELECT 1 FROM arena_profiles sc
+          WHERE sc.arena_id = ice_sessions.arena_id AND sc.schedule_mode = 'season_closed'
+      )
     ORDER BY starts_at_utc, id
     """)
 
@@ -454,7 +459,10 @@ _VISITS = text("""
     """)
 
 _ARENA = text("""
-    SELECT COALESCE(NULLIF(TRIM(a.name), ''), 'Каток') AS name FROM arenas AS a WHERE a.id = :id AND a.is_active
+    SELECT COALESCE(NULLIF(TRIM(a.name), ''), 'Каток') AS name, a.venue_type, p.amenities
+    FROM arenas AS a
+    LEFT JOIN arena_profiles AS p ON p.arena_id = a.id
+    WHERE a.id = :id AND a.is_active
     """)
 
 
@@ -549,7 +557,9 @@ async def produce_nudge(session: AsyncSession, *, now: datetime) -> list[Proposa
         if visitor.arena_id is None or not nudge_due(visitor.visit_day, now):
             continue  # без катка подписываться не на что
         arena = (await session.execute(_ARENA, {"id": visitor.arena_id})).first()
-        if arena is None:
+        if arena is None or not has_public_skating(arena.venue_type):
+            continue  # без сеансов катания подписываться не на что
+        if isinstance(arena.amenities, Mapping) and arena.amenities.get("hockey_center") is True:
             continue
         if await nudge_refusal(session, telegram_id=visitor.telegram_id, arena_id=visitor.arena_id):
             continue
