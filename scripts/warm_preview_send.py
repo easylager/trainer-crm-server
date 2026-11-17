@@ -91,22 +91,15 @@ def scenarios() -> list[tuple[str, str, str, str, list[list[dict]]]]:
         (
             "после подписки, два ближайших сеанса",
             _SUB,
-            "в течение двух суток после подписки, один раз на человека",
-            wt.welcome_text(arena_name=chizh, starts=[_at(0, 19, 30), _at(2, 12)], now=NOW),
+            "в течение двух суток после подписки, один раз на человека; ближайших сеансов нет — не пишем",
+            wt.welcome_text(arena_name=chizh, starts=[_at(0, 19, 30), _at(2, 12)], now=NOW) or "",
             _schedule_buttons(),
         ),
         (
             "после подписки, один ближайший сеанс",
             _SUB,
             "то же",
-            wt.welcome_text(arena_name=arena, starts=[_at(4, 15, 30)], now=NOW),
-            _schedule_buttons(),
-        ),
-        (
-            "после подписки, сеансов в расписании нет",
-            _SUB,
-            "то же; строки о ближайших нет",
-            wt.welcome_text(arena_name="Минск-Арена", starts=[], now=NOW),
+            wt.welcome_text(arena_name=arena, starts=[_at(4, 15, 30)], now=NOW) or "",
             _schedule_buttons(),
         ),
         (

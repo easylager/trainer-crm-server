@@ -26,7 +26,7 @@
   var HIDDEN_LIMIT_MS = 10 * 60 * 1000;
   var FALLBACK = {
     'watch_offer.title': 'Сообщить, когда на этом катке появятся новые сеансы?',
-    'watch_offer.note': 'Не чаще раза в день. Отключается одной кнопкой.',
+    'watch_offer.note': 'Напишем в\u00a0Telegram, если добавят сеанс или снимут объявленный.',
     'watch_offer.cta': 'Сообщать о сеансах',
     'watch_offer.cta_site': 'Сообщать в Telegram',
     'watch_offer.close': 'Закрыть',

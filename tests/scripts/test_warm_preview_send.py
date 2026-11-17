@@ -117,7 +117,7 @@ def test_guard_runs_before_every_call(monkeypatch) -> None:
 def test_messages_cover_every_kind_and_buttons_do_nothing() -> None:
     messages = mod.build_messages()
     bodies = [m.text for m in messages if m.html]
-    assert any("Ближайшие сеансы" in b for b in bodies)
+    assert any("ближайшие сеансы" in b for b in bodies)
     assert any(b.startswith("Сегодня на") for b in bodies)
     assert any("сеансы на" in b for b in bodies)
     assert any("Спрашиваем один раз" in b for b in bodies)
@@ -143,11 +143,12 @@ def test_audience_script_is_read_only() -> None:
 @pytest.mark.asyncio
 async def test_audience_lists_people_without_names(db_session, monkeypatch) -> None:
     sys.path.insert(0, str(ROOT / "tests" / "application"))
-    from warm_helpers import ANNA, at, seed_arena, seed_watch
+    from warm_helpers import ANNA, at, seed_arena, seed_session, seed_watch
 
     audience = _load("warm_audience")
     arena = await seed_arena(db_session)
     await seed_watch(db_session, ANNA, arena, created_at=at(8, day=18))
+    await seed_session(db_session, arena, at(19, day=19))
     people = await audience.audience(db_session, now=at(12, day=18))
     assert people["warm_welcome"] == [ANNA] and people["warm_nudge"] == []
     text = audience.render(people, {}, now=at(12, day=18), ids=False, days=7)

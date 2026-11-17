@@ -62,8 +62,10 @@ async def test_welcome_once_with_nearest_sessions(db_session, factory) -> None:
     await _tick(factory, at(12, day=18), out, kinds=[gate.KIND_WARM_WELCOME])
     assert len(out.sent) == 1
     chat, body, buttons = out.sent[0]
-    assert chat == ANNA and "<b>«Чижовка-арена»</b>" in body
-    assert f"Ближайшие сеансы{NB}— завтра в{NB}19:30{NB}и{NB}в{NB}субботу в{NB}12:00." in body
+    assert chat == ANNA
+    assert (
+        body == f"На{NB}катке «Чижовка-арена» ближайшие сеансы{NB}— завтра в{NB}19:30{NB}и{NB}в{NB}субботу в{NB}12:00."
+    )
     assert [b["text"] for row in buttons for b in row] == ["Открыть расписание", "Не присылать"]
     await _tick(factory, at(12, day=19), out, kinds=[gate.KIND_WARM_WELCOME])
     assert len(out.sent) == 1  # один раз
@@ -75,22 +77,25 @@ async def test_welcome_one_per_person_and_only_fresh_subscriptions(db_session, f
     await seed_watch(db_session, ANNA, a, created_at=at(10, day=18))
     await seed_watch(db_session, ANNA, b, created_at=at(11, day=18))
     await seed_watch(db_session, BORIS, a, created_at=at(10, day=15))  # подписка старше двух суток
+    for arena in (a, b):
+        await seed_session(db_session, arena, at(19, day=20))
     proposals = await wn.produce_welcome(db_session, now=at(12, day=18))
     assert [(p.notice.player_key, p.notice.arena_id) for p in proposals] == [(ANNA, a)]
 
 
 @pytest.mark.asyncio
-async def test_welcome_without_sessions_has_no_nearest_line(db_session) -> None:
+async def test_welcome_without_sessions_is_not_sent(db_session) -> None:
+    """Ревью п. 3: сказать нечего — не пишем; подтверждение подписки человек уже получил от бота или Mini App."""
     arena = await seed_arena(db_session)
     await seed_watch(db_session, ANNA, arena, created_at=at(10, day=18))
-    [proposal] = await wn.produce_welcome(db_session, now=at(12, day=18))
-    assert "Ближайш" not in proposal.notice.text
+    assert await wn.produce_welcome(db_session, now=at(12, day=18)) == []
 
 
 @pytest.mark.asyncio
 async def test_unsubscribed_before_send_is_stale(db_session, factory) -> None:
     arena = await seed_arena(db_session)
     watch = await seed_watch(db_session, ANNA, arena, created_at=at(10, day=18))
+    await seed_session(db_session, arena, at(19, day=20))
     [proposal] = await wn.produce_welcome(db_session, now=at(12, day=18))
     await db_session.execute(text("UPDATE client_ice_watches SET active = false WHERE id = :w"), {"w": watch})
     reason = await proposal.recheck(db_session, ANNA, at(12, day=18))
@@ -157,6 +162,7 @@ async def test_game_message_today_holds_warm_until_tomorrow(db_session, factory)
     arena = await seed_arena(db_session)
     await seed_player(db_session, ANNA)
     await seed_watch(db_session, ANNA, arena, created_at=at(10, day=18))
+    await seed_session(db_session, arena, at(19, day=21))
     await seed_notice(db_session, ANNA, "nomove", at(10, day=18))
     out = Outbox()
     counts = await _tick(factory, at(12, day=18), out, kinds=[gate.KIND_WARM_WELCOME])

@@ -7,8 +7,9 @@
 
 Поводы:
 
-* ``warm_welcome`` — после подписки на каток (``client_ice_watches``, ``sessions``), один раз на человека: что будем
-  присылать и ближайшие 1–2 сеанса. Окно — двое суток после подписки (ночью ждёт утра, лимит дня — следующего дня).
+* ``warm_welcome`` — после подписки на каток (``client_ice_watches``, ``sessions``), один раз на человека: ближайшие
+  1–2 сеанса одной строкой (подтверждение подписки уже прислал бот или показал Mini App — не повторяем); нет сеансов —
+  не пишем. Окно — двое суток после подписки (ночью ждёт утра, лимит дня — следующего дня).
 * ``warm_today`` — утром 09:00–11:00 в день, когда на подписанном катке есть сеанс; раз в сутки.
 * ``warm_week`` — по четвергам 09:00–11:00 подборка сеансов катка на неделю; раз в неделю, если есть что показать.
 * ``warm_nudge`` — одно напоминание за всё время тому, кто запускал бота (``clients.telegram_id``), был в каталоге
@@ -324,11 +325,14 @@ async def produce_welcome(session: AsyncSession, *, now: datetime) -> list[Propo
         arena_id = int(w["arena_id"])
         starts = _starts(_matching(future.get(arena_id, []), w, now))
         name = str(w["arena_name"])
+        body = wt.welcome_text(arena_name=name, starts=starts, now=now)
+        if body is None:  # ближайших сеансов нет — сказать нечего, подтверждение подписки человек уже получил
+            continue
 
-        def render(sent_now: datetime, name=name, starts=starts) -> str:
-            return wt.welcome_text(arena_name=name, starts=starts, now=sent_now)
+        def render(sent_now: datetime, name=name, starts=starts, body=body) -> str:
+            return wt.welcome_text(arena_name=name, starts=starts, now=sent_now) or body
 
-        notice = WarmNotice(KIND_WARM_WELCOME, tid, REF_ONCE, render(now), _schedule_buttons(arena_id), arena_id)
+        notice = WarmNotice(KIND_WARM_WELCOME, tid, REF_ONCE, body, _schedule_buttons(arena_id), arena_id)
         recheck = _all_of(watch_still_active(int(w["id"])), _within(_utc(w["created_at"]) + WELCOME_WINDOW))
         out.append(Proposal(notice, recheck, render))
     return out

@@ -45,9 +45,8 @@ def _samples() -> list[str]:
     starts = [NOW + timedelta(hours=h) for h in (2, 5, 9)] + [NOW + timedelta(days=d, hours=3) for d in (1, 2, 4)]
     many = [NOW + timedelta(hours=2, minutes=30 * i) for i in range(7)]
     return [
-        wt.welcome_text(arena_name="Чижовка-арена", starts=starts, now=NOW),
-        wt.welcome_text(arena_name='Каток хк "Юность"', starts=starts[:1], now=NOW),
-        wt.welcome_text(arena_name="Минск-Арена", starts=[], now=NOW),
+        wt.welcome_text(arena_name="Чижовка-арена", starts=starts, now=NOW) or "",
+        wt.welcome_text(arena_name='Каток хк "Юность"', starts=starts[:1], now=NOW) or "",
         wt.today_text(arena_name="Чижовка-арена", starts=many, now=NOW) or "",
         wt.week_text(arena_name="Чижовка-арена", starts=starts + many, now=NOW) or "",
         wt.nudge_text(arena_name="ЛД «Гранд Каньон Айс»"),
@@ -117,3 +116,19 @@ def test_week_shows_at_most_five_days() -> None:
     starts = [NOW + timedelta(days=d, hours=2) for d in range(7)]
     body = wt.week_text(arena_name="X", starts=starts, now=NOW) or ""
     assert body.count("• ") == wt.WEEK_DAYS_SHOWN
+
+
+@pytest.mark.parametrize("key", KEYS)
+def test_no_promises_we_cannot_keep(key: str) -> None:
+    """Ревью п. 3: колокольчик пишет при каждом изменении расписания, кнопок отключения две — не обещаем иного."""
+    lowered = COPY[key].lower()
+    for phrase in ("раза в день", "одной кнопкой", "одна кнопка"):
+        assert phrase not in lowered, (key, phrase)
+
+
+def test_welcome_is_facts_only_and_skipped_without_sessions() -> None:
+    """Ревью п. 3: подтверждение подписки шлёт бот (или показывает Mini App); приветствие его не повторяет."""
+    body = wt.welcome_text(arena_name="Юность", starts=[NOW + timedelta(days=1)], now=NOW) or ""
+    assert body.startswith("На") and "«Юность»" in body and "ближайший сеанс" in body
+    assert "следим" not in body.lower() and "будем писать" not in body.lower() and "напишем" not in body.lower()
+    assert wt.welcome_text(arena_name="Юность", starts=[], now=NOW) is None

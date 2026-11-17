@@ -82,15 +82,19 @@ def _future(starts: list[datetime], now: datetime) -> list[datetime]:
     return sorted(s for s in starts if _local(s) > _local(now))
 
 
-def welcome_text(*, arena_name: str, starts: list[datetime], now: datetime) -> str:
-    """Сразу после подписки: что будем присылать и ближайшие 1–2 сеанса (без них — без строки)."""
-    lines = [f"<b>{arena_title(arena_name)}</b>", t("warm.welcome")]
+def welcome_text(*, arena_name: str, starts: list[datetime], now: datetime) -> str | None:
+    """После подписки: ближайшие 1–2 сеанса одной строкой. Подтверждение подписки уже прислал бот (``/start watch_…``,
+    кнопка напоминания) или показал Mini App, поэтому здесь его не повторяем и ничего не обещаем. Сеансов нет — ``None``.
+    """
     upcoming = _future(starts, now)[:2]
+    arena = arena_title(arena_name)
     if len(upcoming) == 1:
-        lines.append(t("warm.next_one", first=when_phrase(upcoming[0], now)))
-    elif len(upcoming) == 2:
-        lines.append(t("warm.next_two", first=when_phrase(upcoming[0], now), second=when_phrase(upcoming[1], now)))
-    return typo("\n".join(lines))
+        return typo(t("warm.next_one", arena=arena, first=when_phrase(upcoming[0], now)))
+    if len(upcoming) == 2:
+        return typo(
+            t("warm.next_two", arena=arena, first=when_phrase(upcoming[0], now), second=when_phrase(upcoming[1], now))
+        )
+    return None
 
 
 def today_text(*, arena_name: str, starts: list[datetime], now: datetime) -> str | None:
