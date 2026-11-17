@@ -458,3 +458,61 @@ async def test_explicit_resubscribe_clears_both_blocks(db_session) -> None:
     ).scalar_one()
     assert game is None
     assert (await _ok(db_session, ANNA)).allowed
+
+
+# ---------- 7. приоритет игры и лимит «сегодня лёд» (решение владельца по п. 4 ревью) ----------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", gate.WARM_KINDS)
+async def test_game_has_priority_on_match_days(db_session, factory, kind) -> None:
+    """Игрок «в игре» и сегодня есть матч — прогрев день не берёт, отказ с причиной в журнале."""
+    from kk_notify_helpers import seed_match, seed_pick
+
+    await seed_player(db_session, ANNA)
+    await seed_pick(db_session, ANNA, at(12, day=5))  # ход за последние 30 суток
+    await seed_match(db_session, at(19, day=19))
+    assert (await _ok(db_session, ANNA, kind=kind)).reason == gate.GAME_PRIORITY
+    assert (await _ok(db_session, BORIS, kind=kind)).allowed  # не игрок — правило его не касается
+    assert (await _ok(db_session, ANNA, kind=kind, now=at(12, day=20))).allowed  # день без матча
+    out = Outbox()
+    result = await _go(factory, _notice(ANNA, kind=kind, ref=f"x-{kind}"), send=out, now=at(12))
+    assert out.sent == [] and result.reason == gate.GAME_PRIORITY
+    journal = (
+        (await db_session.execute(text("SELECT reason FROM kk_notify_decisions WHERE player_key = :k"), {"k": ANNA}))
+        .scalars()
+        .all()
+    )
+    assert gate.GAME_PRIORITY in journal
+
+
+@pytest.mark.asyncio
+async def test_game_priority_scope(db_session) -> None:
+    """Давно не игравший без «болею за» игре не нужен; «болею за» без ходов — нужен; отменённый матч не в счёт."""
+    from kk_notify_helpers import seed_match, seed_pick
+
+    await seed_player(db_session, ANNA)
+    await seed_pick(db_session, ANNA, at(12, day=1, month=9))  # больше 31 суток назад
+    await seed_player(db_session, BORIS)
+    await db_session.execute(
+        text("INSERT INTO hockey_player_prefs (player_key, remind, fav_club) VALUES (:k, true, 'Динамо')"), {"k": BORIS}
+    )
+    mid = await seed_match(db_session, at(19, day=19))
+    assert (await _ok(db_session, ANNA)).allowed
+    assert (await _ok(db_session, BORIS)).reason == gate.GAME_PRIORITY
+    await db_session.execute(text("UPDATE hockey_matches SET status = 'cancelled' WHERE id = :m"), {"m": mid})
+    assert (await _ok(db_session, BORIS)).allowed
+
+
+@pytest.mark.asyncio
+async def test_today_at_most_twice_in_rolling_week(db_session) -> None:
+    """«Сегодня лёд» — не чаще 2 раз за скользящие 7 суток (считаются только отправленные); неделя и приветствие —
+    вне этого лимита, общий лимит 3 в неделю остаётся."""
+    await seed_warm_notice(db_session, ANNA, gate.KIND_WARM_TODAY, None, created_at=at(10, day=13), failed=True)
+    await seed_warm_notice(db_session, ANNA, gate.KIND_WARM_TODAY, at(10, day=14))
+    assert (await _ok(db_session, ANNA)).allowed  # одно отправленное, неудачное не в счёт
+    await seed_warm_notice(db_session, ANNA, gate.KIND_WARM_TODAY, at(10, day=16))
+    assert (await _ok(db_session, ANNA)).reason == gate.KIND_WEEKLY_LIMIT
+    for other in (gate.KIND_WARM_WEEK, gate.KIND_WARM_WELCOME):
+        assert (await _ok(db_session, ANNA, kind=other)).allowed, other
+    assert (await _ok(db_session, ANNA, now=at(12, day=21))).allowed  # 14-е выпало из окна
