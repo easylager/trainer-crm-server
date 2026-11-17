@@ -555,6 +555,13 @@
     };
   }
 
+  /** Значок звания на аватарке и в строке: «Кепка позора» — 🧢 на макушке, «В чужом шарфе» — 🧣 на шее (как в первой версии). */
+  var TITLE_MARK = { cap: '🧢', scarf: '🧣' };
+
+  function titleMark(title) {
+    return (title && TITLE_MARK[title.id]) || '';
+  }
+
   /** Пояснение под таблицей лиги: что значат звания, которые на ней висят (шарф, кепка). Нет званий — нет строки. */
   function titlesNote(items) {
     var has = {};
@@ -1444,6 +1451,7 @@
     answerWriteAsk: answerWriteAsk,
     tribune: tribune,
     podiumOrder: podiumOrder,
+    titleMark: titleMark,
     titlesNote: titlesNote,
     TRIBUNE_MIN: TRIBUNE_MIN,
   };

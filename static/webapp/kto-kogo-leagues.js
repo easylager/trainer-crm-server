@@ -10,6 +10,7 @@
   var h = K.h;
   var M = K.M;
   var S = K.S;
+  var NBSP = '\u00a0';
   var I = K.I;
   var state = K.state;
   var icon = K.icon;
@@ -393,12 +394,21 @@
   }
 
   function leagueRow(r) {
-    var sub = (r.title && r.title.label ? r.title.label + (r.title.detail ? ' · ' + r.title.detail : '') + ' · ' : '') + S.rowSub(r);
+    var mark = S.titleMark(r.title);
+    var sub = (r.title && r.title.label ? (mark ? mark + NBSP : '') + r.title.label + (r.title.detail ? ' · ' + r.title.detail : '') + ' · ' : '') + S.rowSub(r);
     return h('div', { class: 'kk-r' + (r.is_me ? ' is-me' : '') }, [
       h('span', { class: 'kk-r__n' + (r.rank === 1 ? ' is-gold' : ''), text: String(r.rank) }),
       h('span', { class: 'kk-col kk-r__w' }, [h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]), h('span', { class: 'kk-sub', text: sub })]),
       h('span', { class: 'kk-r__pt', text: String(r.points) }),
     ]);
+  }
+
+  /** Аватарка со значком звания: кепка на макушке, шарф на шее. Без звания — просто аватарка. */
+  function avatarWithMark(r, size) {
+    var a = K.ava(r.display_name, size);
+    var mark = S.titleMark(r.title);
+    if (!mark) return a;
+    return h('span', { class: 'kk-capwrap' }, [a, h('span', { class: 'kk-cap kk-cap--' + r.title.id, 'aria-hidden': 'true', text: mark })]);
   }
 
   /** Пьедестал лиги из первой версии игры: трое лучших колонками, звание (шарф, кепка) под именем. */
@@ -408,7 +418,7 @@
     return h('div', { class: 'kk-podium', role: 'group', 'aria-label': 'Первая тройка лиги' }, order.map(function (r, i) {
       var place = i === 1 ? 1 : i === 0 ? 2 : 3;
       return h('div', { class: 'kk-podium__col' }, [
-        K.ava(r.display_name, place === 1 ? 60 : 48),
+        avatarWithMark(r, place === 1 ? 60 : 48),
         h('span', { class: 'kk-podium__name' }, [h('span', { class: 'kk-podium__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null]),
         r.title && r.title.label ? h('span', { class: 'kk-podium__title', text: r.title.label }) : h('span', { class: 'kk-podium__title' }),
         h('div', { class: 'kk-podium__block kk-podium__block--' + place }, [

@@ -674,6 +674,12 @@ describe('пьедестал лиги', () => {
     const top = S.podiumOrder([{ rank: 1 }, { rank: 2 }, { rank: 3 }, { rank: 4 }]);
     assert.deepEqual(top.map((r) => r.rank), [2, 1, 3]);
   });
+  it('значок звания: кепка и шарф есть, остальным званиям значка нет', () => {
+    assert.equal(S.titleMark({ id: 'cap' }), '🧢');
+    assert.equal(S.titleMark({ id: 'scarf' }), '🧣');
+    assert.equal(S.titleMark({ id: 'vanga' }), '');
+    assert.equal(S.titleMark(null), '');
+  });
   it('пояснение к званиям: только о тех, что висят на таблице', () => {
     assert.equal(S.titlesNote([{ title: null }, {}]), '');
     assert.match(S.titlesNote([{ title: { id: 'scarf' } }]), /^Шарф — за ход против Динамо/);

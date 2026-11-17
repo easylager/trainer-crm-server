@@ -650,6 +650,9 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-podium__col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
 .kk-podium__name { display: flex; align-items: center; justify-content: center; gap: 4px; max-width: 100%; font: 700 14px/1.2 var(--kk-text); }
 .kk-podium__nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kk-capwrap { position: relative; display: inline-flex; flex: none; }
+.kk-cap { position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(-12deg); font-size: 18px; line-height: 1; pointer-events: none; }
+.kk-cap--scarf { top: auto; bottom: -12px; left: 72%; font-size: 16px; transform: translateX(-50%) rotate(10deg); }
 .kk-podium__title { min-height: 16px; max-width: 100%; font: 500 12px/1.3 var(--kk-text); color: var(--kk-soft); text-align: center; }
 .kk-podium__block { width: 100%; border-radius: 20px 20px 8px 8px; background: var(--kk-row); color: var(--kk-ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-variant-numeric: tabular-nums; }
 .kk-podium__block--1 { height: 108px; background: var(--kk-gold); color: var(--kk-on-gold); }
