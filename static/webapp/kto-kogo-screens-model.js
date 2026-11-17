@@ -953,6 +953,23 @@
     return { total: (crowns || []).length, overall: overall, leagues: leagues, clubs: list };
   }
 
+  /**
+   * Сравнение двух стендов по клубам: в скольких клубах корон больше у меня, у него и поровну.
+   * Клубы, где у обоих ноль, не считаются: «поровну» значит поровну корон, а не «ничего нет».
+   */
+  function standCompare(theirs, mine) {
+    var out = { mine: 0, theirs: 0, same: 0 };
+    theirs.clubs.forEach(function (e, i) {
+      var a = e.count;
+      var b = mine.clubs[i] ? mine.clubs[i].count : 0;
+      if (!a && !b) return;
+      if (b > a) out.mine += 1;
+      else if (a > b) out.theirs += 1;
+      else out.same += 1;
+    });
+    return out;
+  }
+
   /** Мини-стенд в строке: клубы с коронами, у кого больше — первыми (при равенстве порядок каталога), до ``limit``. */
   function standMini(model, limit) {
     var withCrowns = model.clubs.filter(function (c) { return c.count > 0; }).map(function (c, i) { return { c: c, i: i }; });
@@ -1466,6 +1483,7 @@
     crownLabel: crownLabel,
     standModel: standModel,
     standMini: standMini,
+    standCompare: standCompare,
     standCountLabel: standCountLabel,
     clubCrownMonths: clubCrownMonths,
     seasonTitleLine: seasonTitleLine,

@@ -689,6 +689,15 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-crchs { display: flex; flex-wrap: wrap; gap: 8px; }
 .kk-crch { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 16px; background: var(--kk-crownbg); color: var(--kk-crownink); font: 600 13px/1 var(--kk-text); }
 
+/* Сравнение стендов: «Андрей 2 · ты 4», у кого больше — жирным. */
+.kk-cmpl { font: 500 12px/1.2 var(--kk-text); color: var(--kk-muted); text-align: center; }
+.kk-cmpl .is-lead { font-weight: 700; color: var(--kk-ink); }
+.kk-cmp { display: flex; flex-direction: column; gap: 10px; }
+.kk-cmp__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.kk-cmp__row .kk-col { gap: 2px; min-width: 0; }
+.kk-cmp__row b { font: 700 16px/1.2 var(--kk-text); }
+.kk-cmp__vs { color: var(--kk-muted); font: 500 13px/1 var(--kk-text); }
+
 /* Момент «корона получена» (TASK-430): три анимации — отскок плашки, блик, свечение; при reduce-motion стоят. */
 @keyframes kk-mom-pop { 0% { transform: scale(0) rotate(-35deg); opacity: 0; } 55% { transform: scale(1.25) rotate(10deg); opacity: 1; } 100% { transform: scale(1) rotate(6deg); opacity: 1; } }
 @keyframes kk-mom-halo { 0%, 100% { opacity: 0.35; transform: scale(1); } 50% { opacity: 0.65; transform: scale(1.1); } }

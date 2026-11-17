@@ -47,23 +47,37 @@
     ]);
   }
 
-  function plaque(title, n, sub, mine) {
+  function shortName(n) {
+    return n && n.length > 12 ? n.slice(0, 11) + '…' : n || '';
+  }
+
+  /** «Андрей 2 · ты 4»: у кого корон больше, того число жирное. Без сравнения — ничего. */
+  function cmpLine(cmp, theirs) {
+    if (!cmp || (!theirs && !cmp.mine)) return null;
+    return h('span', { class: 'kk-cmpl' }, [
+      h('span', { class: theirs > cmp.mine ? 'is-lead' : '', text: shortName(cmp.who) + ' ' + theirs }),
+      ' · ',
+      h('span', { class: cmp.mine > theirs ? 'is-lead' : '', text: 'ты ' + cmp.mine }),
+    ]);
+  }
+
+  function plaque(title, n, sub, cmp) {
     return h('span', { class: 'kk-plq' + (n ? '' : ' is-dim') }, [
       K.crownIcon(40),
       h('span', { class: 'kk-plq__t', text: title }),
-      n ? null : h('span', { class: 'kk-sub', text: sub }),
-      mine == null ? null : h('span', { class: 'kk-sub', text: 'ты: ' + mine }),
+      n || cmp ? null : h('span', { class: 'kk-sub', text: sub }),
+      cmpLine(cmp, n),
       n ? sticker(n, false) : null,
     ]);
   }
 
-  /** Полка клубов. ``onTile`` — тап по клубу (у чужого стенда его нет); ``mine`` — мой стенд для строки «ты: N». */
-  function shelf(m, onTile, mine) {
+  /** Полка клубов. ``onTile`` — тап по клубу (у чужого стенда его нет); ``mine`` и ``who`` — сравнение с моим стендом. */
+  function shelf(m, onTile, mine, who) {
     return h('div', { class: 'kk-shelf' }, m.clubs.map(function (e, i) {
       var inner = [
         clubDisc(e, 64, false),
         h('span', { class: 'kk-tile__n', text: S.clubName(e.club.name) }),
-        mine ? h('span', { class: 'kk-sub', text: 'ты: ' + mine.clubs[i].count }) : null,
+        mine ? cmpLine({ who: who, mine: mine.clubs[i].count }, e.count) : null,
         ledge(),
       ];
       return onTile
@@ -114,16 +128,29 @@
       }
       var m = S.standModel(a.data.crowns, state.clubs || []);
       var mine = a.compare && state.profile ? model() : null;
+      var who = a.data.display_name || 'Игрок';
       var main = h('main', { class: 'kk-main' }, [K.topbar(a.data.display_name || 'Игрок', S.standCountLabel(m.total))]);
       if (!a.data.is_me) {
         main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--alt', 'aria-pressed': a.compare ? 'true' : 'false', onclick: function () { a.compare = !a.compare; K.render(); }, text: a.compare ? 'Скрыть сравнение' : 'Сравнить с моим стендом' }));
       }
+      if (mine) {
+        var vs = S.standCompare(m, mine);
+        main.appendChild(h('section', { class: 'kk-card kk-cmp' }, [
+          h('span', { class: 'kk-lbl', text: 'КТО КОГО ЧАЩЕ ПЕРВЫЙ' }),
+          h('span', { class: 'kk-cmp__row' }, [
+            h('span', { class: 'kk-col' }, [h('b', { text: shortName(who) }), h('span', { class: 'kk-sub', text: S.standCountLabel(m.total) })]),
+            h('span', { class: 'kk-cmp__vs', text: 'против' }),
+            h('span', { class: 'kk-col' }, [h('b', { text: 'Ты' }), h('span', { class: 'kk-sub', text: S.standCountLabel(mine.total) })]),
+          ]),
+          h('span', { class: 'kk-sub', text: 'По клубам. Больше у тебя: ' + vs.mine + ' · больше у него: ' + vs.theirs + ' · поровну: ' + vs.same + '. Под каждым клубом сначала его короны, потом твои.' }),
+        ]));
+      }
       main.appendChild(h('div', { class: 'kk-plqs' }, [
-        plaque('Общая таблица', m.overall, 'ещё без короны', mine ? mine.overall : null),
-        plaque('Лиги', m.leagues, 'ещё без короны', mine ? mine.leagues : null),
+        plaque('Общая таблица', m.overall, 'ещё без короны', mine ? { who: who, mine: mine.overall } : null),
+        plaque('Лиги', m.leagues, 'ещё без короны', mine ? { who: who, mine: mine.leagues } : null),
       ]));
       main.appendChild(ledge());
-      main.appendChild(h('div', { class: 'kk-sec' }, [h('span', { class: 'kk-lbl', text: 'КЛУБЫ' }), shelf(m, null, mine)]));
+      main.appendChild(h('div', { class: 'kk-sec' }, [h('span', { class: 'kk-lbl', text: 'КЛУБЫ' }), shelf(m, null, mine, who)]));
       main.appendChild(h('span', { class: 'kk-sub', text: 'Видны только награды: прогнозы игрока остаются у него.' }));
       return [main];
     },

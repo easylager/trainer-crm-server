@@ -734,4 +734,16 @@ describe('стенд наград (TASK-430)', () => {
     assert.equal(S.standCountLabel(14), '14' + NBSP + 'корон');
     assert.deepEqual(S.clubCrownMonths({ months: ['2026-10', '2026-09'] }), ['Октябрь', 'Сентябрь']);
   });
+
+  it('сравнение стендов: у кого больше, поровну; клубы без корон у обоих не считаются', () => {
+    const mk = (counts) => S.standModel(
+      counts.flatMap((n, i) => Array.from({ length: n }, () => ({ kind: 'month', club: clubs[i].name, league_id: null, period: '2026-10' }))),
+      clubs,
+    );
+    const theirs = mk([2, 1, 0, 0]);
+    const mine = mk([4, 1, 3, 0]);
+    assert.deepEqual(S.standCompare(theirs, mine), { mine: 2, theirs: 0, same: 1 });
+    assert.deepEqual(S.standCompare(mk([0, 0, 0, 0]), mk([0, 0, 0, 0])), { mine: 0, theirs: 0, same: 0 });
+    assert.deepEqual(S.standCompare(mk([3, 0, 0, 0]), mk([1, 0, 0, 0])), { mine: 0, theirs: 1, same: 0 });
+  });
 });
