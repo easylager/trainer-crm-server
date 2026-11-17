@@ -280,5 +280,32 @@ async def test_nudge_skips_game_opt_out(db_session, column) -> None:
     await _known(db_session, ANNA, at(18, day=15), arena=arena)
     await seed_player(db_session, ANNA, remind=True)
     assert [p.notice.player_key for p in await wn.produce_nudge(db_session, now=at(9, 30, day=19))] == [ANNA]
-    await db_session.execute(text(f"UPDATE hockey_player_prefs SET {column} = false WHERE player_key = :k"), {"k": ANNA})
+    await db_session.execute(
+        text(f"UPDATE hockey_player_prefs SET {column} = false WHERE player_key = :k"), {"k": ANNA}
+    )
     assert await wn.produce_nudge(db_session, now=at(9, 30, day=19)) == []
+
+
+@pytest.mark.asyncio
+async def test_nudge_skips_cancelled_subscription_and_closed_offer(db_session) -> None:
+    """Ревью п. 2: отменил подписку на этот каток или закрыл предложение A — напоминания нет, и закрытое не вернётся."""
+    arena, other = await seed_arena(db_session), await seed_arena(db_session, "Минск-Арена")
+    await _known(db_session, ANNA, at(18, day=15), arena=arena)
+    await seed_watch(db_session, ANNA, arena, created_at=at(18, day=15), active=False)  # отменил
+    await _known(db_session, BORIS, at(18, day=15), arena=arena)
+    await db_session.execute(
+        text("""INSERT INTO catalog_consumer_events (kind, surface, actor_hash, arena_id, occurred_at)
+                VALUES ('watch_offer_closed', 'miniapp_arena', :h, :a, :w)"""),
+        {"h": telegram_actor_hash(BORIS), "a": other, "w": at(18, day=15)},
+    )
+    await _known(db_session, VERA, at(18, day=15), arena=arena)
+    await seed_watch(db_session, VERA, other, created_at=at(18, day=15), active=False)  # отменил другой каток
+    proposals = await wn.produce_nudge(db_session, now=at(9, 30, day=19))
+    assert [p.notice.player_key for p in proposals] == [VERA]
+    # закрыл предложение уже после того, как напоминание собрали — перед отправкой оно отменяется
+    await db_session.execute(
+        text("""INSERT INTO catalog_consumer_events (kind, surface, actor_hash, arena_id, occurred_at)
+                VALUES ('watch_offer_closed', 'place_page', :h, :a, :w)"""),
+        {"h": telegram_actor_hash(VERA), "a": arena, "w": at(9, 31, day=19)},
+    )
+    assert await proposals[0].recheck(db_session, VERA, at(9, 32, day=19)) == "offer_closed"

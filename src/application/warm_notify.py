@@ -418,8 +418,8 @@ async def produce_week(session: AsyncSession, *, now: datetime) -> list[Proposal
 # ---------- C. одно напоминание «знающим нас» ----------
 
 # Достижимые: запускали бота, не заблокировали, не нажимали «Не присылать» (ни в прогреве, ни в игре), ни на что не
-# подписаны, напоминания
-# не получали. Служебные аккаунты каталога в событиях не пишутся, поэтому и сюда не попадут.
+# подписаны, напоминания не получали. Служебные аккаунты каталога в событиях не пишутся, поэтому и сюда не попадут.
+# Каток и закрытое предложение проверяет ``nudge_refusal``: они известны только после разбора визитов.
 _KNOWN = text("""
     SELECT DISTINCT c.telegram_id FROM clients AS c
     WHERE c.telegram_id > 0 AND NOT COALESCE(c.is_sandbox, false)
@@ -486,8 +486,29 @@ def nudge_due(visit_day: date, now: datetime) -> bool:
     return NUDGE_MIN_DAYS <= days <= NUDGE_MAX_DAYS
 
 
-def still_single_visit(visit_day: date) -> Recheck:
-    """Перед отправкой: человек так и не вернулся и не подписался (вернулся — уже не разовый, не пишем)."""
+# Подписка на этот каток когда-либо (в том числе отменённая) и закрытое предложение A: закрытое не возвращается.
+_WATCHED_ARENA = text("SELECT 1 FROM client_ice_watches WHERE telegram_id = :k AND arena_id = :a LIMIT 1")
+_OFFER_CLOSED = text(
+    "SELECT 1 FROM catalog_consumer_events WHERE kind = 'watch_offer_closed' AND actor_hash = :actor LIMIT 1"
+)
+
+
+async def nudge_refusal(session: AsyncSession, *, telegram_id: int, arena_id: int) -> str | None:
+    """Почему напоминание C этому человеку про этот каток не пишем; ``None`` — можно."""
+    from src.application.catalog_consumer_events import telegram_actor_hash
+
+    if (await session.execute(_WATCHED_ARENA, {"k": int(telegram_id), "a": int(arena_id)})).first() is not None:
+        return "watched_before"
+    actor = telegram_actor_hash(telegram_id)
+    if not actor:
+        return "no_actor"
+    if (await session.execute(_OFFER_CLOSED, {"actor": actor})).first() is not None:
+        return "offer_closed"
+    return None
+
+
+def still_single_visit(visit_day: date, arena_id: int) -> Recheck:
+    """Перед отправкой: человек так и не вернулся, не подписался и не закрыл предложение (вернулся — уже не разовый)."""
 
     async def check(session: AsyncSession, player_key: int, now: datetime) -> str | None:
         subscribed = (
@@ -497,6 +518,9 @@ def still_single_visit(visit_day: date) -> Recheck:
         ).first()
         if subscribed is not None:
             return "subscribed"
+        refusal = await nudge_refusal(session, telegram_id=player_key, arena_id=arena_id)
+        if refusal:
+            return refusal
         visits = await single_visit_known(session, telegram_ids=[player_key])
         if len(visits) != 1 or visits[0].visit_day != visit_day:
             return "visited_again"
@@ -516,6 +540,8 @@ async def produce_nudge(session: AsyncSession, *, now: datetime) -> list[Proposa
         arena = (await session.execute(_ARENA, {"id": visitor.arena_id})).first()
         if arena is None:
             continue
+        if await nudge_refusal(session, telegram_id=visitor.telegram_id, arena_id=visitor.arena_id):
+            continue
         notice = WarmNotice(
             KIND_WARM_NUDGE,
             visitor.telegram_id,
@@ -524,7 +550,7 @@ async def produce_nudge(session: AsyncSession, *, now: datetime) -> list[Proposa
             _nudge_buttons(visitor.arena_id),
             visitor.arena_id,
         )
-        out.append(Proposal(notice, _all_of(_morning_check, still_single_visit(visitor.visit_day))))
+        out.append(Proposal(notice, _all_of(_morning_check, still_single_visit(visitor.visit_day, visitor.arena_id))))
     return out
 
 
