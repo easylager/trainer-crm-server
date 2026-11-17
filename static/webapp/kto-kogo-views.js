@@ -394,6 +394,8 @@
     var chips = [h('span', { class: 'kk-chipx', text: '+' + total + (mine.doubled ? ' с козырем' : '') })];
     var place = S.bestLeagueChip(items);
     if (place) chips.push(h('span', { class: 'kk-chipx', text: place }));
+    var trib = S.tribune(m);
+    if (trib) chips.push(h('span', { class: 'kk-chipx', text: trib.chip }));
     return h('section', { class: 'kk-cel', 'aria-label': 'Итог хода', style: 'background:' + tone.bg + ';color:' + tone.ink }, burst(tone).concat([
       h('span', { class: 'kk-cel__d', text: S.dayLabelUp(m.starts_at) + ' · ИТОГ' }),
       h('div', { class: 'kk-cel__s' }, [K.logoDisc(m.home, 60), h('span', { class: 'kk-cel__n', text: r.home_score + ':' + r.away_score }), K.logoDisc(m.away, 60)]),
@@ -407,6 +409,26 @@
     var nm = S.nextMatch(state.matches, m);
     if (!nm) return null;
     return h('button', { type: 'button', class: 'kk-nextl', onclick: function () { K.go('match', { id: nm.id }); } }, [h('span', { text: S.nextTurnLabel(nm) }), icon(I.chev, 18)]);
+  }
+
+  /** «Трибуна»: за кого ходили, твоя сторона выделена, под полосой — одна строка. */
+  function tribuneCard(m) {
+    var t = S.tribune(m);
+    if (!t) return null;
+    var you = h('span', { class: 'kk-me', text: 'ты' });
+    var mineHome = t.side === 'home';
+    return h('section', { class: 'kk-trib', 'aria-label': 'Трибуна' }, [
+      h('div', { class: 'kk-trib__h' }, [h('span', { class: 'kk-lbl', text: 'ТРИБУНА' }), h('span', { class: 'kk-sub', text: t.total + '\u00a0' + M.plural(t.total, 'ход', 'хода', 'ходов') })]),
+      h('div', { class: 'kk-trib__bar', 'aria-hidden': 'true' }, [
+        h('span', { class: 'kk-trib__seg' + (mineHome ? ' is-mine' : ''), style: 'width:' + t.home + '%' }),
+        h('span', { class: 'kk-trib__seg' + (mineHome ? '' : ' is-mine'), style: 'width:' + t.away + '%' }),
+      ]),
+      h('div', { class: 'kk-trib__lg' }, [
+        h('span', { class: 'kk-trib__side' }, [name(m.home) + ' ', h('b', { text: t.home + '%' }), mineHome ? you : null]),
+        h('span', { class: 'kk-trib__side' }, [mineHome ? null : you, name(m.away) + ' ', h('b', { text: t.away + '%' })]),
+      ]),
+      h('span', { class: 'kk-trib__t' + (t.soft ? ' kk-trib__t--soft' : ''), text: t.line }),
+    ]);
   }
 
   function finalView(m) {
@@ -442,6 +464,8 @@
           ]),
           h('span', { class: 'kk-stk kk-stk--' + v.tone, style: stkStyle, 'aria-label': pts == null ? 'очки считаются' : M.points(total || 0), text: pts == null ? '…' : total ? '+' + total : '0' }),
         ]));
+        var trib = tribuneCard(m);
+        if (trib) main.appendChild(trib);
       }
       if (pts != null) {
         var rows = S.movementRows(items);

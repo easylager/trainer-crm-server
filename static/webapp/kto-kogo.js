@@ -35,6 +35,9 @@
     stakes: {}, // id матча → {loading, data}
     movement: {}, // id матча → {loading, data}
     peaks: null,
+    // Срез, на котором открывается «Таблица» (лучшая вершина от десяти игроков), и срез, выбранный руками до закрытия игры.
+    tableStart: null,
+    tableChoice: null,
     profile: null,
     clubs: null,
     leagues: null,
@@ -570,7 +573,7 @@
 
   function loadPeaks() {
     if (state.peaks) return Promise.resolve();
-    return api('GET', '/client/hockey/peaks').then(function (d) { state.peaks = (d && d.items) || []; }).catch(function () { state.peaks = []; });
+    return api('GET', '/client/hockey/peaks').then(function (d) { state.peaks = (d && d.items) || []; state.tableStart = (d && d.start) || null; }).catch(function () { state.peaks = []; state.tableStart = null; });
   }
 
   function loadProfile(force) {

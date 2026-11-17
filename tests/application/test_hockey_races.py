@@ -35,6 +35,7 @@ from src.application.hockey_races import (
     leader_line,
     mark_calendar_synced,
 )
+from src.application import hockey_slices
 from src.application.hockey_slices import (
     LEAGUE_CROWN_MIN_MEMBERS,
     club_scope,
@@ -42,6 +43,7 @@ from src.application.hockey_slices import (
     crown_leaders,
     parse_period,
     peaks,
+    table_start,
     slice_rows,
     stakes,
     table_view,
@@ -472,6 +474,19 @@ async def test_peaks_need_three_players_and_three_moves(db_session) -> None:
     assert all(x["played"] >= 3 for x in out)
     # Двое игроков / мало ходов — вершин нет.
     assert await peaks(db_session, player_key=P[5], now=NOV) == []
+
+
+
+@pytest.mark.asyncio
+async def test_table_starts_on_best_peak_only_with_ten_players(db_session, monkeypatch) -> None:
+    base = datetime(2026, 11, 12, 19, 0, tzinfo=MINSK_TZ)
+    for i in range(3):
+        await _three_players_game(db_session, base + timedelta(days=i), mid=f"ts{i}")
+    assert await table_start(db_session, player_key=P[0], now=NOV) is None  # трое — мало, открывается общая
+    monkeypatch.setattr(hockey_slices, "TABLE_START_MIN_PLAYERS", 3)
+    best = (await peaks(db_session, player_key=P[0], now=NOV))[0]
+    assert await table_start(db_session, player_key=P[0], now=NOV) == {"club": best["club"], "period": best["period"]}
+    assert "with_points" not in best
 
 
 # ---------- «Если угадаешь» ----------

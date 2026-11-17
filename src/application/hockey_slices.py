@@ -42,6 +42,8 @@ CROWN_MIN_PLAYERS = 3
 LEAGUE_CROWN_MIN_MEMBERS = 2
 PEAK_MIN_MOVES = 3
 PEAKS_LIMIT = 3
+# «Таблица» открывается на лучшей вершине, только если там соревнуются хотя бы десятеро с очками.
+TABLE_START_MIN_PLAYERS = 10
 NEIGHBORS = 2
 _PERIOD_RE = re.compile(r"^(\d{4})-(\d{2})$")
 # Годы вне этого окна — мусор из запроса: date/astimezone на краях календаря падают OverflowError (500).
@@ -415,7 +417,24 @@ def _gate() -> asyncio.Semaphore:
 
 
 async def peaks(session: AsyncSession, *, player_key: int, now: datetime) -> list[dict]:
-    """Вершины игрока с коротким кэшем по игроку (результат не зависит от ``now`` внутри сезона)."""
+    """Три вершины игрока — лучшие из ``_ranked_slices``."""
+    return [_public_peak(r) for r in (await _ranked_slices(session, player_key=player_key, now=now))[:PEAKS_LIMIT]]
+
+
+async def table_start(session: AsyncSession, *, player_key: int, now: datetime) -> dict | None:
+    """Срез, на котором открывается «Таблица»: лучшая вершина, где хотя бы десятеро с очками. Нет — общая таблица."""
+    for r in await _ranked_slices(session, player_key=player_key, now=now):
+        if r["with_points"] >= TABLE_START_MIN_PLAYERS:
+            return {"club": r["club"], "period": r["period"]}
+    return None
+
+
+def _public_peak(r: dict) -> dict:
+    return {k: v for k, v in r.items() if k != "with_points"}
+
+
+async def _ranked_slices(session: AsyncSession, *, player_key: int, now: datetime) -> list[dict]:
+    """Все годные срезы игрока от лучшего места, с коротким кэшем по игроку (внутри сезона от ``now`` не зависят)."""
     season = season_period(now)
 
     async def compute() -> list[dict]:
@@ -428,7 +447,7 @@ async def peaks(session: AsyncSession, *, player_key: int, now: datetime) -> lis
 
 
 async def _peaks_uncached(session: AsyncSession, *, player_key: int, now: datetime) -> list[dict]:
-    """Три среза, где у игрока лучшее место среди срезов, где он играл и где есть кого обгонять.
+    """Срезы от лучшего места к худшему — среди тех, где игрок играл и где есть кого обгонять.
 
     Срез годится, если в нём хотя бы трое с очками и у игрока не меньше трёх ходов. Сравнение —
     по доле «место / размер» (первый из 40 лучше первого из 4), при равенстве — большой срез выше.
@@ -448,7 +467,7 @@ async def _peaks_uncached(session: AsyncSession, *, player_key: int, now: dateti
         found.append(r)
     found.sort(key=lambda r: (r.rank / r.players, -r.players, r.club or "", r.period))
     out = []
-    for r in found[:PEAKS_LIMIT]:
+    for r in found:
         period = season if r.period == KIND_SEASON else parse_period(r.period, now)
         out.append(
             {
@@ -460,6 +479,7 @@ async def _peaks_uncached(session: AsyncSession, *, player_key: int, now: dateti
                 "points": r.points,
                 "exact": r.exact,
                 "played": r.played,
+                "with_points": r.with_points,
             }
         )
     return out

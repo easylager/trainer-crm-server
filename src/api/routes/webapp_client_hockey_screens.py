@@ -25,7 +25,10 @@ _ONE_MATCH = text("""
            p.side AS pick_side, p.home_score AS pick_home_score, p.away_score AS pick_away_score,
            p.points AS pick_points, COALESCE(p.doubled, false) AS pick_doubled,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
-           (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'away')::int AS away_picks
+           (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'away')::int AS away_picks,
+           (SELECT COUNT(*) FROM hockey_picks x
+            WHERE x.match_id = m.id AND x.player_key <> :player_key
+              AND x.home_score = p.home_score AND x.away_score = p.away_score)::int AS same_exact
     FROM game_matches AS m
     LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
     WHERE m.id = :match_id

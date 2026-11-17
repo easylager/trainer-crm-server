@@ -121,7 +121,7 @@ async def test_standings_peaks_stakes_and_matches_filter(app_use_test_db, db_ses
             assert st["points_if_winner"] == 40 and st["doubled"] is True
             assert (await client.get("/api/webapp/client/hockey/matches/99999999/stakes")).status_code == 404
             peaks = await client.get("/api/webapp/client/hockey/peaks")
-            assert peaks.status_code == 200 and peaks.json() == {"items": []}  # мало ходов: вершин ещё нет
+            assert peaks.status_code == 200 and peaks.json() == {"items": [], "start": None}  # мало ходов: вершин ещё нет
 
 
 @pytest.mark.asyncio
