@@ -1713,6 +1713,15 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         logger.warning("admin stats: warm slice failed", exc_info=True)
         warm_visitors = None
 
+    from src.application.visitor_retention import get_visitor_retention
+
+    try:
+        async with session.begin_nested():
+            visitor_retention = await get_visitor_retention(session)
+    except Exception:  # noqa: BLE001 — срез возвратов не роняет «Статистику»
+        logger.warning("admin stats: visitor retention failed", exc_info=True)
+        visitor_retention = None
+
     return {
         "catalog_demand_pulse": catalog_demand_pulse,
         "ice_watch_pulse": ice_watch_pulse,
@@ -1720,6 +1729,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         "booking_sources": booking_sources,
         "kk_promo": kk_promo,
         "warm_visitors": warm_visitors,
+        "visitor_retention": visitor_retention,
         "trainers_by_status": trainers_by_status,
         "trainers_total": trainers_total,
         "trainers_pending_moderation": trainers_pending_moderation,
