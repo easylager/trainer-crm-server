@@ -277,6 +277,36 @@ def profile_club(scored, fav_club: str | None) -> str | None:
     return favorite_club(scored)
 
 
+_STAND_PLAYER = text("""
+    SELECT player_key, display_name, public_id FROM hockey_players WHERE public_id = :public_id
+    """)
+
+_STAND_CROWNS = text("""
+    SELECT kind, club, period_start FROM hockey_crowns WHERE player_key = :player_key
+    ORDER BY period_start DESC, id DESC
+    """)
+
+
+async def player_stand(session: AsyncSession, *, public_id: str, viewer_key: int) -> dict | None:
+    """Чужой стенд (TASK-430): имя и короны игрока по ``public_id``; ``None`` — такого игрока нет.
+
+    Только награды: ходы и прогнозы игрока, названия и номера его лиг, Telegram-id наружу не уходят. Лиговые
+    короны приходят без лиги (``league_id`` пустой), клубные и общей таблицы — с клубом или без него."""
+    head = (await session.execute(_STAND_PLAYER, {"public_id": public_id})).one_or_none()
+    if head is None:
+        return None
+    crowns = []
+    for c in (await session.execute(_STAND_CROWNS, {"player_key": head.player_key})).all():
+        start = _utc(c.period_start).astimezone(MINSK_TZ).date()
+        crowns.append({"kind": c.kind, "club": c.club, "league_id": None, "period": f"{start.year:04d}-{start.month:02d}"})
+    return {
+        "pid": head.public_id,
+        "display_name": head.display_name,
+        "is_me": head.player_key == viewer_key,
+        "crowns": crowns,
+    }
+
+
 async def fan_profile(session: AsyncSession, *, player_key: int, now: datetime) -> dict:
     head = (await session.execute(_NAME, {"player_key": player_key})).one()
     name = head.display_name
@@ -345,4 +375,4 @@ async def fan_profile(session: AsyncSession, *, player_key: int, now: datetime) 
     }
 
 
-__all__ = ["clubs_catalog", "fan_profile", "favorite_club", "match_movement", "rank_without", "streaks"]
+__all__ = ["clubs_catalog", "fan_profile", "player_stand", "favorite_club", "match_movement", "rank_without", "streaks"]

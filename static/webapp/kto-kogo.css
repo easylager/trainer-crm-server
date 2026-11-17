@@ -661,6 +661,9 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-podium__rank { font: 700 22px/1 var(--kk-text); }
 .kk-podium__pt { font: 700 13px/1 var(--kk-text); }
 
+/* Строка таблицы — кнопка: тап открывает стенд игрока. */
+.kk-r--btn { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+
 /* Стенд наград (TASK-430): наклейка-корона на логотипе клуба, полки и строка «Мой стенд». */
 .kk-stkw { position: relative; display: inline-flex; flex: none; }
 .kk-stkw.is-dim .kk-disc { opacity: 0.45; }

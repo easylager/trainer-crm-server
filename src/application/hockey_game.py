@@ -69,6 +69,7 @@ class Standing:
     exact: int
     played: int
     correct: int = 0
+    pid: str | None = None
 
 
 def _utc(value: datetime) -> datetime:

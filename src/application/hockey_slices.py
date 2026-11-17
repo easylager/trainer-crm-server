@@ -144,6 +144,7 @@ class Row:
     exact: int
     played: int
     correct: int
+    pid: str | None = None  # public_id игрока: чужой стенд открывается по нему, не по Telegram-id
 
 
 _ROWS = text(f"""
@@ -161,7 +162,7 @@ _ROWS = text(f"""
         GROUP BY p.player_key
     )
     SELECT RANK() OVER (ORDER BY t.points DESC, t.exact DESC, t.played ASC)::int AS rank,
-           t.player_key, pl.display_name, t.points, t.exact, t.played, t.correct
+           t.player_key, pl.display_name, t.points, t.exact, t.played, t.correct, pl.public_id AS pid
     FROM totals AS t
     JOIN hockey_players AS pl ON pl.player_key = t.player_key
     ORDER BY rank, pl.display_name, t.player_key
@@ -189,7 +190,7 @@ _LEAGUE_ROWS = text(f"""
                                  COALESCE(t.played, 0) ASC)::int AS rank,
            mb.player_key, pl.display_name,
            COALESCE(t.points, 0) AS points, COALESCE(t.exact, 0) AS exact,
-           COALESCE(t.played, 0) AS played, COALESCE(t.correct, 0) AS correct
+           COALESCE(t.played, 0) AS played, COALESCE(t.correct, 0) AS correct, pl.public_id AS pid
     FROM members AS mb
     JOIN hockey_players AS pl ON pl.player_key = mb.player_key
     LEFT JOIN totals AS t ON t.player_key = mb.player_key
@@ -355,6 +356,7 @@ def _row_out(row: Row, *, me: int | None, crowns: dict[int, int]) -> dict:
         "correct_percent": correct_percent(row),
         "crowns": crowns.get(row.player_key, 0),
         "is_me": row.player_key == me,
+        "pid": row.pid,
     }
 
 

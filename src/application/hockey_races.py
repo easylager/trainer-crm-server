@@ -239,7 +239,7 @@ async def _award(
 ) -> int | None:
     """Закрыть срез и записать короны. ``None`` — срез уже был закрыт (ничего не пишем).
 
-    ``crowns=False`` — срез закрывается без наград (соперники Динамо, общая таблица)."""
+    ``crowns=False`` — срез закрывается без наград (соперники Динамо). Общая таблица («все») корону получает (TASK-430)."""
     closure = (
         await session.execute(
             _INSERT_CLOSURE,
@@ -282,8 +282,8 @@ async def _award(
 async def crown_clubs(session: AsyncSession) -> frozenset[str]:
     """Клубы, за которые выдаются короны и звания: «Динамо-Минск» и клубы белорусской Экстралиги.
 
-    Соперники Динамо по КХЛ в календаре есть, но срез по ним не разыгрывается; общей таблицы («все») тоже нет:
-    её срез закрывается без наград, чтобы гонка месяца закрывалась как раньше.
+    Соперники Динамо по КХЛ в календаре есть, но срез по ним не разыгрывается. Общая таблица («все») в этот набор
+    не входит, но корону за месяц получает тоже (решение владельца 2026-11-18, TASK-430): её срез клубом не назван.
     """
     teams = (await session.execute(_EXTRALIGA_CLUBS)).scalars().all()
     return frozenset({DINAMO, *teams})
@@ -319,7 +319,7 @@ async def _close_months(session: AsyncSession, *, now: datetime, closed: list[in
                 league_id=None,
                 rows=rows,
                 now=now,
-                crowns=club in eligible,
+                crowns=club is None or club in eligible,
             )
             if closure is not None:
                 closed.append(closure)
@@ -516,7 +516,7 @@ async def confirm_close_month(
         rows=rows,
         now=now,
         manual=True,
-        crowns=club in await crown_clubs(session),
+        crowns=club is None or club in await crown_clubs(session),
     )
     if closure is not None and club is None:
         await session.execute(_CLOSE_RACE, {"race_id": race.id, "now": _utc(now)})
