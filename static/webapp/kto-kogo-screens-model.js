@@ -553,6 +553,22 @@
     };
   }
 
+  /** Пояснение под таблицей лиги: что значат звания, которые на ней висят (шарф, кепка). Нет званий — нет строки. */
+  function titlesNote(items) {
+    var has = {};
+    (items || []).forEach(function (r) { if (r.title && r.title.id) has[r.title.id] = true; });
+    var parts = [];
+    if (has.scarf) parts.push('Шарф — за ход против Динамо на ближайший матч.');
+    if (has.cap) parts.push('Кепка — тому, кто в последнем матче лиги не угадал победителя, когда кто-то из друзей угадал. Снимается со следующим матчем.');
+    return parts.join(' ');
+  }
+
+  /** Пьедестал лиги: [2-е, 1-е, 3-е] места; меньше троих — пьедестала нет, остаётся обычная таблица. */
+  function podiumOrder(items) {
+    if (!items || items.length < 3) return null;
+    return [items[1], items[0], items[2]];
+  }
+
   /** Строки «куда сдвинулась» по ответу /movement. */
   function movementRows(items) {
     return (items || []).map(function (x) {
@@ -1425,6 +1441,8 @@
     shouldAskWrite: shouldAskWrite,
     answerWriteAsk: answerWriteAsk,
     tribune: tribune,
+    podiumOrder: podiumOrder,
+    titlesNote: titlesNote,
     TRIBUNE_MIN: TRIBUNE_MIN,
   };
 

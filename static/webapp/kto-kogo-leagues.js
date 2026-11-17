@@ -401,6 +401,24 @@
     ]);
   }
 
+  /** Пьедестал лиги из первой версии игры: трое лучших колонками, звание (шарф, кепка) под именем. */
+  function leaguePodium(items) {
+    var order = S.podiumOrder(items);
+    if (!order) return null;
+    return h('div', { class: 'kk-podium', role: 'group', 'aria-label': 'Первая тройка лиги' }, order.map(function (r, i) {
+      var place = i === 1 ? 1 : i === 0 ? 2 : 3;
+      return h('div', { class: 'kk-podium__col' }, [
+        K.ava(r.display_name, place === 1 ? 60 : 48),
+        h('span', { class: 'kk-podium__name' }, [h('span', { class: 'kk-podium__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null]),
+        r.title && r.title.label ? h('span', { class: 'kk-podium__title', text: r.title.label }) : h('span', { class: 'kk-podium__title' }),
+        h('div', { class: 'kk-podium__block kk-podium__block--' + place }, [
+          h('span', { class: 'kk-podium__rank', text: String(r.rank) }),
+          h('span', { class: 'kk-podium__pt', text: String(r.points) }),
+        ]),
+      ]);
+    }));
+  }
+
   /** Черновик «Изменить лигу»: название, строка, выбранный файл и «убрать картинку». */
   function editDraft(l) {
     return { kind: 'edit', name: l.name || '', stake: l.stake_text || '', file: null, previewUrl: null, imageError: '', removeImage: false, error: '', busy: false };
@@ -521,7 +539,9 @@
           loadLeague(a).then(K.render, function (e) { K.fail(e); a.failed = true; K.render(); });
         }, 'Период таблицы'),
         h('div', { class: 'kk-crownbar' + (S.leagueCrownMuted(l) ? ' kk-crownbar--muted' : '') }, [K.crownIcon(18), h('span', { text: S.leagueCrownLine(l, a.tab, me, items[0] ? items[0].points : 0) })]),
-        items.length > 1 ? h('div', { class: 'kk-tbl' }, items.map(leagueRow)) : h('span', { class: 'kk-sub', text: 'Пока в лиге только ты. Позови своих — таблица оживёт после первого матча.' }),
+        S.podiumOrder(items) ? leaguePodium(items) : null,
+        items.length > 1 ? h('div', { class: 'kk-tbl' }, (S.podiumOrder(items) ? items.slice(3) : items).map(leagueRow)) : h('span', { class: 'kk-sub', text: 'Пока в лиге только ты. Позови своих — таблица оживёт после первого матча.' }),
+        S.titlesNote(items) ? h('span', { class: 'kk-sub', text: S.titlesNote(items) }) : null,
         a.tab === 'all' ? crownWall(l.wall) : null,
         h('div', { class: 'kk-two kk-two--cta' }, [
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l)); }, text: 'Позвать в лигу' }),

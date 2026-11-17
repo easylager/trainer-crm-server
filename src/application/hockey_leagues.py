@@ -771,8 +771,8 @@ def _plural(n: int, one: str, few: str, many: str) -> str:
 def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, dict[str, str]]:
     """Звания участников лиги по их ходам за сезон (чистая функция, ходы — по времени матча).
 
-    - cap «Кепка позора» — меньше всех очков за последний сыгранный матч лиги; если очки у всех
-      равные — кепки нет. Висит, пока не сыграют следующий матч.
+    - cap «Кепка позора» — меньше всех очков за последний сыгранный матч лиги, и это промах по победителю
+      (меньше ``POINTS_WINNER``); если очки у всех равные — кепки нет. Висит, пока не сыграют следующий матч.
     - scarf «В чужом шарфе» — ход против Динамо на ближайший матч;
     - vanga «Ванга» — единственный лидер лиги по точным счетам, от VANGA_MIN точных;
     - streak «Чуйка» — победитель угадан STREAK_MIN+ сыгранных матчей подряд;
@@ -789,10 +789,10 @@ def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, di
         last = [p for p in scored if p["match_id"] == last_match]
         if len(last) >= 2:
             low = min(p["points"] for p in last)
-            if low < max(p["points"] for p in last):
+            if low < POINTS_WINNER and low < max(p["points"] for p in last):
                 for p in last:
                     if p["points"] == low:
-                        give(p["player_key"], "cap", "Кепка позора", f"{low} {_plural(low, 'очко', 'очка', 'очков')}")
+                        give(p["player_key"], "cap", "Кепка позора", "мимо в последнем матче")
 
     if next_match_id is not None:
         for p in picks:

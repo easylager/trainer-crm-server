@@ -38,7 +38,7 @@ def test_cap_goes_to_the_lowest_score_of_the_last_match_only() -> None:
         _p(3, 11, points=0),
     ]
     titles = pick_titles(picks, next_match_id=None)
-    assert titles[2] == {"id": "cap", "label": "Кепка позора", "detail": "0 очков"}
+    assert titles[2] == {"id": "cap", "label": "Кепка позора", "detail": "мимо в последнем матче"}
     assert titles[3]["id"] == "cap"
     assert 1 not in titles
 
@@ -46,6 +46,12 @@ def test_cap_goes_to_the_lowest_score_of_the_last_match_only() -> None:
 def test_no_cap_when_everyone_scored_the_same_or_played_alone() -> None:
     assert pick_titles([_p(1, 11, points=20), _p(2, 11, points=20)], next_match_id=None) == {}
     assert pick_titles([_p(1, 11, points=0)], next_match_id=None) == {}
+
+
+def test_cap_only_for_a_missed_winner() -> None:
+    # 10 очков — победитель не угадан, кепка; 20 и выше — победитель угадан, кепки нет, хоть и меньше всех.
+    assert pick_titles([_p(1, 11, points=10), _p(2, 11, points=30)], next_match_id=None)[1]["id"] == "cap"
+    assert pick_titles([_p(1, 11, points=20), _p(2, 11, points=50)], next_match_id=None) == {}
 
 
 def test_scarf_bets_against_dinamo_on_the_next_match_home_and_away() -> None:
@@ -63,7 +69,7 @@ def test_scarf_bets_against_dinamo_on_the_next_match_home_and_away() -> None:
 def test_cap_wins_over_scarf_for_one_person() -> None:
     picks = [_p(1, 11, points=0), _p(2, 11, points=30), _p(1, 12, points=None, status="scheduled", side="away")]
     assert pick_titles(picks, next_match_id=12)[1]["id"] == "cap"
-    assert pick_titles(picks, next_match_id=12)[1]["detail"] == "0 очков"
+    assert pick_titles(picks, next_match_id=12)[1]["detail"] == "мимо в последнем матче"
 
 
 def _s(player: int, match: int, home_score: int, away_score: int, *, home: str = "Динамо-Минск") -> dict:

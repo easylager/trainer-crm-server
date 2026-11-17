@@ -663,3 +663,19 @@ describe('срок формы «Новая лига» (TASK-362)', () => {
     assert.equal(S.settleTerm('season', { items: [], season_ends_at: '2027-04-30T21:00:00Z' }), 'dates');
   });
 });
+
+describe('пьедестал лиги', () => {
+  it('меньше троих — пьедестала нет; иначе порядок 2-е, 1-е, 3-е', () => {
+    assert.equal(S.podiumOrder([]), null);
+    assert.equal(S.podiumOrder([{ rank: 1 }, { rank: 2 }]), null);
+    const top = S.podiumOrder([{ rank: 1 }, { rank: 2 }, { rank: 3 }, { rank: 4 }]);
+    assert.deepEqual(top.map((r) => r.rank), [2, 1, 3]);
+  });
+  it('пояснение к званиям: только о тех, что висят на таблице', () => {
+    assert.equal(S.titlesNote([{ title: null }, {}]), '');
+    assert.match(S.titlesNote([{ title: { id: 'scarf' } }]), /^Шарф — за ход против Динамо/);
+    const both = S.titlesNote([{ title: { id: 'cap' } }, { title: { id: 'scarf' } }]);
+    assert.match(both, /Шарф/);
+    assert.match(both, /Кепка — тому, кто в последнем матче лиги не угадал победителя/);
+  });
+});
