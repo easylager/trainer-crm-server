@@ -977,13 +977,15 @@
 
   /**
    * Итог сыгранного вечера (макет v2): звезда — больше всех очков, кепка — по правилу кепки дня.
-   * Имена без склонения (пол и падеж неизвестны): метка «Звезда вечера» / «В кепке» и имя крупно.
+   * Имена без склонения (пол и падеж неизвестны): метка «Звезда вечера» / «Кепка дня» и имя крупно.
    */
   function eveningVerdict(ev) {
     if (!ev || !ev.complete) return null;
     var items = ev.items || [];
     var best = 0;
     items.forEach(function (r) { if (r.moves && r.points > best) best = r.points; });
+    // Звезда — когда было с кем сравнить: ходили хотя бы двое.
+    if (items.filter(function (r) { return r.moves; }).length < 2) best = 0;
     var stars = best ? items.filter(function (r) { return r.moves && r.points === best; }) : [];
     var caps = items.filter(function (r) { return r.cap; });
     var star = stars.length ? {
@@ -992,10 +994,10 @@
       sub: stars.length === 1 ? eveningMoves(stars[0], ev) + ' · +' + best : '+' + best + ' у каждого',
     } : null;
     var cap = null;
-    if (caps.length === 1 && caps[0].is_me) cap = { label: 'Кепка', name: 'у тебя', sub: eveningMoves(caps[0], ev) + '. Носишь до следующего вечера' };
-    else if (caps.length === 1) cap = { label: 'В кепке', name: caps[0].display_name, sub: eveningMoves(caps[0], ev) + ' · носит до следующего вечера' };
-    else if (caps.length) cap = { label: 'В кепке', name: whoList(caps), sub: 'Носят до следующего вечера' };
-    else if (ev.cap && ev.cap.decided && !ev.cap.in_play) cap = { label: 'Кепка', name: 'не разыграна', sub: 'В споре меньше ' + (FEW_WORD[ev.cap.min_players] || ev.cap.min_players) };
+    if (caps.length === 1 && caps[0].is_me) cap = { label: 'Кепка дня', name: 'у тебя', sub: eveningMoves(caps[0], ev) + '. Носишь до следующего вечера' };
+    else if (caps.length === 1) cap = { label: 'Кепка дня', name: caps[0].display_name, sub: eveningMoves(caps[0], ev) + ' · носит до следующего вечера' };
+    else if (caps.length) cap = { label: 'Кепка дня', name: whoList(caps), sub: 'Носят до следующего вечера' };
+    else if (ev.cap && ev.cap.decided && !ev.cap.in_play) cap = { label: 'Кепка дня', name: 'не разыграна', sub: 'В споре меньше ' + (FEW_WORD[ev.cap.min_players] || ev.cap.min_players) };
     return star || cap ? { star: star, cap: cap } : null;
   }
 
@@ -1014,7 +1016,7 @@
   /** Что значит мой жест другу: подпись под его строкой, пока жест стоит. */
   function myGestureNote(r, ev) {
     if (!r || r.is_me) return '';
-    if (r.my_gesture === 'stick') return 'Твой стук виден всей лиге до следующего вечера';
+    if (r.my_gesture === 'stick') return 'Твой стук горит у друга до следующего вечера';
     if (r.my_gesture !== 'pen') return '';
     var m = /^\d{4}-(\d{2})-/.exec((ev && ev.day) || '');
     return 'На скамейке до следующего вечера · +2' + NBSP + 'мин' + (m ? ' в ' + MONTHS_IN[Number(m[1]) - 1] : '');
@@ -1075,7 +1077,7 @@
   function eveningFoot(ev) {
     var cap = ev && ev.cap;
     if (cap && cap.decided && !cap.in_play) return 'Кепку в этот вечер не разыграли: в споре меньше ' + (FEW_WORD[cap.min_players] || cap.min_players) + '.';
-    return 'Кепка — худшему за вечер, стук и скамейка — от друзей. Всё видно до следующего вечера.';
+    return 'Кепку даёт игра, стук и скамейку — друзья. Всё держится до следующего вечера.';
   }
 
   /** Тап по жесту: тот же жест снимает его, другой — меняет. */
@@ -1117,12 +1119,12 @@
   /** Шторка правил, раздел «Жесты». Черновик агента: в макете раздела нет, текст утверждает владелец. */
   function gestureRules() {
     return {
-      lead: 'Жест — шутка вечера: другу, когда все матчи дня сыграны',
+      lead: 'Вечер сыгран — можно ответить другу жестом',
       items: [
-        { k: 'Стук клюшкой.', t: 'Хорошо сходил — уважаем.' },
-        { k: '2 минуты.', t: 'Удаление на две минуты: за промах, за чужой шарф или просто так.' },
-        { k: 'Сколько.', t: 'Один жест от тебя каждому другу за вечер. Передумаешь — смени или сними. Себе нельзя.' },
-        { k: 'Где видно.', t: 'Значок на аватаре до следующего вечера и счёт в таблице лиги: «4 мин штрафа · 3 стука». Сообщений в чат за жесты нет.' },
+        { k: 'Стук клюшкой.', t: 'Так в хоккее хвалят своих — клюшкой по борту. Горит у друга до следующего вечера.' },
+        { k: '2 минуты.', t: 'На скамейку штрафников — за промах, за чужой шарф или просто так. Минуты копятся в таблице месяца.' },
+        { k: 'Сколько.', t: 'Один жест каждому другу за вечер. Можно сменить или снять, себе — нельзя.' },
+        { k: 'Где видно.', t: 'Значок на аватаре и строка в таблице лиги: «4 мин штрафа · 3 стука». Без уведомлений — друг увидит, когда откроет лигу.' },
       ],
     };
   }

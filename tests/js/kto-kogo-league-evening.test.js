@@ -57,7 +57,7 @@ describe('строка человека', () => {
   });
   it('мой жест другу — что он значит; себе и без жеста — пусто', () => {
     assert.equal(S.myGestureNote({ my_gesture: 'pen' }, EV), 'На скамейке до следующего вечера · +2' + NBSP + 'мин в ноябре');
-    assert.equal(S.myGestureNote({ my_gesture: 'stick' }, EV), 'Твой стук виден всей лиге до следующего вечера');
+    assert.equal(S.myGestureNote({ my_gesture: 'stick' }, EV), 'Твой стук горит у друга до следующего вечера');
     assert.equal(S.myGestureNote({ my_gesture: null }, EV), '');
     assert.equal(S.myGestureNote({ is_me: true, my_gesture: 'pen' }, EV), '');
   });
@@ -94,7 +94,7 @@ describe('строка человека', () => {
     const few = Object.assign({}, EV, { cap: { decided: true, in_play: false, min_players: 3 } });
     assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, few), '');
     assert.equal(S.eveningFoot(few), 'Кепку в этот вечер не разыграли: в споре меньше троих.');
-    assert.equal(S.eveningFoot(EV), 'Кепка — худшему за вечер, стук и скамейка — от друзей. Всё видно до следующего вечера.');
+    assert.equal(S.eveningFoot(EV), 'Кепку даёт игра, стук и скамейку — друзья. Всё держится до следующего вечера.');
   });
   it('итог вечера: звезда и кепка, имена без склонения; вечер не сыгран — итога нет', () => {
     const items = [
@@ -105,7 +105,7 @@ describe('строка человека', () => {
     const ev = Object.assign({}, EV, { items });
     assert.deepEqual(S.eveningVerdict(ev), {
       star: { label: 'Звезда вечера', name: 'Андрей', sub: '4 из 4 · +130' },
-      cap: { label: 'Кепка', name: 'у тебя', sub: '0 из 4. Носишь до следующего вечера' },
+      cap: { label: 'Кепка дня', name: 'у тебя', sub: '0 из 4. Носишь до следующего вечера' },
     });
     const other = Object.assign({}, EV, { items: items.map((r) => Object.assign({}, r, { cap: r.display_name === 'Мария' })) });
     assert.equal(S.eveningVerdict(other).cap.name, 'Мария');
@@ -113,7 +113,8 @@ describe('строка человека', () => {
     const tie = Object.assign({}, EV, { items: [Object.assign({}, items[1]), Object.assign({}, items[2], { points: 130 }), Object.assign({}, items[0], { points: 130, cap: false })] });
     assert.deepEqual(S.eveningVerdict(tie).star, { label: 'Звезда вечера', name: 'ты, Андрей и Мария', sub: '+130 у каждого' });
     const few = Object.assign({}, EV, { items: [items[1]], cap: { decided: true, in_play: false, min_players: 3 } });
-    assert.deepEqual(S.eveningVerdict(few).cap, { label: 'Кепка', name: 'не разыграна', sub: 'В споре меньше троих' });
+    assert.equal(S.eveningVerdict(few).star, null, 'звезда — когда ходили хотя бы двое');
+    assert.deepEqual(S.eveningVerdict(few).cap, { label: 'Кепка дня', name: 'не разыграна', sub: 'В споре меньше троих' });
     assert.equal(S.eveningVerdict(Object.assign({}, ev, { complete: false })), null);
     const zero = Object.assign({}, EV, { items: [{ display_name: 'А', moves: 2, points: 0 }], cap: { decided: true, in_play: true } });
     assert.equal(S.eveningVerdict(zero), null);

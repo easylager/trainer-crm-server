@@ -739,8 +739,8 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-stamp--stick { top: -7px; right: -9px; min-width: 22px; height: 22px; padding: 0 4px; gap: 0; border-radius: 11px; font-size: 10px; background: var(--kk-stick); color: var(--kk-stick-on); }
 .kk-stamp--stick svg { stroke-width: 3; }
 .kk-stamp--pen { bottom: -7px; left: 2px; width: 40px; height: 20px; border-radius: 6px; background: var(--kk-pen); color: var(--kk-pen-on); }
-.kk-stamp--stick.is-new { animation: kk-stamp-pop 0.42s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
-.kk-stamp--pen.is-new { animation: kk-stamp-drop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) 0.15s both; }
+.kk-stamp--stick.is-new { animation: kk-stamp-pop 0.42s cubic-bezier(0.3, 1.6, 0.5, 1) var(--kk-mo, 0ms) both; }
+.kk-stamp--pen.is-new { animation: kk-stamp-drop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) calc(0.15s + var(--kk-mo, 0ms)) both; }
 .kk-ev__w { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .kk-ev__name { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font: 700 16px/1.2 var(--kk-text); }
 .kk-ev__nm { min-width: 0; overflow-wrap: anywhere; }
@@ -769,10 +769,9 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-gest__drain { fill: none; stroke: currentColor; stroke-dasharray: 44; stroke-dashoffset: 44; opacity: 0.45; }
 .kk-gest--stick[aria-pressed='true'] { border-color: var(--kk-stick); background: var(--kk-stick-bg); color: var(--kk-stick); }
 .kk-gest--pen[aria-pressed='true'] { border-color: var(--kk-pen); background: var(--kk-pen-bg); color: var(--kk-pen); }
-.kk-gest:disabled { opacity: 0.6; }
-.kk-gest.is-knock, .kk-gest.is-drain { animation: kk-gest-press 0.26s ease-out; }
-.kk-gest.is-knock svg { animation: kk-gest-knock 0.52s ease-out; }
-.kk-gest.is-drain .kk-gest__drain { animation: kk-gest-drain 0.6s linear; }
+.kk-gest.is-knock, .kk-gest.is-drain { animation: kk-gest-press 0.26s ease-out var(--kk-mo, 0ms) both; }
+.kk-gest.is-knock svg { animation: kk-gest-knock 0.52s ease-out var(--kk-mo, 0ms) both; }
+.kk-gest.is-drain .kk-gest__drain { animation: kk-gest-drain 0.6s linear var(--kk-mo, 0ms) both; }
 /* Итог вечера: звезда (больше всех очков) и кепка. */
 .kk-ev__verdict { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .kk-ev__vd { border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }

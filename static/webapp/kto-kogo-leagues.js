@@ -573,6 +573,11 @@
     return !!at && Date.now() - at < MOTION_MS;
   }
 
+  /** Перерисовка посреди анимации продолжает её с того же кадра: отрицательная задержка = сколько уже прошло. */
+  function motionStyle(at) {
+    return '--kk-mo:-' + Math.max(0, Date.now() - at) + 'ms';
+  }
+
   /** Прилетевшие мне жесты анимируем один раз на набор: что уже видел — помнит браузер (только удобство, не состояние игры). */
   function revealAt(a, ev, r) {
     a.reveal = a.reveal || {};
@@ -591,12 +596,12 @@
   function gestureButtons(a, ev, r) {
     return h('div', { class: 'kk-ev__acts', role: 'group', 'aria-label': 'Жест: ' + r.display_name }, S.GESTURES.map(function (g) {
       var on = r.my_gesture === g[0];
-      var just = on && a.gave && a.gave.pid === r.pid && fresh(a.gave.at);
+      var just = on && a.gave && a.gave.pid === r.pid && a.gave.kind === g[0] && fresh(a.gave.at);
       var skin = S.gestureSkin(g[0], 'base');
       return h('button', {
         type: 'button', id: 'kk-g-' + r.pid + '-' + g[0], 'data-keep': '',
-        class: 'kk-gest kk-gest--' + g[0] + (just ? ' is-' + skin.motion : ''),
-        'aria-pressed': on ? 'true' : 'false', 'aria-label': g[1], disabled: r.busy ? 'true' : null,
+        class: 'kk-gest kk-gest--' + g[0] + (just ? ' is-' + skin.motion : ''), style: just ? motionStyle(a.gave.at) : null,
+        'aria-pressed': on ? 'true' : 'false', 'aria-label': g[1],
         onclick: function () { sendGesture(a, ev, r, g[0]); },
       }, [g[0] === 'pen' ? penIcon() : icon(STICK_ICON, 20)]);
     }));
@@ -625,24 +630,34 @@
     } catch (e) { /* старые клиенты */ }
   }
 
-  /** Жест — без пушей: ответ сервера и есть новый «Вечер» этого дня. */
+  /**
+   * Жест — без пушей. Экран отвечает сразу (кнопка, след, вибрация), сервер подтверждает: его ответ — новый «Вечер»
+   * этого дня. Ошибка — возвращаем как было и говорим почему. Пока запрос идёт, повторные тапы по строке не шлём.
+   */
   function sendGesture(a, ev, r, kind) {
     if (r.busy) return;
     var next = S.gestureNext(r.my_gesture, kind);
-    if (next) gestureHaptic(next);
+    var was = { my_gesture: r.my_gesture, gestures: r.gestures };
+    r.my_gesture = next;
+    r.gestures = (r.gestures || []).filter(function (g) { return !g.from_me; })
+      .concat(next ? [{ kind: next, skin: 'base', from: 'Ты', from_me: true }] : []);
     r.busy = true;
+    a.gave = next ? { pid: r.pid, kind: next, at: Date.now() } : null;
+    if (next) gestureHaptic(next);
     K.render();
+    if (next) setTimeout(K.render, MOTION_MS);
     K.api('PUT', '/client/hockey/leagues/' + a.id + '/evening/' + ev.day + '/gesture', { to: r.pid, kind: next })
       .then(function (d) {
         state.evenings[a.id + '|' + d.day] = d;
         if (!a.day) state.evenings[a.id + '|'] = d;
         // Минуты штрафа в таблице месяца изменились: таблицы перечитаются при переключении вкладки.
         delete state.leagueTables[a.id + '|month'];
-        a.gave = next ? { pid: r.pid, at: Date.now() } : null;
         K.render();
-        if (next) setTimeout(K.render, MOTION_MS);
       }, function (e) {
+        r.my_gesture = was.my_gesture;
+        r.gestures = was.gestures;
         r.busy = false;
+        a.gave = null;
         K.render();
         K.toast(e.message);
       });
@@ -651,11 +666,17 @@
   /** Аватар со следом жестов вечера: стуки — значок ×N сверху, скамейка — табличка «2:00» снизу. */
   function eveningAvatar(a, ev, r) {
     var st = S.gestureStamps(r);
-    var motion = r.is_me ? fresh(revealAt(a, ev, r)) : a.gave && a.gave.pid === r.pid && fresh(a.gave.at);
+    // Мне — прилёт всех жестов набора; другу — только след того жеста, что я дал сейчас.
+    var at = r.is_me ? revealAt(a, ev, r) : a.gave && a.gave.pid === r.pid ? a.gave.at : 0;
+    var moving = fresh(at);
+    var kindOn = function (k) { return moving && (r.is_me || a.gave.kind === k); };
+    function stamp(k, kids) {
+      return h('span', { class: 'kk-stamp kk-stamp--' + k + (kindOn(k) ? ' is-new' : ''), style: kindOn(k) ? motionStyle(at) : null, 'aria-hidden': 'true' }, kids);
+    }
     return h('div', { class: 'kk-ev__av' + (st.pens ? ' is-bench' : '') }, [
       K.ava(r.display_name, 44, r.is_me ? '' : 'kk-ava--soft'),
-      st.sticks ? h('span', { class: 'kk-stamp kk-stamp--stick' + (motion ? ' is-new' : ''), 'aria-hidden': 'true' }, [icon(STICK_ICON, 11), st.stickLabel]) : null,
-      st.pens ? h('span', { class: 'kk-stamp kk-stamp--pen' + (motion ? ' is-new' : ''), 'aria-hidden': 'true', text: st.penLabel }) : null,
+      st.sticks ? stamp('stick', [icon(STICK_ICON, 11), st.stickLabel]) : null,
+      st.pens ? stamp('pen', [st.penLabel]) : null,
       st.say ? h('span', { class: 'kk-vh', text: st.say }) : null,
     ]);
   }
@@ -668,7 +689,7 @@
       h('div', { class: 'kk-ev__w' }, [
         h('div', { class: 'kk-ev__name' }, [
           h('span', { class: 'kk-ev__nm', text: r.is_me ? 'Ты' : r.display_name }),
-          r.cap ? h('span', { class: 'kk-ev__cap' }, [capSvg(18, 12, 'currentColor'), 'кепка']) : null,
+          r.cap ? h('span', { class: 'kk-ev__cap' }, [capSvg(18, 12, 'currentColor'), 'кепка дня']) : null,
           r.scarf ? h('span', { class: 'kk-ev__scarf', text: 'в чужом шарфе' }) : null,
         ]),
         h('div', { class: 'kk-ev__dots' }, [

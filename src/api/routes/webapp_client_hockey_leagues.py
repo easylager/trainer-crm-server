@@ -482,7 +482,7 @@ async def put_client_hockey_league_gesture(
     except GestureRefused as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DayNotPlayed as exc:
-        raise HTTPException(status_code=409, detail="Жесты — когда все матчи дня сыграны") from exc
+        raise HTTPException(status_code=409, detail="Жесты откроются, когда сыграют все матчи вечера") from exc
     await session.commit()
     return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
 
