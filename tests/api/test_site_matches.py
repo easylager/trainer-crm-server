@@ -80,6 +80,43 @@ async def _get(path: str, **kw):
         return await c.get(path, **kw)
 
 
+@pytest.mark.asyncio
+async def test_dinamo_home_schedule_is_canonical_and_excludes_away_matches(app_use_test_db, db_session, monkeypatch):
+    await _world(db_session)
+    home = await _match(db_session, site_matches.DINAMO, "Локомотив", league="khl",
+                        starts=NOW + timedelta(days=45), tickets=None)
+    await db_session.execute(
+        text("UPDATE hockey_matches SET source_match_id = '12345' WHERE id = :id"), {"id": home}
+    )
+    away = await _match(db_session, "Локомотив", site_matches.DINAMO, league="khl", tickets=None)
+    cancelled = await _match(db_session, site_matches.DINAMO, "Локомотив", league="khl", status="cancelled")
+    await _match(db_session)
+    path = site_matches.DINAMO_HOME_PATH
+    home_path = await _path(db_session, home)
+    await db_session.commit()
+
+    r = await _get(path)
+    assert r.status_code == 200
+    assert "<h1 class=\"m-title\">Домашние матчи «Динамо-Минск»</h1>" in r.text
+    assert f'<link rel="canonical" href="https://glide.example{path}"' in r.text
+    assert 'content="index, follow"' in r.text
+    assert f'href="{home_path}"' in r.text and "Победителей, 111" in r.text
+    assert "https://hcdinamo.by/tickets/?match=12345" in r.text and 'href="/kk"' in r.text
+    assert f'href="/m/{away}-' not in r.text and f'href="/m/{cancelled}-' not in r.text
+    assert f'href="{path}"' in (await _get("/hockey")).text
+    assert f'href="{path}"' in (await _get("/c/minsk")).text
+    assert f'href="{path}"' in (await _get(home_path)).text
+    filtered = await _get("/hockey?club=dinamo-minsk")
+    assert 'content="noindex, follow"' in filtered.text
+    assert '<link rel="canonical" href="https://glide.example/hockey"' in filtered.text
+    loc = f"<loc>https://glide.example{path}</loc>"
+    assert (await _get("/sitemap.xml")).text.count(loc) == 1
+
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "0")
+    assert (await _get(path)).status_code == 404
+    assert loc not in (await _get("/sitemap.xml")).text
+
+
 # ── Страница матча ───────────────────────────────────────────────────
 
 

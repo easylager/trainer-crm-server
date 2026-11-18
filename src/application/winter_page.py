@@ -229,8 +229,12 @@ def pill(item: Mapping[str, Any]) -> str:
     tone = STATE_TONE.get(state, "wait")
     return (
         f'<span class="w-pill w-pill--{tone}">{_icon(STATE_ICON.get(state, "clock"))}'
-        f"{_esc(STATE_LABEL.get(state, 'Ждём заливку'))}</span>"
+        f"{_esc(_state_label(item))}</span>"
     )
+
+
+def _state_label(item: Mapping[str, Any]) -> str:
+    return "Есть сеансы" if item.get("checked_by") == "schedule" else STATE_LABEL.get(item.get("state"), "Ждём заливку")
 
 
 def pending_line(item: Mapping[str, Any]) -> str:
@@ -255,10 +259,12 @@ def checked_line(item: Mapping[str, Any], now: datetime | None = None) -> str:
     pend = pending_line(item)
     if pend:
         return pend
-    if item.get("checked_by") in ("admin", "source") and item.get("state_at"):
+    if item.get("checked_by") in ("admin", "source", "schedule") and item.get("state_at"):
         moment = _parse_iso(item["state_at"])
         if moment is None:
             return ""
+        if item.get("checked_by") == "schedule":
+            return f"Расписание проверено {day_month_ru(moment, now)}"
         verb = "Заливку подтвердили" if item.get("state") == "flooded" else "Проверено"
         return f"{verb} {day_month_ru(moment, now)}"
     return ""
@@ -330,7 +336,7 @@ def _card(item: Mapping[str, Any], city_name: str) -> str:
     dispute = dispute_note(item)
     meta = card_meta(item)
     dist = _distance(item.get("distance_km"))
-    label = f"{item['name']}, {STATE_LABEL.get(item.get('state'), 'Ждём заливку')}"
+    label = f"{item['name']}, {_state_label(item)}"
     return (
         f'<li class="w-li"><a class="w-card" href="{_esc(href)}" data-w-id="{int(item["id"])}" aria-label="{_esc(label)}">'
         f"{_thumb(item)}"

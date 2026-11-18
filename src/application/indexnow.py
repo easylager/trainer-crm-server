@@ -174,6 +174,8 @@ async def fetch_sitemap_urls(session: AsyncSession) -> list[str]:
         if match_rows:
             urls.append(f"{base}{site_matches.SITE_PATH}")
         urls.extend(f"{base}{path}" for path, _stamp in match_rows)
+    if site_matches.scope_of(settings).dinamo:
+        urls.append(f"{base}{site_matches.DINAMO_HOME_PATH}")
     from src.application import site_trainer_catalog, site_trainer_page
 
     urls.extend(f"{base}{path}" for path, _stamp in await site_trainer_page.sitemap_rows(session))

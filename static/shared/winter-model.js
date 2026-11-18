@@ -37,6 +37,7 @@
   function stateView(point) {
     var base = STATE_VIEW[point && point.state] || STATE_VIEW.waiting;
     var out = { label: base.label, tone: base.tone, icon: base.icon, pin: base.pin };
+    if (point && point.checked_by === 'schedule') out.label = 'Есть сеансы';
     if (point && point.dispute && point.state === 'flooded') {
       /* Есть отметки «не залит»: цвет не меняем, на карте знак «!» (U1); текста тег не добавляет. */
       out.pin = 'dispute';
@@ -140,9 +141,10 @@
     var pend = pendingLine(point);
     if (pend) return pend;
     if (!point.state_at) return '';
-    if (point.checked_by === 'admin' || point.checked_by === 'source') {
+    if (point.checked_by === 'admin' || point.checked_by === 'source' || point.checked_by === 'schedule') {
       var day = dayMonthRu(point.state_at, now);
       if (!day) return '';
+      if (point.checked_by === 'schedule') return 'Расписание проверено ' + day;
       return (point.state === 'flooded' ? 'Заливку подтвердили ' : 'Проверено ') + day;
     }
     if (point.checked_by === 'people' && point.state !== 'waiting') return 'Отметили ' + ago(point.state_at, now);

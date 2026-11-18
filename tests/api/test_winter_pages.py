@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -12,6 +13,7 @@ from src.api.app import app
 from src.api.deps import get_session
 from src.application import winter_public
 from src.application.ice_city_day import invalidate_public_city_cache
+from src.application.winter_import import NEMIGA_SLUG
 from tests.application.winter_helpers import NOW, make_point
 
 UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1"
@@ -106,6 +108,38 @@ async def test_city_page_zero_flooded_is_start_of_season_not_a_dead_counter(on, 
 
 
 @pytest.mark.asyncio
+async def test_nemiga_uses_fresh_schedule_without_overriding_closure(on, client, db_session, monkeypatch):
+    monkeypatch.setattr("src.api.routes.winter_pages._now", lambda: NOW)
+    aid = await point(db_session, name="Каток на Немиге", slug=NEMIGA_SLUG)
+    await db_session.execute(text("UPDATE arenas SET is_confirmed = true WHERE id = :id"), {"id": aid})
+    await db_session.execute(
+        text("""
+        INSERT INTO ice_sessions (arena_id, kind, starts_at_utc, ends_at_utc, starts_at_local,
+                                  ends_at_local, local_date, currency_code, schedule_basis, observed_at)
+        VALUES (:aid, 'public_skate', :start, :end, '15:00', '15:45', :day, 'BYN', 'projected', :checked)
+        """),
+        {"aid": aid, "start": NOW + timedelta(days=1), "end": NOW + timedelta(days=1, minutes=45),
+         "day": NOW.date() + timedelta(days=1), "checked": NOW - timedelta(days=1)},
+    )
+    path = "/c/minsk/zimoy"
+    assert data_of((await client.get(path)).text)["points"][0]["state"] == "waiting"
+
+    await db_session.execute(text("UPDATE ice_sessions SET schedule_basis = 'live' WHERE arena_id = :aid"), {"aid": aid})
+    page = (await client.get(path)).text
+    assert "Есть сеансы" in page and "Расписание проверено 9 декабря" in page
+    assert f'href="/p/minsk/{NEMIGA_SLUG}"' in page
+    assert "ждём первую заливку" not in page
+    assert data_of(page)["points"][0]["checked_by"] == "schedule"
+    assert (await winter_public.get_point(db_session, aid, now=NOW))["state"] == "waiting"
+
+    await db_session.execute(
+        text("UPDATE seasonal_rink_seasons SET state = 'closed', state_source = 'admin' WHERE arena_id = :aid"),
+        {"aid": aid},
+    )
+    assert data_of((await client.get(path)).text)["points"][0]["state"] == "closed"
+
+
+@pytest.mark.asyncio
 async def test_city_page_without_points_is_noindex_and_offers_suggest(on, client, db_session):
     await point(db_session, state="hidden")
     html = (await client.get("/c/minsk/zimoy")).text
@@ -197,6 +231,8 @@ async def test_sitemap_has_indexable_winter_pages_only(on, client, db_session):
     good = await point(db_session, name="Хорошая", hours=WEEK, paid=False)
     vague = await point(db_session, name="Размытая", precision="city", lat=None, lon=None)
     hidden = await point(db_session, name="Скрытая", state="hidden", hours=WEEK)
+    nemiga = await point(db_session, name="Каток на Немиге", slug=NEMIGA_SLUG, hours=WEEK)
+    await db_session.execute(text("UPDATE arenas SET is_confirmed = true WHERE id = :id"), {"id": nemiga})
     r = await client.get("/sitemap.xml")
     xml = r.text
     assert "/c/minsk/zimoy" in xml
@@ -205,6 +241,7 @@ async def test_sitemap_has_indexable_winter_pages_only(on, client, db_session):
     assert await slug_of(db_session, good) in xml
     assert await slug_of(db_session, vague) not in xml
     assert await slug_of(db_session, hidden) not in xml
+    assert xml.count(f"<loc>https://glideclub.test/p/minsk/{NEMIGA_SLUG}</loc>") == 1
 
 
 @pytest.mark.asyncio

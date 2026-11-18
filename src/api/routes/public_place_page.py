@@ -365,6 +365,8 @@ async def place_page(
                 related.append((winter_city_path(city_name), "Зимние катки и коробки"))
         if site_matches.site_enabled(settings):
             related.append((site_matches.SITE_PATH, "Расписание хоккейных матчей"))
+        if site_matches.scope_of(settings).dinamo:
+            related.append((site_matches.DINAMO_HOME_PATH, "Домашние матчи «Динамо-Минск»"))
         if hockey_event.enabled(settings):
             related.append(("/kk", "Игра «Кто кого»"))
         view["related_links"] = related
@@ -585,6 +587,8 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
             urls.append((f"{base}{site_matches.SITE_PATH}", "daily", max(stamp for _p, stamp in match_rows), "0.6"))
         for path, stamp in match_rows:
             urls.append((f"{base}{path}", "daily", stamp, "0.5"))
+    if site_matches.scope_of().dinamo:
+        urls.append((f"{base}{site_matches.DINAMO_HOME_PATH}", "daily", None, "0.6"))
     urls.extend(winter_urls)
     # TASK-350: страницы тренеров — только кто в каталоге (тот же предикат, что у списка в Mini App).
     from src.application import site_trainer_page

@@ -36,6 +36,7 @@ from src.shared.config import Settings
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 
 SITE_PATH = "/hockey"
+DINAMO_HOME_PATH = f"{SITE_PATH}/dinamo-minsk"
 MATCH_PREFIX = "/m"
 LEAGUE_KHL = "khl"
 # Название лиги — наше, не из источника: у hockey.by оно может нести имя титульного спонсора.
@@ -106,6 +107,13 @@ _RANGE = text(f"""
     ORDER BY starts_at, id
     """)
 _ONE = text(f"SELECT {_COLUMNS} FROM hockey_matches WHERE id = :id AND {_SCOPE}")
+_DINAMO_HOME = text(f"""
+    SELECT {_COLUMNS} FROM hockey_matches
+    WHERE league = 'khl' AND home_team = :dinamo_name AND away_team = ANY(:known)
+      AND status = 'scheduled' AND missed_runs < :missed
+      AND starts_at > :now
+    ORDER BY starts_at, id
+    """)
 _REGIONS = text("SELECT name, region FROM cities WHERE region IS NOT NULL AND name = ANY(:names)")
 _NEXT_HOME = text("""
     SELECT id, away_team, starts_at FROM hockey_matches
@@ -232,16 +240,21 @@ def is_away_trip(row: Any) -> bool:
     return row.league == LEAGUE_KHL and row.home_team != DINAMO
 
 
+def find_dinamo_arena(index: dict[str, list[dict[str, Any]]]) -> dict[str, Any] | None:
+    candidates = index.get(_norm(DINAMO_CITY), [])
+    return next(
+        (a for a in candidates if a.get("slug") == "minsk-arena" or _norm(a["name"]) in ("минск арена", "минск-арена")),
+        None,
+    )
+
+
 def resolve_arena(row: Any, index: dict[str, list[dict[str, Any]]]) -> dict[str, Any] | None:
     """Арена матча в каталоге. Экстралига: первое слово названия с hockey.by внутри названия арены города.
     Чужой каток города за арену матча не выдаём — нет совпадения, нет арены."""
     arena_name, city = place_of(row)
-    candidates = index.get(_norm(city), [])
     if row.league == LEAGUE_KHL:
-        if row.home_team != DINAMO:
-            return None
-        found = [a for a in candidates if a.get("slug") == "minsk-arena" or _norm(a["name"]) in ("минск арена", "минск-арена")]
-        return found[0] if found else None
+        return find_dinamo_arena(index) if row.home_team == DINAMO else None
+    candidates = index.get(_norm(city), [])
     words = _norm((arena_name or "").replace("-", " ")).split()
     if not words:
         return None
@@ -480,6 +493,7 @@ async def matches_list(
     (остальные, включая выезды Динамо). Клуб (slug) — все матчи команды, дома и в гостях, одним списком по
     времени, у каждого метка «Дома · …» / «Выезд · …».
     """
+    scope = scope_of(settings)
     pairs = [
         (r, a)
         for r, a in await visible_rows(session, since=now - BEHIND, until=now + LIST_AHEAD, settings=settings)
@@ -528,10 +542,26 @@ async def matches_list(
         "city": city,
         "total": len(cards),
         "today": today,
+        "dinamo_enabled": scope.dinamo,
         # Недели без матчей (пауза лиги): страница не пуста, а честно говорит, когда они снова будут.
         "first_day": first["day"] if first else None,
         "pause": bool(first and (first["day"] - today).days > 7),
     }
+
+
+async def dinamo_home_schedule(session: AsyncSession, *, now: datetime) -> dict[str, Any]:
+    arenas = await arena_index(session)
+    rows = (await session.execute(
+        _DINAMO_HOME, {"dinamo_name": DINAMO, "known": sorted(TEAMS), "missed": MISSED_HIDE, "now": now}
+    )).all()
+    arena = find_dinamo_arena(arenas)
+    matches = []
+    for row in rows:
+        card = match_card(row, now=now, arena=arena)
+        if arena is None:
+            card["path"] = None
+        matches.append({**card, "tickets": tickets_of(row)})
+    return {"matches": matches, "arena": arena, "today": local(now).date()}
 
 
 # ── Страница матча ───────────────────────────────────────────────────

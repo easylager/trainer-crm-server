@@ -59,7 +59,7 @@ async def winter_city_page(city_ref: str, request: Request, session: AsyncSessio
     if request.method == "HEAD":
         return Response(status_code=200, headers=PAGE_CACHE)
     settings = Settings()
-    data = await winter_public.list_points(session, int(city["id"]), now=_now())
+    data = await winter_public.list_points(session, int(city["id"]), now=_now(), include_catalog_schedule=True)
     base = _base()
     html = render_city_page(
         city=city,

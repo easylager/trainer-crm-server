@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.application import site_matches
 from src.application.ice_city_day import city_slug, resolve_city_by_ref
-from src.application.site_matches_page import cache_header, render_match_page, render_matches_list
+from src.application.site_matches_page import cache_header, render_dinamo_home, render_match_page, render_matches_list
 from src.shared.config import Settings
 
 router = APIRouter(tags=["public-matches"])
@@ -72,6 +72,17 @@ async def hockey_list(
         noindex=bool(club or city),
     )
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300", "Vary": "Cookie"})
+
+
+@router.api_route(site_matches.DINAMO_HOME_PATH, methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def dinamo_home(request: Request, session: AsyncSession = Depends(get_session)):
+    if not site_matches.scope_of().dinamo:
+        return _not_found()
+    headers = {"Cache-Control": "public, max-age=60, stale-while-revalidate=300"}
+    if request.method == "HEAD":
+        return Response(headers=headers)
+    data = await site_matches.dinamo_home_schedule(session, now=_now())
+    return HTMLResponse(render_dinamo_home(data, base_url=_base()), headers=headers)
 
 
 async def _load(session: AsyncSession, ref: str):
