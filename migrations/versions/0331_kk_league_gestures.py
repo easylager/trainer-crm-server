@@ -39,6 +39,8 @@ def upgrade() -> None:
             "to_key", sa.BigInteger(), sa.ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
         ),
         sa.Column("kind", sa.String(8), nullable=False),
+        # Облик жеста (скин): на смысл и счёт не влияет, по умолчанию — базовый.
+        sa.Column("skin", sa.String(24), nullable=False, server_default="base"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.CheckConstraint("kind IN ('stick', 'pen')", name="ck_hockey_league_gestures_kind"),

@@ -144,11 +144,11 @@ async def test_gestures_one_per_pair_per_day_change_and_remove(app_use_test_db, 
             r = await client.put(url, json={"to": sasha, "kind": "pen"})
             assert r.status_code == 200, r.text
             row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
-            assert row["my_gesture"] == "pen" and row["gestures"] == [{"kind": "pen", "from": "Макс", "from_me": True}]
+            assert row["my_gesture"] == "pen" and row["gestures"] == [{"kind": "pen", "skin": "base", "from": "Макс", "from_me": True}]
 
             r = await client.put(url, json={"to": sasha, "kind": "stick"})  # сменить: жест один на пару за день
             row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
-            assert row["gestures"] == [{"kind": "stick", "from": "Макс", "from_me": True}]
+            assert row["gestures"] == [{"kind": "stick", "skin": "base", "from": "Макс", "from_me": True}]
 
             r = await client.put(url, json={"to": sasha, "kind": None})  # снять
             row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
@@ -162,7 +162,7 @@ async def test_gestures_one_per_pair_per_day_change_and_remove(app_use_test_db, 
             await client.put(url, json={"to": sasha, "kind": "pen"})
             r = await client.put(url, json={"to": me, "kind": "stick"})
             mine = next(x for x in r.json()["items"] if x["display_name"] == "Макс")
-            assert mine["gestures"] == [{"kind": "stick", "from": "Аня", "from_me": True}]
+            assert mine["gestures"] == [{"kind": "stick", "skin": "base", "from": "Аня", "from_me": True}]
         with as_player(STRANGER):
             assert (await client.put(url, json={"to": sasha, "kind": "pen"})).status_code == 403
         with as_player(ME):

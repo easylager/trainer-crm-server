@@ -22,9 +22,13 @@ const EV = {
 };
 
 describe('шапка вечера', () => {
-  it('«Вечер 18 ноября» и «Динамо — СКА 3:2 · ещё 3 матча»', () => {
+  it('«Вечер 18 ноября» и «4 матча · все сыграны»; один матч — со счётом', () => {
     assert.equal(S.eveningTitle('2026-11-18'), 'Вечер 18' + NBSP + 'ноября');
-    assert.equal(S.eveningSummary(EV), 'Динамо — СКА 3:2 · ещё 3' + NBSP + 'матча');
+    assert.equal(S.eveningSummary(EV), '4' + NBSP + 'матча · все сыграны');
+    const half = { matches: [M('А', 'Б'), M('В', 'Г', { status: 'scheduled', started: true }), M('Д', 'Е', { status: 'scheduled', started: false })] };
+    assert.equal(S.eveningSummary(half), '3' + NBSP + 'матча · сыграно 1');
+    const ahead = { matches: [M('А', 'Б', { status: 'scheduled', started: false }), M('В', 'Г', { status: 'scheduled', started: false })] };
+    assert.equal(S.eveningSummary(ahead), '2' + NBSP + 'матча · первый в 19:00');
     assert.equal(S.eveningSummary({ matches: [M('Юность-Минск', 'Неман')] }), 'Юность-Минск — Неман 3:2');
     assert.equal(S.eveningSummary({ matches: [] }), '');
   });
@@ -42,22 +46,77 @@ describe('строка человека', () => {
     const ahead = { matches: [M('А', 'Б', { status: 'scheduled', started: false })] };
     assert.equal(S.eveningPoints({ points: 0 }, ahead), '');
   });
-  it('жесты: несколько — глаголом во множественном, один — без глагола (пол неизвестен)', () => {
-    const r = { gestures: [{ kind: 'pen', from: 'Саша', from_me: false }, { kind: 'pen', from: 'Макс', from_me: true }, { kind: 'stick', from: 'Аня', from_me: false }] };
-    assert.equal(S.gestureNote(r), 'Аня — стук клюшкой · Ты и Саша дали 2' + NBSP + 'минуты');
+  it('что прилетело мне — настоящим временем (пол неизвестен)', () => {
+    const r = { gestures: [{ kind: 'pen', from: 'Мария', from_me: false }, { kind: 'stick', from: 'Андрей', from_me: false }] };
+    assert.equal(S.gestureNote(r), 'Андрей стучит тебе клюшкой · Мария отправляет тебя на скамейку');
     assert.equal(S.gestureNote({ gestures: [] }), '');
     const three = { gestures: ['Аня', 'Саша', 'Дима'].map((n) => ({ kind: 'stick', from: n, from_me: false })) };
-    assert.equal(S.gestureNote(three), 'Аня, Саша и Дима постучали клюшкой');
+    assert.equal(S.gestureNote(three), 'Аня, Саша и Дима стучат тебе клюшкой');
+    const two = { gestures: ['Аня', 'Саша'].map((n) => ({ kind: 'pen', from: n, from_me: false })) };
+    assert.equal(S.gestureNote(two), 'Аня и Саша отправляют тебя на скамейку');
+  });
+  it('мой жест другу — что он значит; себе и без жеста — пусто', () => {
+    assert.equal(S.myGestureNote({ my_gesture: 'pen' }, EV), 'На скамейке до следующего вечера · +2' + NBSP + 'мин в ноябре');
+    assert.equal(S.myGestureNote({ my_gesture: 'stick' }, EV), 'Твой стук виден всей лиге до следующего вечера');
+    assert.equal(S.myGestureNote({ my_gesture: null }, EV), '');
+    assert.equal(S.myGestureNote({ is_me: true, my_gesture: 'pen' }, EV), '');
+  });
+  it('строки под именем: мне — что прилетело, другу — причина и мой жест с цветом', () => {
+    const me = { is_me: true, moves: 4, in_cap_race: true, gestures: [{ kind: 'stick', from: 'Андрей', from_me: false }] };
+    assert.deepEqual(S.eveningNotes(me, EV), [{ text: 'Андрей стучит тебе клюшкой', tone: '' }]);
+    const friend = { moves: 4, in_cap_race: true, scarf: { club: 'Динамо-Минск', picked: 'Юность-Минск' }, my_gesture: 'pen', gestures: [{ kind: 'pen', from: 'Макс', from_me: true }] };
+    assert.deepEqual(S.eveningNotes(friend, EV).map((n) => n.tone), ['', 'pen']);
+  });
+  it('след на аватаре: ×N стуков от двух, «2:00» за каждую скамейку', () => {
+    const r = { gestures: [{ kind: 'stick' }, { kind: 'stick' }, { kind: 'pen' }, { kind: 'pen' }] };
+    const st = S.gestureStamps(r);
+    assert.equal(st.stickLabel, '×2');
+    assert.equal(st.penLabel, '4:00');
+    assert.equal(st.say, '2' + NBSP + 'стука, на скамейке 4' + NBSP + 'мин');
+    assert.deepEqual(S.gestureStamps({ gestures: [{ kind: 'stick' }] }), { sticks: 1, stickLabel: '', pens: 0, penLabel: '', say: '1' + NBSP + 'стук' });
+  });
+  it('прилёт жестов анимируем один раз на набор: подпись не зависит от порядка и моих жестов', () => {
+    const a = { gestures: [{ kind: 'pen', from: 'Б' }, { kind: 'stick', from: 'А' }, { kind: 'pen', from: 'Я', from_me: true }] };
+    const b = { gestures: [{ kind: 'stick', from: 'А' }, { kind: 'pen', from: 'Б' }] };
+    assert.equal(S.gestureSeenKey(a), S.gestureSeenKey(b));
+    assert.equal(S.gestureSeenKey({ gestures: [] }), '');
+  });
+  it('облик жеста отдельно от смысла: неизвестный скин — базовый', () => {
+    assert.equal(S.gestureSkin('stick', 'base').motion, 'knock');
+    assert.equal(S.gestureSkin('pen', 'base').motion, 'drain');
+    assert.deepEqual(S.gestureSkin('pen', 'gold-led'), S.GESTURE_SKINS.base.pen);
   });
   it('почему без кепки: шарф дня, мало ходов; не разыгрывали — молчим', () => {
-    assert.equal(S.eveningReason({ scarf: { club: 'Юность-Минск', picked: 'Неман' } }, EV), 'Болеет за Юность-Минск, ход — за Неман');
+    assert.equal(S.eveningReason({ scarf: { club: 'Юность-Минск', picked: 'Неман' } }, EV), 'Юность-Минск простит? Ход — за Неман');
     assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, EV), 'Ход 1 из 4 — не в споре за кепку');
     assert.equal(S.eveningReason({ moves: 0, in_cap_race: false }, EV), 'Без ходов — не в споре за кепку');
     assert.equal(S.eveningReason({ moves: 3, in_cap_race: true }, EV), '');
     const few = Object.assign({}, EV, { cap: { decided: true, in_play: false, min_players: 3 } });
     assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, few), '');
     assert.equal(S.eveningFoot(few), 'Кепку в этот вечер не разыграли: в споре меньше троих.');
-    assert.equal(S.eveningFoot(EV), 'Кепка дня — тому, кто хуже всех угадывал в этот вечер.');
+    assert.equal(S.eveningFoot(EV), 'Кепка — худшему за вечер, стук и скамейка — от друзей. Всё видно до следующего вечера.');
+  });
+  it('итог вечера: звезда и кепка, имена без склонения; вечер не сыгран — итога нет', () => {
+    const items = [
+      { display_name: 'Макс', is_me: true, hits: 0, moves: 4, points: 0, cap: true },
+      { display_name: 'Андрей', hits: 4, moves: 4, points: 130, cap: false },
+      { display_name: 'Мария', hits: 3, moves: 4, points: 70, cap: false },
+    ];
+    const ev = Object.assign({}, EV, { items });
+    assert.deepEqual(S.eveningVerdict(ev), {
+      star: { label: 'Звезда вечера', name: 'Андрей', sub: '4 из 4 · +130' },
+      cap: { label: 'Кепка', name: 'у тебя', sub: '0 из 4. Носишь до следующего вечера' },
+    });
+    const other = Object.assign({}, EV, { items: items.map((r) => Object.assign({}, r, { cap: r.display_name === 'Мария' })) });
+    assert.equal(S.eveningVerdict(other).cap.name, 'Мария');
+    assert.equal(S.eveningVerdict(other).cap.sub, '3 из 4 · носит до следующего вечера');
+    const tie = Object.assign({}, EV, { items: [Object.assign({}, items[1]), Object.assign({}, items[2], { points: 130 }), Object.assign({}, items[0], { points: 130, cap: false })] });
+    assert.deepEqual(S.eveningVerdict(tie).star, { label: 'Звезда вечера', name: 'ты, Андрей и Мария', sub: '+130 у каждого' });
+    const few = Object.assign({}, EV, { items: [items[1]], cap: { decided: true, in_play: false, min_players: 3 } });
+    assert.deepEqual(S.eveningVerdict(few).cap, { label: 'Кепка', name: 'не разыграна', sub: 'В споре меньше троих' });
+    assert.equal(S.eveningVerdict(Object.assign({}, ev, { complete: false })), null);
+    const zero = Object.assign({}, EV, { items: [{ display_name: 'А', moves: 2, points: 0 }], cap: { decided: true, in_play: true } });
+    assert.equal(S.eveningVerdict(zero), null);
   });
   it('тот же жест снимает, другой меняет', () => {
     assert.equal(S.gestureNext('pen', 'pen'), null);

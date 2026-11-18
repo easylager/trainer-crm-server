@@ -802,6 +802,8 @@ class HockeyLeagueGesture(Base):
         BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
     )
     kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    # Облик (скин): смысл жеста — ``kind``, облик на счёт не влияет.
+    skin: Mapped[str] = mapped_column(String(24), nullable=False, server_default="base")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

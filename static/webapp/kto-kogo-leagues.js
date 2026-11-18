@@ -566,30 +566,81 @@
   var STICK_ICON = ['M7 2l7 15h7', 'M3 21h8'];
   var PEN_ICON = ['M12 7a7 7 0 1 0 0 14a7 7 0 0 0 0-14z', 'M12 14V10', 'M10 3h4'];
 
-  function gestureChips(a, ev, r) {
+  /** Анимация живёт окном времени: экран перерисовывается целиком, и класс, оставленный дольше, проиграл бы её снова. */
+  var MOTION_MS = 1100;
+
+  function fresh(at) {
+    return !!at && Date.now() - at < MOTION_MS;
+  }
+
+  /** Прилетевшие мне жесты анимируем один раз на набор: что уже видел — помнит браузер (только удобство, не состояние игры). */
+  function revealAt(a, ev, r) {
+    a.reveal = a.reveal || {};
+    if (a.reveal[ev.day] !== undefined) return a.reveal[ev.day];
+    var sig = S.gestureSeenKey(r);
+    var key = 'kk-ev-seen:' + a.id + ':' + ev.day;
+    var seen = null;
+    try { seen = window.localStorage.getItem(key); } catch (e) { seen = sig; }
+    a.reveal[ev.day] = sig && seen !== sig ? Date.now() : 0;
+    if (a.reveal[ev.day]) {
+      try { window.localStorage.setItem(key, sig); } catch (e) { /* без хранилища — просто покажем снова */ }
+    }
+    return a.reveal[ev.day];
+  }
+
+  function gestureButtons(a, ev, r) {
     return h('div', { class: 'kk-ev__acts', role: 'group', 'aria-label': 'Жест: ' + r.display_name }, S.GESTURES.map(function (g) {
       var on = r.my_gesture === g[0];
+      var just = on && a.gave && a.gave.pid === r.pid && fresh(a.gave.at);
+      var skin = S.gestureSkin(g[0], 'base');
       return h('button', {
-        type: 'button', class: 'kk-gest', 'aria-pressed': on ? 'true' : 'false', disabled: r.busy ? 'true' : null,
+        type: 'button', id: 'kk-g-' + r.pid + '-' + g[0], 'data-keep': '',
+        class: 'kk-gest kk-gest--' + g[0] + (just ? ' is-' + skin.motion : ''),
+        'aria-pressed': on ? 'true' : 'false', 'aria-label': g[1], disabled: r.busy ? 'true' : null,
         onclick: function () { sendGesture(a, ev, r, g[0]); },
-      }, [icon(g[0] === 'stick' ? STICK_ICON : PEN_ICON, 18), g[1]]);
+      }, [g[0] === 'pen' ? penIcon() : icon(STICK_ICON, 20)]);
     }));
+  }
+
+  /** Секундомер с кольцом, которое «сбегает» при нажатии. */
+  function penIcon() {
+    var s = icon(PEN_ICON, 20);
+    var ring = document.createElementNS(SVG_NS, 'circle');
+    ring.setAttribute('class', 'kk-gest__drain');
+    ring.setAttribute('cx', '12');
+    ring.setAttribute('cy', '14');
+    ring.setAttribute('r', '7');
+    ring.setAttribute('transform', 'rotate(-90 12 14)');
+    s.appendChild(ring);
+    return s;
+  }
+
+  function gestureHaptic(kind) {
+    var hp = S.gestureSkin(kind, 'base').haptic;
+    try {
+      var hf = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
+      if (!hf) return;
+      if (hp[0] === 'notification') hf.notificationOccurred(hp[1]);
+      else hf.impactOccurred(hp[1]);
+    } catch (e) { /* старые клиенты */ }
   }
 
   /** Жест — без пушей: ответ сервера и есть новый «Вечер» этого дня. */
   function sendGesture(a, ev, r, kind) {
     if (r.busy) return;
+    var next = S.gestureNext(r.my_gesture, kind);
+    if (next) gestureHaptic(next);
     r.busy = true;
     K.render();
-    var next = S.gestureNext(r.my_gesture, kind);
     K.api('PUT', '/client/hockey/leagues/' + a.id + '/evening/' + ev.day + '/gesture', { to: r.pid, kind: next })
       .then(function (d) {
         state.evenings[a.id + '|' + d.day] = d;
         if (!a.day) state.evenings[a.id + '|'] = d;
         // Минуты штрафа в таблице месяца изменились: таблицы перечитаются при переключении вкладки.
         delete state.leagueTables[a.id + '|month'];
-        if (next) K.haptic();
+        a.gave = next ? { pid: r.pid, at: Date.now() } : null;
         K.render();
+        if (next) setTimeout(K.render, MOTION_MS);
       }, function (e) {
         r.busy = false;
         K.render();
@@ -597,26 +648,60 @@
       });
   }
 
+  /** Аватар со следом жестов вечера: стуки — значок ×N сверху, скамейка — табличка «2:00» снизу. */
+  function eveningAvatar(a, ev, r) {
+    var st = S.gestureStamps(r);
+    var motion = r.is_me ? fresh(revealAt(a, ev, r)) : a.gave && a.gave.pid === r.pid && fresh(a.gave.at);
+    return h('div', { class: 'kk-ev__av' + (st.pens ? ' is-bench' : '') }, [
+      K.ava(r.display_name, 44, r.is_me ? '' : 'kk-ava--soft'),
+      st.sticks ? h('span', { class: 'kk-stamp kk-stamp--stick' + (motion ? ' is-new' : ''), 'aria-hidden': 'true' }, [icon(STICK_ICON, 11), st.stickLabel]) : null,
+      st.pens ? h('span', { class: 'kk-stamp kk-stamp--pen' + (motion ? ' is-new' : ''), 'aria-hidden': 'true', text: st.penLabel }) : null,
+      st.say ? h('span', { class: 'kk-vh', text: st.say }) : null,
+    ]);
+  }
+
   function eveningPerson(a, ev, r) {
     var pts = S.eveningPoints(r, ev);
+    var notes = S.eveningNotes(r, ev);
     return h('div', { class: 'kk-ev__p' + (r.is_me ? ' is-me' : '') }, [
-      h('div', { class: 'kk-ev__top' }, [
-        K.ava(r.display_name, 36, r.is_me ? '' : 'kk-ava--soft'),
-        h('div', { class: 'kk-ev__w' }, [
-          h('div', { class: 'kk-ev__name' }, [
-            h('span', { class: 'kk-ev__nm', text: r.is_me ? 'Ты' : r.display_name }),
-            r.cap ? h('span', { class: 'kk-ev__cap' }, [capSvg(18, 12, 'currentColor'), 'кепка дня']) : null,
-            r.scarf ? h('span', { class: 'kk-ev__scarf', text: 'в чужом шарфе' }) : null,
-          ]),
-          h('div', { class: 'kk-ev__dots' }, [
-            h('span', { class: 'kk-dots', 'aria-hidden': 'true' }, (r.marks || []).map(function (x) { return h('span', { class: 'kk-dot kk-dot--' + x.state }); })),
-            h('span', { class: 'kk-ev__mv', text: S.eveningMoves(r, ev) }),
-          ]),
+      eveningAvatar(a, ev, r),
+      h('div', { class: 'kk-ev__w' }, [
+        h('div', { class: 'kk-ev__name' }, [
+          h('span', { class: 'kk-ev__nm', text: r.is_me ? 'Ты' : r.display_name }),
+          r.cap ? h('span', { class: 'kk-ev__cap' }, [capSvg(18, 12, 'currentColor'), 'кепка']) : null,
+          r.scarf ? h('span', { class: 'kk-ev__scarf', text: 'в чужом шарфе' }) : null,
         ]),
-        pts ? h('span', { class: 'kk-ev__pt' + (r.points ? '' : ' is-zero'), text: pts }) : null,
+        h('div', { class: 'kk-ev__dots' }, [
+          h('span', { class: 'kk-evd-row', 'aria-hidden': 'true' }, (r.marks || []).map(function (x) { return h('span', { class: 'kk-evd kk-evd--' + x.state }); })),
+          h('span', { class: 'kk-ev__mv', text: S.eveningMoves(r, ev) }),
+        ]),
       ]),
-    ].concat(S.eveningNotes(r, ev).map(function (t) { return h('span', { class: 'kk-ev__note', text: t }); }))
-      .concat([r.can_gesture ? gestureChips(a, ev, r) : null]));
+      h('div', { class: 'kk-ev__side' }, [
+        pts ? h('span', { class: 'kk-ev__pt' + (r.points ? '' : ' is-zero'), text: pts }) : null,
+        r.can_gesture ? gestureButtons(a, ev, r) : null,
+      ]),
+      notes.length ? h('div', { class: 'kk-ev__notes' }, notes.map(function (n) { return h('span', { class: 'kk-ev__note' + (n.tone ? ' kk-ev__note--' + n.tone : ''), text: n.text }); })) : null,
+    ]);
+  }
+
+  /** Итог вечера над строками: звезда и кепка. Вечер не сыгран — блока нет. */
+  function eveningVerdict(ev) {
+    var v = S.eveningVerdict(ev);
+    if (!v) return null;
+    return h('div', { class: 'kk-ev__verdict' }, [
+      v.star ? h('div', { class: 'kk-ev__vd kk-ev__vd--star' }, [
+        icon(['M4 8l4 4 4-7 4 7 4-4-2 11H6z'], 26),
+        h('span', { class: 'kk-ev__vl', text: v.star.label }),
+        h('span', { class: 'kk-ev__vt', text: v.star.name }),
+        h('span', { class: 'kk-ev__vs', text: v.star.sub }),
+      ]) : null,
+      v.cap ? h('div', { class: 'kk-ev__vd kk-ev__vd--cap' }, [
+        capSvg(34, 24, 'currentColor'),
+        h('span', { class: 'kk-ev__vl', text: v.cap.label }),
+        h('span', { class: 'kk-ev__vt', text: v.cap.name }),
+        h('span', { class: 'kk-ev__vs', text: v.cap.sub }),
+      ]) : null,
+    ]);
   }
 
   function eveningBlock(a) {
@@ -630,6 +715,7 @@
         h('div', { class: 'kk-ev__day' }, [h('h2', { class: 'kk-ev__t', text: S.eveningTitle(ev.day) }), h('span', { class: 'kk-ev__s', text: S.eveningSummary(ev) })]),
         h('button', { type: 'button', class: 'kk-ev__arrow', 'aria-label': 'Следующий вечер', disabled: ev.next ? null : 'true', onclick: function () { go(ev.next); } }, [icon(I.chev)]),
       ]),
+      eveningVerdict(ev),
       h('div', { class: 'kk-ev__people' }, (ev.items || []).map(function (r) { return eveningPerson(a, ev, r); })),
       h('div', { class: 'kk-ev__matches' }, (ev.matches || []).map(function (m, i) {
         return h('div', { class: 'kk-ev__m' }, [

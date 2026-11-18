@@ -57,6 +57,19 @@ describe('тёмная тема: токены владельца и контра
     assert.deepEqual(low, []);
   });
 
+  it('жесты вечера (TASK-431 v2): значки, нажатые кнопки и подписи читаются в обеих темах', () => {
+    for (const t of [light, dark]) {
+      const low = [
+        ['kk-stick-on', 'kk-stick', 4.5], ['kk-pen-on', 'kk-pen', 4.5],
+        ['kk-stick', 'kk-stick-bg', 4.5], ['kk-pen', 'kk-pen-bg', 4.5],
+        ['kk-stick', 'kk-card', 4.5], ['kk-pen', 'kk-card', 4.5], ['kk-stick', 'kk-me', 4.5], ['kk-pen', 'kk-me', 4.5],
+        ['kk-badge-sub', 'kk-badge', 4.5], ['kk-gold', 'kk-badge', 4.5],
+        ['kk-evd-miss', 'kk-card', 1.3],
+      ].filter(([a, b, min]) => ratio(t[a], t[b]) < min).map(([a, b, min]) => `${a}/${b} ${ratio(t[a], t[b]).toFixed(2)} < ${min}`);
+      assert.deepEqual(low, [], t === light ? 'светлая' : 'тёмная');
+    }
+  });
+
   it('экран матчей (TASK-359): очки и точка «идёт» читаются в обеих темах', () => {
     const light = tokens('.kk-mc, .kk-ml, .kk-ml-go');
     const night = Object.assign({}, light, tokens('body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go'));

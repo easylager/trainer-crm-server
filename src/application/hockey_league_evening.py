@@ -381,7 +381,7 @@ def scarf_of(row: DayRow, matches: list[DayMatch]) -> dict | None:
 # ---------- жесты ----------
 
 _DAY_GESTURES = text("""
-    SELECT g.from_key, g.to_key, g.kind, pl.display_name AS from_name
+    SELECT g.from_key, g.to_key, g.kind, g.skin, pl.display_name AS from_name
     FROM hockey_league_gestures AS g
     JOIN hockey_players AS pl ON pl.player_key = g.from_key
     WHERE g.league_id = :league_id AND g.day = :day
@@ -616,7 +616,12 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
                 "scarf": scarf_of(row, matches),
                 # Жесты этой строке: от кого и какой (``from_me`` — мой); ``my_gesture`` — что дал я. Себе — нельзя.
                 "gestures": [
-                    {"kind": g["kind"], "from": g["from_name"], "from_me": g["from_key"] == player_key}
+                    {
+                        "kind": g["kind"],
+                        "skin": g["skin"],
+                        "from": g["from_name"],
+                        "from_me": g["from_key"] == player_key,
+                    }
                     for g in gestures
                     if g["to_key"] == row.member.player_key
                 ],
