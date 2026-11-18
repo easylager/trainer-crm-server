@@ -69,11 +69,16 @@ async def test_minsk_ribbon_is_one_tile_per_rink(app_use_test_db, db_session) ->
     dear = await _insert_arena(db_session, cid, name="Дорогой каток")
     solo = await _insert_arena(db_session, cid, name="Одиночный каток")
     quiet = await _insert_arena(db_session, cid, name="Каток без сеансов")
+    hockey = await _insert_arena(db_session, cid, name="Тренировочная арена")
     shop = await _insert_arena(db_session, cid, name="Магазин коньков")
     await db_session.execute(text("UPDATE arenas SET venue_type = 'shop' WHERE id = :id"), {"id": shop})
     await db_session.execute(
         text("""UPDATE arena_profiles SET amenities = '{"skate_rental": true}' WHERE arena_id = :id"""),
         {"id": cheap},
+    )
+    await db_session.execute(
+        text("""UPDATE arena_profiles SET amenities = '{"hockey_center": true}' WHERE arena_id = :id"""),
+        {"id": hockey},
     )
     profiles = await db_session.execute(text("SELECT arena_id, slug FROM arena_profiles WHERE city_id = :id"), {"id": cid})
     slugs = {arena_id: slug for arena_id, slug in profiles}
@@ -103,6 +108,9 @@ async def test_minsk_ribbon_is_one_tile_per_rink(app_use_test_db, db_session) ->
     assert listing.count("Взрослый билет на ближайший сеанс:") == 2
     for rink in (cheap, dear, solo, quiet):
         assert f'href="/p/minsk/{slugs[rink]}"' in listing
+    hockey_row = listing.split(f'href="/p/minsk/{slugs[hockey]}"', 1)[1].split("</div>", 1)[0]
+    assert "Массового катания нет" in hockey_row
+    assert listing.count("Массового катания нет") == 1
     assert "?s=" not in listing
     assert "Магазин коньков" not in listing
 

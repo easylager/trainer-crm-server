@@ -27,6 +27,7 @@ from src.application.arena_public_use_cases import (
     STATUS_ACTIVE,
     _NOT_HOCKEY_CENTER_SQL,
     _OHM_SESSION_SQL,
+    _is_hockey_center,
     city_hockey_center_count,
 )
 from src.application.catalog_home_page import _USER_UPCOMING_SQL, _session_card
@@ -1328,6 +1329,8 @@ def _b_minsk_rink_list(view: Mapping[str, Any], rinks: list[Mapping[str, Any]]) 
         details = [address] if address else []
         if amenities.get("skate_rental") is True:
             details.append("Прокат коньков")
+        if _is_hockey_center(rink):
+            details.append("Массового катания нет")
         line = _esc(" · ".join(details))
         card = upcoming.get(rink["slug"])
         if card and card.get("price_adult_minor") is not None:
