@@ -144,7 +144,9 @@ async def test_gestures_one_per_pair_per_day_change_and_remove(app_use_test_db, 
             r = await client.put(url, json={"to": sasha, "kind": "pen"})
             assert r.status_code == 200, r.text
             row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
-            assert row["my_gesture"] == "pen" and row["gestures"] == [{"kind": "pen", "skin": "base", "from": "Макс", "from_me": True}]
+            assert row["my_gesture"] == "pen" and row["gestures"] == [
+                {"kind": "pen", "skin": "base", "from": "Макс", "from_me": True}
+            ]
 
             r = await client.put(url, json={"to": sasha, "kind": "stick"})  # сменить: жест один на пару за день
             row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
