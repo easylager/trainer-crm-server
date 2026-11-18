@@ -7,12 +7,24 @@
 Ходы — как в таблице лиги: только на матчи, начавшиеся после вступления участника. Чужие ходы до начала матча
 показываем без счёта и очков (одна сторона, как ``friends_picks``), после старта — целиком (как ``friends_moves``).
 Отменённые матчи в день не входят. Ключи игроков наружу не уходят: строку называет ``public_id``.
+
+Кепка дня (владелец 2026-11-18) заменила «Кепку позора» за последний матч:
+
+* сравниваем средние очки за ход за игровой день (очки дня / число ходов);
+* в споре только те, кто сходил хотя бы на половину матчей дня (``ceil(n/2)``);
+* решается, когда все матчи дня лиги сыграны; носится до следующего сыгранного игрового дня лиги;
+* хуже всех сразу несколько — кепка у каждого; все равны — кепки нет;
+* разыгрывается, если в споре хотя бы ``CAP_MIN_CONTENDERS``.
+
+Пороги — константы ниже: владелец пересмотрит их через пару недель.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from fractions import Fraction
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +34,10 @@ from src.ingestion.hockey_sources import MINSK_TZ
 
 # Отметка хода по матчу дня: в плюсе, мимо, ждёт итога (матч не сыгран), без хода.
 HIT, MISS, WAIT, NONE = "hit", "miss", "wait", "none"
+
+# Кепка дня: сколько человек должно быть в споре и какая доля матчей дня нужна, чтобы в него попасть.
+CAP_MIN_CONTENDERS = 3
+CAP_SHARE = Fraction(1, 2)
 
 
 def _utc(value: datetime) -> datetime:
@@ -237,6 +253,115 @@ def match_out(m: DayMatch, *, now: datetime) -> dict:
     }
 
 
+# ---------- кепка дня ----------
+
+
+def cap_min_moves(matches: int) -> int:
+    """Сколько ходов нужно, чтобы быть в споре за кепку: половина матчей дня, с округлением вверх."""
+    need = Fraction(matches) * CAP_SHARE
+    return max(1, -(-need.numerator // need.denominator))
+
+
+@dataclass(frozen=True)
+class DayCap:
+    """Кепка игрового дня. ``decided`` — день сыгран и решение принято (даже если кепки нет)."""
+
+    holders: frozenset[int] = frozenset()
+    contenders: frozenset[int] = frozenset()
+    need_moves: int = 1
+    decided: bool = False
+    in_play: bool = False  # в споре хватило людей
+
+
+def day_cap(stats: Mapping[int, tuple[int, int]], *, matches: int, complete: bool) -> DayCap:
+    """Кепка дня по ``{игрок: (очки дня, сыгранные ходы)}`` (чистая функция, правило — в докстринге модуля).
+
+    ``matches`` — матчей в дне лиги (без отменённых), ``complete`` — все они сыграны."""
+    need = cap_min_moves(matches)
+    contenders = frozenset(k for k, (_, moves) in stats.items() if moves >= need)
+    if not complete or matches < 1:
+        return DayCap(contenders=contenders, need_moves=need)
+    if len(contenders) < CAP_MIN_CONTENDERS:
+        return DayCap(contenders=contenders, need_moves=need, decided=True)
+    average = {k: Fraction(stats[k][0], stats[k][1]) for k in contenders}
+    low = min(average.values())
+    holders = frozenset() if low == max(average.values()) else frozenset(k for k, v in average.items() if v == low)
+    return DayCap(holders=holders, contenders=contenders, need_moves=need, decided=True, in_play=True)
+
+
+def cap_of_rows(rows: list[DayRow], matches: list[DayMatch]) -> DayCap:
+    stats = {r.member.player_key: (r.points, r.moves) for r in rows}
+    return day_cap(stats, matches=len(matches), complete=day_complete(matches))
+
+
+_WINDOW_DAYS = text(f"""
+    SELECT (m.starts_at AT TIME ZONE 'Europe/Minsk')::date AS day, bool_and(m.status = 'final') AS complete
+    FROM game_matches AS m
+    WHERE m.status <> 'cancelled' AND m.starts_at >= :since AND m.starts_at < :until
+      {SCOPE_SQL}
+    GROUP BY 1
+    ORDER BY 1
+    """)
+
+
+async def last_complete_day(session: AsyncSession, league, *, now: datetime) -> date | None:
+    """Последний сыгранный игровой день лиги (не позже сегодняшнего): его кепку и носят."""
+    until = min(_utc(league.ends_at), day_bounds(game_day(now))[1])
+    params = {"since": _utc(league.starts_at), "until": until, **league.match_scope.params}
+    done = [r.day for r in (await session.execute(_WINDOW_DAYS, params)).all() if r.complete]
+    return done[-1] if done else None
+
+
+async def window_caps(
+    session: AsyncSession, league, *, since: datetime, until: datetime, now: datetime
+) -> dict[date, DayCap]:
+    """Кепки всех сыгранных дней лиги в окне (``since``–``until`` по началу матча, внутри срока лиги)."""
+    since, until = _window(league, since, until)
+    if since >= until:
+        return {}
+    params = {"since": since, "until": until, **league.match_scope.params}
+    by_day: dict[date, list[DayMatch]] = {}
+    for r in (await session.execute(_DAY_MATCHES, params)).all():
+        m = DayMatch(r.id, r.home_team, r.away_team, r.starts_at, r.status, r.home_score, r.away_score)
+        by_day.setdefault(game_day(m.starts_at), []).append(m)
+    done = {d: ms for d, ms in by_day.items() if day_complete(ms)}
+    if not done:
+        return {}
+    members = await league_members(session, league.id, now=now)
+    every = [m for ms in done.values() for m in ms]
+    rows = await day_rows(session, league.id, members, every)
+    out: dict[date, DayCap] = {}
+    for d, ms in done.items():
+        ids = {m.id for m in ms}
+        day_rows_ = [DayRow(member=r.member, picks={k: v for k, v in r.picks.items() if k in ids}) for r in rows]
+        out[d] = cap_of_rows(day_rows_, ms)
+    return out
+
+
+async def current_cap(session: AsyncSession, league, *, now: datetime) -> frozenset[int]:
+    """Кто сейчас в кепке: кепка последнего сыгранного дня лиги (нет решения или кепки — никто)."""
+    day = await last_complete_day(session, league, now=now)
+    if day is None:
+        return frozenset()
+    caps = await window_caps(session, league, since=day_bounds(day)[0], until=day_bounds(day)[1], now=now)
+    return caps[day].holders if day in caps else frozenset()
+
+
+def scarf_of(row: DayRow, matches: list[DayMatch]) -> dict | None:
+    """«В чужом шарфе» за день: ход против своей команды на её матч этого дня. Нет своей команды — нет шарфа."""
+    club = row.member.club
+    if not club:
+        return None
+    for m in matches:
+        pick = row.picks.get(m.id)
+        if pick is None or club not in (m.home, m.away):
+            continue
+        team = m.home if pick["side"] == "home" else m.away
+        if team != club:
+            return {"club": club, "picked": team}
+    return None
+
+
 def neighbours(days: list[date], day: date) -> tuple[date | None, date | None]:
     before = [d for d in days if d < day]
     after = [d for d in days if d > day]
@@ -255,11 +380,12 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
     if day not in days:  # не задан или не день лиги (чужая дата, будущий день) — вечер по умолчанию
         day = days[-1] if days else None
     if day is None:
-        return {"day": None, "prev": None, "next": None, "complete": False, "matches": [], "items": []}
+        return {"day": None, "prev": None, "next": None, "complete": False, "cap": None, "matches": [], "items": []}
     matches = await day_matches(session, league, day)
     members = await league_members(session, league.id, now=now)
     rows = await day_rows(session, league.id, members, matches)
     prev, nxt = neighbours(days, day)
+    cap = cap_of_rows(rows, matches)
     items = []
     for row in sorted(rows, key=lambda r: _sort_key(r, player_key)):
         mine = row.member.player_key == player_key
@@ -272,6 +398,9 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
                 "hits": row.hits,
                 "moves": row.moves,
                 "points": row.points,
+                "cap": row.member.player_key in cap.holders,
+                "in_cap_race": row.member.player_key in cap.contenders,
+                "scarf": scarf_of(row, matches),
             }
         )
     return {
@@ -279,12 +408,29 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
         "prev": None if prev is None else prev.isoformat(),
         "next": None if nxt is None else nxt.isoformat(),
         "complete": day_complete(matches),
+        # Кепка дня: решилась ли, разыгрывалась ли (хватило ли людей) и сколько ходов нужно, чтобы быть в споре.
+        "cap": {
+            "decided": cap.decided,
+            "in_play": cap.in_play,
+            "need_moves": cap.need_moves,
+            "min_players": CAP_MIN_CONTENDERS,
+        },
         "matches": [match_out(m, now=now) for m in matches],
         "items": items,
     }
 
 
 __all__ = [
+    "CAP_MIN_CONTENDERS",
+    "CAP_SHARE",
+    "DayCap",
+    "cap_min_moves",
+    "cap_of_rows",
+    "current_cap",
+    "day_cap",
+    "last_complete_day",
+    "scarf_of",
+    "window_caps",
     "HIT",
     "MISS",
     "NONE",

@@ -685,7 +685,7 @@ describe('пьедестал лиги', () => {
     assert.match(S.titlesNote([{ title: { id: 'scarf' } }]), /^Шарф — за ход против своей команды/);
     const both = S.titlesNote([{ title: { id: 'cap' } }, { title: { id: 'scarf' } }]);
     assert.match(both, /Шарф/);
-    assert.match(both, /Кепка — тому, кто в последнем матче лиги не угадал победителя/);
+    assert.match(both, /Кепка дня — тому, кто хуже всех угадывал в последний сыгранный вечер лиги/);
   });
 });
 

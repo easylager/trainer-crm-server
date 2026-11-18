@@ -1,4 +1,4 @@
-"""Звания лиги: «Кепка позора», «В чужом шарфе» и остальные — из готовых ходов."""
+"""Звания лиги: «Кепка дня», «В чужом шарфе» и остальные — из готовых ходов."""
 
 from __future__ import annotations
 
@@ -31,29 +31,13 @@ def _p(
     }
 
 
-def test_cap_goes_to_the_lowest_score_of_the_last_match_only() -> None:
-    picks = [
-        _p(1, 10, points=0),  # прошлый матч: кепку уже не носит
-        _p(2, 10, points=50),
-        _p(1, 11, points=50),
-        _p(2, 11, points=0),
-        _p(3, 11, points=0),
-    ]
-    titles = pick_titles(picks)
-    assert titles[2] == {"id": "cap", "label": "Кепка позора", "detail": "мимо в последнем матче"}
-    assert titles[3]["id"] == "cap"
-    assert 1 not in titles
-
-
-def test_no_cap_when_everyone_scored_the_same_or_played_alone() -> None:
-    assert pick_titles([_p(1, 11, points=20), _p(2, 11, points=20)]) == {}
-    assert pick_titles([_p(1, 11, points=0)]) == {}
-
-
-def test_cap_only_for_a_missed_winner() -> None:
-    # 10 очков — победитель не угадан, кепка; 20 и выше — победитель угадан, кепки нет, хоть и меньше всех.
-    assert pick_titles([_p(1, 11, points=10), _p(2, 11, points=30)])[1]["id"] == "cap"
-    assert pick_titles([_p(1, 11, points=20), _p(2, 11, points=50)]) == {}
+def test_cap_is_the_day_cap_passed_in_not_the_last_match() -> None:
+    # Кепку дня считает «Вечер» лиги (TASK-431); прежняя «Кепка позора» за последний матч больше не выдаётся.
+    picks = [_p(1, 11, points=50), _p(2, 11, points=0), _p(3, 11, points=0)]
+    assert pick_titles(picks) == {}
+    titles = pick_titles(picks, caps={1})
+    assert titles == {1: {"id": "cap", "label": "Кепка дня", "detail": ""}}
+    assert set(pick_titles(picks, caps={2, 3})) == {2, 3}
 
 
 DINAMO = "Динамо-Минск"
@@ -96,8 +80,8 @@ def test_scarf_looks_only_at_the_nearest_match_of_your_team_and_needs_one() -> N
 
 def test_cap_wins_over_scarf_for_one_person() -> None:
     picks = [_p(1, 11, points=0), _p(2, 11, points=30), _p(1, 12, points=None, status="scheduled", side="away")]
-    assert pick_titles(picks, fans={1: "Динамо-Минск"})[1]["id"] == "cap"
-    assert pick_titles(picks, fans={1: "Динамо-Минск"})[1]["detail"] == "мимо в последнем матче"
+    assert pick_titles(picks, fans={1: "Динамо-Минск"})[1]["id"] == "scarf"
+    assert pick_titles(picks, fans={1: "Динамо-Минск"}, caps={1})[1]["id"] == "cap"
 
 
 def _s(

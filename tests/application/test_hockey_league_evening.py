@@ -169,3 +169,66 @@ async def test_moves_before_joining_do_not_count(db_session) -> None:
     ev = await _evening(db, league_id)
     late = next(r for r in ev["items"] if r["display_name"] == "Поздний")
     assert late["marks"][0]["state"] == "none" and late["points"] == 0
+
+
+@pytest.mark.asyncio
+async def test_day_cap_is_worn_until_the_next_played_day(db_session) -> None:
+    from src.application.hockey_leagues import league_titles
+
+    db = db_session
+    league_id = await _league(db, scope="extraliga")
+    d1 = NOW - timedelta(days=2)
+    a = await _match(db, "Юность-Минск", "Неман", d1)
+    b = await _match(db, "Гомель", "Шахтёр", d1 + timedelta(hours=1))
+    for key, pts in ((ME, (50, 20)), (ANYA, (20, 20)), (SASHA, (0, 10))):
+        await _pick(db, key, a, "home", points=pts[0])
+        await _pick(db, key, b, "home", points=pts[1])
+    # Сегодня: один матч сыгран, второй ещё нет — день не решён, кепку носит Саша со вчерашнего дня.
+    c = await _match(db, "Юность-Минск", "Лида", NOW - timedelta(hours=3))
+    later = await _match(db, "Брест", "Витебск", NOW + timedelta(hours=1), status="scheduled")
+    await _pick(db, ME, c, "home", points=0)
+    await _pick(db, ANYA, c, "home", points=50)
+
+    old = await _evening(db, league_id, day=game_day_of(d1))
+    sasha = next(r for r in old["items"] if r["display_name"] == "Саша")
+    assert sasha["cap"] is True and old["cap"]["decided"] and old["cap"]["in_play"]
+    assert [r["display_name"] for r in old["items"] if r["cap"]] == ["Саша"]
+
+    today = await _evening(db, league_id)
+    assert today["cap"]["decided"] is False and not any(r["cap"] for r in today["items"])
+    assert (await league_titles(db, league_id=league_id, now=NOW))[SASHA]["id"] == "cap"
+
+    # Второй матч сыгран: в споре двое (Саша не ходил) — кепка не разыгрывается и со Саши снята.
+    await db.execute(
+        text(
+            "UPDATE hockey_matches SET status = 'final', home_score = 2, away_score = 1, decided_in = 'regulation', result_source = 'auto' WHERE id = :id"
+        ),
+        {"id": later},
+    )
+    await _pick(db, ME, later, "home", points=20)
+    after = await _evening(db, league_id, now=NOW + timedelta(hours=4))
+    assert after["cap"]["decided"] and not after["cap"]["in_play"]
+    titles = await league_titles(db, league_id=league_id, now=NOW + timedelta(hours=4))
+    assert all(t["id"] != "cap" for t in titles.values())
+
+
+@pytest.mark.asyncio
+async def test_scarf_of_the_day_is_a_move_against_your_own_team(db_session) -> None:
+    db = db_session
+    league_id = await _league(db, scope="extraliga")
+    await db.execute(
+        text("INSERT INTO hockey_player_prefs (player_key, fav_club) VALUES (:k, 'Юность-Минск')"), {"k": ANYA}
+    )
+    m = await _match(db, "Юность-Минск", "Неман", NOW - timedelta(hours=3))
+    await _pick(db, ANYA, m, "away", points=0)
+    await _pick(db, ME, m, "away", points=0)  # своей команды нет (ходил только сегодня за Неман — он и есть свой)
+    ev = await _evening(db, league_id)
+    anya = next(r for r in ev["items"] if r["display_name"] == "Аня")
+    assert anya["scarf"] == {"club": "Юность-Минск", "picked": "Неман"}
+    assert ev["items"][0]["scarf"] is None
+
+
+def game_day_of(value: datetime) -> date:
+    from src.application.hockey_league_evening import game_day
+
+    return game_day(value)
