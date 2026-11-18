@@ -354,6 +354,20 @@ async def place_page(
 
         view["learn"] = learn_block(await load_learn_data(session, city), "arena", arena_id=int(card["id"]))
     settings = Settings()
+    if city_ref == "minsk" and has_public_skating(card.get("venue_type")):
+        from src.application import hockey_event, site_matches, winter_public
+        from src.application.winter_page import winter_city_path
+
+        related = []
+        if settings.seasonal_rinks_enabled:
+            winter = await winter_public.city_summary(session, int(city["id"]), now=datetime.now(timezone.utc))
+            if winter["total"]:
+                related.append((winter_city_path(city_name), "Зимние катки и коробки"))
+        if site_matches.site_enabled(settings):
+            related.append((site_matches.SITE_PATH, "Расписание хоккейных матчей"))
+        if hockey_event.enabled(settings):
+            related.append(("/kk", "Игра «Кто кого»"))
+        view["related_links"] = related
     html = render_place_page(
         view,
         canonical_url=canonical,
@@ -553,6 +567,10 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
         # учит поисковик не верить lastmod всего файла.
         (f"{base}/trainers", "weekly", None, "0.4"),
     ]
+    from src.application import hockey_event
+
+    if hockey_event.enabled():
+        urls.append((f"{base}/kk", "weekly", None, "0.6"))
     for city_name in order:
         stamp = city_stamp[city_name]
         # Подборка города — ответ на «где покататься в <город>» (TASK-146).

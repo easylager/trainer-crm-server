@@ -92,6 +92,7 @@ async def test_city_page_lists_sorted_with_honest_copy(on, client, db_session):
     bad = [p for p in data_of(html)["points"] if p["name"] == "Неточная"][0]
     assert bad["lat"] is None and bad["map_allowed"] is False
     assert "index, follow" in html and 'rel="canonical" href="https://glideclub.test/c/minsk/zimoy"' in html
+    assert 'href="/c/minsk"' in html and "Катки Минска и расписание массового катания</a>" in html
     assert "ItemList" in html
     assert "Ждать" not in html  # кнопка подписки «рядом» называется «Подписаться» (если бот настроен)
 

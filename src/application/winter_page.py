@@ -436,8 +436,9 @@ def render_city_page(
         f'<a class="w-suggest" href="{_esc(suggest_href)}"><span>{_icon("route")}</span>'
         "<span><b>Нет вашего катка или коробки?</b><span>Отметьте точку на карте — проверим и добавим</span></span></a>"
     )
+    city_label = "Катки Минска и расписание массового катания" if city_slug(name) == "minsk" else name
     body = (
-        f'<a class="w-back" href="{_esc(city_href)}">{_icon("back")}{_esc(name)}</a>'
+        f'<a class="w-back" href="{_esc(city_href)}">{_icon("back")}{_esc(city_label)}</a>'
         f'<h1 class="w-title">{("Зимой в " + _esc(where)) if where else ("Зимой: " + _esc(name))}</h1>'
         f"{head_note}{bell_html}{controls}{list_html}{suggest}"
     )

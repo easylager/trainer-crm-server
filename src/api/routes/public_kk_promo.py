@@ -1,4 +1,4 @@
-"""Короткая рекламная ссылка «Кто кого»: /kk?s=<метка> — превью для соцсетей и вход в Telegram.
+"""Страница игры «Кто кого» и рекламные ссылки /kk?s=<метка> для входа в Telegram.
 
 Без базы: метка только вшивается в ссылку на бота (start_param ``kks_<метка>``), считает её сама игра.
 """
@@ -15,9 +15,11 @@ from pathlib import Path
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
+from src.application import hockey_event, site_matches
 from src.application.hockey_promo import clean_src
 from src.application.hockey_teams import TEAMS, logo_path
 from src.application.place_links import public_telegram_entry_link
+from src.application.public_analytics import public_analytics_head_html_from_settings
 from src.application.style_b import _file_version, public_fonts_head_html
 from src.shared.config import Settings
 
@@ -108,6 +110,7 @@ _PAGE_CSS = (
     ".go:active{transform:translateY(1px)}"
     ".go:focus{outline:3px solid #fff;outline-offset:3px}"
     ".go:focus:not(:focus-visible){outline:none}"
+    ".schedule{display:inline-flex;min-height:44px;align-items:center;margin-top:12px;color:#fff}"
     "@keyframes fade{from{opacity:0}to{opacity:1}}"
     "@keyframes up{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:none}}"
     "@keyframes fly{0%{transform:translateX(-160px) rotate(-200deg) scaleX(.7);opacity:0}20%{opacity:1}"
@@ -177,12 +180,33 @@ def _rail_html() -> str:
 
 
 @router.get("/kk", include_in_schema=False)
-async def get_kk_promo_page(request: Request, s: str = Query("", max_length=64)) -> HTMLResponse:
+async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_length=64)) -> HTMLResponse:
     src = clean_src(s) or DEFAULT_SRC
     cfg = Settings()  # type: ignore[call-arg]
     base = (cfg.webapp_base_url or "").strip().rstrip("/")
     go = public_telegram_entry_link(cfg, start_param=f"kks_{src}") or f"{base}/webapp/kto-kogo?src={src}"
     e = html.escape
+    landing = s is None and hockey_event.enabled(cfg)
+    robots = "index, follow" if landing else "noindex"
+    title = "Кто кого — игра с прогнозами на хоккей | Glideclub" if landing else _TITLE
+    description = (
+        "Угадай победителя хоккейного матча, получай очки за верные прогнозы и соревнуйся с друзьями. "
+        "Бесплатная игра в Telegram."
+    ) if landing else _DESCRIPTION
+    canonical = (
+        f'<link rel="canonical" href="{e(base)}/kk">\n<meta property="og:url" content="{e(base)}/kk">'
+        if landing else ""
+    )
+    schedule = (
+        '<a class="schedule" href="/hockey">Расписание матчей</a>'
+        if landing and site_matches.site_enabled(cfg) else ""
+    )
+    rules = (
+        "<p>Выбери команду до начала матча. После игры за верный выбор начисляются очки. "
+        "Свой результат можно посмотреть в таблице игроков.</p>"
+        if landing else ""
+    )
+    analytics = public_analytics_head_html_from_settings() if landing else ""
     if (_KK_DIR / "og.png").is_file():
         image = f"{base}{_OG_URL}?v={_file_version(_OG_REL)}"
         og_image = (
@@ -198,7 +222,7 @@ async def get_kk_promo_page(request: Request, s: str = Query("", max_length=64))
             f'<meta property="og:image" content="{e(base + _LOGO)}">\n<meta name="twitter:card" content="summary">'
         )
     hop = ""
-    if not _is_preview_bot(request):
+    if not landing and not _is_preview_bot(request):
         hop = (
             "<script>if(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)){"
             f"location.replace({json.dumps(go)});}}</script>"
@@ -209,17 +233,22 @@ async def get_kk_promo_page(request: Request, s: str = Query("", max_length=64))
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#1747b5">
-<title>{e(_TITLE)}</title>
-<meta name="description" content="{e(_DESCRIPTION)}">
+<title>{e(title)}</title>
+<meta name="description" content="{e(description)}">
 <meta property="og:type" content="website">
-<meta property="og:title" content="{e(_TITLE)}">
-<meta property="og:description" content="{e(_DESCRIPTION)}">
+<meta property="og:title" content="{e(title)}">
+<meta property="og:description" content="{e(description)}">
 {og_image}
-<meta name="robots" content="noindex">
+<meta name="robots" content="{robots}">
+{canonical}
 {public_fonts_head_html()}
+{analytics}
 <style>{css}</style>
 </head><body>{_rail_html()}<main><h1 class="brand"><span class="puck" aria-hidden="true"></span><span class="tag" aria-hidden="true">КТО КОГО?</span><span class="vh">Кто кого</span></h1>
-<p>{e(_typeset(_DESCRIPTION))}</p>
-<a class="go" href="{e(go)}">Открыть в Telegram</a></main>{hop}
+<p>{e(_typeset(description))}</p>{rules}
+<a class="go" href="{e(go)}">Открыть в Telegram</a>{schedule}</main>{hop}
 </body></html>"""
-    return HTMLResponse(page, headers={"Cache-Control": "public, max-age=300"})
+    headers = {"Cache-Control": "public, max-age=300"}
+    if not landing:
+        headers["Vary"] = "User-Agent"
+    return HTMLResponse(page, headers=headers)

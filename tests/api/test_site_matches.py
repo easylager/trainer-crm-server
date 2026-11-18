@@ -321,6 +321,7 @@ async def test_list_own_city_first_chip_filter_noindex(app_use_test_db, db_sessi
     assert (await _path(db_session, gr)) in filtered and (await _path(db_session, mn)) not in filtered and "noindex" in filtered
     plain = (await _get("/hockey")).text
     assert "index, follow" in plain and not has_forbidden_words(plain)
+    assert 'href="/kk"' in plain
 
 
 @pytest.mark.asyncio
@@ -523,6 +524,8 @@ async def test_arena_page_has_match_row_and_here_block_and_honest_note(app_use_t
     html = r.text
     assert "Матчи здесь" in html and "m-ticket" in html and "вечернего катания нет" in html
     assert (await _path(db_session, mid)) in html
+    assert 'href="/hockey">Расписание хоккейных матчей</a>' in html
+    assert 'href="/kk">Игра «Кто кого»</a>' in html
     # Сеанс вечером → строка нейтральная, ничего о катании не утверждает
     await db_session.execute(
         text("""INSERT INTO ice_sessions (arena_id, kind, status, starts_at_utc, ends_at_utc, starts_at_local, ends_at_local,
@@ -543,6 +546,7 @@ async def test_arena_without_matches_and_flag_off_unchanged(app_use_test_db, db_
     monkeypatch.setenv("SITE_MATCHES_ENABLED", "0")
     html = (await _get("/p/minsk/chizhovka-arena")).text
     assert "Матчи здесь" not in html and "matches.css" not in html
+    assert 'href="/hockey"' not in html
 
 
 @pytest.mark.asyncio

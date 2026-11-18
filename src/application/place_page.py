@@ -2751,6 +2751,16 @@ def _b_matches_here(view: Mapping[str, Any]) -> str:
     return here_section(matches, today=view.get("today"))
 
 
+def _b_related_links(view: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    links = view.get("related_links")
+    if not links:
+        return ""
+    anchors = "".join(f'<a class="b-link" href="{_esc(href)}">{_esc(label)}</a>' for href, label in links)
+    return section("Ещё на Glideclub", f'<div class="b-links">{anchors}</div>', sec_id="related")
+
+
 def watch_offer_site_html(arena_id: int, href: str) -> str:
     """TASK-428: скрипт предложения подписки на каток (сам решает, показывать ли; см. watch-offer.js)."""
     wv = _esc(_webapp_bundle_version())
@@ -2841,6 +2851,7 @@ def render_place_body_b(
         trainers_html,
         "" if trainers_listed else render_learn_block(learn_block),
         _b_matches_here(view),
+        _b_related_links(view),
         facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
         services_html(vv, title=_rental_section_title(card, hours) if hours.get("rental_title") else "Прокат и услуги"),
         _b_partners(card),

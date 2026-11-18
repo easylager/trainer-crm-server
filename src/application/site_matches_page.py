@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from src.application import hockey_event
 from src.application.catalog_icons import icon_svg
 from src.application.ice_city_day import city_slug, plural_ru
 from src.application.place_links import (
@@ -350,9 +351,13 @@ def render_matches_list(
     first_line = "Экстралига и Динамо-Минск"
     if data["club"]:
         first_line = "Все матчи клуба — дома и на выезде"
+    game_link_html = (
+        '<a class="m-text-link" href="/kk">Угадай победителя в игре «Кто кого»</a>'
+        if hockey_event.enabled() else ""
+    )
     body = (
         f'<div class="m-top">{back}<h1 class="m-title">Хоккей</h1><p class="m-lead">{_e(first_line)}</p>'
-        f'<nav class="m-chips" aria-label="Клуб">{"".join(chips)}</nav></div>'
+        f'<nav class="m-chips" aria-label="Клуб">{"".join(chips)}</nav>{game_link_html}</div>'
         + (f'<p class="m-empty">{_e(text)}</p>' if text else "")
         + f'<div class="m-days">{days}</div>'
     )
@@ -646,9 +651,14 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
         if link
         else ""
     )
+    rules_link = (
+        '<a class="m-text-link" href="/kk">Как играть в «Кто кого»</a>'
+        if game["kind"] != "soon" and hockey_event.enabled() else ""
+    )
     return (
         '<section class="m-panel m-panel--game" aria-label="Кто кого"><span class="m-sticker">КТО КОГО?</span>'
-        f'<span class="m-panel__head">{_e(head)}</span><span class="m-panel__sub">{_e(sub)}</span>{button}</section>'
+        f'<span class="m-panel__head">{_e(head)}</span><span class="m-panel__sub">{_e(sub)}</span>'
+        f'{button}{rules_link}</section>'
     )
 
 
