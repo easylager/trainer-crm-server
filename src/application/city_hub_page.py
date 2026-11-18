@@ -1337,7 +1337,7 @@ def _b_routes(view: Mapping[str, Any]) -> str:
         )
     if not rows:
         return ""
-    return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>')
+    return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>', sec_id="city-sections")
 
 
 def _b_trainers(view: Mapping[str, Any]) -> str:
@@ -1787,9 +1787,12 @@ def _b_body(
         return "".join(blocks)
     minsk = view["slug"] == "minsk" and bool(rinks)
     rink_list = _b_minsk_rink_list(view, rinks) if minsk else ""
+    routes = _b_routes(view)
     sub_html = f"<span data-nosnippet>{_esc(city_hub_topic_line(view))}</span>"
     if rink_list:
         sub_html += ' · <a href="#rinks">Список катков</a>'
+        if routes:
+            sub_html += ' · <a href="#city-sections">Все разделы</a>'
     hero = hero_html(
         title="Катки Минска" if minsk else t("hub.on_ice", city=city_name),
         title_break="" if minsk else "на льду",
@@ -1812,7 +1815,7 @@ def _b_body(
             rink_list,
             render_learn_block(view.get("learn")),
             matches_block,
-            _b_routes(view),
+            routes,
             _b_for_you(view),
             empty,
             _b_all_places(view),
