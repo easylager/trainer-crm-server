@@ -451,6 +451,19 @@
    * Экран, который вход по ссылке кладёт поверх `hub`: приглашение в лигу, матч (?match/?reveal/?pick), таблица.
    * null — вход остаётся на `hub` (?from=, ?src=). Итоги месяца (?month=) кладутся поверх отдельно, после загрузки.
    */
+  /**
+   * «Вечер в лиге» из вечерней сводки (TASK-431): start_param kkv_<лига>_<ГГГГММДД> или ?league=&day=.
+   * Аргументы экрана лиги на вкладке «Вечер»; чужой день сервер сам заменит вечером по умолчанию.
+   */
+  function eveningEntry(startParam, leagueParam, dayParam) {
+    var m = /^kkv_([1-9][0-9]*)_(\d{4})(\d{2})(\d{2})$/.exec(String(startParam || '').trim());
+    if (m) return { id: Number(m[1]), tab: 'evening', day: m[2] + '-' + m[3] + '-' + m[4] };
+    var id = /^[1-9][0-9]*$/.test(String(leagueParam || '')) ? Number(leagueParam) : 0;
+    if (!id) return null;
+    var day = /^\d{4}-\d{2}-\d{2}$/.test(String(dayParam || '')) ? String(dayParam) : '';
+    return { id: id, tab: 'evening', day: day };
+  }
+
   function entryScreen(code, openId, tab) {
     if (code) return { name: 'join', args: { code: code } };
     if (openId) return { name: 'match', args: { id: openId } };
@@ -568,6 +581,7 @@
     nativeBackShown: nativeBackShown,
     retapAction: retapAction,
     entryScreen: entryScreen,
+    eveningEntry: eveningEntry,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

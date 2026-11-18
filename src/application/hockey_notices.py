@@ -119,6 +119,7 @@ START_PICK = "kkn"
 START_MONTH = "kkmo"
 START_OFF = "kkoff"
 START_LEAGUE = "kkl"
+START_EVENING = "kkv"  # kkv_<лига>_<ГГГГММДД> — «Вечер» лиги за игровой день (TASK-431)
 
 # callback_data кнопок в чате.
 CB_PICK = "kk:p"  # kk:p:<матч>:<h|a>
@@ -349,7 +350,7 @@ _DUE_NOMOVE = text(f"""
     """)
 
 _DUE_RESULT = text(f"""
-    SELECT p.player_key, m.id AS match_id, m.home_team, m.away_team, m.starts_at,
+    SELECT p.player_key, m.id AS match_id, m.home_team, m.away_team, m.starts_at, m.league,
            m.home_score AS final_home, m.away_score AS final_away,
            p.side, p.home_score, p.away_score, p.doubled, p.points,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
@@ -556,6 +557,21 @@ def tribune_line(
         club = html.escape(club_name(home if side == "home" else away))
         return f"Трибуна тоже промахнулась: {pct[side]}% были за {club}."
     return f"Победителя угадали {pct[winner]}% игроков."
+
+
+def cap_line(*, league_name: str, holders: tuple[str, ...] | list[str], mine: bool) -> str:
+    """Строка сводки про кепку дня в лиге (TASK-431). Имена и названия не склоняем: «в лиге «Бригада» — у тебя», но «— Олег»."""
+    league = html.escape(league_name)
+    if len(holders) == 1:
+        who = "у тебя" if mine else html.escape(holders[0])
+        return f"<b>Кепка дня</b> в лиге «{league}» — {who}: хуже всех угадывал в этот день."
+    names = [html.escape(n) for n in holders]
+    joined = ", ".join(names[:-1]) + " и " + names[-1]
+    return f"<b>Кепка дня</b> в лиге «{league}» — {joined}: хуже всех угадывали в этот день."
+
+
+def evening_button(league_id: int, day) -> dict | None:
+    return url_button("Вечер в лиге", f"{START_EVENING}_{league_id}_{day:%Y%m%d}")
 
 
 def summary_text(lines: list[str]) -> str:
@@ -825,17 +841,36 @@ async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) 
             body = summary_text(texts)
         if place:
             body += "\n" + place
+        # Кепка дня решилась матчем из этой сводки — по строке на лигу; кнопка ведёт в «Вечер» первой (TASK-431).
+        news = await _cap_news(session, player_key, rows, now=now, cache=cache.setdefault("cap_news", {}))
+        for item in news:
+            body += "\n" + cap_line(league_name=item.league_name, holders=item.holders, mine=item.mine)
         buttons = _rows(
             [
                 {"text": "Следующий ход", "callback_data": CB_NEXT},
                 url_button("Таблица", f"{START_PICK}_{rows[-1].match_id}"),
             ],
+            [evening_button(news[0].league_id, news[0].day)] if news else [],
             off_button(KIND_RESULT),
         )
         out.append(
             Notice(KIND_RESULT, player_key, rows[0].match_id, body, buttons, also=tuple(r.match_id for r in rows[1:]))
         )
     return out
+
+
+async def _cap_news(session: AsyncSession, player_key: int, rows: list, *, now: datetime, cache: dict) -> list:
+    """Сбой подсчёта кепки не должен задержать итог: без строки про кепку сводка уходит как раньше."""
+    from src.application.hockey_league_evening import cap_news
+
+    try:
+        async with session.begin_nested():
+            return await cap_news(
+                session, player_key=player_key, matches=[dict(r._mapping) for r in rows], now=now, cache=cache
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning("kk cap news failed for %s", player_key, exc_info=True)
+        return []
 
 
 async def _nomove_candidates(session: AsyncSession, *, now: datetime) -> dict[int, Notice]:
@@ -1585,6 +1620,7 @@ __all__ = [
     "KIND_RESULT",
     "Notice",
     "Overtake",
+    "START_EVENING",
     "START_LEAGUE",
     "START_MONTH",
     "START_OFF",
@@ -1596,6 +1632,7 @@ __all__ = [
     "clear_blocked",
     "cleanup_old_notices",
     "deliver",
+    "cap_line",
     "deliver_league_notices",
     "due_notices",
     "fan_club",

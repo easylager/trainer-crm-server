@@ -208,6 +208,7 @@ def test_zovi_exit_link_follows_the_flag(bot_env) -> None:
         ("kk_AB12", "kto-kogo"),
         ("kkl_AB12", "kto-kogo"),
         ("kkr", "kto-kogo"),
+        ("kkv_12_20261118", "kto-kogo"),  # «Вечер в лиге» из сводки (TASK-431)
         ("something-new_1", "client-home"),
     ],
 )

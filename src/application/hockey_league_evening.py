@@ -476,6 +476,103 @@ async def period_marks(
     }
 
 
+# ---------- строка про кепку в вечерней сводке ----------
+
+_DAY_FINALS = text(f"""
+    SELECT m.id, m.status, m.finalized_at
+    FROM game_matches AS m
+    WHERE m.status <> 'cancelled' AND m.starts_at >= :since AND m.starts_at < :until
+      {SCOPE_SQL}
+    """)
+
+
+def _player_leagues_sql():
+    from src.application.hockey_leagues import _LEAGUE_COLUMNS
+
+    cols = ", ".join(f"l.{c.strip()}" for c in _LEAGUE_COLUMNS.split(","))
+    return text(f"""
+        SELECT {cols} FROM hockey_leagues AS l
+        JOIN hockey_league_members AS mb ON mb.league_id = l.id AND mb.player_key = :player_key
+        WHERE l.starts_at <= :now AND l.ends_at > :since
+        ORDER BY mb.joined_at, l.id
+        """)
+
+
+async def closing_match(session: AsyncSession, league, day: date) -> int | None:
+    """Матч, которым день лиги закончился (последний по времени итога), — если все матчи дня сыграны."""
+    since, until = _window(league, *day_bounds(day))
+    if since >= until:
+        return None
+    params = {"since": since, "until": until, **league.match_scope.params}
+    rows = (await session.execute(_DAY_FINALS, params)).all()
+    if not rows or any(r.status != "final" for r in rows):
+        return None
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return max(rows, key=lambda r: (_utc(r.finalized_at) if r.finalized_at else epoch, r.id)).id
+
+
+@dataclass(frozen=True)
+class CapNews:
+    """Кепка дня решилась в лиге, и итог этого игрока закрыл день: строка в его вечерней сводке."""
+
+    league_id: int
+    league_name: str
+    day: date
+    holders: tuple[str, ...]  # имена, «я» — первым
+    mine: bool
+
+
+async def cap_news(
+    session: AsyncSession, *, player_key: int, matches: list[dict], now: datetime, cache: dict
+) -> list[CapNews]:
+    """Лиги игрока, где кепка дня решилась матчем из этой сводки (``matches``: id, home_team, away_team,
+    starts_at, league). Строки нет, если кепку не разыграли или день закрыл матч, которого в сводке нет."""
+    from src.application.hockey_leagues import _league
+    from src.application.hockey_slices import scope_has_match
+
+    now = _utc(now)
+    ids = {m["match_id"] for m in matches}
+    params = {"player_key": player_key, "now": now, "since": now - timedelta(days=2)}
+    out: list[CapNews] = []
+    for record in (await session.execute(_player_leagues_sql(), params)).all():
+        league = _league(record)
+        days = {
+            game_day(m["starts_at"])
+            for m in matches
+            if scope_has_match(
+                league.match_scope, home=m["home_team"], away=m["away_team"], match_league=m.get("league") or "khl"
+            )
+        }
+        for day in sorted(days):
+            key = (league.id, day)
+            if key not in cache:
+                cache[key] = None
+                closing = await closing_match(session, league, day)
+                if closing is not None:
+                    caps = await window_caps(
+                        session, league, since=day_bounds(day)[0], until=day_bounds(day)[1], now=now
+                    )
+                    members = {m.player_key: m.display_name for m in await league_members(session, league.id, now=now)}
+                    cap = caps.get(day)
+                    if cap is not None and cap.holders:
+                        cache[key] = (closing, cap.holders, members)
+            found = cache[key]
+            if found is None or found[0] not in ids:
+                continue
+            _, holders, members = found
+            names = sorted(members.get(k, "") for k in holders if k != player_key)
+            out.append(
+                CapNews(
+                    league_id=league.id,
+                    league_name=league.name,
+                    day=day,
+                    holders=tuple((["ты"] if player_key in holders else []) + names),
+                    mine=player_key in holders,
+                )
+            )
+    return out
+
+
 def neighbours(days: list[date], day: date) -> tuple[date | None, date | None]:
     before = [d for d in days if d < day]
     after = [d for d in days if d > day]
@@ -552,6 +649,9 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
 
 
 __all__ = [
+    "CapNews",
+    "cap_news",
+    "closing_match",
     "GESTURES",
     "PENALTY_MINUTES",
     "DayNotPlayed",

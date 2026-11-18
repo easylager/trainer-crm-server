@@ -940,6 +940,9 @@
           // Экран из ссылки ложится поверх `hub`: «назад» возвращает в игру, а не закрывает приложение.
           var entry = M.entryScreen(code, openId, params.get('tab'));
           if (entry) go(entry.name, entry.args);
+          // «Вечер в лиге» из сводки (TASK-431): лига на вкладке «Вечер» за день из ссылки, поверх hub.
+          var evening = entry ? null : M.eveningEntry(startParam(), params.get('league'), params.get('day'));
+          if (evening) go('league', evening);
           if (month) {
             var owner = current();
             api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {

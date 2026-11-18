@@ -163,6 +163,9 @@
       if (kkPick[2]) return { key: 'kto-kogo', path: 'kto-kogo?pick=' + kkPick[1] + '&side=' + (kkPick[2] === 'h' ? 'home' : 'away') };
       return { key: 'kto-kogo', path: 'kto-kogo' };
     }
+    // «Вечер в лиге» из вечерней сводки (TASK-431): kkv_<лига>_<ГГГГММДД> — вечер лиги за игровой день.
+    var kkEvening = /^kkv_([1-9][0-9]*)_(\d{4})(\d{2})(\d{2})$/.exec(sp);
+    if (kkEvening) return { key: 'kto-kogo', path: 'kto-kogo?league=' + kkEvening[1] + '&day=' + kkEvening[2] + '-' + kkEvening[3] + '-' + kkEvening[4] };
     var kkMonth = /^kkmo_([1-9][0-9]*)$/.exec(sp);
     if (kkMonth) return { key: 'kto-kogo', path: 'kto-kogo?month=' + kkMonth[1] };
     if (sp === 'kkoff') return { key: 'kto-kogo', path: 'kto-kogo?remind=off' };

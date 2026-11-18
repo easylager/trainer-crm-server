@@ -150,3 +150,18 @@ describe('цвета вечера в обеих темах', () => {
     assert.ok(ratio(dark['kk-dot'], dark['kk-card']) >= 1.5, 'dark miss/card ' + ratio(dark['kk-dot'], dark['kk-card']).toFixed(2));
   });
 });
+
+describe('вход «Вечер в лиге» из сводки', () => {
+  const Mdl = require('../../static/webapp/kto-kogo-model.js');
+  it('kkv_<лига>_<ГГГГММДД> и ?league=&day= открывают лигу на «Вечере» за день', () => {
+    assert.deepEqual(Mdl.eveningEntry('kkv_12_20261118', null, null), { id: 12, tab: 'evening', day: '2026-11-18' });
+    assert.deepEqual(Mdl.eveningEntry('', '12', '2026-11-18'), { id: 12, tab: 'evening', day: '2026-11-18' });
+    assert.deepEqual(Mdl.eveningEntry('', '12', 'вчера'), { id: 12, tab: 'evening', day: '' });
+    assert.equal(Mdl.eveningEntry('kks_insta', null, null), null);
+    assert.equal(Mdl.eveningEntry('', 'x', '2026-11-18'), null);
+  });
+  it('boot кладёт лигу поверх hub только без другого экрана из ссылки', () => {
+    const js = fs.readFileSync(path.join(__dirname, '../../static/webapp/kto-kogo.js'), 'utf8');
+    assert.match(js, /var evening = entry \? null : M\.eveningEntry\(startParam\(\), params\.get\('league'\), params\.get\('day'\)\);\s*if \(evening\) go\('league', evening\);/);
+  });
+});
