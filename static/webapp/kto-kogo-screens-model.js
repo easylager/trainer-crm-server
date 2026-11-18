@@ -932,6 +932,63 @@
     return month + ' · ' + (c.club ? 'болельщики ' + clubGen(c.club) : 'все игроки');
   }
 
+  /**
+   * Стенд наград (TASK-430): короны игрока по клубам, общей таблице и лигам из ``profile.crowns``.
+   * ``clubs`` — каталог клубов (Динамо-Минск первым): на стенде видны все, и те, где корон ещё нет.
+   * Цифра у клуба — сколько раз игрок был первым в нём (месяцы), месяцы идут от новых к старым.
+   */
+  function standModel(crowns, clubs) {
+    var byClub = {};
+    var overall = 0;
+    var leagues = 0;
+    (crowns || []).forEach(function (c) {
+      if (c.league_id || (c.kind && String(c.kind).indexOf('league_') === 0)) { leagues += 1; return; }
+      if (c.club) { (byClub[c.club] = byClub[c.club] || []).push(c.period || ''); return; }
+      overall += 1;
+    });
+    var list = (clubs || []).map(function (club) {
+      var months = (byClub[club.name] || []).slice().sort().reverse();
+      return { club: club, count: months.length, months: months };
+    });
+    return { total: (crowns || []).length, overall: overall, leagues: leagues, clubs: list };
+  }
+
+  /**
+   * Сравнение двух стендов по клубам: в скольких клубах корон больше у меня, у него и поровну.
+   * Клубы, где у обоих ноль, не считаются: «поровну» значит поровну корон, а не «ничего нет».
+   */
+  function standCompare(theirs, mine) {
+    var out = { mine: 0, theirs: 0, same: 0 };
+    theirs.clubs.forEach(function (e, i) {
+      var a = e.count;
+      var b = mine.clubs[i] ? mine.clubs[i].count : 0;
+      if (!a && !b) return;
+      if (b > a) out.mine += 1;
+      else if (a > b) out.theirs += 1;
+      else out.same += 1;
+    });
+    return out;
+  }
+
+  /** Мини-стенд в строке: клубы с коронами, у кого больше — первыми (при равенстве порядок каталога), до ``limit``. */
+  function standMini(model, limit) {
+    var withCrowns = model.clubs.filter(function (c) { return c.count > 0; }).map(function (c, i) { return { c: c, i: i }; });
+    withCrowns.sort(function (a, b) { return b.c.count - a.c.count || a.i - b.i; });
+    var shown = withCrowns.slice(0, limit).map(function (x) { return x.c; });
+    return { shown: shown, more: Math.max(0, withCrowns.length - shown.length) };
+  }
+
+  /** «14 корон» / «1 корона» / «Пока без корон»: подпись у строки стенда. */
+  function standCountLabel(total) {
+    if (!total) return 'Пока без корон';
+    return total + NBSP + Base.plural(total, 'корона', 'короны', 'корон');
+  }
+
+  /** Месяцы корон клуба для карточки клуба: «Октябрь», «Сентябрь». */
+  function clubCrownMonths(entry) {
+    return (entry.months || []).filter(Boolean).map(function (p) { return cap(MONTH_NOM[Number(p.slice(5, 7)) - 1]); });
+  }
+
   function seasonTitleLine(p, seasonLabelText) {
     var lines = [];
     if (p.overall) lines.push({ rank: p.overall.rank, label: 'Знаток сезона · все матчи', note: p.overall.to_first ? 'до 1-го места — ' + Base.points(p.overall.to_first) : 'первое место', total: p.overall.players });
@@ -1424,6 +1481,11 @@
     leagueMeta: leagueMeta,
     inviteText: inviteText,
     crownLabel: crownLabel,
+    standModel: standModel,
+    standMini: standMini,
+    standCompare: standCompare,
+    standCountLabel: standCountLabel,
+    clubCrownMonths: clubCrownMonths,
     seasonTitleLine: seasonTitleLine,
     matchPhase: matchPhase,
     isStale: isStale,

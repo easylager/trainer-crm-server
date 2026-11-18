@@ -248,3 +248,36 @@ async def test_khl_opponent_gets_no_slice_but_dinamo_and_all_do(app_use_test_db,
     clubs = {x["club"] for x in move["items"] if x["kind"] == "slice"}
     # Срезы Динамо и «все» есть (в них трое с очками), среза соперника по КХЛ нет.
     assert {"Динамо-Минск", None} <= clubs and "Нефтехимик" not in clubs
+
+
+@pytest.mark.asyncio
+async def test_other_player_stand_by_public_id_shows_only_crowns(app_use_test_db, db_session) -> None:
+    """TASK-430: чужой стенд открывается по pid из строки таблицы; наружу — имя и короны, без Telegram-id и лиг."""
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=2)
+    await _play(db_session, start, {ME: (3, 1), B: (2, 0), C: (2, 1)}, result=(3, 1))
+    pid = (await db_session.execute(text("SELECT public_id FROM hockey_players WHERE player_key = :k"), {"k": B})).scalar_one()
+    assert len(pid) == 12
+    await db_session.execute(
+        text("""
+            INSERT INTO hockey_crowns (player_key, points, exact, played, club, kind, period_start, period_end)
+            VALUES (:k, 50, 1, 3, 'Юность', 'month', :s, :e), (:k, 40, 0, 4, NULL, 'month', :s, :e)
+            """),
+        {"k": B, "s": datetime(2026, 10, 1, tzinfo=timezone.utc), "e": datetime(2026, 11, 1, tzinfo=timezone.utc)},
+    )
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            rows = (await client.get(f"{API}/standings?period=season")).json()["items"]
+            assert all(r["pid"] for r in rows) and all("player_key" not in r for r in rows)
+            out = await client.get(f"{API}/players/{pid}/stand")
+            assert out.status_code == 200
+            body = out.json()
+            assert body["display_name"] == f"И{B % 10}" and body["is_me"] is False
+            assert sorted((c["club"] or "", c["kind"]) for c in body["crowns"]) == [("", "month"), ("Юность", "month")]
+            assert str(B) not in out.text
+            assert (await client.get(f"{API}/players/nope-not-here/stand")).status_code == 404
+            assert (await client.get(f"{API}/players/abcdefabcdef/stand")).status_code == 404
+        with patch_client_principal(B):
+            assert (await client.get(f"{API}/players/{pid}/stand")).json()["is_me"] is True

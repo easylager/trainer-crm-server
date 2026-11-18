@@ -632,6 +632,13 @@ class HockeyPlayer(Base):
     name_set_by_user: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
     # Рекламная метка первого хода (миграция 0312): пишется при создании игрока, потом не меняется.
     first_src: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Публичное имя игрока для чужого стенда (миграция 0330): player_key — Telegram-id, наружу он не уходит.
+    public_id: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        unique=True,
+        server_default=text("substr(md5(random()::text || clock_timestamp()::text), 1, 12)"),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

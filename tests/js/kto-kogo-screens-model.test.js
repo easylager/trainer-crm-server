@@ -688,3 +688,62 @@ describe('пьедестал лиги', () => {
     assert.match(both, /Кепка — тому, кто в последнем матче лиги не угадал победителя/);
   });
 });
+
+describe('стенд наград (TASK-430)', () => {
+  const clubs = [{ name: 'Динамо-Минск' }, { name: 'Брест' }, { name: 'Неман' }, { name: 'Лида' }];
+  const crowns = [
+    { kind: 'month', club: 'Динамо-Минск', league_id: null, period: '2026-09' },
+    { kind: 'month', club: 'Динамо-Минск', league_id: null, period: '2026-10' },
+    { kind: 'month', club: 'Брест', league_id: null, period: '2026-10' },
+    { kind: 'month', club: null, league_id: null, period: '2026-10' },
+    { kind: 'league_month', club: null, league_id: 7, period: '2026-10' },
+    { kind: 'league_term', club: null, league_id: 7, period: '2026-10' },
+  ];
+
+  it('считает короны по клубам, общей таблице и лигам; все клубы каталога на стенде', () => {
+    const m = S.standModel(crowns, clubs);
+    assert.equal(m.total, 6);
+    assert.equal(m.overall, 1);
+    assert.equal(m.leagues, 2);
+    assert.deepEqual(m.clubs.map((c) => [c.club.name, c.count]), [['Динамо-Минск', 2], ['Брест', 1], ['Неман', 0], ['Лида', 0]]);
+    assert.deepEqual(m.clubs[0].months, ['2026-10', '2026-09']);
+  });
+
+  it('пустой стенд: короны ноль, клубы остаются', () => {
+    const m = S.standModel([], clubs);
+    assert.equal(m.total, 0);
+    assert.equal(m.clubs.length, 4);
+    assert.deepEqual(S.standMini(m, 6), { shown: [], more: 0 });
+  });
+
+  it('мини-стенд: у кого короны, больше — первым, остаток считается', () => {
+    const many = [
+      { kind: 'month', club: 'Лида', league_id: null, period: '2026-10' },
+      { kind: 'month', club: 'Лида', league_id: null, period: '2026-09' },
+      { kind: 'month', club: 'Неман', league_id: null, period: '2026-10' },
+      { kind: 'month', club: 'Брест', league_id: null, period: '2026-10' },
+    ];
+    const mini = S.standMini(S.standModel(many, clubs), 2);
+    assert.deepEqual(mini.shown.map((c) => c.club.name), ['Лида', 'Брест']); // 2 короны, затем порядок каталога
+    assert.equal(mini.more, 1);
+  });
+
+  it('подпись и месяцы клуба', () => {
+    assert.equal(S.standCountLabel(0), 'Пока без корон');
+    assert.equal(S.standCountLabel(1), '1' + NBSP + 'корона');
+    assert.equal(S.standCountLabel(14), '14' + NBSP + 'корон');
+    assert.deepEqual(S.clubCrownMonths({ months: ['2026-10', '2026-09'] }), ['Октябрь', 'Сентябрь']);
+  });
+
+  it('сравнение стендов: у кого больше, поровну; клубы без корон у обоих не считаются', () => {
+    const mk = (counts) => S.standModel(
+      counts.flatMap((n, i) => Array.from({ length: n }, () => ({ kind: 'month', club: clubs[i].name, league_id: null, period: '2026-10' }))),
+      clubs,
+    );
+    const theirs = mk([2, 1, 0, 0]);
+    const mine = mk([4, 1, 3, 0]);
+    assert.deepEqual(S.standCompare(theirs, mine), { mine: 2, theirs: 0, same: 1 });
+    assert.deepEqual(S.standCompare(mk([0, 0, 0, 0]), mk([0, 0, 0, 0])), { mine: 0, theirs: 0, same: 0 });
+    assert.deepEqual(S.standCompare(mk([3, 0, 0, 0]), mk([1, 0, 0, 0])), { mine: 0, theirs: 1, same: 0 });
+  });
+});

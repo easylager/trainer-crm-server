@@ -12,7 +12,7 @@ from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_hockey import _match_out
 from src.application.hockey_leagues import MAX_CLUBS, friends_moves, friends_picks
-from src.application.hockey_screens import clubs_catalog, fan_profile, match_movement
+from src.application.hockey_screens import clubs_catalog, fan_profile, match_movement, player_stand
 
 router = APIRouter(tags=["webapp"])
 
@@ -73,6 +73,21 @@ async def get_client_hockey_movement(
     )
     if out is None:
         raise HTTPException(status_code=404, detail="Матч не найден")
+    return out
+
+
+@router.get("/client/hockey/players/{public_id}/stand")
+async def get_client_hockey_player_stand(
+    public_id: str,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Стенд другого игрока: только короны и имя. Открывается по ``pid`` из строки таблицы (TASK-430)."""
+    if not 6 <= len(public_id) <= 16 or not public_id.isalnum():
+        raise HTTPException(status_code=404, detail="Игрок не найден")
+    out = await player_stand(session, public_id=public_id, viewer_key=client_catalog_telegram_key(principal))
+    if out is None:
+        raise HTTPException(status_code=404, detail="Игрок не найден")
     return out
 
 

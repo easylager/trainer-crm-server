@@ -229,22 +229,23 @@ async def test_new_review_gets_one_card_for_the_admin_bot(db_session, _test_db_c
 
 
 async def _full_month(db_session) -> None:
-    """Три игрока с очками в ноябре по Юности, всё сыграно 20-го."""
+    """Три игрока с очками в ноябре по Юности, всё сыграно 20-го; три матча: короне нужны три хода (TASK-430)."""
     await ensure_month_race(db_session, now=at(10))
-    m1 = (
-        await db_session.execute(
-            text("""
-                INSERT INTO hockey_matches (source, league, source_match_id, home_team, away_team, starts_at)
-                VALUES ('hockeyby', 'extraliga', 'cm1', 'Юность', 'Неман', :s) RETURNING id
-                """),
-            {"s": at(20)},
-        )
-    ).scalar_one()
-    for key, (hs, as_) in ((A, (3, 1)), (B, (2, 1)), (C, (1, 0))):
-        await make_pick(
-            db_session, player_key=key, display_name=f"И{key}", match_id=m1, home_score=hs, away_score=as_, now=at(19)
-        )
-    await set_manual_result(db_session, m1, home_score=3, away_score=1, decided_in="regulation", now=at(20, 22))
+    for i in range(3):
+        m = (
+            await db_session.execute(
+                text("""
+                    INSERT INTO hockey_matches (source, league, source_match_id, home_team, away_team, starts_at)
+                    VALUES ('hockeyby', 'extraliga', :mid, 'Юность', 'Неман', :s) RETURNING id
+                    """),
+                {"mid": f"cm{i + 1}", "s": at(20, i)},
+            )
+        ).scalar_one()
+        for key, (hs, as_) in ((A, (3, 1)), (B, (2, 1)), (C, (1, 0))):
+            await make_pick(
+                db_session, player_key=key, display_name=f"И{key}", match_id=m, home_score=hs, away_score=as_, now=at(19)
+            )
+        await set_manual_result(db_session, m, home_score=3, away_score=1, decided_in="regulation", now=at(20, 22))
     await score_finished_matches(db_session, now=at(20, 22))
     await mark_calendar_synced(db_session, now=at(21))
 
@@ -256,7 +257,7 @@ async def test_close_month_button_writes_crowns_once(db_session) -> None:
     pending = await pending_month_closures(db_session, now=at(22))
     # «Все» и соперники Динамо в списке не показываем: короны там не выдаются.
     assert {p["club"] for p in pending} == {"Неман", "Юность"}
-    assert pending[0]["leaders"][0][1] == 50
+    assert pending[0]["leaders"][0][1] == 150  # три матча по 50
     race_id = pending[0]["race_id"]
 
     cb = _callback(f"hk:cm:{race_id}:Юность")
