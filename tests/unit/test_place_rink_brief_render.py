@@ -233,7 +233,35 @@ def test_region_description_unchanged(city: str, monkeypatch) -> None:
     assert search_description(_view(city)) == text
 
 
-def test_minsk_without_sessions_keeps_old_description() -> None:
+def test_minsk_without_sessions_does_not_promise_a_weekly_schedule() -> None:
     view = _view("Минск")
     view.update(days=[], session_count=0, next_slot=None)
-    assert search_description(view).startswith("Расписание массового катания на неделю")
+    assert search_description(view) == (
+        "Каток для массового катания. Билеты онлайн. Центральный район, пр-т Победителей, 65, Минск."
+    )
+
+
+@pytest.mark.parametrize(
+    ("city", "has_skate", "has_ohm", "nearby_early"),
+    [
+        ("Минск", False, False, True),
+        ("Минск", True, False, False),
+        ("Минск", False, True, False),
+        ("Мозырь", False, False, False),
+    ],
+)
+def test_nearby_moves_up_only_for_a_minsk_rink_without_sessions(
+    city: str, has_skate: bool, has_ohm: bool, nearby_early: bool
+) -> None:
+    view = _view(city, ohm=has_ohm)
+    if not has_skate:
+        view.update(days=[], session_count=0, next_slot=None)
+    href = "/p/minsk/alternative"
+    view["nearby"] = [{"kind": "arena", "name": "Другой каток", "href": href, "line": "завтра в 12:00"}]
+
+    html = _render(view)
+    assert html.count(f'href="{href}"') == 1
+    assert 'data-glide-track="es_fallback_click"' in html
+    assert (html.index(f'href="{href}"') < html.index("Адрес и контакты")) is nearby_early
+    if nearby_early:
+        assert html.index('id="schedule"') < html.index(f'href="{href}"')

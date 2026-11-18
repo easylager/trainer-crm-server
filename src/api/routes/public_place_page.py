@@ -97,7 +97,7 @@ async def terms_page() -> HTMLResponse:
 @router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def catalog_home_page(
     request: Request,
-    when: str | None = Query(None, description="Период: today|tomorrow|weekend|day"),
+    when: str | None = Query(None, description="Период: today|tomorrow|weekend|day|any"),
     d: str | None = Query(None, description="Дата для when=day: YYYY-MM-DD"),
     session: AsyncSession = Depends(get_session),
 ):
@@ -119,7 +119,7 @@ async def catalog_home_page(
     # TASK-210: варианты с ?when= — noindex, follow, canonical на /
     robots = "index, follow"
     canonical = f"{base}/" if base else "/"
-    if when and when.strip().lower() in ("today", "tomorrow", "weekend", "day"):
+    if when and when.strip().lower() in ("today", "tomorrow", "weekend", "day", "any"):
         robots = "noindex, follow"
 
     view = await load_catalog_home_view(

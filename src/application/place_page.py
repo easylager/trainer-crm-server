@@ -798,11 +798,14 @@ def search_description(view: Mapping[str, Any]) -> str:
         visit = _place_visit(view)
         currency = str(card.get("currency_code") or "BYN")
         where_tail = _where(card).replace(" · ", ", ")
+        lead = "Расписание массового катания на неделю"
+        default_head = f"{lead}, цены и как добраться"
+        if not (slots or view.get("session_count")) and _brief_on(view):
+            lead = default_head = "Каток для массового катания"
 
         def _compose(with_services: bool) -> str:
             bits = search_bits(visit, currency=currency, slots=slots, with_services=with_services)
-            head = "Расписание массового катания на неделю"
-            head = f"{head}. " + ". ".join(bits) if bits else "Расписание массового катания на неделю, цены и как добраться"
+            head = ". ".join([lead, *bits]) if bits else default_head
             return f"{head}. {where_tail}." if where_tail else f"{head}."
 
         answer = _brief_description(view, slots=slots, visit=visit, currency=currency, where_tail=where_tail)
@@ -2821,13 +2824,18 @@ def render_place_body_b(
     trainers_html = _b_trainers(
         view, school_html=school_in_trainers_html(vv.get("school")), learn_line=learn_line
     )
-    ice_and_trainers = ice_html + trainers_html
+    nearby = _b_nearby(view)
+    # При пустом расписании в Минске показываем ближайший лёд сразу после блока катания.
+    nearby_early = _brief_on(view) and not any(
+        view.get(key) for key in ("days", "ohm_days", "figure_days", "family_days", "focus")
+    )
     # Порядок блоков — arena_visit_info.PLACE_BLOCKS: cover, ice, facts, services, trainers, partners, more.
-    # «Лёд рядом» — после контактов, в самом низу тела (как на /c/ у однокатковых городов).
     parts = [
         _b_hero(card, status_html=_b_status(view), chips_html=_b_hero_chips(card, links)),
         _b_plan(view, invite=invite),
-        ice_and_trainers,
+        ice_html,
+        nearby if nearby_early else "",
+        trainers_html,
         "" if trainers_listed else render_learn_block(learn_block),
         _b_matches_here(view),
         facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
@@ -2836,7 +2844,7 @@ def render_place_body_b(
         more_html(vv, coach_html=coach_in_more, tel_href=str(links.get("tel") or "")),
         _b_about(card),
         _b_contacts(card, links),
-        _b_nearby(view),
+        "" if nearby_early else nearby,
     ]
     body = "".join(parts)
     return body + phone_beacon_script(body) + offer_html
