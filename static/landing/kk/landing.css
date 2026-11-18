@@ -1,0 +1,208 @@
+:root {
+  color-scheme: light dark;
+  --kk-bg: #e9eef4;
+  --kk-ink: #19212a;
+  --kk-line: #c9d2dd;
+  --kk-panel: #19212a;
+  --kk-panel-ink: #f2f5f7;
+  --kk-muted: #bdcbd8;
+  --kk-gold: #ffd34e;
+  --kk-display: 'Dela Gothic One', 'Golos Text', system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root { --kk-bg: #111821; --kk-ink: #f2f5f7; --kk-line: #344151; }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--kk-bg);
+  color: var(--kk-ink);
+  font: 500 1rem/1.5 'Golos Text', system-ui, sans-serif;
+}
+a { color: inherit; }
+a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.kk-frame { width: min(1120px, calc(100% - 48px)); margin-inline: auto; }
+.kk-header, .kk-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.kk-header { min-height: 74px; }
+.kk-glide { font-size: 1.22rem; font-weight: 800; letter-spacing: -.045em; }
+.kk-header a { text-decoration: none; }
+.kk-nav { display: flex; justify-content: flex-end; flex-wrap: wrap; column-gap: 22px; font-size: .91rem; }
+.kk-nav a { display: inline-flex; align-items: center; min-height: 44px; }
+.kk-nav a:hover, .kk-footer a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.kk-footer { min-height: 88px; margin-top: 26px; border-top: 1px solid var(--kk-line); }
+.kk-footer a { font-size: .91rem; }
+
+.kk-hero, .kk-league, .kk-feature {
+  overflow: hidden;
+  color: var(--kk-panel-ink);
+  border-radius: 26px;
+}
+.kk-hero, .kk-league {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 58px);
+  padding: clamp(26px, 5vw, 66px);
+}
+.kk-hero {
+  min-height: 470px;
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 85% 30%, #26446b 0%, transparent 60%),
+    linear-gradient(130deg, #18222f, #111a25 54%, #192942);
+}
+.kk-hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 7% -16% 7% 45%;
+  opacity: .18;
+  transform: rotate(-14deg);
+  border: 1px solid #a6c9ef;
+  border-radius: 90px;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 74px, #a6c9ef 75px, transparent 77px),
+    linear-gradient(90deg, transparent calc(50% - 1px), #a6c9ef 50%, transparent calc(50% + 1px)),
+    repeating-linear-gradient(0deg, transparent 0 20px, #7aa2d722 20px 21px);
+}
+.kk-logo {
+  display: inline-block;
+  margin-bottom: 23px;
+  padding: 6px 13px 8px;
+  transform: rotate(-4deg);
+  border-radius: 6px;
+  background: var(--kk-gold);
+  color: #151a21;
+  font: 400 clamp(.95rem, 2.3vw, 1.35rem)/1.25 var(--kk-display);
+  text-transform: uppercase;
+}
+.kk-hero h1, .kk-league h2, .kk-feature h2 { margin: 0; font-family: var(--kk-display); font-weight: 400; }
+.kk-hero h1 { font-size: clamp(2.25rem, 5.7vw, 4.2rem); line-height: 1.02; letter-spacing: -.038em; }
+.kk-hero p, .kk-league p, .kk-feature p { margin: 16px 0 0; color: var(--kk-muted); }
+.kk-hero p, .kk-league p { max-width: 38ch; font-size: clamp(1rem, 2vw, 1.18rem); }
+.kk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 19px;
+  margin-top: 25px;
+  border-radius: 12px;
+  background: var(--kk-gold);
+  color: #151a21;
+  text-decoration: none;
+  font-size: .99rem;
+  font-weight: 800;
+}
+.kk-button::after { content: '↗' / ''; font-size: 1.2em; }
+.kk-button:hover { background: #ffe18b; }
+.kk-button:focus-visible { outline-color: var(--kk-panel-ink); }
+
+.kk-example {
+  width: 100%;
+  max-width: 400px;
+  justify-self: end;
+  margin: 0;
+  padding: 17px;
+  border: 1px solid #ffffff2d;
+  border-radius: 24px;
+  background: #1a2737;
+  box-shadow: 0 25px 48px #080d17a6;
+}
+.kk-example figcaption { font-size: .84rem; font-weight: 700; color: var(--kk-muted); }
+.kk-teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.kk-team {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 9px;
+  min-height: 124px;
+  padding: 9px 5px;
+  border: 1px solid #ffffff14;
+  border-radius: 15px;
+  background: #253449;
+  text-align: center;
+  font-size: clamp(.76rem, 1.8vw, .92rem);
+  line-height: 1.22;
+}
+.kk-team--picked { position: relative; border-color: var(--kk-gold); background: #2e3543; }
+.kk-pick {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--kk-gold);
+  color: #151a21;
+  font-weight: 800;
+}
+.kk-team img { width: 50px; height: 50px; padding: 5px; border-radius: 50%; background: #f2f5f7; object-fit: contain; }
+.kk-earned {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  margin-top: 10px;
+  border-radius: 10px;
+  background: #111a26;
+  color: var(--kk-muted);
+  font-size: .83rem;
+}
+.kk-earned strong { color: var(--kk-gold); white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) {
+  .kk-earned { animation: kk-earned .5s .22s ease-out both; }
+  @keyframes kk-earned { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+
+.kk-league {
+  margin-top: 18px;
+  border: 1px solid #ffd34e75;
+  background: var(--kk-panel);
+}
+.kk-league h2 { font-size: clamp(1.9rem, 4.2vw, 3.1rem); line-height: 1.08; letter-spacing: -.03em; }
+.kk-league img, .kk-feature img { display: block; width: 100%; height: auto; }
+.kk-league img { max-width: 400px; justify-self: end; }
+.kk-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+.kk-feature {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: clamp(22px, 3.8vw, 44px) clamp(22px, 3.8vw, 44px) 10px;
+  background: var(--kk-panel);
+}
+.kk-feature h2 { font-size: clamp(1.3rem, 3vw, 2rem); line-height: 1.15; letter-spacing: -.022em; }
+.kk-feature p { margin-top: 10px; max-width: 41ch; }
+.kk-feature img { align-self: center; max-width: 400px; margin-top: auto; }
+
+@media (max-width: 680px) {
+  .kk-frame { width: calc(100% - 24px); }
+  .kk-header { padding-inline: 6px; min-height: 60px; }
+  .kk-footer { padding-inline: 6px; min-height: 68px; }
+  .kk-nav { column-gap: 14px; }
+  .kk-hero, .kk-league, .kk-features { grid-template-columns: minmax(0, 1fr); }
+  .kk-hero, .kk-league { gap: 20px; padding: 24px; }
+  .kk-hero { min-height: auto; }
+  .kk-hero::before { inset: 26% -45% 0 20%; }
+  .kk-example, .kk-league img { justify-self: center; }
+  .kk-team { min-height: 92px; }
+  .kk-league img { margin: -10px 0 -12px; }
+  .kk-feature { padding-inline: 24px; }
+}
+
+@media (max-width: 359px) {
+  .kk-hero, .kk-league, .kk-feature { padding-inline: 16px; }
+}

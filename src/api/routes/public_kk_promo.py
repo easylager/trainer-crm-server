@@ -16,6 +16,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from src.application import hockey_event, site_matches
+from src.application.hockey_game import POINTS_WINNER
 from src.application.hockey_promo import clean_src
 from src.application.hockey_teams import TEAMS, logo_path
 from src.application.place_links import public_telegram_entry_link
@@ -28,6 +29,10 @@ router = APIRouter(tags=["public-kk-promo"])
 DEFAULT_SRC = "site"
 _TITLE = "Кто кого — угадай, кто победит в матче Динамо-Минск"
 _DESCRIPTION = "Тапни за команду, набирай очки и соревнуйся с друзьями. Бесплатно, в Telegram."
+_LANDING_DESCRIPTION = (
+    "«Кто кого» — бесплатная хоккейная игра в Telegram. Угадывай победителей матчей, набирай очки "
+    "и создай свою лигу для друзей."
+)
 _LOGO = "/logos/01-icon/glide-icon-teal-square-512.png"
 # Картинка превью 1200×630 и лёгкие копии логотипов для ленты: static/landing/kk, отдаёт /landing/{path}.
 _KK_DIR = Path(__file__).resolve().parents[3] / "static" / "landing" / "kk"
@@ -110,7 +115,6 @@ _PAGE_CSS = (
     ".go:active{transform:translateY(1px)}"
     ".go:focus{outline:3px solid #fff;outline-offset:3px}"
     ".go:focus:not(:focus-visible){outline:none}"
-    ".schedule{display:inline-flex;min-height:44px;align-items:center;margin-top:12px;color:#fff}"
     "@keyframes fade{from{opacity:0}to{opacity:1}}"
     "@keyframes up{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:none}}"
     "@keyframes fly{0%{transform:translateX(-160px) rotate(-200deg) scaleX(.7);opacity:0}20%{opacity:1}"
@@ -179,6 +183,77 @@ def _rail_html() -> str:
     return f'<div class="rail" aria-hidden="true">{_rail_row(slugs, "a", _A_DISC)}{_rail_row(back, "b", _B_DISC)}</div>'
 
 
+@lru_cache
+def _landing_asset(filename: str) -> str:
+    return f"/landing/kk/{filename}?v={_file_version(f'static/landing/kk/{filename}')}"
+
+
+def _banner(filename: str, alt: str) -> str:
+    return (
+        f'<img src="{_landing_asset(filename)}" alt="{html.escape(alt)}" '
+        'width="400" height="320" loading="lazy" decoding="async">'
+    )
+
+
+def _landing_body(go: str, *, show_matches: bool) -> str:
+    play = html.escape(go)
+    matches = '<a href="/hockey">Расписание матчей</a>' if show_matches else ""
+    return f"""
+<header class="kk-header kk-frame">
+  <a class="kk-glide" href="/">Glideclub</a>
+  <nav class="kk-nav" aria-label="Навигация">
+    <a href="#league">Лига друзей</a>{matches}
+  </nav>
+</header>
+<main class="kk-frame">
+  <section class="kk-hero" aria-labelledby="kk-title">
+    <div>
+      <span class="kk-logo">Кто кого?</span>
+      <h1 id="kk-title">Угадай, кто победит</h1>
+      <p>Выбери команду до начала хоккейного матча. За верный выбор получишь очки.</p>
+      <a class="kk-button" href="{play}">Играть в Telegram</a>
+    </div>
+    <figure class="kk-example">
+      <figcaption>Пример хода</figcaption>
+      <div class="kk-teams">
+        <div class="kk-team kk-team--picked">
+          <span class="kk-pick" aria-hidden="true">✓</span>
+          <img src="{_logo_src('dinamo-minsk')}" width="50" height="50" alt="">
+          <b>Динамо-Минск</b>
+        </div>
+        <div class="kk-team">
+          <img src="{_logo_src('lokomotiv')}" width="50" height="50" alt="">
+          <b>Локомотив</b>
+        </div>
+      </div>
+      <div class="kk-earned"><span>Победитель угадан</span><strong>+{POINTS_WINNER} очков</strong></div>
+    </figure>
+  </section>
+  <section class="kk-league" id="league" aria-labelledby="league-title">
+    <div>
+      <h2 id="league-title">Лига друзей</h2>
+      <p>В игре открой «Лиги», нажми «+&nbsp;Создать» и отправь ссылку друзьям. После матчей сравнивайте очки в своей таблице.</p>
+      <a class="kk-button" href="{play}">Открыть игру в Telegram</a>
+    </div>
+    {_banner('friends-league.webp', 'Пример таблицы друзей после четырёх матчей')}
+  </section>
+  <div class="kk-features">
+    <section class="kk-feature">
+      <h2>Свои команды</h2>
+      <p>Выбирайте, какие матчи идут в зачёт вашей лиги. Можно взять все, только минское «Динамо» или несколько любимых клубов.</p>
+      {_banner('favorite-teams.webp', 'Выбор матчей при настройке лиги')}
+    </section>
+    <section class="kk-feature">
+      <h2>Корона каждый месяц</h2>
+      <p>Лидер по очкам за месяц получает корону. Все твои короны видны друзьям на «Трибуне».</p>
+      {_banner('monthly-crowns.webp', 'Пример «Трибуны» игрока с пятью коронами')}
+    </section>
+  </div>
+</main>
+<footer class="kk-footer kk-frame"><a href="/">Катки и массовое катание на Glideclub</a></footer>
+"""
+
+
 @router.get("/kk", include_in_schema=False)
 async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_length=64)) -> HTMLResponse:
     src = clean_src(s) or DEFAULT_SRC
@@ -189,21 +264,9 @@ async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_le
     landing = s is None and hockey_event.enabled(cfg)
     robots = "index, follow" if landing else "noindex"
     title = "Кто кого — игра с прогнозами на хоккей | Glideclub" if landing else _TITLE
-    description = (
-        "Угадай победителя хоккейного матча, получай очки за верные прогнозы и соревнуйся с друзьями. "
-        "Бесплатная игра в Telegram."
-    ) if landing else _DESCRIPTION
+    description = _LANDING_DESCRIPTION if landing else _DESCRIPTION
     canonical = (
         f'<link rel="canonical" href="{e(base)}/kk">\n<meta property="og:url" content="{e(base)}/kk">'
-        if landing else ""
-    )
-    schedule = (
-        '<a class="schedule" href="/hockey">Расписание матчей</a>'
-        if landing and site_matches.site_enabled(cfg) else ""
-    )
-    rules = (
-        "<p>Выбери команду до начала матча. После игры за верный выбор начисляются очки. "
-        "Свой результат можно посмотреть в таблице игроков.</p>"
         if landing else ""
     )
     analytics = public_analytics_head_html_from_settings() if landing else ""
@@ -227,12 +290,21 @@ async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_le
             "<script>if(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)){"
             f"location.replace({json.dumps(go)});}}</script>"
         )
-    css = _PAGE_CSS + _rail_css(len(_rail_logos())) + _REDUCED_MOTION_CSS
+    color_scheme = "light dark" if landing else "light"
+    theme_color = "#19212a" if landing else "#1747b5"
+    if landing:
+        style = f'<link rel="stylesheet" href="{_landing_asset("landing.css")}">'
+        body = _landing_body(go, show_matches=site_matches.site_enabled(cfg))
+    else:
+        style = f"<style>{_PAGE_CSS}{_rail_css(len(_rail_logos()))}{_REDUCED_MOTION_CSS}</style>"
+        body = f"""{_rail_html()}<main><h1 class="brand"><span class="puck" aria-hidden="true"></span><span class="tag" aria-hidden="true">КТО КОГО?</span><span class="vh">Кто кого</span></h1>
+<p>{e(_typeset(_DESCRIPTION))}</p>
+<a class="go" href="{e(go)}">Открыть в Telegram</a></main>"""
     page = f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
-<meta name="theme-color" content="#1747b5">
+<meta name="color-scheme" content="{color_scheme}">
+<meta name="theme-color" content="{theme_color}">
 <title>{e(title)}</title>
 <meta name="description" content="{e(description)}">
 <meta property="og:type" content="website">
@@ -243,10 +315,8 @@ async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_le
 {canonical}
 {public_fonts_head_html()}
 {analytics}
-<style>{css}</style>
-</head><body>{_rail_html()}<main><h1 class="brand"><span class="puck" aria-hidden="true"></span><span class="tag" aria-hidden="true">КТО КОГО?</span><span class="vh">Кто кого</span></h1>
-<p>{e(_typeset(description))}</p>{rules}
-<a class="go" href="{e(go)}">Открыть в Telegram</a>{schedule}</main>{hop}
+{style}
+</head><body>{body}{hop}
 </body></html>"""
     headers = {"Cache-Control": "public, max-age=300"}
     if not landing:
