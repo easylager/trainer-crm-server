@@ -744,7 +744,7 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-ev__note { padding-left: 46px; font: 500 13px/1.35 var(--kk-text); color: var(--kk-muted); }
 .kk-ev__p.is-me .kk-ev__note, .kk-ev__p.is-me .kk-ev__mv { color: var(--kk-soft); }
 .kk-ev__acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding-left: 46px; }
-.kk-gest { min-height: 44px; border-radius: 22px; border: 2px solid var(--kk-line); background: var(--kk-card); color: var(--kk-soft); font: 700 14px var(--kk-text); padding: 0 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.kk-gest { min-height: 44px; border-radius: 22px; border: 2px solid var(--kk-line); background: var(--kk-card); color: var(--kk-soft); font: 700 14px var(--kk-text); padding: 0 4px; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .kk-gest svg { flex: none; }
 .kk-gest[aria-pressed='true'] { border-color: var(--kk-ink); background: var(--kk-gold); color: var(--kk-on-gold); }
 .kk-gest:disabled { opacity: 0.6; }
