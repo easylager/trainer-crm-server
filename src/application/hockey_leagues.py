@@ -642,6 +642,11 @@ async def _member_league(session: AsyncSession, league_id: int, player_key: int,
     return _league(record)
 
 
+async def member_league(session: AsyncSession, *, league_id: int, player_key: int) -> League:
+    """Лига для её участника: ``LookupError`` — нет такой, ``PermissionError`` — не участник."""
+    return await _member_league(session, league_id, player_key, lock=False)
+
+
 async def leave_league(session: AsyncSession, *, league_id: int, player_key: int) -> str:
     """Выйти. Ушёл владелец — лига переходит к самому раннему участнику; ушёл последний — лиги нет
     (``deleted``), а если у неё есть короны — она уходит в архив без участников (``archived``)."""
@@ -1045,6 +1050,7 @@ __all__ = [
     "league_preview",
     "league_table",
     "leave_league",
+    "member_league",
     "new_invite_code",
     "normalize_code",
     "player_leagues",

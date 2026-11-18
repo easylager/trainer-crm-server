@@ -39,12 +39,14 @@ from src.application.hockey_leagues import (
     league_titles,
     leave_league,
     matches_in_terms,
+    member_league,
     owned_league,
     player_leagues,
     set_league_image,
     term_options,
     update_league,
 )
+from src.application.hockey_league_evening import league_evening
 from src.application.hockey_races import crown_counts, league_crown_wall, race_summary
 from src.application.hockey_share import record_card_event
 from src.application.hockey_slices import parse_period
@@ -350,6 +352,23 @@ async def get_client_hockey_league(
         "wall": await league_crown_wall(session, league_id=league_id, now=now),
         "items": [{**_table_row(row, player_key, titles), "crowns": crowns.get(row.player_key, 0)} for row in rows],
     }
+
+
+@router.get("/client/hockey/leagues/{league_id}/evening")
+async def get_client_hockey_league_evening(
+    league_id: int,
+    day: date | None = Query(None, description="игровой день 2026-11-18; пусто — сегодня или последний с матчами"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Вечер» лиги: матчи игрового дня, строка каждого участника, соседние дни с матчами. Только для участника."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league = await member_league(session, league_id=league_id, player_key=player_key)
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
 
 
 @router.patch("/client/hockey/leagues/{league_id}")
