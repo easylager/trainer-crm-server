@@ -23,6 +23,7 @@ from src.application.arena_public_use_cases import _trainer_windows_on_arena
 from src.application.place_links import place_path
 from src.application.place_page import load_place_view, slot_price, slot_when
 from src.application.style_b import APP_MARK_SRC, media_url
+from src.shared.html_template import PUBLIC_ICON_LINKS
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.public_display import format_clock, format_public_name
 
@@ -640,9 +641,7 @@ def render_trainer_landing_page(
   <meta name="twitter:title" content="{t}">
   <meta name="twitter:description" content="{d}">
   <meta name="twitter:image" content="{_esc(og_image)}">
-  <link rel="icon" href="/favicon.ico" type="image/png">
-  <link rel="icon" type="image/png" sizes="120x120" href="/favicon-120.png">
-  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png">
+  {PUBLIC_ICON_LINKS}
 {_landing_site_head_html()}
   <link rel="stylesheet" href="/landing/trainer-landing.css?v={css_v}">
   {analytics}

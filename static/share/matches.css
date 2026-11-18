@@ -92,7 +92,7 @@
 .m-day__h { margin: 0; padding-top: 6px; font-size: 12px; font-weight: 600; letter-spacing: .05em; color: var(--g-muted); }
 .m-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 10px;
-  min-height: 60px; padding: 0 14px; border-radius: var(--g-r);
+  min-height: 60px; padding: 8px 14px; border-radius: var(--g-r);
   background: var(--g-surface); border: 1px solid var(--g-line);
   color: var(--g-ink) !important; text-decoration: none;
 }
@@ -100,7 +100,7 @@
 .m-row__time { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .m-row__main { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .m-row__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.m-row__name { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-row__name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .m-row__where { font-size: 13px; color: var(--g-muted); }
 .m-row__go { font-size: 15px; font-weight: 600; color: var(--g-accent-ink); }
 

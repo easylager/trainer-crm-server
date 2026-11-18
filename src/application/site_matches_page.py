@@ -10,9 +10,11 @@ from __future__ import annotations
 import html as html_lib
 import re
 from datetime import datetime
+from itertools import groupby
 from pathlib import Path
 from typing import Any, Mapping
 
+from src.application import hockey_event
 from src.application.catalog_icons import icon_svg
 from src.application.ice_city_day import city_slug, plural_ru
 from src.application.place_links import (
@@ -21,6 +23,8 @@ from src.application.place_links import (
     telegram_bot_start_link,
 )
 from src.application.site_matches import (
+    DINAMO_ARENA,
+    DINAMO_HOME_PATH,
     LEAGUE_EXTRALIGA,
     MATCH_PREFIX,
     PHASE_AFTER,
@@ -31,6 +35,8 @@ from src.application.site_matches import (
     SITE_PATH,
     WEEKDAYS_FULL,
     WEEKDAYS_SHORT,
+    arena_path,
+    day_heading,
     day_word,
     local,
     score_text,
@@ -38,11 +44,12 @@ from src.application.site_matches import (
     yandex_link,
 )
 from src.application.hockey_teams import display_name
+from src.ingestion.hockey_sources import HCDINAMO_CALENDAR_URL
 from src.shared.city_locative import city_locative
 from src.shared.config import Settings
 from src.shared.copy_ru import t
 from src.shared.html_template import fill_placeholders, json_for_script, safe_external_url
-from src.shared.public_display import format_public_name
+from src.shared.public_display import format_public_name, format_street_address
 
 MATCH_SURFACE = "match_page"
 BELL_PREFIX = "mbell_"
@@ -290,16 +297,19 @@ def _row(m: Mapping[str, Any]) -> str:
     if m["league"] != LEAGUE_EXTRALIGA:
         where = f"{where} · {m['league_label']}" if where else m["league_label"]
     klass = "m-row m-row--mine" if m.get("mine") else "m-row"
+    path = m.get("path")
+    opening = f'<a class="{klass}" href="{_e(path)}">' if path else f'<div class="{klass}">'
+    closing = "</a>" if path else "</div>"
     return (
-        f'<a class="{klass}" href="{_e(m["path"])}"><span class="m-row__time">{_e(m["time"])}</span>'
+        f'{opening}<span class="m-row__time">{_e(m["time"])}</span>'
         f'<span class="m-row__main"><span class="m-logos">{logo(m["home"], "sm")}{logo(m["away"], "sm")}</span>'
         f'<span class="m-row__text"><span class="m-row__name">{_e(m["title"])}</span>'
-        f'<span class="m-row__where">{_e(where)}</span></span></span>{right}</a>'
+        f'<span class="m-row__where">{_e(where)}</span></span></span>{right if path else ""}{closing}'
     )
 
 
 def list_title(data: Mapping[str, Any]) -> str:
-    return "Хоккей в Беларуси — матчи Экстралиги и Динамо-Минск | Glideclub"
+    return "Хоккей в Беларуси — матчи Экстралиги и Динамо-Минск | Glide"
 
 
 def list_description() -> str:
@@ -350,9 +360,18 @@ def render_matches_list(
     first_line = "Экстралига и Динамо-Минск"
     if data["club"]:
         first_line = "Все матчи клуба — дома и на выезде"
+    game_link_html = (
+        '<a class="m-text-link" href="/kk">Угадай победителя в игре «Кто кого»</a>'
+        if hockey_event.enabled() else ""
+    )
+    dinamo_link_html = (
+        f'<a class="m-text-link" href="{DINAMO_HOME_PATH}">Домашние матчи «Динамо-Минск»</a>'
+        if data.get("dinamo_enabled") else ""
+    )
     body = (
         f'<div class="m-top">{back}<h1 class="m-title">Хоккей</h1><p class="m-lead">{_e(first_line)}</p>'
-        f'<nav class="m-chips" aria-label="Клуб">{"".join(chips)}</nav></div>'
+        f'<nav class="m-chips" aria-label="Клуб">{"".join(chips)}</nav>'
+        f'<div class="m-links">{dinamo_link_html}{game_link_html}</div></div>'
         + (f'<p class="m-empty">{_e(text)}</p>' if text else "")
         + f'<div class="m-days">{days}</div>'
     )
@@ -371,6 +390,46 @@ def render_matches_list(
         city_id=city_id,
         city_slug_value=city_slug(city_name) if city_name else "",
         surface="matches_list",
+    )
+
+
+def render_dinamo_home(data: Mapping[str, Any], *, base_url: str) -> str:
+    canonical = f"{base_url}{DINAMO_HOME_PATH}"
+    title = "Домашние матчи «Динамо-Минск» — расписание КХЛ и билеты"
+    description = "Ближайшие домашние матчи «Динамо-Минск» в КХЛ. Даты и время начала по Минску, адрес Минск-Арены и официальные билеты."
+    arena = data["arena"]
+    address = format_street_address(arena.get("address") or "", city="Минск") if arena else ""
+    destination = arena_path(arena)
+    arena_link = f'<a class="m-text-link" href="{_e(destination)}">Минск-Арена на Glide</a>' if destination else ""
+    map_link = f'<a class="m-text-link" href="{_e(yandex_link(arena))}">Как добраться</a>' if arena else ""
+    game = '<a class="m-text-link" href="/kk">Угадай победителя в игре «Кто кого»</a>' if hockey_event.enabled() else ""
+    rows = []
+    for day, matches in groupby(data["matches"], key=lambda match: match["day"]):
+        rows.append(f'<section class="m-day"><h3 class="m-day__h">{_e(day_heading(day, data["today"]))}</h3>')
+        for match in matches:
+            rows.append(_row(match))
+            tickets = match["tickets"]
+            if tickets and tickets["direct"]:
+                label = _e(f'Билеты на матч {match["title"]}')
+                rows.append(f'<a class="m-text-link" href="{_e(tickets["url"])}" aria-label="{label}">Билеты на матч</a>')
+        rows.append("</section>")
+    schedule = "".join(rows) or '<p class="m-lead">Ближайшие домашние матчи пока не опубликованы.</p>'
+    where = f"{DINAMO_ARENA} · {address}" if address else DINAMO_ARENA
+    body = (
+        f'<div class="m-top"><a class="m-back" href="{SITE_PATH}">‹ Все хоккейные матчи</a>'
+        '<h1 class="m-title">Домашние матчи «Динамо-Минск»</h1>'
+        f'<p class="m-lead">КХЛ · {_e(where)}. Время матчей указано по Минску.</p>'
+        f'<div class="m-links">{arena_link}{map_link}'
+        f'<a class="m-text-link" href="{HCDINAMO_CALENDAR_URL}">Календарь клуба</a>'
+        f'<a class="m-text-link" href="{hockey_event.TICKETS_FALLBACK_URL}">Билеты у клуба</a></div></div>'
+        '<section class="m-days"><h2 class="m-sec">Ближайшие матчи</h2>'
+        f'{schedule}<div class="m-links">{game}'
+        '<a class="m-text-link" href="/c/minsk">Катки Минска</a></div></section>'
+    )
+    return _page(
+        title=f"{title} | Glide", description=description, canonical=canonical,
+        og_url=canonical, og_image=_default_og(base_url), robots="index, follow", jsonld="{}",
+        body=body, base_url=base_url, city_id=None, city_slug_value="minsk", surface="matches_list",
     )
 
 
@@ -436,10 +495,10 @@ def match_description(data: Mapping[str, Any]) -> str:
     where = ", ".join(bit for bit in (data["arena_name"], data["city"]) if bit)
     when = f"{m['day'].day} {_months(m['day'].month)} в {m['time']}"
     if data["gone"]:
-        return f"Матч {m['title']} ({league}) перенесён или отменён — уточните на hockey.by. Время, арена и билеты на странице Glideclub."
+        return f"Матч {m['title']} ({league}) перенесён или отменён — уточните на hockey.by. Время, арена и билеты на странице Glide."
     if m["phase"] == PHASE_AFTER:
         goals = len(data["goals"])
-        tail = f" Голы по минутам: {goals}." if goals else " Протокол и ближайшие матчи — на Glideclub."
+        tail = f" Голы по минутам: {goals}." if goals else " Протокол и ближайшие матчи — на Glide."
         return _fit_text(f"{m['title']}: итог матча {league} {score_text(m['result'])}, {m['day'].day} {_months(m['day'].month)}, {where}.{tail}")
     if data.get("away_trip"):
         base = f"Выездной матч {league} {m['title']} {when}."
@@ -646,9 +705,14 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
         if link
         else ""
     )
+    rules_link = (
+        '<a class="m-text-link" href="/kk">Как играть в «Кто кого»</a>'
+        if game["kind"] != "soon" and hockey_event.enabled() else ""
+    )
     return (
         '<section class="m-panel m-panel--game" aria-label="Кто кого"><span class="m-sticker">КТО КОГО?</span>'
-        f'<span class="m-panel__head">{_e(head)}</span><span class="m-panel__sub">{_e(sub)}</span>{button}</section>'
+        f'<span class="m-panel__head">{_e(head)}</span><span class="m-panel__sub">{_e(sub)}</span>'
+        f'{button}{rules_link}</section>'
     )
 
 
@@ -730,6 +794,8 @@ def _club_links(data: Mapping[str, Any]) -> str:
     items = "".join(
         f'<a class="m-text-link" href="{_e(list_href(None, c["slug"]))}">Все матчи · {_e(c["name"])} ›</a>' for c in links
     )
+    if any(c["slug"] == "dinamo-minsk" for c in links):
+        items += f'<a class="m-text-link" href="{DINAMO_HOME_PATH}">Домашние матчи «Динамо-Минск»</a>'
     return f'<div class="m-links">{items}</div>'
 
 
@@ -863,7 +929,7 @@ def render_match_page(
         city_id=city_id,
         city_slug_value=city_slug(data["city"]) if data.get("city") else "",
         surface=MATCH_SURFACE,
-        breadcrumbs=[("Glideclub", f"{base_url}/"), ("Хоккей", f"{base_url}{SITE_PATH}"), (m["title"], canonical)],
+        breadcrumbs=[("Glide", f"{base_url}/"), ("Хоккей", f"{base_url}{SITE_PATH}"), (m["title"], canonical)],
         canonical_for_crumbs=canonical,
     )
 

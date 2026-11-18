@@ -3232,7 +3232,7 @@ def favicon_ico():
 @app.api_route("/favicon-120.png", methods=["GET", "HEAD"], include_in_schema=False)
 def favicon_120_png():
     """Иконка 120×120 — рекомендованный Яндексом размер для сниппета."""
-    return _icon_file("glide-icon-teal-square-120.png")
+    return _icon_file("glide-icon-teal-transparent-120.png")
 
 
 if _LOGOS_DIR.is_dir():

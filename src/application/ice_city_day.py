@@ -23,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.ice_session_use_cases import STATUS_ACTIVE
+from src.shared.html_template import PUBLIC_ICON_LINKS
 from src.shared.arena_schedule_mode import arena_schedule_mode_sql
 from src.shared.currency import currency_label_ru
 from src.shared.ice_discovery_scope import (
@@ -111,9 +112,7 @@ def render_unknown_city_html(cities: list[dict[str, Any]], *, home: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
 <title>{title}</title>
-<link rel="icon" href="/favicon.ico" type="image/png" />
-<link rel="icon" type="image/png" sizes="120x120" href="/favicon-120.png" />
-<link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />
+{PUBLIC_ICON_LINKS}
 __PUBLIC_FONTS_HEAD__
 <style>body{{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
 margin:0;padding:48px 20px;text-align:center}}h1{{font-weight:600;letter-spacing:-.01em}}a{{color:#0B6E70;font-weight:600}}</style></head>

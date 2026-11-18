@@ -30,7 +30,7 @@ from src.application.ice_city_day import (
     render_unknown_city_html,
     resolve_city_by_ref,
 )
-from src.application.indexnow import SITEMAP_PLACE_WHERE_SQL
+from src.application.indexnow import CATALOG_PLACE_WHERE_SQL
 from src.application.place_card_image import render_place_card, share_display_path
 from src.application.arena_public_use_cases import resolve_merged_arena_id
 from src.application.png_render_cache import render_png_cached
@@ -97,7 +97,7 @@ async def terms_page() -> HTMLResponse:
 @router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def catalog_home_page(
     request: Request,
-    when: str | None = Query(None, description="Период: today|tomorrow|weekend|day"),
+    when: str | None = Query(None, description="Период: today|tomorrow|weekend|day|any"),
     d: str | None = Query(None, description="Дата для when=day: YYYY-MM-DD"),
     session: AsyncSession = Depends(get_session),
 ):
@@ -119,7 +119,7 @@ async def catalog_home_page(
     # TASK-210: варианты с ?when= — noindex, follow, canonical на /
     robots = "index, follow"
     canonical = f"{base}/" if base else "/"
-    if when and when.strip().lower() in ("today", "tomorrow", "weekend", "day"):
+    if when and when.strip().lower() in ("today", "tomorrow", "weekend", "day", "any"):
         robots = "noindex, follow"
 
     view = await load_catalog_home_view(
@@ -211,7 +211,7 @@ _NOT_FOUND_HTML = """<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>Место не найдено — Glideclub</title>
+<title>Место не найдено — Glide</title>
 <meta property="og:title" content="Glide — карта льда" />
 <meta property="og:description" content="Где покататься сегодня: катки, расписание и цены." />
 __PUBLIC_FONTS_HEAD__
@@ -354,6 +354,22 @@ async def place_page(
 
         view["learn"] = learn_block(await load_learn_data(session, city), "arena", arena_id=int(card["id"]))
     settings = Settings()
+    if city_ref == "minsk" and has_public_skating(card.get("venue_type")):
+        from src.application import hockey_event, site_matches, winter_public
+        from src.application.winter_page import winter_city_path
+
+        related = []
+        if settings.seasonal_rinks_enabled:
+            winter = await winter_public.city_summary(session, int(city["id"]), now=datetime.now(timezone.utc))
+            if winter["total"]:
+                related.append((winter_city_path(city_name), "Зимние катки и коробки"))
+        if site_matches.site_enabled(settings):
+            related.append((site_matches.SITE_PATH, "Расписание хоккейных матчей"))
+        if site_matches.scope_of(settings).dinamo:
+            related.append((site_matches.DINAMO_HOME_PATH, "Домашние матчи «Динамо-Минск»"))
+        if hockey_event.enabled(settings):
+            related.append(("/kk", "Игра «Кто кого»"))
+        view["related_links"] = related
     html = render_place_page(
         view,
         canonical_url=canonical,
@@ -377,6 +393,7 @@ async def place_page(
         invite=invite,
         share_src=share_src,
         country=str(city.get("country") or ""),
+        noindex=s is not None or "when" in request.query_params,
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))
@@ -468,9 +485,7 @@ _SITEMAP_SQL = text(f"""
         FROM ice_sessions
         GROUP BY arena_id
     ) sess ON sess.arena_id = a.id
-    WHERE {SITEMAP_PLACE_WHERE_SQL}
-      -- TASK-343: зимние точки из seed идут в sitemap отдельно и только индексируемые (O3), не пачкой
-      AND p.slug !~ '-(korobka|katok)-[0-9]+$'
+    WHERE {CATALOG_PLACE_WHERE_SQL}
     ORDER BY c.sort_order, c.id, a.id
     """)
 
@@ -553,6 +568,10 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
         # учит поисковик не верить lastmod всего файла.
         (f"{base}/trainers", "weekly", None, "0.4"),
     ]
+    from src.application import hockey_event
+
+    if hockey_event.enabled():
+        urls.append((f"{base}/kk", "weekly", None, "0.6"))
     for city_name in order:
         stamp = city_stamp[city_name]
         # Подборка города — ответ на «где покататься в <город>» (TASK-146).
@@ -567,6 +586,8 @@ async def sitemap(request: Request, session: AsyncSession = Depends(get_session)
             urls.append((f"{base}{site_matches.SITE_PATH}", "daily", max(stamp for _p, stamp in match_rows), "0.6"))
         for path, stamp in match_rows:
             urls.append((f"{base}{path}", "daily", stamp, "0.5"))
+    if site_matches.scope_of().dinamo:
+        urls.append((f"{base}{site_matches.DINAMO_HOME_PATH}", "daily", None, "0.6"))
     urls.extend(winter_urls)
     # TASK-350: страницы тренеров — только кто в каталоге (тот же предикат, что у списка в Mini App).
     from src.application import site_trainer_page

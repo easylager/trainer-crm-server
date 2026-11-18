@@ -18,12 +18,14 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.catalog_consumer_events import hmac_actor
+from src.application.winter_import import NEMIGA_SLUG
 from src.application.winter_links import (
     bell_param, bot_link, gone_param, map_allowed, photo_param, route_url, static_map_url, NEAR_PARAM,
 )
 from src.shared import winter_status as ws
 from src.shared.city_locative import city_locative
 from src.shared.config import Settings
+from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
 from src.shared.winter_hours import hours_summary_ru
 from src.shared.winter_text import clean_official_name, phone_links
 
@@ -31,20 +33,53 @@ TOKEN_TTL = timedelta(minutes=30)
 SHARED_PHONE_MIN = 3
 _STATE_RANK = {"flooded": 0, "waiting": 1, "stale": 2, "closed": 3}
 
+# У Немиги есть расписание оператора в основном каталоге. Свежий опубликованный сеанс
+# даёт статус для посетителя, сезонная запись и решения модерации остаются в своём контуре.
+_POINT_FROM = f"""
+FROM seasonal_rinks sr
+JOIN arenas a ON a.id = sr.arena_id AND a.is_active
+JOIN cities c ON c.id = a.city_id
+JOIN seasonal_rink_seasons s ON s.arena_id = a.id AND s.season = :season
+LEFT JOIN arena_profiles p ON p.arena_id = a.id
+LEFT JOIN LATERAL (
+    SELECT max(slot.observed_at) AS checked_at
+    FROM ice_sessions slot
+    WHERE :include_catalog_schedule AND p.slug = :nemiga
+      AND p.status = 'published' AND p.schedule_mode <> 'season_closed'
+      AND {PUBLIC_ARENA_VISIBLE_SQL}
+      AND s.state IN ('waiting', 'stale') AND NOT (s.doubtful OR s.dispute)
+      AND s.state_source <> ALL(:confirmed_sources)
+      AND slot.arena_id = a.id AND slot.status = 'active' AND slot.kind IN ('public_skate', 'open_ice')
+      AND slot.schedule_basis <> 'projected'
+      AND slot.starts_at_utc > :now AND slot.starts_at_utc < :week_end
+      AND (slot.valid_until IS NULL OR slot.valid_until >= :now)
+      AND slot.observed_at BETWEEN :checked_after AND :now
+) catalog ON true
+WHERE s.state <> 'hidden'
+"""
+
 _SELECT = """
 SELECT a.id, a.name, a.address, a.latitude, a.longitude, a.city_id, c.name AS city_name,
        p.slug, p.district, p.catalog_pin, p.opening_hours AS profile_hours, p.phone AS profile_phone,
        p.visitor_prices,
        sr.kind, sr.operator, sr.is_paid, sr.price_note, sr.often_hockey, sr.geocode_precision, sr.same_complex_id,
        s.state, s.state_at, s.state_source, s.quality, s.dispute, s.doubtful, s.hours_text, s.opening_hours,
-       s.pending_confirm, s.flood_floor_at, s.hours_known, s.hours_season, s.season_from, s.season_to, s.phone, s.source_url, s.confidence, s.season
-FROM seasonal_rinks sr
-JOIN arenas a ON a.id = sr.arena_id AND a.is_active
-JOIN cities c ON c.id = a.city_id
-JOIN seasonal_rink_seasons s ON s.arena_id = a.id AND s.season = :season
-LEFT JOIN arena_profiles p ON p.arena_id = a.id
-WHERE s.state <> 'hidden'
-"""
+       s.pending_confirm, s.flood_floor_at, s.hours_known, s.hours_season, s.season_from, s.season_to, s.phone,
+       s.source_url, s.confidence, s.season, catalog.checked_at AS schedule_checked_at
+""" + _POINT_FROM
+
+
+def _point_params(now: datetime, *, include_catalog_schedule: bool = False) -> dict[str, Any]:
+    return {
+        **public_scope_params(),
+        "season": ws.current_season(now),
+        "include_catalog_schedule": include_catalog_schedule,
+        "confirmed_sources": sorted(ws.CONFIRMED_SOURCES),
+        "nemiga": NEMIGA_SLUG,
+        "now": now,
+        "week_end": now + timedelta(days=7),
+        "checked_after": now - timedelta(days=14),
+    }
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -213,11 +248,15 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
         if price:
             is_paid, price_note = True, price
         phone = r.profile_phone or phone
+    schedule_checked_at = r.schedule_checked_at
+    state = "flooded" if schedule_checked_at else r.state
+    state_at = schedule_checked_at or r.state_at
+    checked_by = {"admin": "admin", "parser": "source", "engine": "people"}.get(r.state_source)
     item: dict[str, Any] = {
         "id": int(r.id), "slug": r.slug, "name": display_name(r.name, own), "kind": r.kind, "district": r.district,
         "city_id": int(r.city_id), "city": r.city_name, "address": r.address,
-        "state": r.state, "state_at": r.state_at.isoformat() if r.state_at else None,
-        "checked_by": {"admin": "admin", "parser": "source", "engine": "people"}.get(r.state_source),
+        "state": state, "state_at": state_at.isoformat() if state_at else None,
+        "checked_by": "schedule" if schedule_checked_at else checked_by,
         "quality": r.quality, "dispute": bool(r.dispute), "doubtful": bool(r.doubtful),
         # Загрузку и хоккей показываем только у залитой точки: у незалитой они ничего не значат.
         "crowd": live.get("crowd") if r.state == "flooded" else None,
@@ -225,7 +264,7 @@ def _shape(r: Any, *, live: dict, photos: list, shared_phone: bool, origin: tupl
         "crowd_at": live.get("crowd_at") if r.state == "flooded" else None,
         "hockey_at": live.get("hockey_at") if r.state == "flooded" else None,
         # Люди отметили «залит», админ ещё не подтвердил: публично «ждём заливку» + нейтральная строка.
-        "pending": bool(r.pending_confirm and r.state in ("waiting", "stale") and pending_people > 0),
+        "pending": bool(r.pending_confirm and state in ("waiting", "stale") and pending_people > 0),
         "pending_people": pending_people if r.pending_confirm else 0,
         "distance_km": dist, "pin": r.catalog_pin,
         "is_paid": is_paid, "price_note": price_note,
@@ -270,11 +309,13 @@ async def _shared_phones(session: AsyncSession, season: int) -> set[str]:
 
 async def list_points(
     session: AsyncSession, city_id: int, *, now: datetime, lat: float | None = None, lon: float | None = None,
-    kind: str | None = None, only_flooded: bool = False,
+    kind: str | None = None, only_flooded: bool = False, include_catalog_schedule: bool = False,
 ) -> dict[str, Any]:
     settings = Settings()
     season = ws.current_season(now)
-    rows = (await session.execute(text(_SELECT + " AND a.city_id = :city"), {"season": season, "city": city_id})).all()
+    rows = (await session.execute(text(_SELECT + " AND a.city_id = :city"),
+                                  {**_point_params(now, include_catalog_schedule=include_catalog_schedule),
+                                   "city": city_id})).all()
     rows = [r for r in rows if (kind is None or r.kind == kind)]
     ids = [int(r.id) for r in rows]
     live, photos, shared = await _live_marks(session, ids, now), await _photos(session, ids), await _shared_phones(session, season)
@@ -309,17 +350,16 @@ async def list_points(
 async def get_point(session: AsyncSession, ident: str | int, *, now: datetime, lat: float | None = None,
                     lon: float | None = None) -> dict[str, Any] | None:
     settings = Settings()
-    season = ws.current_season(now)
     if str(ident).isdigit():
         cond, params = "a.id = :ident", {"ident": int(ident)}
     else:
         cond, params = "p.slug = :ident", {"ident": str(ident)}
-    r = (await session.execute(text(_SELECT + f" AND {cond}"), {"season": season, **params})).first()
+    r = (await session.execute(text(_SELECT + f" AND {cond}"), {**_point_params(now), **params})).first()
     if r is None:
         return None
     live = await _live_marks(session, [int(r.id)], now)
     photos = await _photos(session, [int(r.id)])
-    shared = await _shared_phones(session, season)
+    shared = await _shared_phones(session, int(r.season))
     pending = await _pending_people(session, [r], now)
     origin = (lat, lon) if lat is not None and lon is not None else None
     item = _shape(r, live=ws.live_summary(live.get(int(r.id), []), now), photos=photos.get(int(r.id), []),
@@ -367,18 +407,18 @@ def is_indexable(item: dict[str, Any]) -> bool:
     return sum(facts) >= 3
 
 
-async def city_summary(session: AsyncSession, city_id: int, *, now: datetime) -> dict[str, int]:
+async def city_summary(
+    session: AsyncSession, city_id: int, *, now: datetime, include_catalog_schedule: bool = False,
+) -> dict[str, int]:
     """Сколько зимних точек в городе и сколько залито — для плитки «Зимой» на странице города."""
     row = (
         await session.execute(
             text(
-                """SELECT count(*) AS total, count(*) FILTER (WHERE s.state = 'flooded') AS flooded
-                   FROM seasonal_rinks sr
-                   JOIN arenas a ON a.id = sr.arena_id AND a.is_active
-                   JOIN seasonal_rink_seasons s ON s.arena_id = a.id AND s.season = :season
-                   WHERE a.city_id = :city AND s.state <> 'hidden'"""
+                """SELECT count(*) AS total,
+                          count(*) FILTER (WHERE s.state = 'flooded' OR catalog.checked_at IS NOT NULL) AS flooded
+                """ + _POINT_FROM + " AND a.city_id = :city"
             ),
-            {"season": ws.current_season(now), "city": city_id},
+            {**_point_params(now, include_catalog_schedule=include_catalog_schedule), "city": city_id},
         )
     ).one()
     return {"total": int(row.total), "flooded": int(row.flooded)}
@@ -416,12 +456,13 @@ async def lookup_any(session: AsyncSession, ident: str | int) -> dict[str, Any] 
 
 async def sitemap_points(session: AsyncSession, *, now: datetime) -> list[dict[str, Any]]:
     """Индексируемые точки (O3) с городом и датой правки — для sitemap.xml."""
-    season = ws.current_season(now)
     rows = (await session.execute(text(_SELECT + " AND p.status = 'published' AND p.slug IS NOT NULL ORDER BY a.city_id, a.id"),
-                                   {"season": season})).all()
+                                   _point_params(now))).all()
     settings = Settings()
     out: list[dict[str, Any]] = []
     for r in rows:
+        if not has_winter_page(r.slug):
+            continue
         item = _shape(r, live={}, photos=[], shared_phone=False, origin=None, settings=settings, detail=False)
         if is_indexable(item):
             out.append({"slug": r.slug, "city": r.city_name, "city_id": int(r.city_id)})

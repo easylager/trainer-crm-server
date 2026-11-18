@@ -162,11 +162,11 @@ def test_direction_description_counts_and_skips_a_missing_price() -> None:
 
 def test_catalog_title_adds_brand_only_when_it_fits() -> None:
     short = catalog_title("Хоккейное катание", "в Минске")
-    assert short == "Хоккейное катание в Минске · Glideclub"
+    assert short == "Хоккейное катание в Минске · Glide"
     assert len(short) <= TITLE_LIMIT
     long = catalog_title("Уроки катания для тех, кто уже стоит на коньках", "в Санкт-Петербурге")
     assert long == "Уроки катания для тех, кто уже стоит на коньках в Санкт-Петербурге"
-    assert "Glideclub" not in long
+    assert "Glide" not in long
     assert len(long) > TITLE_LIMIT
 
 

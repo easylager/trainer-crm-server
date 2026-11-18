@@ -7,7 +7,7 @@
  */
 'use strict';
 
-const { describe, it } = require('node:test');
+const { beforeEach, describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -16,6 +16,11 @@ const { STATES } = require('./fixtures/trainer-card-states');
 
 const RuText = require('../../static/webapp/ru-text.js');
 const SNAPSHOT = require('./fixtures/trainer-card-flag-off.snapshot.json');
+
+// Фикстуры и снимки карточки используют расписание на 20–26 ноября 2026 года.
+beforeEach((t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 18, 12) });
+});
 
 const slotsRoute = (slots, status = 200) => ({
   match: (c) => c.url.split('?')[0] === '/api/webapp/client/slots',

@@ -49,7 +49,7 @@ def _events(ld: dict) -> list[dict]:
 
 
 @pytest.mark.asyncio
-async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_use_test_db, db_session) -> None:
+async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_use_test_db, db_session, monkeypatch) -> None:
     """«/» — каталог, «/trainers» — лендинг. lastmod места — более поздний из профиля и сеанса."""
     older = await _place(db_session, name=f"Старее {uuid.uuid4().hex[:4]}")
     newer = await _place(db_session, name=f"Новее {uuid.uuid4().hex[:4]}")
@@ -86,6 +86,7 @@ async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_
     hidden_path = f"/p/{city_slug(hidden_name)}/{hidden_slug}"
     await db_session.commit()
 
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
     async with _client() as client:
         sm = await client.get("/sitemap.xml")
     assert sm.status_code == 200
@@ -93,6 +94,7 @@ async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_
     base = Settings().webapp_base_url.rstrip("/")
     assert f"<loc>{base}/</loc>" in xml
     assert f"<loc>{base}/trainers</loc>" in xml
+    assert f"<loc>{base}/kk</loc>" in xml and "/kk?" not in xml
     home_block = _url_block(xml, f"{base}/")
     trainers_block = _url_block(xml, f"{base}/trainers")
     assert "<lastmod>" in home_block
@@ -111,8 +113,10 @@ async def test_sitemap_lists_catalog_home_and_trainers_landing_with_lastmod(app_
     stamp = datetime.strptime(found.group(1), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     assert stamp <= datetime.now(timezone.utc)
     # Повторный запрос даёт ту же дату: lastmod не плавает вместе с часами.
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "0")
     async with _client() as client2:
         xml2 = (await client2.get("/sitemap.xml")).text
+    assert f"<loc>{base}/kk</loc>" not in xml2
     assert _url_block(xml2, older["path"]) == older_block
     city_block = _url_block(xml, f"/c/{city_slug(older['city_name'])}")
     assert "<lastmod>" in city_block

@@ -131,6 +131,10 @@ async def test_share_src_is_tracked_and_noindex_without_changing_canonical(
     async with _client() as client:
         resp = await client.get(place["path"], params={"src": "wa", "garbage": "x"})
         bad = await client.get(place["path"], params={"src": "evil"})
+        variants = [
+            await client.get(place["path"], params=params)
+            for params in ({"when": "any"}, {"s": "unavailable"})
+        ]
         beacon = await post_catalog_page_view(
             client,
             surface="place_page",
@@ -146,6 +150,10 @@ async def test_share_src_is_tracked_and_noindex_without_changing_canonical(
     assert "src=wa" in _meta(resp.text, "og:url")
     assert "src=" not in _meta(resp.text, "og:image")
     assert _meta(bad.text, "robots") == "index, follow"
+    for variant in variants:
+        assert variant.status_code == 200
+        assert _meta(variant.text, "robots") == "noindex, follow"
+        assert re.search(rf'<link rel="canonical" href="[^"]*{re.escape(place["path"])}"', variant.text)
     row = (
         await db_session.execute(
             text(
@@ -920,10 +928,12 @@ async def test_schedule_price_is_the_week_floor_not_the_most_frequent(app_use_te
 
 @pytest.mark.asyncio
 async def test_indexnow_urls_match_sitemap_exactly(app_use_test_db, db_session, monkeypatch) -> None:
-    monkeypatch.setenv("WEBAPP_BASE_URL", "https://glide.example")
     """IndexNow берёт те же URL, что sitemap (в т.ч. прячет draft-места)."""
     from src.application.indexnow import arena_page_urls, fetch_sitemap_urls
 
+    monkeypatch.setenv("WEBAPP_BASE_URL", "https://glide.example")
+    monkeypatch.setenv("SITE_MATCHES_ENABLED", "true")
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "true")
     place = await _place(db_session)
     hidden = await _place(db_session)
     await db_session.execute(
@@ -933,6 +943,8 @@ async def test_indexnow_urls_match_sitemap_exactly(app_use_test_db, db_session, 
     async with _client() as client:
         sm = await client.get("/sitemap.xml")
     locs = re.findall(r"<loc>([^<]*)</loc>", sm.text)
+    assert "https://glide.example/kk" in locs
+    assert "https://glide.example/hockey/dinamo-minsk" in locs
     assert await fetch_sitemap_urls(db_session) == locs
     assert await arena_page_urls(db_session, hidden["arena_id"]) == []
     urls = await arena_page_urls(db_session, place["arena_id"])

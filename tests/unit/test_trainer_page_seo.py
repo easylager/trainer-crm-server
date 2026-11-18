@@ -28,26 +28,26 @@ def _page(**over):
 
 def test_title_adds_brand_only_when_the_whole_line_fits() -> None:
     short = page_title(_page(name="Влад Сак"))
-    assert short == "Влад Сак — тренер по катанию на коньках в Минске · Glideclub"
+    assert short == "Влад Сак — тренер по катанию на коньках в Минске · Glide"
     assert len(short) <= TITLE_LIMIT
     long = page_title(_page())
     assert long == "Александр Гаевский — тренер по катанию на коньках в Минске"
-    assert "Glideclub" not in long
+    assert "Glide" not in long
     assert page_heading(_page()) == long
 
 
 def test_title_names_the_only_direction() -> None:
     fig = page_title(_page(name="Анна Орлова", directions=[{"key": "fig"}]))
-    assert fig == "Анна Орлова — тренер по фигурному катанию в Минске"
+    assert fig == "Анна Орлова — тренер по фигурному катанию в Минске · Glide"
     hock = page_title(_page(name="Олег Жук", directions=[{"key": "hock"}]))
-    assert hock == "Олег Жук — тренер по хоккейному катанию в Минске · Glideclub"
+    assert hock == "Олег Жук — тренер по хоккейному катанию в Минске · Glide"
     spb = page_title(_page(name="Мария Соколова", city_name="Санкт-Петербург/ЛО", directions=[{"key": "fig"}]))
     assert spb == "Мария Соколова — тренер по фигурному катанию в Санкт-Петербурге"
     assert len(hock) <= TITLE_LIMIT
 
 
 def test_title_with_several_directions_or_a_skill_level_stays_general() -> None:
-    general = "Влад Сак — тренер по катанию на коньках в Минске · Glideclub"
+    general = "Влад Сак — тренер по катанию на коньках в Минске · Glide"
     assert page_title(_page(name="Влад Сак", directions=[{"key": "fig"}, {"key": "hock"}])) == general
     assert page_title(_page(name="Влад Сак", directions=[{"key": "zero"}])) == general
     assert page_title(_page(name="Влад Сак", directions=[])) == general
@@ -66,7 +66,7 @@ def test_title_uses_public_city_not_the_internal_region_label() -> None:
     title = page_title(_page(name="Мария Соколова", city_name="Санкт-Петербург/ЛО"))
     assert title == "Мария Соколова — тренер по катанию на коньках в Санкт-Петербурге"
     assert "Санкт-Петербург/ЛО" not in title
-    assert "Glideclub" not in title
+    assert "Glide" not in title
 
 
 def test_description_two_directions_keeps_both_rinks_when_they_fit() -> None:

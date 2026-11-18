@@ -27,6 +27,7 @@ from src.application.arena_public_use_cases import (
     STATUS_ACTIVE,
     _NOT_HOCKEY_CENTER_SQL,
     _OHM_SESSION_SQL,
+    _is_hockey_center,
     city_hockey_center_count,
 )
 from src.application.catalog_home_page import _USER_UPCOMING_SQL, _session_card
@@ -36,7 +37,15 @@ from src.application.city_place_counts import (
     city_place_counts_from_places,
     city_place_inventory_line,
 )
-from src.application.ice_city_day import DEFAULT_TIMEZONE, city_slug, format_price_minor, human_date, plural_ru
+from src.application.ice_city_day import (
+    DEFAULT_TIMEZONE,
+    ICE_CITY_DAY_FROM_SQL,
+    ICE_CITY_DAY_SESSION_WHERE_SQL,
+    city_slug,
+    format_price_minor,
+    human_date,
+    plural_ru,
+)
 from src.application.ice_time_windows import (
     home_default_when_key,
     home_picker_dates,
@@ -95,6 +104,20 @@ _WINDOW_KEYS = ("today", "tomorrow", "weekend")
 # Окна, в которых открывается хаб (``/c/{город}?w=…``, PDEC-026). Остальные ``w`` — список.
 HUB_WINDOW_KEYS = _WINDOW_KEYS
 _SOON_MINUTES = 60
+
+_WEEK_COMPARISON_SQL = text(
+    f"""
+    SELECT DISTINCT ON (a.id)
+           a.id AS arena_id, s.local_date, s.starts_at_local,
+           s.price_adult_minor, s.price_child_minor, s.price_rental_minor, s.currency_code
+    {ICE_CITY_DAY_FROM_SQL}
+    WHERE a.city_id = :city_id AND s.local_date BETWEEN :first_day AND :last_day
+      AND COALESCE(a.venue_type, 'ice') IN ('ice', 'outdoor')
+      AND {_NOT_HOCKEY_CENTER_SQL}
+      {ICE_CITY_DAY_SESSION_WHERE_SQL}
+    ORDER BY a.id, s.starts_at_utc, s.id
+    """
+)
 
 # Сеансы города по окнам, по аренам и по виду (МК / ОХМ) — один запрос.
 # «Все» — все будущие сеансы, как в счёте подборки (city_selection_session_counts): og-описание
@@ -497,6 +520,20 @@ async def load_city_hub_view(
     tz = ZoneInfo(DEFAULT_TIMEZONE)
     local_now = now.astimezone(tz)
     variant = choose_city_variant(places)
+    week_comparison = {}
+    if rink_ribbon and rinks and variant not in (VARIANT_ONE, VARIANT_PHONE):
+        rows = await session.execute(
+            _WEEK_COMPARISON_SQL,
+            {
+                **scope,
+                "city_id": city_id,
+                "now": now,
+                "st": STATUS_ACTIVE,
+                "first_day": picker_dates[0],
+                "last_day": picker_dates[-1],
+            },
+        )
+        week_comparison = {int(row["arena_id"]): row for row in rows.mappings()}
     week_rows: list[dict[str, Any]] = []
     one_rink_place_view: dict[str, Any] | None = None
     nearby: list[dict[str, Any]] = []
@@ -562,15 +599,18 @@ async def load_city_hub_view(
         "hot_ohm": hot_window_key(ohm, now=now),
         "variant": variant,
         "week_rows": week_rows,
+        "week_comparison": week_comparison,
         "one_rink_place_view": one_rink_place_view,
         "nearby": nearby,
         # TASK-347: хоккей города на 7 дней; нет матчей или флаг выключен — None, блоков нет.
         "matches": await _city_matches(session, city_id=city_id, city_name=city_name, now=now),
-        "winter": await _winter_summary(session, city_id, now=now),
+        "winter": await _winter_summary(session, city_id, now=now, include_catalog_schedule=seo_text),
     }
 
 
-async def _winter_summary(session: AsyncSession, city_id: int, *, now: datetime) -> dict[str, int] | None:
+async def _winter_summary(
+    session: AsyncSession, city_id: int, *, now: datetime, include_catalog_schedule: bool = False,
+) -> dict[str, int] | None:
     """Плитка «Зимой» (TASK-343): только при включённом флаге и если в городе есть показываемые точки."""
     from src.shared.config import Settings
 
@@ -578,7 +618,7 @@ async def _winter_summary(session: AsyncSession, city_id: int, *, now: datetime)
         return None
     from src.application import winter_public
 
-    summary = await winter_public.city_summary(session, city_id, now=now)
+    summary = await winter_public.city_summary(session, city_id, now=now, include_catalog_schedule=include_catalog_schedule)
     return summary if summary["total"] > 0 else None
 
 
@@ -651,7 +691,9 @@ def city_hub_document_title(view: Mapping[str, Any]) -> str:
     """
     city_name = format_public_name(str(view["city"]["name"]))
     where = city_locative(str(view["city"]["name"]))
-    brand = "Glideclub"
+    brand = "Glide"
+    if city_slug(city_name) == "minsk" and int(view.get("rink_count") or 0):
+        return f"Катки Минска — массовое катание и расписание | {brand}"
     if where and int((view.get("skate_counts") or {}).get("all") or 0):
         return f"Массовое катание в {where} — расписание катков | {brand}"
     if int(view.get("rink_count") or 0) and where:
@@ -718,7 +760,10 @@ def city_hub_search_description(view: Mapping[str, Any]) -> str:
     sentences: list[str] = []
     if rinks:
         # Одно и то же в любой день: не зависит ни от сеансов сегодня, ни от порядка «по льду сейчас».
-        sentences.append(f"Массовое катание {in_city}: расписание сеансов, цены и адреса")
+        if city_slug(raw_city) == "minsk":
+            sentences.append("Где покататься на коньках в Минске: адреса катков, расписание массового катания и цены")
+        else:
+            sentences.append(f"Массовое катание {in_city}: расписание сеансов, цены и адреса")
         names = [format_public_name(str(p.get("name") or "")) for p in sorted(rinks, key=lambda p: int(p["id"]))[:3]]
         rest = len(rinks) - len(names)
         listed = ", ".join(names)
@@ -744,7 +789,7 @@ def _breadcrumbs(view: Mapping[str, Any], canonical_url: str) -> str:
     from src.application.place_links import breadcrumb_script
 
     name = format_public_name(str(view["city"]["name"]))
-    return breadcrumb_script(canonical_url, [("Glideclub", "/"), (name, canonical_url)])
+    return breadcrumb_script(canonical_url, [("Glide", "/"), (name, canonical_url)])
 
 
 def compose_city_hub_share(
@@ -1250,6 +1295,18 @@ def _b_routes(view: Mapping[str, Any]) -> str:
                 line=_esc(route_row_line(feed)),
             )
         )
+    if slug == "minsk":
+        from src.application import hockey_event
+        from src.application.site_matches import DINAMO_HOME_PATH, scope_of
+
+        if scope_of().dinamo:
+            rows.append(_b_route_row(
+                href=DINAMO_HOME_PATH, icon="ticket", title="Домашние матчи «Динамо-Минск»", line="КХЛ · Минск-Арена",
+            ))
+        if hockey_event.enabled():
+            rows.append(_b_route_row(
+                href="/kk", icon="ticket", title="Игра «Кто кого»", line="Угадай победителя хоккейного матча",
+            ))
     service_n = int(view.get("service_count") or 0)
     if service_n:
         service_places = [p for p in view.get("places") or [] if p.get("in_sharpening")]
@@ -1285,7 +1342,7 @@ def _b_routes(view: Mapping[str, Any]) -> str:
         )
     if not rows:
         return ""
-    return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>')
+    return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>', sec_id="city-sections")
 
 
 def _b_trainers(view: Mapping[str, Any]) -> str:
@@ -1304,6 +1361,52 @@ def _b_city_coach_entry(city_name: str) -> str:
         f'<span class="b-coach__t"><b>{_esc(title)}</b><span>{_esc(t("coach.city_sub"))}</span></span>'
         f'<span class="b-coach__go">{_esc(t("coach.entry_go"))}&nbsp;›</span></a>'
     )
+
+
+def _b_minsk_rink_list(view: Mapping[str, Any], rinks: list[Mapping[str, Any]]) -> str:
+    from src.application.style_b import section
+
+    upcoming = view.get("week_comparison") or {}
+    places = sorted(
+        (rink for rink in rinks if rink.get("slug")),
+        key=lambda rink: (rink["id"] not in upcoming, format_public_name(rink["name"]).casefold()),
+    )
+    if not places:
+        return ""
+    rows = []
+    for rink in places:
+        address = format_street_address(rink["address"])
+        amenities = rink["amenities"]
+        details = [address] if address else []
+        if amenities.get("skate_rental") is True:
+            details.append("Прокат коньков")
+        card = upcoming.get(rink["id"])
+        if _is_hockey_center(rink):
+            details.append("Массового катания нет")
+        elif not card:
+            details.append("На ближайшие 7 дней сеансы не опубликованы")
+        line = _esc(" · ".join(details))
+        if card:
+            clock, day = _session_when(card, today=view["today"])
+            adult, child, rental = (card[key] for key in ("price_adult_minor", "price_child_minor", "price_rental_minor"))
+            prices = [("взрослый", adult), ("детский", child)]
+            if adult is not None and rental is not None:
+                prices.append(("взрослый с прокатом", adult + rental))
+            currency = str(card["currency_code"] or "BYN")
+            price_line = " · ".join(
+                f"{label} {format_price_minor(value, currency)}" for label, value in prices if value is not None
+            )
+            session_line = _esc(f"Ближайший сеанс: {day} в {clock}")
+            line = "<br>".join(part for part in (line, session_line, _esc(price_line)) if part)
+        rows.append(
+            _b_route_row(
+                href=place_path(city_name=str(view["city"]["name"]), slug=rink["slug"]),
+                icon="skate",
+                title=format_public_name(rink["name"]),
+                line=line,
+            )
+        )
+    return section("Катки на ближайшие 7 дней", f'<div class="b-list">{"".join(rows)}</div>', sec_id="rinks")
 
 
 def _b_all_places(view: Mapping[str, Any]) -> str:
@@ -1687,10 +1790,18 @@ def _b_body(
         blocks.append(_b_trainers(view))
         blocks.append(share_block)
         return "".join(blocks)
+    minsk = view["slug"] == "minsk" and bool(rinks)
+    rink_list = _b_minsk_rink_list(view, rinks) if minsk else ""
+    routes = _b_routes(view)
+    sub_html = f"<span data-nosnippet>{_esc(city_hub_topic_line(view))}</span>"
+    if rink_list:
+        sub_html += ' · <a href="#rinks">Список катков</a>'
+        if routes:
+            sub_html += ' · <a href="#city-sections">Все разделы</a>'
     hero = hero_html(
-        title=t("hub.on_ice", city=city_name),
-            title_break="на льду",
-        sub_html=f"<span data-nosnippet>{_esc(city_hub_topic_line(view))}</span>",
+        title="Катки Минска" if minsk else t("hub.on_ice", city=city_name),
+        title_break="" if minsk else "на льду",
+        sub_html=sub_html,
         kicker=_b_today_kicker(view),
         photo_url=photo,
         photo_alt=alt,
@@ -1706,9 +1817,10 @@ def _b_body(
             hero,
             _b_when_switch(view) if int(view["skate_counts"].get("all") or 0) else "",
             _b_upcoming(view),
+            rink_list,
             render_learn_block(view.get("learn")),
             matches_block,
-            _b_routes(view),
+            routes,
             _b_for_you(view),
             empty,
             _b_all_places(view),
