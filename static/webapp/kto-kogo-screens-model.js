@@ -567,7 +567,7 @@
     var has = {};
     (items || []).forEach(function (r) { if (r.title && r.title.id) has[r.title.id] = true; });
     var parts = [];
-    if (has.scarf) parts.push('Шарф — за ход против Динамо на ближайший матч.');
+    if (has.scarf) parts.push('Шарф — за ход против своей команды на её ближайший матч.');
     if (has.cap) parts.push('Кепка — тому, кто в последнем матче лиги не угадал победителя, когда кто-то из друзей угадал. Снимается со следующим матчем.');
     return parts.join(' ');
   }

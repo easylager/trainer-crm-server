@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import secrets
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 
@@ -32,6 +33,7 @@ from src.application.hockey_slices import (
     month_period,
     season_period,
 )
+from src.application.hockey_slices_sql import SCOPE_SQL
 from src.ingestion.hockey_sources import MINSK_TZ
 
 NAME_MAX = 28
@@ -738,19 +740,16 @@ STREAK_MIN = 3
 OPTIMIST_MARGIN = 2
 OPTIMIST_MIN_PICKS = 2
 
-_TITLE_PICKS = text("""
-    SELECT p.player_key, m.id AS match_id, m.starts_at, m.status, m.home_team, p.side, p.points,
+# Матчи — те же, что считает таблица лиги (её набор команд), а не только Динамо.
+_TITLE_PICKS = text(f"""
+    SELECT p.player_key, m.id AS match_id, m.starts_at, m.status, m.home_team, m.away_team, p.side, p.points,
            p.home_score AS pick_home, p.away_score AS pick_away
     FROM hockey_picks AS p
-    JOIN kk_matches AS m ON m.id = p.match_id
+    JOIN game_matches AS m ON m.id = p.match_id
     WHERE p.player_key IN (SELECT player_key FROM hockey_league_members WHERE league_id = :league_id)
       AND m.starts_at >= :since
+      {SCOPE_SQL}
     ORDER BY m.starts_at, m.id
-    """)
-
-_NEXT_MATCH = text("""
-    SELECT id FROM kk_matches WHERE status = 'scheduled' AND starts_at > :now
-    ORDER BY starts_at, id LIMIT 1
     """)
 
 
@@ -769,15 +768,18 @@ def _plural(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
-def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, dict[str, str]]:
+def pick_titles(picks: list[dict], *, fans: Mapping[int, str] | None = None) -> dict[int, dict[str, str]]:
     """Звания участников лиги по их ходам за сезон (чистая функция, ходы — по времени матча).
+
+    ``fans`` — «своя» команда игрока (как у бота: «болею за», иначе клуб, за который чаще всего ходил).
 
     - cap «Кепка позора» — меньше всех очков за последний сыгранный матч лиги, и это промах по победителю
       (меньше ``POINTS_WINNER``); если очки у всех равные — кепки нет. Висит, пока не сыграют следующий матч.
-    - scarf «В чужом шарфе» — ход против Динамо на ближайший матч;
+    - scarf «В чужом шарфе» — ход против своей команды на её ближайший матч, на который есть ход;
+      нет своей команды — нет шарфа;
     - vanga «Ванга» — единственный лидер лиги по точным счетам, от VANGA_MIN точных;
     - streak «Чуйка» — победитель угадан STREAK_MIN+ сыгранных матчей подряд;
-    - optimist «Вечный оптимист» — в среднем ставит Динамо +OPTIMIST_MARGIN и больше.
+    - optimist «Вечный оптимист» — в среднем ставит Динамо +OPTIMIST_MARGIN и больше (только матчи Динамо).
     """
     found: dict[int, dict[str, dict[str, str]]] = {}
 
@@ -795,10 +797,14 @@ def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, di
                     if p["points"] == low:
                         give(p["player_key"], "cap", "Кепка позора", "мимо в последнем матче")
 
-    if next_match_id is not None:
-        for p in picks:
-            if p["match_id"] == next_match_id and p["side"] and p["side"] != _dinamo_side(p["home_team"]):
-                give(p["player_key"], "scarf", "В чужом шарфе")
+    nearest: dict[int, dict] = {}
+    for p in picks:
+        club = (fans or {}).get(p["player_key"])
+        if p["status"] == "scheduled" and club in (p["home_team"], p["away_team"]):
+            nearest.setdefault(p["player_key"], p)
+    for player, p in nearest.items():
+        if p["side"] and (p["home_team"] if p["side"] == "home" else p["away_team"]) != fans[player]:
+            give(player, "scarf", "В чужом шарфе")
 
     exact: dict[int, int] = {}
     for p in scored:
@@ -824,7 +830,7 @@ def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, di
 
     margins: dict[int, list[int]] = {}
     for p in picks:
-        if p.get("pick_home") is None or p.get("pick_away") is None:
+        if p.get("pick_home") is None or p.get("pick_away") is None or DINAMO not in (p["home_team"], p["away_team"]):
             continue
         dinamo_home = _dinamo_side(p["home_team"]) == "home"
         ours, theirs = (p["pick_home"], p["pick_away"]) if dinamo_home else (p["pick_away"], p["pick_home"])
@@ -838,17 +844,27 @@ def pick_titles(picks: list[dict], *, next_match_id: int | None) -> dict[int, di
 
 async def league_titles(session: AsyncSession, *, league_id: int, now: datetime) -> dict[int, dict[str, str]]:
     now = _utc(now)
-    league_start = (
-        await session.execute(text("SELECT starts_at FROM hockey_leagues WHERE id = :id"), {"id": league_id})
-    ).scalar_one()
-    picks = [
-        dict(r._mapping)
-        for r in (await session.execute(_TITLE_PICKS, {"league_id": league_id, "since": league_start})).all()
-    ]
+    league = (
+        await session.execute(
+            text("SELECT starts_at, scope, clubs FROM hockey_leagues WHERE id = :id"), {"id": league_id}
+        )
+    ).one()
+    params = {"league_id": league_id, "since": league.starts_at, **league_scope(league.scope, league.clubs).params}
+    picks = [dict(r._mapping) for r in (await session.execute(_TITLE_PICKS, params)).all()]
     if not picks:
         return {}
-    next_id = (await session.execute(_NEXT_MATCH, {"now": now})).scalar_one_or_none()
-    return pick_titles(picks, next_match_id=next_id)
+    from src.application.hockey_notices import _FAN_CLUB, FAN_WINDOW
+
+    fans_sql = text(f"""
+        SELECT pl.player_key, {_FAN_CLUB} AS club
+        FROM hockey_league_members AS lm
+        JOIN hockey_players AS pl ON pl.player_key = lm.player_key
+        LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key
+        WHERE lm.league_id = :league_id
+        """)
+    params = {"league_id": league_id, "now": now, "fan_since": now - FAN_WINDOW}
+    fans = {r.player_key: r.club for r in (await session.execute(fans_sql, params)).all() if r.club}
+    return pick_titles(picks, fans=fans)
 
 
 _RECENT = object()

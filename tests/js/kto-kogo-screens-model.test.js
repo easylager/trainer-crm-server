@@ -682,7 +682,7 @@ describe('пьедестал лиги', () => {
   });
   it('пояснение к званиям: только о тех, что висят на таблице', () => {
     assert.equal(S.titlesNote([{ title: null }, {}]), '');
-    assert.match(S.titlesNote([{ title: { id: 'scarf' } }]), /^Шарф — за ход против Динамо/);
+    assert.match(S.titlesNote([{ title: { id: 'scarf' } }]), /^Шарф — за ход против своей команды/);
     const both = S.titlesNote([{ title: { id: 'cap' } }, { title: { id: 'scarf' } }]);
     assert.match(both, /Шарф/);
     assert.match(both, /Кепка — тому, кто в последнем матче лиги не угадал победителя/);
