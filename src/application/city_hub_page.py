@@ -652,6 +652,8 @@ def city_hub_document_title(view: Mapping[str, Any]) -> str:
     city_name = format_public_name(str(view["city"]["name"]))
     where = city_locative(str(view["city"]["name"]))
     brand = "Glideclub"
+    if city_slug(city_name) == "minsk" and int(view.get("rink_count") or 0):
+        return f"Катки Минска — массовое катание и расписание | {brand}"
     if where and int((view.get("skate_counts") or {}).get("all") or 0):
         return f"Массовое катание в {where} — расписание катков | {brand}"
     if int(view.get("rink_count") or 0) and where:
@@ -718,7 +720,10 @@ def city_hub_search_description(view: Mapping[str, Any]) -> str:
     sentences: list[str] = []
     if rinks:
         # Одно и то же в любой день: не зависит ни от сеансов сегодня, ни от порядка «по льду сейчас».
-        sentences.append(f"Массовое катание {in_city}: расписание сеансов, цены и адреса")
+        if city_slug(raw_city) == "minsk":
+            sentences.append("Где покататься на коньках в Минске: адреса катков, расписание массового катания и цены")
+        else:
+            sentences.append(f"Массовое катание {in_city}: расписание сеансов, цены и адреса")
         names = [format_public_name(str(p.get("name") or "")) for p in sorted(rinks, key=lambda p: int(p["id"]))[:3]]
         rest = len(rinks) - len(names)
         listed = ", ".join(names)
@@ -1306,6 +1311,40 @@ def _b_city_coach_entry(city_name: str) -> str:
     )
 
 
+def _b_minsk_rink_list(view: Mapping[str, Any], rinks: list[Mapping[str, Any]]) -> str:
+    from src.application.style_b import section
+
+    upcoming = {card["arena_slug"]: card for card in view.get("upcoming") or [] if card.get("arena_slug")}
+    places = sorted(
+        (rink for rink in rinks if rink.get("slug")),
+        key=lambda rink: (rink["slug"] not in upcoming, format_public_name(rink["name"]).casefold()),
+    )
+    if not places:
+        return ""
+    rows = []
+    for rink in places:
+        address = format_street_address(rink["address"])
+        amenities = rink["amenities"]
+        details = [address] if address else []
+        if amenities.get("skate_rental") is True:
+            details.append("Прокат коньков")
+        line = _esc(" · ".join(details))
+        card = upcoming.get(rink["slug"])
+        if card and card.get("price_adult_minor") is not None:
+            price = format_price_minor(int(card["price_adult_minor"]), str(card.get("currency_code") or "BYN"))
+            price_html = f'<span data-nosnippet>Взрослый билет на ближайший сеанс: {_esc(price)}</span>'
+            line = f"{line}<br>{price_html}" if line else price_html
+        rows.append(
+            _b_route_row(
+                href=place_path(city_name=str(view["city"]["name"]), slug=rink["slug"]),
+                icon="skate",
+                title=format_public_name(rink["name"]),
+                line=line,
+            )
+        )
+    return section("Адреса катков", f'<div class="b-list">{"".join(rows)}</div>', sec_id="rinks")
+
+
 def _b_all_places(view: Mapping[str, Any]) -> str:
     from src.application.catalog_icons import icon_svg
 
@@ -1687,10 +1726,15 @@ def _b_body(
         blocks.append(_b_trainers(view))
         blocks.append(share_block)
         return "".join(blocks)
+    minsk = view["slug"] == "minsk" and bool(rinks)
+    rink_list = _b_minsk_rink_list(view, rinks) if minsk else ""
+    sub_html = f"<span data-nosnippet>{_esc(city_hub_topic_line(view))}</span>"
+    if rink_list:
+        sub_html += ' · <a href="#rinks">Список катков</a>'
     hero = hero_html(
-        title=t("hub.on_ice", city=city_name),
-            title_break="на льду",
-        sub_html=f"<span data-nosnippet>{_esc(city_hub_topic_line(view))}</span>",
+        title="Катки Минска" if minsk else t("hub.on_ice", city=city_name),
+        title_break="" if minsk else "на льду",
+        sub_html=sub_html,
         kicker=_b_today_kicker(view),
         photo_url=photo,
         photo_alt=alt,
@@ -1709,6 +1753,7 @@ def _b_body(
             render_learn_block(view.get("learn")),
             matches_block,
             _b_routes(view),
+            rink_list,
             _b_for_you(view),
             empty,
             _b_all_places(view),

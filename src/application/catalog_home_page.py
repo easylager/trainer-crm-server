@@ -1560,7 +1560,8 @@ def _catalog_site_footer(
     from src.application.public_site_footer import render_site_footer_html
 
     elsewhere = _b_elsewhere(cities)
-    context = elsewhere if elsewhere else ""
+    minsk = any(c.get("slug") == "minsk" and c.get("ice_place_count") for c in cities)
+    context = ('<div class="elsewhere"><a href="/c/minsk">Катки Минска</a></div>' if minsk else "") + elsewhere
     return render_site_footer_html(
         trainers_href=trainers_url,
         context_html=context,

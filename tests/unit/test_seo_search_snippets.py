@@ -44,11 +44,11 @@ def test_locative_covers_tricky_names_and_falls_back_to_none() -> None:
 
 
 def test_city_title_matches_the_search_query() -> None:
-    assert city_hub_document_title(_hub()) == "Массовое катание в Минске — расписание катков | Glideclub"
+    assert city_hub_document_title(_hub()) == "Катки Минска — массовое катание и расписание | Glideclub"
 
 
 def test_city_title_without_sessions_keeps_the_sections() -> None:
-    assert city_hub_document_title(_hub(skate_counts={"all": 0})) == "Катки в Минске — массовое катание и расписание | Glideclub"
+    assert city_hub_document_title(_hub(skate_counts={"all": 0})) == "Катки Минска — массовое катание и расписание | Glideclub"
 
 
 def test_catalog_home_snippet_leads_with_mass_skating_keyword() -> None:
@@ -71,7 +71,7 @@ def test_catalog_home_snippet_leads_with_mass_skating_keyword() -> None:
 def test_city_search_description_has_no_session_counts() -> None:
     text = city_hub_search_description(_hub()).replace(" ", " ")
     assert text == (
-        "Массовое катание в Минске: расписание сеансов, цены и адреса. "
+        "Где покататься на коньках в Минске: адреса катков, расписание массового катания и цены. "
         "Чижовка-арена, ТЦ Замок, ТЦ DiaMond city и ещё 2 катка. "
         "Заточка коньков — 3 места."
     )

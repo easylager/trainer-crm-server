@@ -65,9 +65,18 @@ def _ribbon(html: str) -> str:
 @pytest.mark.asyncio
 async def test_minsk_ribbon_is_one_tile_per_rink(app_use_test_db, db_session) -> None:
     cid = await _minsk(db_session)
-    cheap = await _insert_arena(db_session, cid, name="Дешёвый каток")
+    cheap = await _insert_arena(db_session, cid, name="Дешёвый каток", address="ул. Тестовая, 5")
     dear = await _insert_arena(db_session, cid, name="Дорогой каток")
     solo = await _insert_arena(db_session, cid, name="Одиночный каток")
+    quiet = await _insert_arena(db_session, cid, name="Каток без сеансов")
+    shop = await _insert_arena(db_session, cid, name="Магазин коньков")
+    await db_session.execute(text("UPDATE arenas SET venue_type = 'shop' WHERE id = :id"), {"id": shop})
+    await db_session.execute(
+        text("""UPDATE arena_profiles SET amenities = '{"skate_rental": true}' WHERE arena_id = :id"""),
+        {"id": cheap},
+    )
+    profiles = await db_session.execute(text("SELECT arena_id, slug FROM arena_profiles WHERE city_id = :id"), {"id": cid})
+    slugs = {arena_id: slug for arena_id, slug in profiles}
     day = _tomorrow()
     for hh in ("10:00", "12:00", "08:30"):
         await _session(db_session, cheap, day=day, hhmm=hh, minutes=45, adult=700, child=500, rental=300)
@@ -85,6 +94,23 @@ async def test_minsk_ribbon_is_one_tile_per_rink(app_use_test_db, db_session) ->
     assert "8:30" in ribbon  # бейдж — ближайший сеанс катка
     assert "Частые вопросы" not in html and "FAQPage" not in html  # карточку вопросов убрали: спроса нет
 
+    assert re.search(r'<link rel="canonical" href="https?://[^/"]+/c/minsk"', html)
+    assert '<h1 class="b-hero__title">Катки Минска</h1>' in html
+    assert 'href="#rinks">Список катков</a>' in html
+    listing = html.split('id="rinks"', 1)[1].split("</section>", 1)[0]
+    assert "ул. Тестовая, 5 · Прокат коньков" in listing
+    assert "Взрослый билет на ближайший сеанс: 7 BYN</span>" in listing
+    assert listing.count("Взрослый билет на ближайший сеанс:") == 2
+    for rink in (cheap, dear, solo, quiet):
+        assert f'href="/p/minsk/{slugs[rink]}"' in listing
+    assert "?s=" not in listing
+    assert "Магазин коньков" not in listing
+
+    async with _client() as client:
+        home, place = await client.get("/"), await client.get(f"/p/minsk/{slugs[quiet]}")
+    assert 'href="/c/minsk">Катки Минска</a>' in home.text
+    assert 'href="/c/minsk">Все катки Минска</a>' in place.text
+
 
 @pytest.mark.asyncio
 async def test_other_city_page_is_unchanged(app_use_test_db, db_session) -> None:
@@ -97,6 +123,7 @@ async def test_other_city_page_is_unchanged(app_use_test_db, db_session) -> None
     html = await _get(f"/c/{city_slug('Молодечно')}")
     assert "b-seo" not in html and "b-tile__more" not in html
     assert "Частые вопросы" not in html
+    assert 'id="rinks"' not in html
 
 
 @pytest.mark.asyncio

@@ -47,7 +47,7 @@ def test_city_description_is_stable_and_free_of_today_tomorrow() -> None:
     assert quiet == busy, "порядок и текст не зависят от сеансов сегодня"
     lowered = busy.lower()
     assert "сегодня" not in lowered and "завтра" not in lowered
-    assert busy.startswith("Массовое катание в Минске: расписание сеансов, цены и адреса")
+    assert busy.startswith("Где покататься на коньках в Минске: адреса катков, расписание массового катания и цены")
 
 
 @pytest.mark.asyncio

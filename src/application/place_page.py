@@ -1298,7 +1298,10 @@ def _place_hub_footer_links(*, city: str, city_page_url: str | None, public_skat
     from src.shared.city_locative import city_locative
 
     where = city_locative(city)
-    if public_skate:
+    if public_skate and city_slug(city) == "minsk":
+        city_page_url = "/c/minsk"
+        hub = "Все катки Минска"
+    elif public_skate:
         hub = f"Массовое катание в {where}" if where else f"Массовое катание — {format_public_name(city)}"
     else:
         hub = f"Каталог в {where}" if where else f"Каталог — {format_public_name(city)}"

@@ -314,7 +314,7 @@ def test_city_hub_title_names_only_sections_on_the_page() -> None:
         city_hub_document_title(
             {"city": {"name": "Минск"}, "rink_count": 12, "service_count": 14, "ohm_counts": {"all": 19}}
         )
-        == "Катки в Минске — массовое катание и расписание | Glideclub"
+        == "Катки Минска — массовое катание и расписание | Glideclub"
     )
     assert (
         city_hub_document_title(
