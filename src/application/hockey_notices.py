@@ -84,8 +84,10 @@ KIND_BEFORE = "before"  # прежнее «за час»: больше не шл
 # Приоритет внутри дневного бюджета (меньше — важнее).
 PRIORITY = {KIND_MFINAL: 0, KIND_OVERTOOK: 1, KIND_NOMOVE: 2}
 # Короткие коды типов в callback_data (лимит Telegram — 64 байта).
-TYPE_CODES = {"nm": KIND_NOMOVE, "rs": KIND_RESULT, "ot": KIND_OVERTOOK, "mf": KIND_MFINAL}
+TYPE_CODES = {"nm": KIND_NOMOVE, "rs": KIND_RESULT, "ot": KIND_OVERTOOK, "mf": KIND_MFINAL, "li": "lginvite"}
 CODE_OF = {v: k for k, v in TYPE_CODES.items()}
+# Типы со своей колонкой, которых нет в настройках Mini App (``TYPE_COLUMN``): письма лиги и приглашение собрать лигу.
+EXTRA_TYPE_COLUMN = {"league": "notify_league", "lginvite": "notify_lginvite"}
 TYPE_COLUMN = {
     KIND_NOMOVE: "notify_nomove",
     KIND_RESULT: "notify_result",
@@ -97,6 +99,7 @@ TYPE_TITLES = {
     KIND_RESULT: "итоги ходов",
     KIND_OVERTOOK: "«тебя обошли»",
     KIND_MFINAL: "«последний матч месяца»",
+    "lginvite": "приглашения собрать лигу",
 }
 
 NOMOVE_AHEAD = timedelta(hours=3)
@@ -162,6 +165,8 @@ class Notice:
     also: tuple[int, ...] = field(default=())
     # Строка в hockey_notices уже есть (повод ставится событием, не сканом): claim пропускаем.
     preclaimed: bool = False
+    # Фото к сообщению (путь к файлу): текст уходит подписью (sendPhoto). Только у новых поводов (TASK-431).
+    photo: str | None = None
 
     @property
     def match_ids(self) -> tuple[int, ...]:
@@ -277,8 +282,8 @@ async def get_prefs(session: AsyncSession, player_key: int) -> dict:
 
 
 async def set_type(session: AsyncSession, player_key: int, kind: str, on: bool) -> None:
-    """Включить или отключить один тип сообщений. ``kind`` — один из ``TYPE_COLUMN`` или ``league``."""
-    column = "notify_league" if kind == "league" else TYPE_COLUMN[kind]
+    """Включить или отключить один тип сообщений. ``kind`` — один из ``TYPE_COLUMN`` или ``EXTRA_TYPE_COLUMN``."""
+    column = EXTRA_TYPE_COLUMN.get(kind) or TYPE_COLUMN[kind]
     await session.execute(_SET_TYPE, {"player_key": player_key})
     await session.execute(
         text(f"UPDATE hockey_player_prefs SET {column} = :on, updated_at = now() WHERE player_key = :player_key"),
@@ -1546,19 +1551,28 @@ async def _throttle() -> None:
     _last_send = time.monotonic()
 
 
-async def send_via_client_bot_gone(chat_id: int, text_body: str, buttons: list[list[dict]]) -> str:
+async def send_via_client_bot_gone(
+    chat_id: int, text_body: str, buttons: list[list[dict]], *, photo: str | None = None
+) -> str:
     """Тот же отправитель, но «чат не найден» и «аккаунт удалён» отдаёт как ``gone`` (трактуется как блокировка)."""
-    return await send_via_client_bot(chat_id, text_body, buttons, detect_gone=True)
+    return await send_via_client_bot(chat_id, text_body, buttons, detect_gone=True, photo=photo)
 
 
 async def send_via_client_bot(
-    chat_id: int, text_body: str, buttons: list[list[dict]], *, detect_gone: bool = False, bot: Any = None
+    chat_id: int,
+    text_body: str,
+    buttons: list[list[dict]],
+    *,
+    detect_gone: bool = False,
+    bot: Any = None,
+    photo: str | None = None,
 ) -> str:
     """Личное сообщение клиентским ботом: ``ok``, ``blocked`` (запретил писать), ``retry`` (429, сеть, 5xx —
     повторим позже) или ``failed`` (BadRequest и прочее постоянное).
 
     ``bot`` — свой экземпляр у другого цикла (прогрев, TASK-428): общий ``_bot`` закрывает цикл матчей в конце
-    прохода, и чужая отправка в этот момент упала бы на закрытой сессии."""
+    прохода, и чужая отправка в этот момент упала бы на закрытой сессии. ``photo`` — путь к картинке: тогда уходит
+    фото с текстом в подписи (sendPhoto)."""
     from aiogram.exceptions import (
         TelegramBadRequest,
         TelegramForbiddenError,
@@ -1579,7 +1593,14 @@ async def send_via_client_bot(
     for attempt in (1, 2):
         await _throttle()
         try:
-            await bot.send_message(chat_id=int(chat_id), text=text_body, reply_markup=markup)
+            if photo:
+                from aiogram.types import FSInputFile
+
+                await bot.send_photo(
+                    chat_id=int(chat_id), photo=FSInputFile(photo), caption=text_body, reply_markup=markup
+                )
+            else:
+                await bot.send_message(chat_id=int(chat_id), text=text_body, reply_markup=markup)
             return SENT
         except TelegramForbiddenError:
             logger.info("kto-kogo notice to %s: bot blocked", chat_id)

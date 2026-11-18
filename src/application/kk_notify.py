@@ -198,7 +198,11 @@ async def dispatch(
             await session.commit()  # «занято» видно всем до вызова Telegram; блокировка снята
 
         try:
-            outcome = hn._outcome(await send(player_key, notice.text, notice.buttons))
+            photo = getattr(notice, "photo", None)
+            if photo:  # фото с подписью (TASK-431); прочие отправители и подмены в тестах фото не принимают
+                outcome = hn._outcome(await send(player_key, notice.text, notice.buttons, photo=photo))
+            else:
+                outcome = hn._outcome(await send(player_key, notice.text, notice.buttons))
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
             logger.warning("kk_notify %s/%s send failed", kind, notice.match_ids, exc_info=True)
             outcome = hn.FAILED

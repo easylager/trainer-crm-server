@@ -15,6 +15,7 @@
   число месяца (там итог месяца).
 * ``month`` — итог месяца, 1-го числа с 10:00: месяц закрыт, итогов на правке нет, у игрока были засчитанные очки.
 * ``consent`` — вопрос «Присылать?» после первого хода, один раз.
+* ``lginvite`` — пятничное фото-приглашение собрать лигу игрокам без лиги (TASK-431, ``kk_league_invite``).
 
 Паузу «два приглашения подряд без хода в течение суток — на месяц» выставляет ``apply_silence_pause``.
 """
@@ -30,11 +31,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application import hockey_notices as hn
 from src.application import kk_notify_texts as tx
 from src.application.hockey_slices import club_scope, month_period, slice_rows
+from src.application.kk_league_invite import produce_league_invite
 from src.application.kk_notify import Producer, Proposal, match_still_open
 from src.application.kk_notify_gate import (
     KIND_COMEBACK,
     KIND_CONSENT,
     KIND_INVITE,
+    KIND_LEAGUE_INVITE,
     KIND_MONTH,
     KIND_WEEK,
     day_bounds,
@@ -614,6 +617,8 @@ PRODUCERS: dict[str, Producer] = {
     KIND_WEEK: produce_week,
     KIND_INVITE: produce_invite,
     KIND_COMEBACK: produce_comeback,
+    # Пятничное приглашение собрать лигу (TASK-431): свой модуль, свой выключатель KK_LEAGUE_INVITE_ENABLED.
+    KIND_LEAGUE_INVITE: produce_league_invite,
 }
 
 __all__ = [

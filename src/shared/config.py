@@ -441,6 +441,9 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     kk_notify_kinds: str = ""
     # Белый список player_key для пробной отправки, через запятую.
     kk_notify_whitelist: str = ""
+    # Пятничное фото-приглашение «Собери лигу» игрокам без лиги (TASK-431). Выключено, пока владелец не включит
+    # KK_LEAGUE_INVITE_ENABLED=1; поверх — общие флаги KK_NOTIFY_* и вид «lginvite» в KK_NOTIFY_KINDS.
+    kk_league_invite_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # Прогрев разовых посетителей (TASK-428): серия подписчикам катка и одно напоминание «знающим нас». Те же
     # правила, что у игры (kk_notify_gate), и общий с ней бюджет на человека. Всё закрыто по умолчанию.
     warm_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False

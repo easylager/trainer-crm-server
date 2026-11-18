@@ -124,6 +124,7 @@ KIND_COMEBACK = "comeback"  # возврат: 3, 10, 30 дней молчани�
 KIND_WEEK = "week"  # итог недели
 KIND_MONTH = "month"  # итог месяца
 KIND_CONSENT = "consent"  # вопрос о согласии после первого хода
+KIND_LEAGUE_INVITE = "lginvite"  # пятничное фото-приглашение собрать лигу, игрокам без лиги (TASK-431)
 
 
 def register_kind(kind: str, policy: KindPolicy, *, allow_unbudgeted: bool = False) -> None:
@@ -218,7 +219,7 @@ _PREFS = text("""
     SELECT COALESCE(pr.remind, true) AS remind, pr.bot_blocked_at, pr.notify_paused_until, pr.notify_consent,
            COALESCE(pr.notify_nomove, true) AS notify_nomove, COALESCE(pr.notify_result, true) AS notify_result,
            COALESCE(pr.notify_overtook, true) AS notify_overtook, COALESCE(pr.notify_mfinal, true) AS notify_mfinal,
-           COALESCE(pr.notify_league, true) AS notify_league
+           COALESCE(pr.notify_league, true) AS notify_league, COALESCE(pr.notify_lginvite, true) AS notify_lginvite
     FROM (SELECT CAST(:player_key AS BIGINT) AS player_key) AS q
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = q.player_key
     """)
@@ -254,6 +255,11 @@ register_kind(KIND_MONTH, KindPolicy(budgeted=True, weekly=True, new=True, prior
 register_kind(KIND_WEEK, KindPolicy(budgeted=True, weekly=True, new=True, priority=2, needs_consent=True))
 register_kind(KIND_INVITE, KindPolicy(budgeted=True, weekly=True, new=True, priority=3, needs_consent=True))
 register_kind(KIND_COMEBACK, KindPolicy(budgeted=True, weekly=True, new=True, priority=4, needs_consent=True))
+# Приглашение собрать лигу — ниже всех поводов игры (итоги и так вне бюджета); свой выключатель — «Не присылать» под ним.
+register_kind(
+    KIND_LEAGUE_INVITE,
+    KindPolicy(budgeted=True, weekly=True, new=True, priority=5, needs_consent=True, type_column="notify_lginvite"),
+)
 
 
 # Прогрев посетителей (TASK-428): те же правила и тот же бюджет. Приоритет внутри прохода: меньше — важнее.
@@ -452,6 +458,7 @@ __all__ = [
     "FAMILY_KK",
     "FAMILY_WARM",
     "GAME_PRIORITY",
+    "KIND_LEAGUE_INVITE",
     "KIND_WEEKLY_LIMIT",
     "WARM_KINDS",
     "WARM_TODAY_WEEKLY_CAP",
