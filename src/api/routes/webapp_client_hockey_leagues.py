@@ -53,6 +53,7 @@ from src.application.hockey_leagues import (
 from src.application.hockey_league_evening import (
     DayNotPlayed,
     GestureRefused,
+    gestures_enabled,
     league_evening,
     period_marks,
     set_gesture,
@@ -477,6 +478,8 @@ async def put_client_hockey_league_gesture(
         league = await member_league(session, league_id=league_id, player_key=player_key)
     except (LookupError, PermissionError) as exc:
         _raise_league(exc)
+    if not gestures_enabled():
+        raise HTTPException(status_code=404, detail="Жестов в лиге пока нет")
     try:
         await set_gesture(session, league=league, from_key=player_key, to_pid=body.to, day=day, kind=body.kind, now=now)
     except GestureRefused as exc:

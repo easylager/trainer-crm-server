@@ -291,7 +291,8 @@
   var RULE_TABS = [['points', 'Очки'], ['cap', 'Кепка'], ['gestures', 'Жесты']];
 
   function ruleTabs(tab) {
-    return h('div', { class: 'kk-rtabs', role: 'tablist', 'aria-label': 'Правила' }, RULE_TABS.map(function (t) {
+    var tabs = RULE_TABS.filter(function (t) { return t[0] !== 'gestures' || state.gesturesOn; });
+    return h('div', { class: 'kk-rtabs', role: 'tablist', 'aria-label': 'Правила' }, tabs.map(function (t) {
       var on = t[0] === tab;
       return h('button', {
         type: 'button', role: 'tab', class: 'kk-rtab', 'aria-selected': on ? 'true' : 'false', id: 'kk-rtab-' + t[0], 'data-keep': '',

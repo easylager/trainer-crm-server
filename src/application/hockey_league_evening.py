@@ -416,6 +416,13 @@ _PERIOD_GESTURES = text("""
     """)
 
 
+def gestures_enabled() -> bool:
+    """Жесты вечера включены настройкой ``KK_GESTURES_ENABLED`` (по умолчанию выключены)."""
+    from src.shared.config import Settings
+
+    return bool(Settings().kk_gestures_enabled)  # type: ignore[call-arg]
+
+
 async def day_gestures(session: AsyncSession, league_id: int, day: date) -> list[dict]:
     rows = await session.execute(_DAY_GESTURES, {"league_id": league_id, "day": day})
     return [dict(r._mapping) for r in rows.all()]
@@ -463,7 +470,8 @@ async def period_marks(
     pens: dict[int, int] = {}
     sticks: dict[int, int] = {}
     params = {"league_id": league.id, "first": first, "last": last}
-    for r in (await session.execute(_PERIOD_GESTURES, params)).all():
+    rows = (await session.execute(_PERIOD_GESTURES, params)).all() if gestures_enabled() else []
+    for r in rows:
         (pens if r.kind == GESTURE_PEN else sticks)[r.to_key] = r.n
     caps: dict[int, int] = {}
     for cap in (await window_caps(session, league, since=since, until=until, now=now)).values():
@@ -591,14 +599,24 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
     if day not in days:  # не задан или не день лиги (чужая дата, будущий день) — вечер по умолчанию
         day = days[-1] if days else None
     if day is None:
-        return {"day": None, "prev": None, "next": None, "complete": False, "cap": None, "matches": [], "items": []}
+        return {
+            "day": None,
+            "prev": None,
+            "next": None,
+            "complete": False,
+            "gestures_on": gestures_enabled(),
+            "cap": None,
+            "matches": [],
+            "items": [],
+        }
     matches = await day_matches(session, league, day)
     members = await league_members(session, league.id, now=now)
     rows = await day_rows(session, league.id, members, matches)
     prev, nxt = neighbours(days, day)
     cap = cap_of_rows(rows, matches)
     complete = day_complete(matches)
-    gestures = await day_gestures(session, league.id, day)
+    gestures_on = gestures_enabled()
+    gestures = await day_gestures(session, league.id, day) if gestures_on else []
     items = []
     for row in sorted(rows, key=lambda r: _sort_key(r, player_key)):
         mine = row.member.player_key == player_key
@@ -633,7 +651,7 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
                     ),
                     None,
                 ),
-                "can_gesture": complete and not mine,
+                "can_gesture": gestures_on and complete and not mine,
             }
         )
     return {
@@ -641,6 +659,7 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
         "prev": None if prev is None else prev.isoformat(),
         "next": None if nxt is None else nxt.isoformat(),
         "complete": complete,
+        "gestures_on": gestures_on,
         # Кепка дня: решилась ли, разыгрывалась ли (хватило ли людей) и сколько ходов нужно, чтобы быть в споре.
         "cap": {
             "decided": cap.decided,
@@ -663,6 +682,7 @@ __all__ = [
     "GestureRefused",
     "PeriodMarks",
     "day_gestures",
+    "gestures_enabled",
     "period_marks",
     "set_gesture",
     "CAP_MIN_CONTENDERS",

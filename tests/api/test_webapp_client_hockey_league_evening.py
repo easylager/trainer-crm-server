@@ -123,7 +123,8 @@ async def _pid(db, key: int) -> str:
 
 
 @pytest.mark.asyncio
-async def test_gestures_one_per_pair_per_day_change_and_remove(app_use_test_db, db_session) -> None:
+async def test_gestures_one_per_pair_per_day_change_and_remove(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("KK_GESTURES_ENABLED", "1")
     db = db_session
     league_id = await _league(db)
     played = datetime.now(timezone.utc) - timedelta(days=3)
@@ -175,7 +176,8 @@ async def test_gestures_one_per_pair_per_day_change_and_remove(app_use_test_db, 
 
 
 @pytest.mark.asyncio
-async def test_gestures_only_after_the_day_is_played(app_use_test_db, db_session) -> None:
+async def test_gestures_only_after_the_day_is_played(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("KK_GESTURES_ENABLED", "1")
     db = db_session
     league_id = await _league(db)
     now = datetime.now(timezone.utc)
@@ -196,3 +198,31 @@ async def test_gestures_only_after_the_day_is_played(app_use_test_db, db_session
                 json={"to": sasha, "kind": "pen"},
             )
             assert r.status_code == 409  # не день лиги
+
+
+@pytest.mark.asyncio
+async def test_gestures_off_by_default_hide_everywhere(app_use_test_db, db_session, monkeypatch) -> None:
+    """Владелец убрал жесты из релиза 19.11: без KK_GESTURES_ENABLED их нет ни в вечере, ни в таблице, ни в API."""
+    monkeypatch.delenv("KK_GESTURES_ENABLED", raising=False)
+    db = db_session
+    league_id = await _league(db)
+    m = await _match(db, datetime.now(timezone.utc) - timedelta(days=3))
+    for key, pts in ((ME, 50), (ANYA, 20), (SASHA, 0)):
+        await _pick(db, key, m, "home", pts)
+    await db.commit()
+    sasha = await _pid(db, SASHA)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with as_player(ME):
+            monkeypatch.setenv("KK_GESTURES_ENABLED", "1")
+            ev = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}/evening")).json()
+            url = f"/api/webapp/client/hockey/leagues/{league_id}/evening/{ev['day']}/gesture"
+            assert (await client.put(url, json={"to": sasha, "kind": "pen"})).status_code == 200
+            monkeypatch.delenv("KK_GESTURES_ENABLED")
+
+            ev = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}/evening")).json()
+            assert ev["gestures_on"] is False
+            assert not any(r["can_gesture"] or r["gestures"] or r["my_gesture"] for r in ev["items"])
+            assert (await client.put(url, json={"to": sasha, "kind": "stick"})).status_code == 404
+            table = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}")).json()
+            saved = next(x for x in table["items"] if x["display_name"] == "Саша")
+            assert saved["penalty_minutes"] == 0 and saved["caps"] == 1

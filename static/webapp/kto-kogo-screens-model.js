@@ -1077,6 +1077,7 @@
   function eveningFoot(ev) {
     var cap = ev && ev.cap;
     if (cap && cap.decided && !cap.in_play) return 'Кепку в этот вечер не разыграли: в споре меньше ' + (FEW_WORD[cap.min_players] || cap.min_players) + '.';
+    if (!(ev && ev.gestures_on)) return 'Звезда — лучшему за вечер, кепка дня — худшему. Носят до следующего вечера.';
     return 'Кепку даёт игра, стук и скамейку — друзья. Всё держится до следующего вечера.';
   }
 

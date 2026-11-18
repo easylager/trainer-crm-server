@@ -94,7 +94,8 @@ describe('строка человека', () => {
     const few = Object.assign({}, EV, { cap: { decided: true, in_play: false, min_players: 3 } });
     assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, few), '');
     assert.equal(S.eveningFoot(few), 'Кепку в этот вечер не разыграли: в споре меньше троих.');
-    assert.equal(S.eveningFoot(EV), 'Кепку даёт игра, стук и скамейку — друзья. Всё держится до следующего вечера.');
+    assert.equal(S.eveningFoot(EV), 'Звезда — лучшему за вечер, кепка дня — худшему. Носят до следующего вечера.');
+    assert.equal(S.eveningFoot(Object.assign({}, EV, { gestures_on: true })), 'Кепку даёт игра, стук и скамейку — друзья. Всё держится до следующего вечера.');
   });
   it('итог вечера: звезда и кепка, имена без склонения; вечер не сыгран — итога нет', () => {
     const items = [
@@ -175,10 +176,15 @@ describe('шторка правил: разделы', () => {
     assert.equal(root.attrs['aria-label'], 'Как считаются очки?');
     const tabs = root.children[0];
     assert.equal(tabs.className, 'kk-rtabs');
-    assert.deepEqual(tabs.children.map((t) => [t.textContent, t.attrs['aria-selected']]), [['Очки', 'false'], ['Кепка', 'true'], ['Жесты', 'false']]);
+    // Жесты выключены (KK_GESTURES_ENABLED) — раздела «Жесты» нет.
+    assert.deepEqual(tabs.children.map((t) => [t.textContent, t.attrs['aria-selected']]), [['Очки', 'false'], ['Кепка', 'true']]);
     assert.match(text(root), /Кепка дня достаётся тому, кто хуже всех угадывал в этот день/);
     assert.match(text(root), /3 за ход — кепка/);
-    tabs.children[2].listeners.click();
+    state.gesturesOn = true;
+    root = K.hubCards.pointsSheet();
+    const on = root.children[0].children;
+    assert.deepEqual(on.map((t) => t.textContent), ['Очки', 'Кепка', 'Жесты']);
+    on[2].listeners.click();
     root = K.hubCards.pointsSheet();
     assert.match(text(root), /Стук клюшкой\./);
   });

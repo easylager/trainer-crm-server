@@ -523,6 +523,8 @@
     return K.api('GET', '/client/hockey/leagues/' + a.id + '/evening' + (a.day ? '?day=' + encodeURIComponent(a.day) : '')).then(function (d) {
       state.evenings[key] = d;
       if (d && d.day) state.evenings[a.id + '|' + d.day] = d;
+      // Жесты включает сервер (KK_GESTURES_ENABLED): выключены — нет и раздела «Жесты» в правилах.
+      state.gesturesOn = !!(d && d.gestures_on);
     });
   }
 
