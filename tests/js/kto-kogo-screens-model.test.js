@@ -610,9 +610,10 @@ describe('шторка «Как считаются очки»', () => {
     assert.equal(btn.getAttribute('aria-expanded'), 'false');
     assert.equal(btn.getAttribute('aria-controls'), panel.getAttribute('id'));
     assert.equal(panel.hidden, true);
-    // Блок стоит между карточкой «Козырь» и нижней подписью.
+    // Сверху разделы «Очки · Кепка · Жесты» (TASK-431); блок стоит между карточкой «Козырь» и нижней подписью.
     const kids = root.children.map((c) => c.className);
-    assert.deepEqual(kids.slice(1), ['kk-rl__trump', 'kk-rl__tables', 'kk-sub']);
+    assert.equal(kids[0], 'kk-rtabs');
+    assert.deepEqual(kids.slice(2), ['kk-rl__trump', 'kk-rl__tables', 'kk-sub']);
     assert.equal(panel.children.length, 4);
     btn.click();
     assert.equal(btn.getAttribute('aria-expanded'), 'true');

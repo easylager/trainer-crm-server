@@ -918,6 +918,142 @@
     return leagueSub(l) + ' · ' + members + NBSP + Base.plural(members, 'человек', 'человека', 'человек');
   }
 
+  // ---------- вечер лиги (TASK-431, макет design/kto-kogo-league-evening/League.dc.html) ----------
+
+  /** Жесты вечера: ключ — как у сервера, подпись — на кнопке. */
+  var GESTURES = [['stick', 'Стук клюшкой'], ['pen', '2' + NBSP + 'минуты']];
+
+  /** «Вечер 18 ноября» по игровому дню '2026-11-18' (день уже минский, часовой пояс не нужен). */
+  function eveningTitle(day) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || '');
+    return m ? 'Вечер ' + Number(m[3]) + NBSP + Base.MONTHS[Number(m[2]) - 1] : 'Вечер';
+  }
+
+  function eveningMatchTitle(m) {
+    return clubShort(m.home) + ' — ' + clubShort(m.away);
+  }
+
+  /** Счёт матча дня; несыгранный — «идёт» или время начала. Ходов и очков тут нет. */
+  function eveningScore(m) {
+    if (m.status === 'final' && m.home_score != null && m.away_score != null) return m.home_score + ':' + m.away_score;
+    return m.started ? 'идёт' : timeOnly(m.starts_at);
+  }
+
+  /** Подзаголовок дня: «Динамо — СКА 3:2 · ещё 3 матча». */
+  function eveningSummary(ev) {
+    var ms = (ev && ev.matches) || [];
+    if (!ms.length) return '';
+    var head = eveningMatchTitle(ms[0]) + ' ' + eveningScore(ms[0]);
+    var rest = ms.length - 1;
+    return rest ? head + ' · ещё ' + rest + NBSP + Base.plural(rest, 'матч', 'матча', 'матчей') : head;
+  }
+
+  /** «3 из 4»: в плюсе из всех матчей дня. */
+  function eveningMoves(r, ev) {
+    return (r.hits || 0) + ' из ' + (((ev && ev.matches) || []).length);
+  }
+
+  /** Очки за день — числом только когда в дне есть сыгранный матч: до матча очков не показываем. */
+  function eveningPoints(r, ev) {
+    var played = ((ev && ev.matches) || []).some(function (m) { return m.status === 'final'; });
+    return played ? '+' + (r.points || 0) : '';
+  }
+
+  function joinNames(names) {
+    if (names.length < 2) return names[0] || '';
+    return names.slice(0, -1).join(', ') + ' и ' + names[names.length - 1];
+  }
+
+  /**
+   * Кто что дал строке: «Аня и Саша постучали клюшкой», «Ты и Саша дали 2 минуты».
+   * Пола игрока мы не знаем, поэтому одного человека пишем без глагола: «Аня — стук клюшкой».
+   */
+  function gestureNote(r) {
+    var by = { stick: [], pen: [] };
+    (r.gestures || []).forEach(function (g) {
+      if (!by[g.kind]) return;
+      if (g.from_me) by[g.kind].unshift('Ты');
+      else by[g.kind].push(g.from);
+    });
+    var parts = [];
+    if (by.stick.length) parts.push(by.stick.length > 1 ? joinNames(by.stick) + ' постучали клюшкой' : by.stick[0] + ' — стук клюшкой');
+    if (by.pen.length) parts.push(by.pen.length > 1 ? joinNames(by.pen) + ' дали 2' + NBSP + 'минуты' : by.pen[0] + ' — 2' + NBSP + 'минуты');
+    return parts.join(' · ');
+  }
+
+  /** Почему без кепки: шарф дня или мало ходов для спора (только когда кепку разыгрывали). */
+  function eveningReason(r, ev) {
+    if (r.scarf) return 'Болеет за ' + clubShort(r.scarf.club) + ', ход — за ' + clubShort(r.scarf.picked);
+    var cap = ev && ev.cap;
+    if (!cap || !cap.in_play || r.in_cap_race) return '';
+    var n = ((ev && ev.matches) || []).length;
+    if (!r.moves) return 'Без ходов — не в споре за кепку';
+    return Base.plural(r.moves, 'Ход', 'Хода', 'Ходов') + ' ' + r.moves + ' из ' + n + ' — не в споре за кепку';
+  }
+
+  /** Строки под именем в вечере: жесты и причина. Пусто — строк нет. */
+  function eveningNotes(r, ev) {
+    return [gestureNote(r), eveningReason(r, ev)].filter(Boolean);
+  }
+
+  var FEW_WORD = { 2: 'двоих', 3: 'троих', 4: 'четверых', 5: 'пятерых' };
+
+  /** Строка под карточкой вечера. Кепку не разыграли (в споре меньше троих) — так и пишем. */
+  function eveningFoot(ev) {
+    var cap = ev && ev.cap;
+    if (cap && cap.decided && !cap.in_play) return 'Кепку в этот вечер не разыграли: в споре меньше ' + (FEW_WORD[cap.min_players] || cap.min_players) + '.';
+    return 'Кепка дня — тому, кто хуже всех угадывал в этот вечер.';
+  }
+
+  /** Тап по жесту: тот же жест снимает его, другой — меняет. */
+  function gestureNext(current, kind) {
+    return current === kind ? null : kind;
+  }
+
+  /** Строка таблицы месяца: «12 мин штрафа · 3 кепки · 9 стуков»; нулевые части не показываем. */
+  function leagueMarks(r) {
+    var parts = [];
+    if (r && r.penalty_minutes) parts.push(r.penalty_minutes + NBSP + 'мин штрафа');
+    if (r && r.caps) parts.push(r.caps + NBSP + Base.plural(r.caps, 'кепка', 'кепки', 'кепок'));
+    if (r && r.sticks) parts.push(r.sticks + NBSP + Base.plural(r.sticks, 'стук', 'стука', 'стуков'));
+    return parts.join(' · ');
+  }
+
+  /** Шторка правил, раздел «Кепка» (макет Rules.dc.html). */
+  function capRules() {
+    return {
+      lead: 'Кепка дня достаётся тому, кто хуже всех угадывал в этот день',
+      items: [
+        { k: 'Как сравниваем.', t: 'Очки за день делим на число ходов — у кого меньше в среднем за ход, тот и в кепке.' },
+        { k: 'Кто в споре.', t: 'Только те, кто сходил хотя бы на половину матчей дня. Пропустил — кепки нет, но и очков тоже.' },
+        { k: 'Когда.', t: 'Решается после последнего матча дня. Носишь до следующего игрового дня лиги.' },
+        { k: 'Ничья.', t: 'Хуже всех сразу двое — кепка у обоих. Все угадали одинаково — кепки нет.' },
+        { k: 'Сколько нужно.', t: 'Кепка разыгрывается, если в этот день сходили хотя бы трое.' },
+      ],
+      exampleTitle: 'Пример: вечер из 4 матчей',
+      example: [
+        { name: 'Аня', moves: '4 хода · +80', value: '20 за ход' },
+        { name: 'Саша', moves: '3 хода · +50', value: '17 за ход' },
+        { name: 'Олег', moves: '3 хода · +10', value: '3 за ход — кепка' },
+        { name: 'Дима', moves: '1 ход · +20', value: 'не в споре', out: true },
+      ],
+      foot: 'Кепки за месяц видны в таблице лиги: «3 кепки». 1-го числа — с нуля, вместе с короной.',
+    };
+  }
+
+  /** Шторка правил, раздел «Жесты». Черновик агента: в макете раздела нет, текст утверждает владелец. */
+  function gestureRules() {
+    return {
+      lead: 'Жест — шутка вечера: другу, когда все матчи дня сыграны',
+      items: [
+        { k: 'Стук клюшкой.', t: 'Хорошо сходил — уважаем.' },
+        { k: '2 минуты.', t: 'Удаление на две минуты: за промах, за чужой шарф или просто так.' },
+        { k: 'Сколько.', t: 'Один жест от тебя каждому другу за вечер. Передумаешь — смени или сними. Себе нельзя.' },
+        { k: 'Где видно.', t: 'В строке вечера и в таблице лиги: «4 мин штрафа». Сообщений в чат за жесты нет.' },
+      ],
+    };
+  }
+
   function inviteText(name, l) {
     var what = l && l.scope !== 'all' ? ': ' + scopeText(l.scope, l.clubs) : l ? '' : ': Динамо-Минск';
     return 'Угадываем хоккейные матчи' + what + ' — лига «' + name + '». Тапни за команду, посмотрим, кто кого.';
@@ -1516,6 +1652,21 @@
     titleMark: titleMark,
     titlesNote: titlesNote,
     TRIBUNE_MIN: TRIBUNE_MIN,
+    GESTURES: GESTURES,
+    eveningTitle: eveningTitle,
+    eveningMatchTitle: eveningMatchTitle,
+    eveningScore: eveningScore,
+    eveningSummary: eveningSummary,
+    eveningMoves: eveningMoves,
+    eveningPoints: eveningPoints,
+    gestureNote: gestureNote,
+    eveningReason: eveningReason,
+    eveningNotes: eveningNotes,
+    eveningFoot: eveningFoot,
+    gestureNext: gestureNext,
+    leagueMarks: leagueMarks,
+    capRules: capRules,
+    gestureRules: gestureRules,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

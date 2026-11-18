@@ -287,16 +287,70 @@
     return h('div', { class: 'kk-rl__tables' }, [btn, panel]);
   }
 
-  function pointsSheet() {
+  // Разделы шторки (TASK-431): очки, кепка дня, жесты вечера лиги. Раздел живёт в state.sheet.tab.
+  var RULE_TABS = [['points', 'Очки'], ['cap', 'Кепка'], ['gestures', 'Жесты']];
+
+  function ruleTabs(tab) {
+    return h('div', { class: 'kk-rtabs', role: 'tablist', 'aria-label': 'Правила' }, RULE_TABS.map(function (t) {
+      var on = t[0] === tab;
+      return h('button', {
+        type: 'button', role: 'tab', class: 'kk-rtab', 'aria-selected': on ? 'true' : 'false', id: 'kk-rtab-' + t[0], 'data-keep': '',
+        onclick: function () { if (state.sheet) { state.sheet.tab = t[0]; K.render(); } },
+        text: t[1],
+      });
+    }));
+  }
+
+  /** Раздел «Кепка» (макет Rules.dc.html) и «Жесты»: жирное начало абзаца и текст. */
+  function ruleList(items) {
+    return h('div', { class: 'kk-capr__list' }, items.map(function (x) {
+      return h('p', { class: 'kk-capr__p' }, [h('b', { text: x.k }), ' ' + x.t]);
+    }));
+  }
+
+  function capSection() {
+    var r = S.capRules();
+    return [
+      h('div', { class: 'kk-capr__hero' }, [
+        h('span', { class: 'kk-capr__ic', 'aria-hidden': 'true' }, [K.capSvg ? K.capSvg(40, 28, '#0d1424', '#ffffff') : null]),
+        h('span', { class: 'kk-capr__lead', text: r.lead }),
+      ]),
+      ruleList(r.items),
+      h('div', { class: 'kk-capr__ex' }, [
+        h('span', { class: 'kk-capr__exh', text: r.exampleTitle }),
+        h('div', { class: 'kk-capr__grid' }, r.example.reduce(function (acc, x) {
+          return acc.concat([
+            h('span', { class: 'kk-capr__n' + (x.out ? ' is-out' : ''), text: x.name }),
+            h('span', { class: 'kk-capr__m', text: x.moves }),
+            h('span', { class: 'kk-capr__v' + (x.out ? ' is-out' : ''), text: x.value }),
+          ]);
+        }, [])),
+      ]),
+      h('span', { class: 'kk-sub kk-capr__foot', text: r.foot }),
+    ];
+  }
+
+  function gestureSection() {
+    var r = S.gestureRules();
+    return [h('span', { class: 'kk-capr__lead', text: r.lead }), ruleList(r.items)];
+  }
+
+  function pointsSection() {
     var r = S.pointsRules();
-    return K.sheet('Как считаются очки', null, [
+    return [
       h('div', { class: 'kk-rl' }, r.rows.map(function (x) {
         return h('div', { class: 'kk-rl__r' }, [h('span', { class: 'kk-rl__v' + (x.gold ? ' is-gold' : ''), text: x.value }), h('span', { class: 'kk-rl__t', text: x.text })]);
       })),
       h('div', { class: 'kk-rl__trump' }, [h('b', { text: r.trumpTitle }), h('span', { text: r.trumpText })]),
       tablesBlock(r),
       h('span', { class: 'kk-sub', text: r.foot }),
-    ], 'kk-sheet--pts');
+    ];
+  }
+
+  function pointsSheet() {
+    var tab = (state.sheet && state.sheet.tab) || 'points';
+    var body = tab === 'cap' ? capSection() : tab === 'gestures' ? gestureSection() : pointsSection();
+    return K.sheet('Как считаются очки?', null, [ruleTabs(tab)].concat(body), 'kk-sheet--pts');
   }
 
   K.hubCards = { hero: heroCard, pending: pendingSection, day: daySection, pointsLink: pointsLink, pointsSheet: pointsSheet };

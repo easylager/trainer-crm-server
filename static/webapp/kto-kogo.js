@@ -42,6 +42,7 @@
     clubs: null,
     leagues: null,
     leagueTables: {}, // 'id|month' | 'id|all'
+    evenings: {}, // 'id|день' — «Вечер» лиги; 'id|' — вечер по умолчанию (TASK-431)
     tables: {}, // 'клуб|период'
     created: null,
     joinCode: '',
