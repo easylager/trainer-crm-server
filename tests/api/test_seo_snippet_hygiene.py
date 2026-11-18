@@ -80,10 +80,10 @@ async def test_city_page_marks_live_blocks_and_separates_day_chips(app_use_test_
     nav = html[html.index('class="b-when vt-when-strip"'):]
     nav = nav[: nav.index("</nav>")]
     assert "СегодняЗавтра" not in _text(nav)
-    # Бренд один: «Glideclub».
+    # Бренд один: «Glide».
     title = re.search(r"<title>(.*?)</title>", html, re.S).group(1)
-    assert title.endswith("| Glideclub")
-    assert '<meta property="og:site_name" content="Glideclub" />' in html
+    assert title.endswith("| Glide")
+    assert '<meta property="og:site_name" content="Glide" />' in html
 
 
 @pytest.mark.asyncio

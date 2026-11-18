@@ -1140,8 +1140,8 @@ def _json_ld(view: Mapping[str, Any], *, canonical_url: str) -> str:
     graph = [
         {
             "@type": "WebSite",
-            "name": "Glideclub",
-            "alternateName": ["Glide", "glideclub.by"],
+            "name": "Glide",
+            "alternateName": "glideclub.by",
             "url": canonical_url,
             "description": "Массовое катание: расписание катков по Беларуси",
         },
@@ -1398,7 +1398,7 @@ def _b_more_cities(rest: list[Mapping[str, Any]]) -> str:
     )
 
 
-_SERP_BRAND = "Glideclub"
+_SERP_BRAND = "Glide"
 
 
 def catalog_home_document_title() -> str:

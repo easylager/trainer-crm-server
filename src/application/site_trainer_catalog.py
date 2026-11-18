@@ -683,9 +683,9 @@ def _direction_price_clause(data: Mapping[str, Any], direction: Direction) -> st
 
 
 def catalog_title(h1: str, in_city: str) -> str:
-    """« · Glideclub» в конце, только если весь title не длиннее 60 знаков."""
+    """« · Glide» в конце, только если весь title не длиннее 60 знаков."""
     base = f"{h1} {in_city}".replace("\u00a0", " ").strip()
-    branded = f"{base} · Glideclub"
+    branded = f"{base} · Glide"
     return branded if len(branded) <= TITLE_LIMIT else base
 
 
@@ -1172,7 +1172,7 @@ def render_catalog_page(
         body += _DIALOG_SCRIPT
 
     crumbs = [
-        ("Glideclub", f"{base}/"),
+        ("Glide", f"{base}/"),
         (public_city, f"{base}{city_href}"),
         ("Тренеры", f"{base}{catalog_path(city_name)}"),
     ]

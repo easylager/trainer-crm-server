@@ -300,7 +300,7 @@ def _row(m: Mapping[str, Any]) -> str:
 
 
 def list_title(data: Mapping[str, Any]) -> str:
-    return "Хоккей в Беларуси — матчи Экстралиги и Динамо-Минск | Glideclub"
+    return "Хоккей в Беларуси — матчи Экстралиги и Динамо-Минск | Glide"
 
 
 def list_description() -> str:
@@ -441,10 +441,10 @@ def match_description(data: Mapping[str, Any]) -> str:
     where = ", ".join(bit for bit in (data["arena_name"], data["city"]) if bit)
     when = f"{m['day'].day} {_months(m['day'].month)} в {m['time']}"
     if data["gone"]:
-        return f"Матч {m['title']} ({league}) перенесён или отменён — уточните на hockey.by. Время, арена и билеты на странице Glideclub."
+        return f"Матч {m['title']} ({league}) перенесён или отменён — уточните на hockey.by. Время, арена и билеты на странице Glide."
     if m["phase"] == PHASE_AFTER:
         goals = len(data["goals"])
-        tail = f" Голы по минутам: {goals}." if goals else " Протокол и ближайшие матчи — на Glideclub."
+        tail = f" Голы по минутам: {goals}." if goals else " Протокол и ближайшие матчи — на Glide."
         return _fit_text(f"{m['title']}: итог матча {league} {score_text(m['result'])}, {m['day'].day} {_months(m['day'].month)}, {where}.{tail}")
     if data.get("away_trip"):
         base = f"Выездной матч {league} {m['title']} {when}."
@@ -873,7 +873,7 @@ def render_match_page(
         city_id=city_id,
         city_slug_value=city_slug(data["city"]) if data.get("city") else "",
         surface=MATCH_SURFACE,
-        breadcrumbs=[("Glideclub", f"{base_url}/"), ("Хоккей", f"{base_url}{SITE_PATH}"), (m["title"], canonical)],
+        breadcrumbs=[("Glide", f"{base_url}/"), ("Хоккей", f"{base_url}{SITE_PATH}"), (m["title"], canonical)],
         canonical_for_crumbs=canonical,
     )
 

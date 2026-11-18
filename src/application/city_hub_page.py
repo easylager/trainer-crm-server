@@ -652,7 +652,7 @@ def city_hub_document_title(view: Mapping[str, Any]) -> str:
     """
     city_name = format_public_name(str(view["city"]["name"]))
     where = city_locative(str(view["city"]["name"]))
-    brand = "Glideclub"
+    brand = "Glide"
     if city_slug(city_name) == "minsk" and int(view.get("rink_count") or 0):
         return f"Катки Минска — массовое катание и расписание | {brand}"
     if where and int((view.get("skate_counts") or {}).get("all") or 0):
@@ -750,7 +750,7 @@ def _breadcrumbs(view: Mapping[str, Any], canonical_url: str) -> str:
     from src.application.place_links import breadcrumb_script
 
     name = format_public_name(str(view["city"]["name"]))
-    return breadcrumb_script(canonical_url, [("Glideclub", "/"), (name, canonical_url)])
+    return breadcrumb_script(canonical_url, [("Glide", "/"), (name, canonical_url)])
 
 
 def compose_city_hub_share(

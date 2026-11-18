@@ -13,6 +13,8 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from src.shared.html_template import fill_placeholders
+
 _PAGE_PATH = Path(__file__).resolve().parent.parent.parent / "static" / "landing" / "404.html"
 _NO_HTML_PREFIXES = ("/api/", "/webapp/", "/static/")
 # Старые адреса городов без префикса: /mozyr -> /c/mozyr (в поиске они ещё лежат с прошлых обходов).
@@ -23,7 +25,7 @@ _page_cache: str | None = None
 def _page() -> str:
     global _page_cache
     if _page_cache is None:
-        _page_cache = _PAGE_PATH.read_text(encoding="utf-8")
+        _page_cache = fill_placeholders(_PAGE_PATH.read_text(encoding="utf-8"), {})
     return _page_cache
 
 

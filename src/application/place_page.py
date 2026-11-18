@@ -702,9 +702,9 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
         # официального имени арены и сниппет тянет short_description из «О катке».
         if city:
             if _seo_rink_title(view, city):
-                return f"{name}, {city} — каток, расписание массового катания | Glideclub"
-            return f"Массовое катание — {name}, {city} | Glideclub"
-        return f"Массовое катание — {name} | Glideclub"
+                return f"{name}, {city} — каток, расписание массового катания | Glide"
+            return f"Массовое катание — {name}, {city} | Glide"
+        return f"Массовое катание — {name} | Glide"
     if vt == "shop":
         services = ", ".join(s.lower() for s in _services(card))
         # Одно слово «розница» в title — слишком мало для поиска: называем, что это за место.
@@ -822,8 +822,8 @@ def search_description(view: Mapping[str, Any]) -> str:
     else:
         noun = card.get("venue_noun") or "Место"
         city = _city(card)
-        head = f"{noun} ({city}) в каталоге Glideclub: адрес, телефон и как добраться" if city else (
-            f"{noun} в каталоге Glideclub: адрес, телефон и как добраться"
+        head = f"{noun} ({city}) в каталоге Glide: адрес, телефон и как добраться" if city else (
+            f"{noun} в каталоге Glide: адрес, телефон и как добраться"
         )
     where = _where(card).replace(" · ", ", ")
     return f"{head}. {where}." if where else f"{head}."
@@ -1294,7 +1294,7 @@ def _place_share_scripts_html(
 def _place_hub_footer_links(*, city: str, city_page_url: str | None, public_skate: bool) -> str:
     """Внутренние ссылки: городской хаб и корень. «Массовое катание» — только у катков."""
     if not city_page_url or not city:
-        return '<a href="/">Массовое катание по Беларуси</a>' if public_skate else '<a href="/">Каталог Glideclub</a>'
+        return '<a href="/">Массовое катание по Беларуси</a>' if public_skate else '<a href="/">Каталог Glide</a>'
     from src.shared.city_locative import city_locative
 
     where = city_locative(city)
@@ -1421,7 +1421,7 @@ def render_place_page(
         replacements["__BODY__"] += breadcrumb_script(
             canonical_url,
             [
-                ("Glideclub", "/"),
+                ("Glide", "/"),
                 (format_public_name(city), f"/c/{city_slug(city)}"),
                 (format_public_name(str(card.get("name") or "")), canonical_url),
             ],
@@ -2758,7 +2758,7 @@ def _b_related_links(view: Mapping[str, Any]) -> str:
     if not links:
         return ""
     anchors = "".join(f'<a class="b-link" href="{_esc(href)}">{_esc(label)}</a>' for href, label in links)
-    return section("Ещё на Glideclub", f'<div class="b-links">{anchors}</div>', sec_id="related")
+    return section("Ещё на Glide", f'<div class="b-links">{anchors}</div>', sec_id="related")
 
 
 def watch_offer_site_html(arena_id: int, href: str) -> str:

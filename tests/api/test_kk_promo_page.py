@@ -66,6 +66,10 @@ async def test_public_landing_stays_on_mobile_and_campaign_links_keep_their_trac
             asset = await client.get(url)
             assert asset.status_code == 200 and "immutable" in asset.headers["cache-control"]
     assert plain.status_code == campaign.status_code == 200
+    assert 'sizes="120x120" href="/favicon-120.png?v=2"' in plain.text
+    assert 'sizes="120x120" href="/favicon-120.png?v=2"' in campaign.text
+    assert '<meta property="og:site_name" content="Glide">' in plain.text
+    assert '<a class="kk-glide" href="/">Glide</a>' in plain.text
     assert '<meta name="robots" content="index, follow">' in plain.text
     assert '<link rel="canonical" href="https://glide.test/kk">' in plain.text
     assert 'href="/hockey">Расписание матчей</a>' in plain.text

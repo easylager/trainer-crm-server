@@ -10,6 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.application.public_analytics import public_analytics_head_html
+from src.shared.html_template import PUBLIC_ICON_LINKS
 from src.shared.config import Settings
 
 _LANDING_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "landing"
@@ -156,7 +157,7 @@ def _landing_jsonld_script(settings: Settings, manifest: dict[str, Any], canonic
                 "@type": "WebPage",
                 "name": name,
                 "url": canonical_url,
-                "isPartOf": {"@type": "WebSite", "name": "Glideclub", "url": home},
+                "isPartOf": {"@type": "WebSite", "name": "Glide", "url": home},
             },
             {
                 "@type": "BreadcrumbList",
@@ -233,7 +234,7 @@ def inject_landing_html(html: str, settings: Settings | None = None) -> str:
         html[:head_end].replace(' lang="ru"', f' lang="{_LANDING_LANG.get(market, "ru")}"', 1)
         + html[head_end:]
     )
-    html = html.replace("__LANDING_SITE_HEAD__", _landing_site_head_html(), 1)
+    html = html.replace("__LANDING_SITE_HEAD__", PUBLIC_ICON_LINKS + "\n" + _landing_site_head_html(), 1)
     html = html.replace(
         "__PUBLIC_ANALYTICS_HEAD__",
         public_analytics_head_html(

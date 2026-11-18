@@ -461,7 +461,7 @@ def render_city_page(
         "как добраться. Отметки о льде от людей."
     )
     return _shell(
-        title=f"Зимой {('в ' + where) if where else name}: катки и хоккейные коробки | Glideclub",
+        title=f"Зимой {('в ' + where) if where else name}: катки и хоккейные коробки | Glide",
         description=description,
         canonical=canonical,
         robots="index, follow" if total else "noindex, follow",
@@ -690,7 +690,7 @@ def render_point_page(
         "Часы и цена сезона 2025/26, как добраться, отметки о льде от людей."
     )
     robots = "index, follow" if indexable and not item.get("doubtful") else "noindex, follow"
-    title = f"{item['name']} — зимой {('в ' + where) if where else name} | Glideclub"
+    title = f"{item['name']} — зимой {('в ' + where) if where else name} | Glide"
     return _shell(
         title=title,
         description=description,
@@ -722,7 +722,7 @@ def render_gone_page(*, city: Mapping[str, Any] | None, name: str | None, list_h
         f"{links}</div>"
     )
     return _shell(
-        title="Точки больше нет в каталоге | Glideclub",
+        title="Точки больше нет в каталоге | Glide",
         description="Эту зимнюю точку убрали из каталога Glide.",
         canonical="",
         robots="noindex, follow",

@@ -23,6 +23,7 @@ from src.application.place_links import public_telegram_entry_link
 from src.application.public_analytics import public_analytics_head_html_from_settings
 from src.application.style_b import _file_version, public_fonts_head_html
 from src.shared.config import Settings
+from src.shared.html_template import PUBLIC_ICON_LINKS
 
 router = APIRouter(tags=["public-kk-promo"])
 
@@ -200,7 +201,7 @@ def _landing_body(go: str, *, show_matches: bool) -> str:
     matches = '<a href="/hockey">Расписание матчей</a>' if show_matches else ""
     return f"""
 <header class="kk-header kk-frame">
-  <a class="kk-glide" href="/">Glideclub</a>
+  <a class="kk-glide" href="/">Glide</a>
   <nav class="kk-nav" aria-label="Навигация">
     <a href="#league">Лига друзей</a>{matches}
   </nav>
@@ -250,7 +251,7 @@ def _landing_body(go: str, *, show_matches: bool) -> str:
     </section>
   </div>
 </main>
-<footer class="kk-footer kk-frame"><a href="/">Катки и массовое катание на Glideclub</a></footer>
+<footer class="kk-footer kk-frame"><a href="/">Катки и массовое катание на Glide</a></footer>
 """
 
 
@@ -263,7 +264,7 @@ async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_le
     e = html.escape
     landing = s is None and hockey_event.enabled(cfg)
     robots = "index, follow" if landing else "noindex"
-    title = "Кто кого — игра с прогнозами на хоккей | Glideclub" if landing else _TITLE
+    title = "Кто кого — игра с прогнозами на хоккей | Glide" if landing else _TITLE
     description = _LANDING_DESCRIPTION if landing else _DESCRIPTION
     canonical = (
         f'<link rel="canonical" href="{e(base)}/kk">\n<meta property="og:url" content="{e(base)}/kk">'
@@ -306,8 +307,10 @@ async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_le
 <meta name="color-scheme" content="{color_scheme}">
 <meta name="theme-color" content="{theme_color}">
 <title>{e(title)}</title>
+{PUBLIC_ICON_LINKS}
 <meta name="description" content="{e(description)}">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Glide">
 <meta property="og:title" content="{e(title)}">
 <meta property="og:description" content="{e(description)}">
 {og_image}
