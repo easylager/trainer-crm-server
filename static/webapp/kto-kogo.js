@@ -896,7 +896,7 @@
       if (state.src) sessionStorage.setItem('kk_src', state.src);
       else state.src = M.promoSrc('', sessionStorage.getItem('kk_src'));
     } catch (e) { /* */ }
-    if (state.src && (params.get('src') || /^kks_/.test(startParam()))) {
+    if (state.src && (params.get('src') || /^kk[sg]_/.test(startParam()))) {
       var entryKey = 'kk_entry_' + state.src;
       var counted = false;
       try { counted = sessionStorage.getItem(entryKey) === '1'; } catch (e) { /* */ }
@@ -943,6 +943,8 @@
           // «Вечер в лиге» из сводки (TASK-431): лига на вкладке «Вечер» за день из ссылки, поверх hub.
           var evening = entry ? null : M.eveningEntry(startParam(), params.get('league'), params.get('day'));
           if (evening) go('league', evening);
+          // «Собрать лигу» из еженедельного приглашения (TASK-431): экран «Лига готова» поверх hub.
+          else if (!entry && M.readyEntry(startParam(), params.get('ready'))) go('ready', {});
           if (month) {
             var owner = current();
             api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {

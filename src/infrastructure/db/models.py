@@ -745,6 +745,8 @@ class HockeyLeague(Base):
     # Лицо лиги (TASK-361, миграция 0317): картинка в хранилище и строка «на что играем» — задаёт владелец.
     image_key: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     stake_text: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    # Метка входа, с которого лига создана в один тап (миграция 0332, TASK-431): lg1/lg2/lg3 — недели приглашения.
+    src: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

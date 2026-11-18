@@ -796,6 +796,115 @@
     },
   });
 
+  // ---------- Своя лига в один тап (TASK-431, макет Ready.dc.html) ----------
+
+  function readyForm(a) {
+    if (!a.form) a.form = { scope: 'all', clubs: [], stake: '' };
+    return a.form;
+  }
+
+  /** «Позвать друзей»: лига создаётся только здесь (не при открытии экрана), потом — приглашение в чат. */
+  function quickCreate(a) {
+    var f = readyForm(a);
+    var err = S.readyError(f) || Id().stakeError(f.stake);
+    if (err) return K.toast(err);
+    if (state.busy) return;
+    state.busy = true;
+    K.render();
+    var owner = K.current();
+    K.api('POST', '/client/hockey/leagues/quick', S.readyBody(f, Id().cleanStake(f.stake), state.src))
+      .then(function (l) {
+        state.busy = false;
+        state.leagues = null;
+        state.created = l;
+        K.haptic('success');
+        // Назад с лиги — не на «Лига готова»: повторный тап создал бы вопрос «а лига уже есть?».
+        if (K.current() === owner) K.replace('league', { id: l.id, tab: 'evening' });
+        K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l));
+      }, function (e) {
+        state.busy = false;
+        K.render();
+        K.toast(e.message);
+      });
+  }
+
+  function readyClubs(f) {
+    var clubs = state.clubs || [];
+    var maxClubs = state.maxClubs || null;
+    return h('div', { class: 'kk-clubgrid' }, clubs.map(function (c) {
+      var on = f.clubs.indexOf(c.name) >= 0;
+      return h('button', {
+        type: 'button', class: 'kk-club' + (on ? ' is-on' : ''), 'aria-pressed': on ? 'true' : 'false',
+        onclick: function () {
+          if (!on && maxClubs && f.clubs.length >= maxClubs) return K.toast('Не больше ' + maxClubs + ' команд');
+          f.clubs = on ? f.clubs.filter(function (x) { return x !== c.name; }) : f.clubs.concat([c.name]);
+          K.render();
+        },
+      }, [K.logoDisc(c, 34), h('span', { class: 'kk-club__n', text: S.clubShort(c.name) }), on ? h('span', { class: 'kk-ok', 'aria-hidden': 'true' }, [icon(I.check, 12)]) : null]);
+    }));
+  }
+
+  K.register('ready', {
+    enter: function (a) {
+      var me = K.current();
+      readyForm(a);
+      a.info = null;
+      a.failed = false;
+      K.api('GET', '/client/hockey/leagues/quick').then(function (d) {
+        // Своя действующая лига уже есть — вторую не собираем, открываем её «Вечер».
+        if (d.league_id) {
+          if (K.current() === me) K.replace('league', { id: d.league_id, tab: 'evening' });
+          return;
+        }
+        a.info = d;
+        K.render();
+      }, function (e) {
+        a.failed = true;
+        K.render();
+        K.fail(e);
+      });
+      K.loadClubs().then(K.render, function () {});
+    },
+    render: function (a) {
+      var f = readyForm(a);
+      var back = h('div', { class: 'kk-ready__top' }, [h('button', { type: 'button', class: 'kk-round', 'aria-label': 'Назад', onclick: K.back }, [icon(I.back)])]);
+      if (!a.info) {
+        return [h('main', { class: 'kk-main kk-ready' }, [back, a.failed ? K.retryCard('Не загрузилось.', function () { K.replace('ready', {}); }) : K.loading()])];
+      }
+      var err = S.readyError(f);
+      return [h('main', { class: 'kk-main kk-ready' }, [
+        back,
+        h('div', { class: 'kk-ready__body' }, [
+          h('span', { class: 'kk-ready__tag', 'aria-hidden': 'true', text: 'ТВОЯ ЛИГА ГОТОВА' }),
+          h('h1', { class: 'kk-ready__name', text: a.info.name }),
+          h('p', { class: 'kk-ready__tx', text: S.readyLine(f.scope, f.clubs) }),
+          h('div', { class: 'kk-fld' }, [
+            h('label', { for: 'kk-rstake', class: 'kk-ready__lbl', text: 'На что играем' }),
+            h('input', { id: 'kk-rstake', class: 'kk-ready__input', type: 'text', maxlength: String(Id().STAKE_MAX), autocomplete: 'off', value: f.stake, oninput: function (e) { f.stake = e.target.value; } }),
+          ]),
+          h('div', { class: 'kk-fld' }, [
+            h('span', { class: 'kk-ready__lbl', id: 'kk-rscope', text: 'Какие матчи' }),
+            h('div', { class: 'kk-seg', role: 'group', 'aria-labelledby': 'kk-rscope' }, S.READY_SCOPES.map(function (it) {
+              var on = f.scope === it[0];
+              return h('button', { type: 'button', class: 'kk-seg__b' + (on ? ' is-on' : ''), 'aria-pressed': on ? 'true' : 'false', onclick: function () { f.scope = it[0]; K.render(); }, text: it[1] });
+            })),
+            f.scope === 'clubs' ? readyClubs(f) : null,
+          ]),
+          h('div', { class: 'kk-ready__list' }, [
+            h('div', { class: 'kk-ready__row' }, [K.ava(state.profile && state.profile.display_name ? state.profile.display_name : a.info.name.replace(/^Лига\s+/, ''), 36), h('span', { class: 'kk-ready__who', text: 'Ты' }), h('span', { class: 'kk-ready__in', text: 'уже в лиге' })]),
+            h('div', { class: 'kk-ready__row' }, [h('span', { class: 'kk-ready__ph', 'aria-hidden': 'true' }), h('span', { class: 'kk-ready__who is-empty', text: 'Здесь будет твой друг' })]),
+            h('div', { class: 'kk-ready__row' }, [h('span', { class: 'kk-ready__ph', 'aria-hidden': 'true' }), h('span', { class: 'kk-ready__who is-empty', text: 'И ещё один' })]),
+          ]),
+          h('p', { class: 'kk-ready__note', text: 'Кепка дня разыгрывается, когда в лиге трое' }),
+        ]),
+        h('div', { class: 'kk-ready__cta' }, [
+          h('button', { type: 'button', class: 'kk-btn kk-btn--gold kk-btn--lg kk-ready__go', disabled: err || state.busy ? 'true' : null, 'aria-disabled': err ? 'true' : 'false', onclick: function () { quickCreate(a); }, text: err || (state.busy ? 'Собираем…' : 'Позвать друзей') }),
+          h('button', { type: 'button', class: 'kk-ready__alt', onclick: function () { K.go('leagueNew', {}); }, text: 'Изменить лигу' }),
+        ]),
+      ])];
+    },
+  });
+
   // ---------- Вход по ссылке ----------
 
   K.register('join', {

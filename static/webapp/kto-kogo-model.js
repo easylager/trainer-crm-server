@@ -291,7 +291,8 @@
    */
   function promoSrc(startParam, srcParam) {
     var re = /^[A-Za-z0-9]{2,16}$/;
-    var m = /^kks_(.*)$/.exec(String(startParam || '').trim());
+    // kkg_<метка> — «Собрать лигу» из еженедельного приглашения (TASK-431): та же метка, плюс экран «Лига готова».
+    var m = /^kk[sg]_(.*)$/.exec(String(startParam || '').trim());
     if (m) return re.test(m[1]) ? m[1].toLowerCase() : '';
     var s = String(srcParam || '').trim();
     return re.test(s) ? s.toLowerCase() : '';
@@ -464,6 +465,11 @@
     return { id: id, tab: 'evening', day: day };
   }
 
+  /** «Собрать лигу» (TASK-431): start_param kkg_<метка> или ?ready=1 — экран «Лига готова». */
+  function readyEntry(startParam, readyParam) {
+    return /^kkg_[A-Za-z0-9]{2,16}$/.test(String(startParam || '').trim()) || readyParam === '1';
+  }
+
   function entryScreen(code, openId, tab) {
     if (code) return { name: 'join', args: { code: code } };
     if (openId) return { name: 'match', args: { id: openId } };
@@ -582,6 +588,7 @@
     retapAction: retapAction,
     entryScreen: entryScreen,
     eveningEntry: eveningEntry,
+    readyEntry: readyEntry,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

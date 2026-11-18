@@ -165,3 +165,35 @@ describe('вход «Вечер в лиге» из сводки', () => {
     assert.match(js, /var evening = entry \? null : M\.eveningEntry\(startParam\(\), params\.get\('league'\), params\.get\('day'\)\);\s*if \(evening\) go\('league', evening\);/);
   });
 });
+
+describe('«Лига готова» (Ready.dc.html)', () => {
+  const Mdl = require('../../static/webapp/kto-kogo-model.js');
+  it('переключатель «Все · Динамо · Свои команды» и строка под названием', () => {
+    assert.deepEqual(S.READY_SCOPES.map((x) => x[1]), ['Все', 'Динамо', 'Свои команды']);
+    assert.equal(S.readyLine('all', []), 'Все матчи «Кто кого», до конца сезона. Название и картинку можно поменять потом.');
+    assert.match(S.readyLine('dinamo', []), /^Матчи Динамо-Минск, до конца сезона\./);
+    assert.match(S.readyLine('clubs', ['Неман', 'Шахтер']), /^Матчи: Неман, Шахтёр — до конца сезона\./);
+    assert.equal(S.readyError({ scope: 'clubs', clubs: [] }), 'Выбери команду');
+    assert.equal(S.readyError({ scope: 'all', clubs: [] }), '');
+  });
+  it('тело «Позвать друзей»: команды только для своих, «на что играем» и метка — если есть', () => {
+    assert.deepEqual(S.readyBody({ scope: 'all', clubs: ['Неман'] }, '', ''), { scope: 'all', clubs: [] });
+    assert.deepEqual(S.readyBody({ scope: 'clubs', clubs: ['Неман'] }, 'на пиво', 'lg1'), { scope: 'clubs', clubs: ['Неман'], stake_text: 'на пиво', src: 'lg1' });
+  });
+  it('вход kkg_<метка>: экран «Лига готова» и та же метка, что у kks_', () => {
+    assert.equal(Mdl.readyEntry('kkg_lg1', null), true);
+    assert.equal(Mdl.readyEntry('', '1'), true);
+    assert.equal(Mdl.readyEntry('kks_lg1', null), false);
+    assert.equal(Mdl.promoSrc('kkg_LG2', ''), 'lg2');
+    assert.equal(Mdl.inviteCode('kkg_lg1'), '');
+  });
+  it('лига создаётся по кнопке, а не при открытии экрана; поле без подсказки внутри', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../static/webapp/kto-kogo-leagues.js'), 'utf8');
+    const ready = src.slice(src.indexOf("K.register('ready'"), src.indexOf('// ---------- Вход по ссылке'));
+    const enter = ready.slice(0, ready.indexOf('render:'));
+    assert.ok(!/POST/.test(enter), 'enter только спрашивает GET /quick');
+    assert.match(src, /K\.api\('POST', '\/client\/hockey\/leagues\/quick'/);
+    const input = ready.slice(ready.indexOf("id: 'kk-rstake'"), ready.indexOf("id: 'kk-rstake'") + 300);
+    assert.ok(!/placeholder/.test(input));
+  });
+});

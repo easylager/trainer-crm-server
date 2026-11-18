@@ -189,9 +189,9 @@ _LEAGUE_COLUMNS = "id, name, invite_code, owner_key, scope, clubs, term_kind, st
 
 _INSERT_LEAGUE = text(f"""
     INSERT INTO hockey_leagues (name, owner_key, invite_code, scope, clubs, term_kind, starts_at, ends_at,
-                                extended_from, image_key, stake_text)
+                                extended_from, image_key, stake_text, src)
     VALUES (:name, :owner_key, :invite_code, :scope, :clubs, :term_kind, :starts_at, :ends_at, :extended_from,
-            :image_key, :stake_text)
+            :image_key, :stake_text, :src)
     RETURNING {_LEAGUE_COLUMNS}
     """)
 
@@ -458,6 +458,7 @@ async def _insert_league(
     extended_from: int | None = None,
     image_key: str | None = None,
     stake_text: str | None = None,
+    src: str | None = None,
 ) -> League:
     for _ in range(5):
         try:
@@ -477,6 +478,7 @@ async def _insert_league(
                             "extended_from": extended_from,
                             "image_key": image_key,
                             "stake_text": stake_text,
+                            "src": src,
                         },
                     )
                 ).one()
@@ -495,19 +497,90 @@ async def create_league(
     terms: Terms | None = None,
     now: datetime | None = None,
     stake_text: str | None = None,
+    src: str | None = None,
 ) -> League:
     """Новая лига; создатель — первый участник. Без ``terms`` — «Динамо-Минск, до конца сезона».
 
-    ``stake_text`` — «на что играем» (необязательно); картинку владелец добавляет отдельным запросом."""
+    ``stake_text`` — «на что играем» (необязательно); картинку владелец добавляет отдельным запросом.
+    ``src`` — метка входа (``lg1``…), с которого лига создана в один тап; мусор не пишется."""
+    from src.application.hockey_promo import clean_src
+
     now = _utc(now or datetime.now(timezone.utc))
     name = clean_name(name)
     stake = clean_stake(stake_text)
     terms = terms or build_terms(scope=DEFAULT_SCOPE, term="season", now=now)
     await _ensure_player(session, owner_key, owner_name)
     await _check_league_quota(session, owner_key, now=now)
-    league = await _insert_league(session, owner_key=owner_key, name=name, terms=terms, stake_text=stake)
+    league = await _insert_league(
+        session, owner_key=owner_key, name=name, terms=terms, stake_text=stake, src=clean_src(src)
+    )
     await session.execute(_ADD_MEMBER, {"league_id": league.id, "player_key": owner_key})
     return league
+
+
+# ---------- своя лига в один тап (TASK-431) ----------
+
+QUICK_SCOPES = ("all", "dinamo", "clubs")
+QUICK_PREFIX = "Лига "
+
+# Своя действующая лига: владелец — я, срок не кончился, я в ней (архивная без участников не в счёт).
+_OWN_ACTIVE = text(f"""
+    SELECT {", ".join("l." + c.strip() for c in _LEAGUE_COLUMNS.split(","))} FROM hockey_leagues AS l
+    JOIN hockey_league_members AS mb ON mb.league_id = l.id AND mb.player_key = :player_key
+    WHERE l.owner_key = :player_key AND l.ends_at > :now
+    ORDER BY l.created_at DESC, l.id DESC
+    LIMIT 1
+    """)
+
+_PLAYER_NAME = text("SELECT display_name FROM hockey_players WHERE player_key = :player_key")
+
+
+def quick_name(display_name: str | None) -> str:
+    """«Лига <имя>», обрезанная до ``NAME_MAX``; без имени — «Лига игрока»."""
+    who = " ".join((display_name or "").split()) or "игрока"
+    return (QUICK_PREFIX + who)[:NAME_MAX].rstrip()
+
+
+async def own_active_league(session: AsyncSession, *, player_key: int, now: datetime) -> League | None:
+    row = (await session.execute(_OWN_ACTIVE, {"player_key": player_key, "now": _utc(now)})).one_or_none()
+    return None if row is None else _league(row)
+
+
+async def player_display_name(session: AsyncSession, player_key: int) -> str | None:
+    return (await session.execute(_PLAYER_NAME, {"player_key": player_key})).scalar_one_or_none()
+
+
+async def quick_league(
+    session: AsyncSession,
+    *,
+    player_key: int,
+    display_name: str,
+    now: datetime,
+    scope: str = "all",
+    clubs: list[str] | tuple[str, ...] | None = None,
+    stake_text: str | None = None,
+    src: str | None = None,
+) -> tuple[League, bool]:
+    """«Позвать друзей» на экране «Лига готова»: своя лига до конца сезона. Уже есть своя действующая — она же
+    (``created=False``), вторую не создаём. Имя — «Лига <имя игрока>»; квоты — как у любой новой лиги."""
+    if scope not in QUICK_SCOPES:
+        raise InvalidTerms("Выбери, какие матчи считаем")
+    existing = await own_active_league(session, player_key=player_key, now=now)
+    if existing is not None:
+        return existing, False
+    known = await player_display_name(session, player_key)
+    terms = build_terms(scope=scope, clubs=clubs, term="season", now=now)
+    league = await create_league(
+        session,
+        owner_key=player_key,
+        owner_name=display_name,
+        name=quick_name(known or display_name),
+        terms=terms,
+        now=now,
+        stake_text=stake_text,
+        src=src,
+    )
+    return league, True
 
 
 _EXTENSION_OF = text(f"SELECT {_LEAGUE_COLUMNS} FROM hockey_leagues WHERE extended_from = :league_id")
@@ -1033,6 +1106,9 @@ __all__ = [
     "clean_name",
     "clean_stake",
     "create_league",
+    "own_active_league",
+    "quick_league",
+    "quick_name",
     "league_image_key",
     "owned_league",
     "set_league_image",

@@ -41,7 +41,11 @@ from src.application.hockey_leagues import (
     matches_in_terms,
     member_league,
     owned_league,
+    own_active_league,
+    player_display_name,
     player_leagues,
+    quick_league,
+    quick_name,
     set_league_image,
     term_options,
     update_league,
@@ -103,6 +107,16 @@ class GestureBody(BaseModel):
 
     to: str
     kind: Literal["stick", "pen"] | None = None
+
+
+class QuickLeagueBody(BaseModel):
+    """«Лига готова» (TASK-431): какие матчи, «на что играем» и метка входа (``lg1``…) — для отчёта по входам."""
+
+    scope: Literal["all", "dinamo", "clubs"] = "all"
+    clubs: list[str] = []
+    stake_text: str | None = None
+    display_name: str | None = None
+    src: str | None = None
 
 
 class PatchLeagueBody(BaseModel):
@@ -295,6 +309,56 @@ async def get_client_hockey_league_term_options(
 ) -> dict:
     """Окна сроков «до конца сезона / месяц / 4 недели / плей-офф», правило корон и лимит команд для новой лиги."""
     return term_options(now=datetime.now(timezone.utc))
+
+
+@router.get("/client/hockey/leagues/quick")
+async def get_client_hockey_league_quick(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Экран «Лига готова»: имя будущей лиги или своя действующая лига (тогда экран открывает её «Вечер»).
+    Лигу здесь не создаём — только по кнопке «Позвать друзей»."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    existing = await own_active_league(session, player_key=player_key, now=now)
+    if existing is not None:
+        return {"league_id": existing.id, "name": existing.name}
+    known = await player_display_name(session, player_key)
+    return {
+        "league_id": None,
+        "name": quick_name(known or _player_name(None, _init_raw(init_data, x_telegram_init_data))),
+    }
+
+
+@router.post("/client/hockey/leagues/quick")
+async def post_client_hockey_league_quick(
+    body: QuickLeagueBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Позвать друзей»: своя лига до конца сезона в один тап. Своя действующая уже есть — вернём её (``created``)."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league, created = await quick_league(
+            session,
+            player_key=player_key,
+            display_name=_player_name(body.display_name, _init_raw(init_data, x_telegram_init_data)),
+            now=now,
+            scope=body.scope,
+            clubs=body.clubs,
+            stake_text=body.stake_text,
+            src=body.src,
+        )
+        payload = await _created_out(session, league, player_key, now)
+    except (ValueError, TooManyLeagues) as exc:
+        _raise_league(exc)
+    await session.commit()
+    return {**payload, "created": created}
 
 
 @router.post("/client/hockey/leagues/join")

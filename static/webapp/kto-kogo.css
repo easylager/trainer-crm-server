@@ -776,6 +776,29 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-capr__v.is-out { font-weight: 500; }
 .kk-capr__foot { font-size: 14px; line-height: 1.45; }
 
+/* Своя лига в один тап (TASK-431, design/kto-kogo-league-evening/Ready.dc.html). */
+.kk-ready { gap: 0; padding-top: 12px; padding-bottom: 24px; }
+.kk-ready__top { display: flex; }
+.kk-ready__body { display: flex; flex-direction: column; gap: 20px; padding: 20px 0 24px; }
+.kk-ready__tag { align-self: flex-start; transform: rotate(-3deg); background: var(--kk-gold); color: var(--kk-on-gold); font: 400 16px/1.2 var(--kk-display); padding: 6px 12px; border-radius: 10px; }
+.kk-ready__name { margin: 0; font: 400 36px/1.05 var(--kk-display); overflow-wrap: anywhere; }
+.kk-ready__tx { margin: 0; font: 400 16px/1.45 var(--kk-text); color: var(--kk-soft); }
+.kk-ready__lbl { font: 700 14px var(--kk-text); color: var(--kk-soft); }
+.kk-ready__input { min-height: 48px; width: 100%; border-radius: 14px; border: 2px solid var(--kk-line); background: var(--kk-card); color: var(--kk-ink); padding: 0 14px; font: 400 16px var(--kk-text); }
+.kk-ready .kk-seg { background: var(--kk-chip); }
+.kk-ready .kk-seg__b.is-on { background: var(--kk-card); color: var(--kk-ink); box-shadow: 0 1px 3px rgba(13, 20, 36, 0.15); }
+.kk-ready__list { background: var(--kk-card); border-radius: 16px; padding: 4px 14px; display: flex; flex-direction: column; }
+.kk-ready__row { display: flex; align-items: center; gap: 10px; min-height: 56px; }
+.kk-ready__row + .kk-ready__row { border-top: 1px solid var(--kk-chip); }
+.kk-ready__ph { width: 36px; height: 36px; flex: none; border-radius: 50%; border: 2px dashed var(--kk-dot); }
+.kk-ready__who { flex: 1; min-width: 0; font: 700 16px var(--kk-text); }
+.kk-ready__who.is-empty { font-weight: 400; color: var(--kk-muted); }
+.kk-ready__in { font: 500 14px var(--kk-text); color: var(--kk-muted); }
+.kk-ready__note { margin: 0; font: 500 14px/1.4 var(--kk-text); color: var(--kk-muted); text-align: center; }
+.kk-ready__cta { display: flex; flex-direction: column; gap: 8px; }
+.kk-ready__go { font-weight: 800; }
+.kk-ready__alt { min-height: 48px; border: 0; border-radius: 16px; background: transparent; color: var(--kk-link); font: 600 15px var(--kk-text); }
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.

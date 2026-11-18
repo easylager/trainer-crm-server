@@ -1054,6 +1054,37 @@
     };
   }
 
+  // ---------- своя лига в один тап (TASK-431, макет Ready.dc.html) ----------
+
+  /** Переключатель «Какие матчи» на экране «Лига готова»: ключ — scope для сервера. */
+  var READY_SCOPES = [['all', 'Все'], ['dinamo', 'Динамо'], ['clubs', 'Свои команды']];
+  var READY_TAIL = 'Название и картинку можно поменять потом.';
+
+  /** Строка под названием: что считаем и до когда. */
+  function readyLine(scope, clubs) {
+    if (scope === 'dinamo') return 'Матчи Динамо-Минск, до конца сезона. ' + READY_TAIL;
+    if (scope === 'clubs') {
+      var names = (clubs || []).map(clubName);
+      if (!names.length) return 'Выбери свои команды — считаем их матчи до конца сезона.';
+      return 'Матчи: ' + names.join(', ') + ' — до конца сезона. ' + READY_TAIL;
+    }
+    return 'Все матчи «Кто кого», до конца сезона. ' + READY_TAIL;
+  }
+
+  /** Что мешает нажать «Позвать друзей». Пусто — можно. */
+  function readyError(form) {
+    if (form && form.scope === 'clubs' && !(form.clubs || []).length) return 'Выбери команду';
+    return '';
+  }
+
+  /** Тело «Позвать друзей»: набор команд, «на что играем» (уже очищенная строка) и метка входа. */
+  function readyBody(form, stake, src) {
+    var body = { scope: form.scope, clubs: form.scope === 'clubs' ? (form.clubs || []).slice() : [] };
+    if (stake) body.stake_text = stake;
+    if (src) body.src = src;
+    return body;
+  }
+
   function inviteText(name, l) {
     var what = l && l.scope !== 'all' ? ': ' + scopeText(l.scope, l.clubs) : l ? '' : ': Динамо-Минск';
     return 'Угадываем хоккейные матчи' + what + ' — лига «' + name + '». Тапни за команду, посмотрим, кто кого.';
@@ -1667,6 +1698,10 @@
     leagueMarks: leagueMarks,
     capRules: capRules,
     gestureRules: gestureRules,
+    READY_SCOPES: READY_SCOPES,
+    readyLine: readyLine,
+    readyError: readyError,
+    readyBody: readyBody,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
