@@ -80,8 +80,8 @@ async def test_trainer_always_gets_universal_invite_link(
     bot.send_message.assert_awaited_once()
     _, kwargs = bot.send_message.call_args
     assert kwargs["chat_id"] == 12345
-    # TASK-350: ссылка ученикам — страница тренера на сайте; кнопка на ней ведёт через welcome_ref.
-    assert f"https://example.com/t/{trainer_id}-test-trainer?via=link" in kwargs["text"]
+    # Ссылка ученикам — сразу в бота (welcome_ref), а не на страницу сайта.
+    assert f"https://t.me/TestClientBot?start=welcome_ref_{trainer_id}" in kwargs["text"]
     assert "Следующий шаг к новым клиентам" in kwargs["text"]
 
 

@@ -655,22 +655,20 @@ def share_url(base_url: str, trainer_id: int, name: str, *, via: str = SHARE_VIA
 
 
 async def trainer_invite_link(session: AsyncSession, trainer_id: int) -> tuple[str | None, str | None]:
-    """Ссылка тренера ученикам — страница сайта ``/t/…`` (TASK-350), а не ``t.me``.
+    """Ссылка тренера ученикам — ``t.me/<бот>?start=welcome_ref_{id}`` (прямо в приложение).
 
-    Контракт ``build_trainer_universal_invite_link``: ``(ссылка, ошибка)``. Без https-адреса сайта
-    (локально) — прежняя ``t.me/…?start=welcome_ref_{id}``. Кнопка на странице по ``via=link`` ведёт
-    туда же, через ``welcome_ref``: бот привязывает и регистрирует ученика, как раньше.
+    Контракт ``build_trainer_universal_invite_link``: ``(ссылка, ошибка)``. Бот привязывает ученика
+    к тренеру и регистрирует его, при входе он сразу видит записи, абонементы и своего тренера.
+    Страница сайта ``/t/…`` (TASK-350) для этой ссылки не используется — только для «Поделиться
+    тренером» (``via=share``) в Mini App.
     """
     from src.application.trainer_invite_links import build_trainer_universal_invite_link
     from src.shared.config import Settings
 
     settings = Settings()  # type: ignore[call-arg]
-    fallback, err = build_trainer_universal_invite_link(
+    return build_trainer_universal_invite_link(
         client_bot_username=settings.client_bot_username, trainer_id=int(trainer_id)
     )
-    if err:
-        return None, err
-    return await site_share_link(session, int(trainer_id), via=SHARE_VIA) or fallback, None
 
 
 async def site_share_link(session: AsyncSession, trainer_id: int, *, via: str) -> str | None:

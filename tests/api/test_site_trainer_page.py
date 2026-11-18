@@ -164,8 +164,8 @@ async def test_listed_trainer_in_sitemap_and_deactivated_is_404(app_use_test_db,
 
 
 @pytest.mark.asyncio
-async def test_trainer_shared_link_is_site_page_and_keeps_welcome_ref_binding(app_use_test_db, db_session) -> None:
-    """Ссылка из кабинета — ``/t/…?via=link``; кнопка на ней — ``welcome_ref``, бот привяжет ученика."""
+async def test_trainer_invite_link_goes_straight_to_bot_with_welcome_ref(app_use_test_db, db_session) -> None:
+    """Ссылка из кабинета — ``t.me/<бот>?start=welcome_ref_{id}``: ученик попадает в бота, а не на сайт."""
     from tests.api.test_webapp_trainer_catalog import HEADERS
     from tests.api.test_webapp_trainer_miniapp_profile_integration import (
         _fresh_trainer_telegram_id,
@@ -173,7 +173,7 @@ async def test_trainer_shared_link_is_site_page_and_keeps_welcome_ref_binding(ap
     )
 
     async with _client() as client:
-        _place_row, tid, name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
+        _place_row, tid, _name = await _listed(db_session, client, tier=SUBSCRIPTION_TIER_ONLINE)
     tg = _fresh_trainer_telegram_id()
     await db_session.execute(text("UPDATE trainers SET telegram_id = :tg WHERE id = :t"), {"tg": tg, "t": tid})
     await db_session.commit()
@@ -181,19 +181,12 @@ async def test_trainer_shared_link_is_site_page_and_keeps_welcome_ref_binding(ap
         async with _client() as client:
             body = (await client.get("/api/webapp/trainer/hub/universal-invite-link", headers=HEADERS)).json()
     link = body["link"]
-    assert link == f"https://glide.example{trainer_path(tid, name)}?via=link"
+    assert link == f"https://t.me/glide_test_bot?start=welcome_ref_{tid}"
     assert link in body["share_text"]
+    # Страница сайта с ``via=link`` по-прежнему ведёт на тот же welcome_ref (старые ссылки в чатах живы).
     async with _client() as client:
-        shared = (await client.get(link.replace("https://glide.example", ""))).text
-        plain = (await client.get(link.replace("https://glide.example", "").split("?")[0])).text
-    assert f"https://t.me/glide_test_bot?start=welcome_ref_{tid}" in shared
-    # Тот же адрес без метки — витрина: карточка в Mini App через учётный прокси.
-    assert f"startapp=trainer_{tid}&amp;surface=trainer_page" in plain
-    # Канонический адрес один — метка ссылки на него не влияет.
-    assert (
-        f'rel="canonical" href="https://glide.example{link.replace("https://glide.example", "").split("?")[0]}"'
-        in shared
-    )
+        old = (await client.get(f"{trainer_path(tid, _name)}?via=link")).text
+    assert f"https://t.me/glide_test_bot?start=welcome_ref_{tid}" in old
 
 
 @pytest.mark.asyncio
