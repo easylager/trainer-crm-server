@@ -30,7 +30,7 @@ from src.application.ice_city_day import (
     render_unknown_city_html,
     resolve_city_by_ref,
 )
-from src.application.indexnow import SITEMAP_PLACE_WHERE_SQL
+from src.application.indexnow import CATALOG_PLACE_WHERE_SQL
 from src.application.place_card_image import render_place_card, share_display_path
 from src.application.arena_public_use_cases import resolve_merged_arena_id
 from src.application.png_render_cache import render_png_cached
@@ -393,6 +393,7 @@ async def place_page(
         invite=invite,
         share_src=share_src,
         country=str(city.get("country") or ""),
+        noindex=s is not None or "when" in request.query_params,
     )
     response = HTMLResponse(content=html, media_type="text/html", headers=_PAGE_CACHE)
     apply_glide_city_cookie(response, slug=city_slug(city_name))
@@ -484,9 +485,7 @@ _SITEMAP_SQL = text(f"""
         FROM ice_sessions
         GROUP BY arena_id
     ) sess ON sess.arena_id = a.id
-    WHERE {SITEMAP_PLACE_WHERE_SQL}
-      -- TASK-343: зимние точки из seed идут в sitemap отдельно и только индексируемые (O3), не пачкой
-      AND p.slug !~ '-(korobka|katok)-[0-9]+$'
+    WHERE {CATALOG_PLACE_WHERE_SQL}
     ORDER BY c.sort_order, c.id, a.id
     """)
 

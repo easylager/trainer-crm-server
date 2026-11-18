@@ -1296,11 +1296,16 @@ def _b_routes(view: Mapping[str, Any]) -> str:
             )
         )
     if slug == "minsk":
+        from src.application import hockey_event
         from src.application.site_matches import DINAMO_HOME_PATH, scope_of
 
         if scope_of().dinamo:
             rows.append(_b_route_row(
                 href=DINAMO_HOME_PATH, icon="ticket", title="Домашние матчи «Динамо-Минск»", line="КХЛ · Минск-Арена",
+            ))
+        if hockey_event.enabled():
+            rows.append(_b_route_row(
+                href="/kk", icon="ticket", title="Игра «Кто кого»", line="Угадай победителя хоккейного матча",
             ))
     service_n = int(view.get("service_count") or 0)
     if service_n:

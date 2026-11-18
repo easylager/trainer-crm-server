@@ -43,13 +43,15 @@ _KEY_RE = re.compile(r"^[0-9a-f]{32}$")
 # Видимость места в sitemap: общий предикат + опубликованный профиль со slug.
 # Единственный источник — им же собран sitemap в public_place_page.
 SITEMAP_PLACE_WHERE_SQL = f"{PUBLIC_ARENA_VISIBLE_SQL} AND p.status = 'published' AND p.slug IS NOT NULL"
+# Индексируемые зимние точки из seed добавляются отдельной выборкой.
+CATALOG_PLACE_WHERE_SQL = f"{SITEMAP_PLACE_WHERE_SQL} AND p.slug !~ '-(korobka|katok)-[0-9]+$'"
 
 _PLACES_SQL = f"""
     SELECT c.name AS city_name, p.slug
     FROM arenas a
     JOIN arena_profiles p ON p.arena_id = a.id
     JOIN cities c ON c.id = a.city_id
-    WHERE {SITEMAP_PLACE_WHERE_SQL}
+    WHERE {CATALOG_PLACE_WHERE_SQL}
     {{extra}}
     ORDER BY c.sort_order, c.id, a.id
 """
@@ -142,7 +144,11 @@ async def fetch_sitemap_urls(session: AsyncSession) -> list[str]:
     """Все URL, которые перечисляет sitemap.xml, в том же порядке."""
     from datetime import datetime, timezone
 
+    from src.application import hockey_event, site_matches, site_trainer_catalog, site_trainer_page
+
     base = _base()
+    settings = Settings()
+    now = datetime.now(timezone.utc)
     rows = (await session.execute(text(_PLACES_SQL.format(extra="")), public_scope_params())).mappings().all()
     by_city: dict[str, list[str]] = {}
     order: list[str] = []
@@ -153,31 +159,26 @@ async def fetch_sitemap_urls(session: AsyncSession) -> list[str]:
             order.append(city)
         by_city[city].append(place_page_url(base_url=base, city_name=city, slug=str(row["slug"])))
     urls = [f"{base}/", f"{base}/trainers"]
+    if hockey_event.enabled(settings):
+        urls.append(f"{base}/kk")
     for city in order:
         urls.append(f"{base}/c/{city_slug(city)}")
         urls.extend(by_city[city])
-    settings = Settings()
-    if settings.seasonal_rinks_enabled:
-        from src.application import winter_public
-        from src.application.winter_page import winter_city_path
-
-        now = datetime.now(timezone.utc)
-        for city_name in await winter_public.cities_with_points(session, now=now):
-            urls.append(f"{base}{winter_city_path(city_name)}")
-        for point in await winter_public.sitemap_points(session, now=now):
-            urls.append(place_page_url(base_url=base, city_name=point["city"], slug=point["slug"]))
-    from src.application import site_matches
-
-    if site_matches.site_enabled():
-        now = datetime.now(timezone.utc)
-        match_rows = await site_matches.sitemap_rows(session, now=now)
+    if site_matches.site_enabled(settings):
+        match_rows = await site_matches.sitemap_rows(session, now=now, settings=settings)
         if match_rows:
             urls.append(f"{base}{site_matches.SITE_PATH}")
         urls.extend(f"{base}{path}" for path, _stamp in match_rows)
     if site_matches.scope_of(settings).dinamo:
         urls.append(f"{base}{site_matches.DINAMO_HOME_PATH}")
-    from src.application import site_trainer_catalog, site_trainer_page
+    if settings.seasonal_rinks_enabled:
+        from src.application import winter_public
+        from src.application.winter_page import winter_city_path
 
+        for city_name in await winter_public.cities_with_points(session, now=now):
+            urls.append(f"{base}{winter_city_path(city_name)}")
+        for point in await winter_public.sitemap_points(session, now=now):
+            urls.append(place_page_url(base_url=base, city_name=point["city"], slug=point["slug"]))
     urls.extend(f"{base}{path}" for path, _stamp in await site_trainer_page.sitemap_rows(session))
     urls.extend(f"{base}{path}" for path, _stamp in await site_trainer_catalog.sitemap_rows(session))
     return urls

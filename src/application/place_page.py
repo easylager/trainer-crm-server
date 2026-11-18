@@ -1345,6 +1345,7 @@ def render_place_page(
     invite: bool = False,
     share_src: str | None = None,
     country: str | None = None,
+    noindex: bool = False,
 ) -> str:
     card = view["card"]
     title = page_title(view, invite=invite)
@@ -1364,8 +1365,8 @@ def render_place_page(
         city_page_url=city_page_url,
         public_skate=has_public_skating(card.get("venue_type")),
     )
-    # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
-    robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
+    # В индекс идёт основная карточка; варианты сеанса, даты и шаринга сохраняют канонический URL.
+    robots = "noindex, follow" if (noindex or view.get("focus") is not None or invite or share_src) else "index, follow"
 
     from src.application.public_analytics import public_analytics_head_html_from_settings
     from src.application.public_web_cta import public_page_view_beacon_script
