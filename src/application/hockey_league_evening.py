@@ -17,6 +17,10 @@
 * разыгрывается, если в споре хотя бы ``CAP_MIN_CONTENDERS``.
 
 Пороги — константы ниже: владелец пересмотрит их через пару недель.
+
+Жесты: «Стук клюшкой» и «2 минуты» (2 минуты штрафа). Один жест от человека человеку за игровой день в лиге,
+можно сменить или снять; только когда день лиги сыгран, себе нельзя, оба — участники. Пушей за жесты нет —
+их видно в лиге: в строке вечера и в таблице месяца («4 мин штрафа · 3 кепки»).
 """
 
 from __future__ import annotations
@@ -38,6 +42,18 @@ HIT, MISS, WAIT, NONE = "hit", "miss", "wait", "none"
 # Кепка дня: сколько человек должно быть в споре и какая доля матчей дня нужна, чтобы в него попасть.
 CAP_MIN_CONTENDERS = 3
 CAP_SHARE = Fraction(1, 2)
+
+GESTURE_STICK, GESTURE_PEN = "stick", "pen"
+GESTURES = (GESTURE_STICK, GESTURE_PEN)
+PENALTY_MINUTES = 2  # «2 минуты» — столько минут штрафа
+
+
+class GestureRefused(ValueError):
+    """Жест нельзя: себе, не участнику, неизвестный (текст — для человека)."""
+
+
+class DayNotPlayed(Exception):
+    """День лиги ещё не сыгран (или это не день лиги): жесты — только после последнего матча дня."""
 
 
 def _utc(value: datetime) -> datetime:
@@ -362,6 +378,104 @@ def scarf_of(row: DayRow, matches: list[DayMatch]) -> dict | None:
     return None
 
 
+# ---------- жесты ----------
+
+_DAY_GESTURES = text("""
+    SELECT g.from_key, g.to_key, g.kind, pl.display_name AS from_name
+    FROM hockey_league_gestures AS g
+    JOIN hockey_players AS pl ON pl.player_key = g.from_key
+    WHERE g.league_id = :league_id AND g.day = :day
+      AND g.from_key IN (SELECT player_key FROM hockey_league_members WHERE league_id = :league_id)
+    ORDER BY g.created_at, g.from_key
+    """)
+
+_UPSERT_GESTURE = text("""
+    INSERT INTO hockey_league_gestures (league_id, day, from_key, to_key, kind)
+    VALUES (:league_id, :day, :from_key, :to_key, :kind)
+    ON CONFLICT (league_id, day, from_key, to_key) DO UPDATE SET kind = EXCLUDED.kind, updated_at = now()
+    """)
+
+_DROP_GESTURE = text("""
+    DELETE FROM hockey_league_gestures
+    WHERE league_id = :league_id AND day = :day AND from_key = :from_key AND to_key = :to_key
+    """)
+
+_MEMBER_BY_PID = text("""
+    SELECT pl.player_key FROM hockey_league_members AS mb
+    JOIN hockey_players AS pl ON pl.player_key = mb.player_key
+    WHERE mb.league_id = :league_id AND pl.public_id = :pid
+    """)
+
+# Полученные жесты за дни окна: только от тех, кто ещё в лиге (ушёл — его жесты в лиге не видны).
+_PERIOD_GESTURES = text("""
+    SELECT g.to_key, g.kind, COUNT(*)::int AS n
+    FROM hockey_league_gestures AS g
+    WHERE g.league_id = :league_id AND g.day >= :first AND g.day <= :last
+      AND g.from_key IN (SELECT player_key FROM hockey_league_members WHERE league_id = :league_id)
+    GROUP BY g.to_key, g.kind
+    """)
+
+
+async def day_gestures(session: AsyncSession, league_id: int, day: date) -> list[dict]:
+    rows = await session.execute(_DAY_GESTURES, {"league_id": league_id, "day": day})
+    return [dict(r._mapping) for r in rows.all()]
+
+
+async def set_gesture(
+    session: AsyncSession, *, league, from_key: int, to_pid: str, day: date, kind: str | None, now: datetime
+) -> str | None:
+    """Дать, сменить (``kind``) или снять (``None``) жест участнику за игровой день. Участие ``from_key`` проверяет
+    вызывающий. ``GestureRefused`` — себе, не участнику, неизвестный жест; ``DayNotPlayed`` — день не сыгран."""
+    if kind is not None and kind not in GESTURES:
+        raise GestureRefused("Такого жеста нет")
+    to_key = (await session.execute(_MEMBER_BY_PID, {"league_id": league.id, "pid": to_pid})).scalar_one_or_none()
+    if to_key is None:
+        raise GestureRefused("Этого человека нет в лиге")
+    if to_key == from_key:
+        raise GestureRefused("Себе жест не дают")
+    if game_day(now) < day or not day_complete(await day_matches(session, league, day)):
+        raise DayNotPlayed(day)
+    params = {"league_id": league.id, "day": day, "from_key": from_key, "to_key": to_key}
+    if kind is None:
+        await session.execute(_DROP_GESTURE, params)
+    else:
+        await session.execute(_UPSERT_GESTURE, {**params, "kind": kind})
+    return kind
+
+
+@dataclass(frozen=True)
+class PeriodMarks:
+    """Жесты и кепки участника за период: для строки таблицы месяца."""
+
+    penalty_minutes: int = 0
+    sticks: int = 0
+    caps: int = 0
+
+
+async def period_marks(
+    session: AsyncSession, league, *, since: datetime, until: datetime, now: datetime
+) -> dict[int, PeriodMarks]:
+    """Минуты штрафа, стуки клюшкой и кепки дня за окно (по началу матча, внутри срока лиги)."""
+    since, until = _window(league, since, until)
+    if since >= until:
+        return {}
+    first, last = game_day(since), game_day(until - timedelta(microseconds=1))
+    pens: dict[int, int] = {}
+    sticks: dict[int, int] = {}
+    params = {"league_id": league.id, "first": first, "last": last}
+    for r in (await session.execute(_PERIOD_GESTURES, params)).all():
+        (pens if r.kind == GESTURE_PEN else sticks)[r.to_key] = r.n
+    caps: dict[int, int] = {}
+    for cap in (await window_caps(session, league, since=since, until=until, now=now)).values():
+        for key in cap.holders:
+            caps[key] = caps.get(key, 0) + 1
+    keys = set(pens) | set(sticks) | set(caps)
+    return {
+        k: PeriodMarks(penalty_minutes=PENALTY_MINUTES * pens.get(k, 0), sticks=sticks.get(k, 0), caps=caps.get(k, 0))
+        for k in keys
+    }
+
+
 def neighbours(days: list[date], day: date) -> tuple[date | None, date | None]:
     before = [d for d in days if d < day]
     after = [d for d in days if d > day]
@@ -386,6 +500,8 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
     rows = await day_rows(session, league.id, members, matches)
     prev, nxt = neighbours(days, day)
     cap = cap_of_rows(rows, matches)
+    complete = day_complete(matches)
+    gestures = await day_gestures(session, league.id, day)
     items = []
     for row in sorted(rows, key=lambda r: _sort_key(r, player_key)):
         mine = row.member.player_key == player_key
@@ -401,13 +517,28 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
                 "cap": row.member.player_key in cap.holders,
                 "in_cap_race": row.member.player_key in cap.contenders,
                 "scarf": scarf_of(row, matches),
+                # Жесты этой строке: от кого и какой (``from_me`` — мой); ``my_gesture`` — что дал я. Себе — нельзя.
+                "gestures": [
+                    {"kind": g["kind"], "from": g["from_name"], "from_me": g["from_key"] == player_key}
+                    for g in gestures
+                    if g["to_key"] == row.member.player_key
+                ],
+                "my_gesture": next(
+                    (
+                        g["kind"]
+                        for g in gestures
+                        if g["from_key"] == player_key and g["to_key"] == row.member.player_key
+                    ),
+                    None,
+                ),
+                "can_gesture": complete and not mine,
             }
         )
     return {
         "day": day.isoformat(),
         "prev": None if prev is None else prev.isoformat(),
         "next": None if nxt is None else nxt.isoformat(),
-        "complete": day_complete(matches),
+        "complete": complete,
         # Кепка дня: решилась ли, разыгрывалась ли (хватило ли людей) и сколько ходов нужно, чтобы быть в споре.
         "cap": {
             "decided": cap.decided,
@@ -421,6 +552,14 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
 
 
 __all__ = [
+    "GESTURES",
+    "PENALTY_MINUTES",
+    "DayNotPlayed",
+    "GestureRefused",
+    "PeriodMarks",
+    "day_gestures",
+    "period_marks",
+    "set_gesture",
     "CAP_MIN_CONTENDERS",
     "CAP_SHARE",
     "DayCap",

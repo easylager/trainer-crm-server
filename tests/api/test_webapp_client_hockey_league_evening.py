@@ -114,3 +114,83 @@ async def test_evening_for_members_only(app_use_test_db, db_session) -> None:
         with as_player(STRANGER):
             r = await client.get(f"/api/webapp/client/hockey/leagues/{league_id}/evening")
             assert r.status_code == 403
+
+
+async def _pid(db, key: int) -> str:
+    return (
+        await db.execute(text("SELECT public_id FROM hockey_players WHERE player_key = :k"), {"k": key})
+    ).scalar_one()
+
+
+@pytest.mark.asyncio
+async def test_gestures_one_per_pair_per_day_change_and_remove(app_use_test_db, db_session) -> None:
+    db = db_session
+    league_id = await _league(db)
+    played = datetime.now(timezone.utc) - timedelta(days=3)
+    m = await _match(db, played)
+    for key, pts in ((ME, 50), (ANYA, 20), (SASHA, 0)):
+        await _pick(db, key, m, "home", pts)
+    await db.commit()
+    anya, me, sasha = await _pid(db, ANYA), await _pid(db, ME), await _pid(db, SASHA)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with as_player(ME):
+            ev = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}/evening")).json()
+            day = ev["day"]
+            url = f"/api/webapp/client/hockey/leagues/{league_id}/evening/{day}/gesture"
+            # Кепка у Саши — значит, день сыгран и кепка разыгрывалась.
+            assert [r["display_name"] for r in ev["items"] if r["cap"]] == ["Саша"]
+            assert all(r["can_gesture"] is (not r["is_me"]) for r in ev["items"])
+
+            r = await client.put(url, json={"to": sasha, "kind": "pen"})
+            assert r.status_code == 200, r.text
+            row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
+            assert row["my_gesture"] == "pen" and row["gestures"] == [{"kind": "pen", "from": "Макс", "from_me": True}]
+
+            r = await client.put(url, json={"to": sasha, "kind": "stick"})  # сменить: жест один на пару за день
+            row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
+            assert row["gestures"] == [{"kind": "stick", "from": "Макс", "from_me": True}]
+
+            r = await client.put(url, json={"to": sasha, "kind": None})  # снять
+            row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
+            assert row["gestures"] == [] and row["my_gesture"] is None
+
+            assert (await client.put(url, json={"to": me, "kind": "stick"})).status_code == 400  # себе нельзя
+            assert (await client.put(url, json={"to": "nobody", "kind": "stick"})).status_code == 400
+            assert (await client.put(url, json={"to": anya, "kind": "slap"})).status_code == 422
+            await client.put(url, json={"to": sasha, "kind": "pen"})
+        with as_player(ANYA):
+            await client.put(url, json={"to": sasha, "kind": "pen"})
+            r = await client.put(url, json={"to": me, "kind": "stick"})
+            mine = next(x for x in r.json()["items"] if x["display_name"] == "Макс")
+            assert mine["gestures"] == [{"kind": "stick", "from": "Аня", "from_me": True}]
+        with as_player(STRANGER):
+            assert (await client.put(url, json={"to": sasha, "kind": "pen"})).status_code == 403
+        with as_player(ME):
+            table = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}")).json()
+            by_name = {x["display_name"]: x for x in table["items"]}
+            assert (by_name["Саша"]["penalty_minutes"], by_name["Саша"]["caps"]) == (4, 1)
+            assert by_name["Макс"]["sticks"] == 1 and by_name["Аня"]["penalty_minutes"] == 0
+
+
+@pytest.mark.asyncio
+async def test_gestures_only_after_the_day_is_played(app_use_test_db, db_session) -> None:
+    db = db_session
+    league_id = await _league(db)
+    now = datetime.now(timezone.utc)
+    await _match(db, now - timedelta(minutes=30), status="scheduled")
+    await db.commit()
+    sasha = await _pid(db, SASHA)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with as_player(ME):
+            ev = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}/evening")).json()
+            assert ev["complete"] is False and not any(r["can_gesture"] for r in ev["items"])
+            r = await client.put(
+                f"/api/webapp/client/hockey/leagues/{league_id}/evening/{ev['day']}/gesture",
+                json={"to": sasha, "kind": "pen"},
+            )
+            assert r.status_code == 409
+            r = await client.put(
+                f"/api/webapp/client/hockey/leagues/{league_id}/evening/2026-01-01/gesture",
+                json={"to": sasha, "kind": "pen"},
+            )
+            assert r.status_code == 409  # не день лиги

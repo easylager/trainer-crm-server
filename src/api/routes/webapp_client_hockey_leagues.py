@@ -46,7 +46,13 @@ from src.application.hockey_leagues import (
     term_options,
     update_league,
 )
-from src.application.hockey_league_evening import league_evening
+from src.application.hockey_league_evening import (
+    DayNotPlayed,
+    GestureRefused,
+    league_evening,
+    period_marks,
+    set_gesture,
+)
 from src.application.hockey_races import crown_counts, league_crown_wall, race_summary
 from src.application.hockey_share import record_card_event
 from src.application.hockey_slices import parse_period
@@ -90,6 +96,13 @@ class JoinLeagueBody(BaseModel):
     display_name: str | None = None
     # С какой карточки в чате пришёл: для воронки TASK-300.
     from_card: Literal["result", "league"] | None = None
+
+
+class GestureBody(BaseModel):
+    """Жест участнику за игровой день: ``to`` — его ``pid`` из «Вечера», ``kind`` пустой — снять."""
+
+    to: str
+    kind: Literal["stick", "pen"] | None = None
 
 
 class PatchLeagueBody(BaseModel):
@@ -339,6 +352,10 @@ async def get_client_hockey_league(
     )
     titles = await league_titles(session, league_id=league_id, now=now)
     crowns = await crown_counts(session, league_id=league_id, player_keys=[row.player_key for row in rows])
+    # Минуты штрафа, стуки и кепки дня — за показанный период (месяц или весь срок лиги).
+    league = await member_league(session, league_id=league_id, player_key=player_key)
+    since, until = (chosen.since, chosen.until) if chosen else (league.starts_at, league.ends_at)
+    marks = await period_marks(session, league, since=since, until=until, now=now)  # type: ignore[arg-type]
     return {
         "id": summary.id,
         "name": summary.name,
@@ -350,8 +367,18 @@ async def get_client_hockey_league(
         "period": None if chosen is None else {"key": chosen.key, "title": chosen.title},
         "race": await race_summary(session, now=now),
         "wall": await league_crown_wall(session, league_id=league_id, now=now),
-        "items": [{**_table_row(row, player_key, titles), "crowns": crowns.get(row.player_key, 0)} for row in rows],
+        "items": [
+            {**_table_row(row, player_key, titles), "crowns": crowns.get(row.player_key, 0), **_marks_out(marks, row)}
+            for row in rows
+        ],
     }
+
+
+def _marks_out(marks: dict, row: LeagueRow) -> dict:
+    found = marks.get(row.player_key)
+    if found is None:
+        return {"penalty_minutes": 0, "sticks": 0, "caps": 0}
+    return {"penalty_minutes": found.penalty_minutes, "sticks": found.sticks, "caps": found.caps}
 
 
 @router.get("/client/hockey/leagues/{league_id}/evening")
@@ -368,6 +395,31 @@ async def get_client_hockey_league_evening(
         league = await member_league(session, league_id=league_id, player_key=player_key)
     except (LookupError, PermissionError) as exc:
         _raise_league(exc)
+    return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
+
+
+@router.put("/client/hockey/leagues/{league_id}/evening/{day}/gesture")
+async def put_client_hockey_league_gesture(
+    league_id: int,
+    day: date,
+    body: GestureBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Жест другу за сыгранный день лиги: дать, сменить или снять. Пушей нет — ответ: «Вечер» этого дня."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league = await member_league(session, league_id=league_id, player_key=player_key)
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    try:
+        await set_gesture(session, league=league, from_key=player_key, to_pid=body.to, day=day, kind=body.kind, now=now)
+    except GestureRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DayNotPlayed as exc:
+        raise HTTPException(status_code=409, detail="Жесты — когда все матчи дня сыграны") from exc
+    await session.commit()
     return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
 
 

@@ -779,6 +779,31 @@ class HockeyLeagueMember(Base):
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeyLeagueGesture(Base):
+    """Жест в вечере лиги (TASK-431): «Стук клюшкой» или «2 минуты» — один от человека человеку за игровой день."""
+
+    __tablename__ = "hockey_league_gestures"
+    __table_args__ = (
+        CheckConstraint("kind IN ('stick', 'pen')", name="ck_hockey_league_gestures_kind"),
+        CheckConstraint("from_key <> to_key", name="ck_hockey_league_gestures_not_self"),
+        Index("ix_hockey_league_gestures_to", "league_id", "to_key", "day"),
+    )
+
+    league_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date(), primary_key=True)
+    from_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
+    )
+    to_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
+    )
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class HockeyCardEvent(Base):
     """Карточка «Кто кого» в чате: отправили, открыли, вступили — без ключа игрока (TASK-300)."""
 
