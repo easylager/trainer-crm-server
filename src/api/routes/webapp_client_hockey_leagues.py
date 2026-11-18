@@ -529,7 +529,9 @@ async def post_client_hockey_league_image(
     except LeagueImageError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     try:
-        league, previous = await set_league_image(session, league_id=league_id, player_key=player_key, image_key=new_key)
+        league, previous = await set_league_image(
+            session, league_id=league_id, player_key=player_key, image_key=new_key
+        )
         payload = await _created_out(session, league, player_key, now)
     except (LookupError, PermissionError) as exc:
         await release_image(session, new_key)  # пока файл ждал, лигу удалили или передали: он никому не нужен

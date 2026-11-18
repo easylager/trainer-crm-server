@@ -14,6 +14,8 @@ from sqlalchemy.exc import IntegrityError
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "versions"
 MIGRATION_FILE = "0245_hockey_matches.py"
 DEPENDENT_FILES = (
+    # 0331: жесты вечера ссылаются на лиги (0247) — снимаем самыми первыми (TASK-431).
+    "0331_kk_league_gestures.py",
     # 0318: жалобы на лиги ссылаются на лиги (0247) — снимаем самыми первыми.
     "0318_kk_league_identity.py",
     # 0301: game_matches видит previous_starts_at из 0294 — снимаем до 0294.
