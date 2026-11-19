@@ -202,7 +202,7 @@ async def test_day_cap_is_worn_until_the_next_played_day(db_session) -> None:
     assert state.head(SASHA, enabled=True) == {"item": "cap"} and state.cap.captains == {ME}
     assert SASHA not in await league_titles(db, league_id=league_id, now=NOW)
 
-    # Второй матч сыгран: в споре двое (Саша не ходил) — кепка не разыгрывается и со Саши снята.
+    # Второй матч сыгран: в споре двое (Саша не ходил) — вдвоём тоже разыгрывается: кепка у Макса, капитан — Аня.
     await db.execute(
         text(
             "UPDATE hockey_matches SET status = 'final', home_score = 2, away_score = 1, decided_in = 'regulation', result_source = 'auto' WHERE id = :id"
@@ -211,12 +211,13 @@ async def test_day_cap_is_worn_until_the_next_played_day(db_session) -> None:
     )
     await _pick(db, ME, later, "home", points=20)
     after = await _evening(db, league_id, now=NOW + timedelta(hours=4))
-    assert after["cap"]["decided"] and not after["cap"]["in_play"]
+    assert after["cap"]["decided"] and after["cap"]["in_play"]
     titles = await league_titles(db, league_id=league_id, now=NOW + timedelta(hours=4))
     assert all(t["id"] != "cap" for t in titles.values())
     league = await member_league(db, league_id=league_id, player_key=ME)
     later_state = await current_state(db, league, now=NOW + timedelta(hours=4))
-    assert later_state.head(SASHA, enabled=True) is None and not later_state.cap.captains
+    assert later_state.head(SASHA, enabled=True) is None  # со Саши кепка снята
+    assert later_state.cap.holders == {ME} and later_state.cap.captains == {ANYA}
 
 
 @pytest.mark.asyncio

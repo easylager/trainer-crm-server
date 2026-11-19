@@ -44,7 +44,7 @@ from src.ingestion.hockey_sources import MINSK_TZ
 HIT, MISS, WAIT, NONE = "hit", "miss", "wait", "none"
 
 # Кепка дня: сколько человек должно быть в споре и какая доля матчей дня нужна, чтобы в него попасть.
-CAP_MIN_CONTENDERS = 3
+CAP_MIN_CONTENDERS = 2  # владелец 2026-11-19: вдвоём тоже играют — кепка и капитан есть и в лиге на двоих
 CAP_SHARE = Fraction(1, 2)
 
 GESTURE_STICK, GESTURE_PEN = "stick", "pen"

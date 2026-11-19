@@ -170,11 +170,11 @@ body.client-shell-body .client-mini-nav > button.btn-app-home {
   transform: scale(0.94);
 }
 
-/* «КТО КОГО» в баре — заглавными: при том же кегле капс выше и шире строчных соседей. Уменьшаем, чтобы высота букв
-   совпала со строчными подписями «Главная», «Поиск». */
+/* «КТО КОГО» в баре — заглавными: при том же кегле капс выше и шире строчных соседей. Прописные по шкале — ступень
+   kicker с трекингом: высота букв совпадает со строчными подписями «Главная», «Поиск». */
 .client-tab-bar__btn[data-tab-id="kk"] > span:last-child {
-  font-size: 0.86em;
-  letter-spacing: 0.01em;
+  font-size: var(--app-text-kicker);
+  letter-spacing: 0.03em;
 }
 
 .client-tab-bar__btn--active {

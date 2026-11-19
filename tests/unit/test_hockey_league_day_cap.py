@@ -6,7 +6,7 @@ from src.application.hockey_league_evening import CAP_MIN_CONTENDERS, cap_min_mo
 
 
 def test_threshold_constants_are_the_owners_numbers() -> None:
-    assert CAP_MIN_CONTENDERS == 3
+    assert CAP_MIN_CONTENDERS == 2
     assert [cap_min_moves(n) for n in (1, 2, 3, 4, 5)] == [1, 1, 2, 2, 3]
 
 
@@ -34,10 +34,13 @@ def test_half_of_the_day_is_enough_to_be_in_the_race() -> None:
     assert day_cap(short, matches=3, complete=True).holders == {4}
 
 
-def test_needs_three_in_the_race() -> None:
+def test_two_in_the_race_are_enough() -> None:
+    # Владелец 2026-11-19: вдвоём тоже играют. Третий не ходил — кепка и капитан всё равно есть.
     stats = {1: (0, 2), 2: (50, 2), 3: (0, 0)}
     cap = day_cap(stats, matches=2, complete=True)
-    assert cap.holders == frozenset() and cap.decided and not cap.in_play
+    assert cap.holders == {1} and cap.captains == {2} and cap.in_play
+    alone = day_cap({1: (50, 2), 3: (0, 0)}, matches=2, complete=True)
+    assert alone.holders == frozenset() and alone.decided and not alone.in_play  # в споре один — не с кем
 
 
 def test_tie_at_the_bottom_caps_everyone_at_the_bottom() -> None:
@@ -86,5 +89,5 @@ def test_captains_tie_and_no_captain_without_a_decided_race() -> None:
     assert day_cap({1: (20, 2), 2: (20, 2), 3: (20, 2)}, matches=2, complete=True).captains == frozenset()
     # Средние равны (кепки нет), а суммы разные — капитан есть.
     assert day_cap({1: (20, 2), 2: (40, 4), 3: (10, 1)}, matches=2, complete=True).captains == {2}
-    assert day_cap({1: (0, 2), 2: (50, 2)}, matches=2, complete=True).captains == frozenset()  # в споре двое
+    assert day_cap({1: (0, 2), 2: (50, 2)}, matches=2, complete=True).captains == {2}  # вдвоём — тоже
     assert day_cap({1: (0, 2), 2: (50, 2), 3: (40, 2)}, matches=3, complete=False).captains == frozenset()
