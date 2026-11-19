@@ -106,7 +106,7 @@ describe('строка человека', () => {
     ];
     const ev = Object.assign({}, EV, { items });
     assert.deepEqual(S.eveningVerdict(ev), {
-      captain: { label: 'Капитан', name: 'Андрей', sub: '4 из 4 · 33' + NBSP + 'за ход' },
+      captain: { label: 'Капитан', name: 'Андрей', sub: '4 из 4 · +130' },
       cap: { label: 'Кепка дня', name: 'у тебя', sub: '0 из 4. Носишь до следующего вечера' },
     });
     const other = Object.assign({}, EV, { items: items.map((r) => Object.assign({}, r, { cap: r.display_name === 'Мария' })) });

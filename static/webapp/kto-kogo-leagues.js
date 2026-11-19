@@ -757,6 +757,11 @@
     return fresh(at) ? at : 0;
   }
 
+  /** Карточка экипировки в чат лиги: картинка «Олег разыскивается», кнопка под ней зовёт в эту лигу. */
+  function shareKitButton(a, ev, cls) {
+    return h('button', { type: 'button', class: cls, onclick: function () { K.shareCard({ card: 'outfit', league_id: a.id, day: ev.day }, null, null); }, text: 'Показать в чате' });
+  }
+
   /** Плашка получателю: «Андрей выдаёт тебе экипировку». */
   function receivedBlock(a, ev) {
     var b = K.Kit.receivedBanner(ev);
@@ -768,14 +773,21 @@
       h('h3', { class: 'kk-got__t', text: b.title }),
       h('p', { class: 'kk-got__x', text: b.text }),
       h('p', { class: 'kk-got__tail', text: b.tail }),
+      shareKitButton(a, ev, 'kk-btn kk-btn--gold'),
     ]);
   }
 
   /** Выбор в праве капитана живёт в аргументах экрана: кому, что, правим ли выданное. */
   function kitDraft(a, ev) {
     var award = ev.captain.award;
+    var sg = ev.captain.suggest;
     if (!a.kit || a.kit.day !== ev.day) {
-      a.kit = { day: ev.day, to: award ? award.to : K.Kit.defaultTarget(ev.items), item: award ? award.item : K.Kit.OUTFITS[0].id, editing: !award, at: 0, busy: false };
+      a.kit = {
+        day: ev.day,
+        to: award ? award.to : sg ? sg.to : K.Kit.defaultTarget(ev.items),
+        item: award ? award.item : sg ? sg.item : K.Kit.OUTFITS[0].id,
+        editing: !award, at: 0, busy: false,
+      };
     }
     if (!(ev.items || []).some(function (r) { return r.pid === a.kit.to; })) a.kit.to = K.Kit.defaultTarget(ev.items);
     return a.kit;
@@ -800,6 +812,7 @@
           got ? h('div', { class: 'kk-cpt__big' }, [K.kitAva(got.display_name, 64, { head: got.head, cls: got.is_me ? '' : 'kk-ava--soft', dropAt: at })]) : null,
           h('div', { class: 'kk-cpt__who' }, [h('span', { class: 'kk-cpt__dt', text: line.title }), h('span', { class: 'kk-cpt__dl', text: line.text })]),
         ]),
+        shareKitButton(a, ev, 'kk-btn kk-btn--gold'),
         h('button', { type: 'button', class: 'kk-cpt__alt', id: 'kk-cpt-change', 'data-keep': '', onclick: function () { p.editing = true; p.to = award.to; p.item = award.item; p.at = 0; K.render(); }, text: 'Поменять' }),
       ]);
     }
@@ -815,6 +828,7 @@
     return h('section', { class: 'kk-cpt', 'aria-label': 'Право капитана' }, [
       h('h3', { class: 'kk-cpt__t', text: 'Право капитана' }),
       h('p', { class: 'kk-cpt__lead', text: 'Выбери экипировку и кому её выдать — любому в лиге, даже себе. До следующего вечера, увидят все в «КТО КОГО».' }),
+      K.Kit.revengeLine(ev) ? h('p', { class: 'kk-cpt__rev', text: K.Kit.revengeLine(ev) }) : null,
       h('span', { class: 'kk-cpt__lbl', id: 'kk-cpt-to', text: 'КОМУ' }),
       h('div', { class: 'kk-cpt__grid', role: 'group', 'aria-labelledby': 'kk-cpt-to' }, items.map(function (r) {
         return pickButton('kk-cpt-to-' + r.pid, r.pid === p.to, function () { if (r.pid !== p.to) choose({ to: r.pid }); }, [

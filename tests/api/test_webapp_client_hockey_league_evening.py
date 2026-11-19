@@ -21,6 +21,7 @@ def _captain_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
     """Право капитана включено во всех лигах (KK_CAPTAIN_LEAGUES=*); тесты выключения ставят своё."""
     monkeypatch.setenv("KK_CAPTAIN_LEAGUES", "*")
 
+
 ME, ANYA, SASHA, STRANGER = 880_431_201, 880_431_202, 880_431_203, 880_431_204
 
 
@@ -289,3 +290,40 @@ async def test_outfit_off_switch(app_use_test_db, db_session, monkeypatch) -> No
                 json={"to": sasha, "item": "bag"},
             )
             assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_outfit_card_share_and_signed_png(app_use_test_db, db_session, monkeypatch) -> None:
+    """Карточка экипировки для чата (TASK-432): подпись, кнопка в лигу, картинка по подписанному адресу."""
+    monkeypatch.setenv("WEBAPP_BASE_URL", "https://glide.test")
+    db = db_session
+    league_id = await _league(db)
+    m = await _match(db, datetime.now(timezone.utc) - timedelta(days=3))
+    for key, pts in ((ME, 50), (ANYA, 20), (SASHA, 0)):
+        await _pick(db, key, m, "home", pts)
+    await db.commit()
+    sasha = await _pid(db, SASHA)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with as_player(ME):
+            ev = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}/evening")).json()
+            share = {"card": "outfit", "league_id": league_id, "day": ev["day"]}
+            assert (await client.post("/api/webapp/client/hockey/share", json=share)).status_code == 404  # не выдано
+            await client.put(
+                f"/api/webapp/client/hockey/leagues/{league_id}/evening/{ev['day']}/outfit",
+                json={"to": sasha, "item": "wanted"},
+            )
+            r = await client.post("/api/webapp/client/hockey/share", json=share)
+            assert r.status_code == 200, r.text
+            assert r.json()["text"].startswith("КТО КОГО: Саша разыскивается — за 0 из 1.")
+        with as_player(STRANGER):
+            assert (await client.post("/api/webapp/client/hockey/share", json=share)).status_code == 403
+    from src.application.hockey_kit_card import outfit_card_sig
+    from src.shared.config import Settings
+
+    stamp = ev["day"][2:].replace("-", "")
+    sig = outfit_card_sig(Settings().telegram_bot_token_client, league_id, stamp, sasha, "wanted")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        png = await client.get(f"/kk/o/{league_id}/{stamp}/{sasha}/wanted/{sig}.png")
+        assert png.status_code == 200 and png.headers["content-type"] == "image/png" and png.content[:4] == b"\x89PNG"
+        bad = await client.get(f"/kk/o/{league_id}/{stamp}/{sasha}/bucket/{sig}.png")
+        assert bad.status_code == 404

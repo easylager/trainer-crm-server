@@ -983,11 +983,6 @@
 
   var FEW_WORD = { 2: 'двоих', 3: 'троих', 4: 'четверых', 5: 'пятерых' };
 
-  /** Очки за ход, округлённо: так сравниваются капитан и кепка. */
-  function perMove(r) {
-    return r && r.moves ? Math.round((r.points || 0) / r.moves) : 0;
-  }
-
   /**
    * Итог сыгранного вечера: капитан и кепка дня — оба по правилу сервера (средний за ход среди тех, кто в споре).
    * Имена без склонения (пол и падеж неизвестны): метка «Капитан» / «Кепка дня» и имя крупно.
@@ -998,8 +993,7 @@
     var captains = items.filter(function (r) { return r.captain; });
     var caps = items.filter(function (r) { return r.cap; });
     var captain = null;
-    // Капитана решает средний за ход (как кепку), поэтому он и в подписи: «2 из 4 · 40 за ход».
-    if (captains.length === 1) captain = { label: 'Капитан', name: captains[0].is_me ? 'ты' : captains[0].display_name, sub: eveningMoves(captains[0], ev) + ' · ' + perMove(captains[0]) + NBSP + 'за ход' };
+    if (captains.length === 1) captain = { label: 'Капитан', name: captains[0].is_me ? 'ты' : captains[0].display_name, sub: eveningMoves(captains[0], ev) + ' · +' + (captains[0].points || 0) };
     else if (captains.length) captain = { label: 'Капитаны', name: whoList(captains), sub: 'Выдаёт тот, кто успеет первым' };
     var cap = null;
     if (caps.length === 1 && caps[0].is_me) cap = { label: 'Кепка дня', name: 'у тебя', sub: eveningMoves(caps[0], ev) + '. Носишь до следующего вечера' };

@@ -842,7 +842,7 @@ class HockeyCardEvent(Base):
     __tablename__ = "hockey_card_events"
     __table_args__ = (
         CheckConstraint("kind IN ('shared', 'opened', 'joined')", name="ck_hockey_card_events_kind"),
-        CheckConstraint("card IN ('result', 'league')", name="ck_hockey_card_events_card"),
+        CheckConstraint("card IN ('result', 'league', 'crown', 'outfit')", name="ck_hockey_card_events_card"),
         Index("ix_hockey_card_events_created", "created_at"),
     )
 

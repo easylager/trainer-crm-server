@@ -115,3 +115,10 @@ describe('правила «Капитан»', () => {
     assert.match(r.collectionNote, /^Все 10 вещей — у каждого капитана, бесплатно/);
   });
 });
+
+describe('рисунки вещей — одни на Mini App и карточку для чата', () => {
+  it('src/application/kk_kit_shapes.json совпадает с SHAPES из kto-kogo-kit.js', () => {
+    const json = JSON.parse(fs.readFileSync(path.join(__dirname, '../../src/application/kk_kit_shapes.json'), 'utf8'));
+    assert.deepEqual(json, JSON.parse(JSON.stringify(Kit.SHAPES)));
+  });
+});

@@ -50,12 +50,22 @@ def upgrade() -> None:
         sa.Column("notice_failed", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
     op.execute("ALTER TABLE hockey_player_prefs ADD COLUMN IF NOT EXISTS notify_outfit boolean")
+    # Карточка экипировки для чата — в воронке карточек отдельной строкой.
+    op.drop_constraint("ck_hockey_card_events_card", "hockey_card_events", type_="check")
+    op.create_check_constraint(
+        "ck_hockey_card_events_card", "hockey_card_events", "card IN ('result', 'league', 'crown', 'outfit')"
+    )
     # Ключ (league_id, day) обслуживает чтение; индексы ниже — для каскадного удаления игрока.
     op.create_index("ix_hockey_league_outfits_to", "hockey_league_outfits", ["to_key"])
     op.create_index("ix_hockey_league_outfits_captain", "hockey_league_outfits", ["captain_key"])
 
 
 def downgrade() -> None:
+    op.execute("DELETE FROM hockey_card_events WHERE card = 'outfit'")
+    op.drop_constraint("ck_hockey_card_events_card", "hockey_card_events", type_="check")
+    op.create_check_constraint(
+        "ck_hockey_card_events_card", "hockey_card_events", "card IN ('result', 'league', 'crown')"
+    )
     op.execute("ALTER TABLE hockey_player_prefs DROP COLUMN IF EXISTS notify_outfit")
     op.drop_index("ix_hockey_league_outfits_captain", table_name="hockey_league_outfits")
     op.drop_index("ix_hockey_league_outfits_to", table_name="hockey_league_outfits")

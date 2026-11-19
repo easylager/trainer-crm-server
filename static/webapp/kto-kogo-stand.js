@@ -93,6 +93,24 @@
     }));
   }
 
+  /**
+   * Экипировка от капитанов лиг (TASK-432): что на человеке сейчас, последняя выданная — первой. Названий лиг нет.
+   * Нет экипировки — блока нет.
+   */
+  function kitSection(outfit, name, mine) {
+    var list = K.Kit.outsideList(outfit);
+    if (!list.length) return null;
+    return h('section', { class: 'kk-card kk-kitst', 'aria-label': 'Экипировка' }, [
+      h('span', { class: 'kk-lbl', text: mine ? 'НА ТЕБЕ СЕЙЧАС' : 'ЭКИПИРОВКА СЕЙЧАС' }),
+      h('div', { class: 'kk-kitlist' }, list.map(function (x) {
+        return h('div', { class: 'kk-kitlist__r' }, [
+          h('span', { class: 'kk-kitlist__ava' }, [K.kitAva(name, 44, { head: { item: x.id, stat: x.stat, score: x.score }, cls: mine ? '' : 'kk-ava--soft' })]),
+          h('span', { class: 'kk-col' }, [h('span', { class: 'kk-kitlist__t', text: x.full }), h('span', { class: 'kk-kitlist__s', text: x.from + ' · до следующего вечера' })]),
+        ]);
+      })),
+    ]);
+  }
+
   function ledge() {
     return h('span', { class: 'kk-ledge', 'aria-hidden': 'true' });
   }
@@ -106,7 +124,7 @@
     render: function () {
       if (!state.profile) return [h('main', { class: 'kk-main' }, [K.topbar('Мой стенд', null), K.loading()])];
       var m = model();
-      var main = h('main', { class: 'kk-main' }, [K.topbar('Мой стенд', S.standCountLabel(m.total))]);
+      var main = h('main', { class: 'kk-main' }, [K.topbar('Мой стенд', S.standCountLabel(m.total)), kitSection(state.profile.outfit, state.profile.display_name || 'Я', true)]);
       main.appendChild(h('div', { class: 'kk-plqs' }, [
         plaque('Общая таблица', m.overall, 'ещё без короны'),
         plaque('Лиги', m.leagues, 'ещё без короны'),
@@ -136,7 +154,7 @@
       var m = S.standModel(a.data.crowns, state.clubs || []);
       var mine = COMPARE_ENABLED && a.compare && state.profile ? model() : null;
       var who = a.data.display_name || 'Игрок';
-      var main = h('main', { class: 'kk-main' }, [K.topbar(a.data.display_name || 'Игрок', S.standCountLabel(m.total))]);
+      var main = h('main', { class: 'kk-main' }, [K.topbar(a.data.display_name || 'Игрок', S.standCountLabel(m.total)), kitSection(a.data.outfit, who, !!a.data.is_me)]);
       if (COMPARE_ENABLED && !a.data.is_me) {
         main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--alt', 'aria-pressed': a.compare ? 'true' : 'false', onclick: function () { a.compare = !a.compare; K.render(); }, text: a.compare ? 'Скрыть сравнение' : 'Сравнить с моим стендом' }));
       }

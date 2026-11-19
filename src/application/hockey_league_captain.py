@@ -294,6 +294,57 @@ async def set_outfit(
         raise AlreadyGiven(award.captain_name if award else "")
 
 
+@dataclass(frozen=True)
+class OutfitCard:
+    name: str
+    pid: str
+    item: str
+    stat: str
+    score: str
+    invite_code: str
+
+
+async def outfit_card(session: AsyncSession, *, league, day: date, now: datetime) -> OutfitCard | None:
+    """Что на карточке для чата: действительная выдача вечера ``day`` и цифры получателя. Нет выдачи — ``None``."""
+    if not captain_enabled(league.id):
+        return None
+    state = await evening_state(session, league, day, now=now)
+    if state.award is None:
+        return None
+    row = next(r for r in state.rows if r.member.player_key == state.award.to_key)
+    nums = outfit_numbers(row, state.matches)
+    return OutfitCard(
+        row.member.display_name, row.member.pid, state.award.item, nums["stat"], nums["score"], league.invite_code
+    )
+
+
+async def card_for(session: AsyncSession, *, league_id: int, day: date, pid: str, item: str) -> dict | None:
+    """Картинка по подписанному адресу: имя и цифры — из базы (как у вечера ``day``), не из адреса."""
+    from src.application.hockey_leagues import _LEAGUE_BY_ID, _league
+
+    found = (await session.execute(_LEAGUE_BY_ID, {"league_id": league_id})).one_or_none()
+    if found is None or item not in OUTFITS:
+        return None
+    league = _league(found)
+    key = (await session.execute(_MEMBER_BY_PID, {"league_id": league_id, "pid": pid})).scalar_one_or_none()
+    if key is None:
+        return None
+    matches = await day_matches(session, league, day)
+    row = next(
+        (
+            r
+            for r in await day_rows(
+                session, league_id, await league_members(session, league_id, now=_utc(league.ends_at)), matches
+            )
+            if r.member.player_key == key
+        ),
+        None,
+    )
+    if row is None:
+        return None
+    return {"name": row.member.display_name, "item": item, **outfit_numbers(row, matches)}
+
+
 _PLAYER_NAME = text("SELECT display_name FROM hockey_players WHERE player_key = :player_key")
 
 
@@ -370,6 +421,9 @@ __all__ = [
     "award_valid",
     "captain_enabled",
     "chat_give",
+    "card_for",
+    "outfit_card",
+    "OutfitCard",
     "captain_leagues",
     "current_state",
     "day_award",
