@@ -163,6 +163,19 @@ a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
   font-size: .83rem;
 }
 .kk-earned strong { color: var(--kk-gold); white-space: nowrap; }
+.kk-scoring, .kk-trump {
+  margin-top: 12px;
+  padding-inline: 11px;
+  color: var(--kk-muted);
+  font-size: .82rem;
+  line-height: 1.3;
+}
+.kk-scoring h2 { margin: 0; color: var(--kk-panel-ink); font-size: inherit; font-weight: 700; }
+.kk-scoring dl { display: grid; gap: 4px; margin: 6px 0 0; }
+.kk-scoring dl > div, .kk-trump { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.kk-scoring dd { margin: 0; white-space: nowrap; }
+.kk-trump { margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffffff2d; }
+.kk-scoring strong, .kk-trump strong { color: var(--kk-gold); white-space: nowrap; }
 @media (prefers-reduced-motion: no-preference) {
   .kk-earned { animation: kk-earned .5s .22s ease-out both; }
   @keyframes kk-earned { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

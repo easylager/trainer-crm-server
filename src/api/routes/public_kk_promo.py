@@ -16,7 +16,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from src.application import hockey_event, site_matches
-from src.application.hockey_game import POINTS_WINNER
+from src.application.hockey_game import POINTS_DIFF, POINTS_EXACT, POINTS_GOALS, POINTS_WINNER
 from src.application.hockey_promo import clean_src
 from src.application.hockey_teams import TEAMS, logo_path
 from src.application.place_links import public_telegram_entry_link
@@ -228,6 +228,15 @@ def _landing_body(go: str, *, show_matches: bool) -> str:
         </div>
       </div>
       <div class="kk-earned"><span>Победитель угадан</span><strong>+{POINTS_WINNER} очков</strong></div>
+      <div class="kk-scoring">
+        <h2>Если прогнозируешь счёт</h2>
+        <dl>
+          <div><dt>Разница шайб</dt><dd>+{POINTS_DIFF}</dd></div>
+          <div><dt>Шайбы каждой команды</dt><dd>+{POINTS_GOALS} за команду</dd></div>
+          <div><dt>Точный счёт</dt><dd><strong>{POINTS_EXACT} всего</strong></dd></div>
+        </dl>
+      </div>
+      <div class="kk-trump"><span>Козырь недели</span><strong>×2 за один матч</strong></div>
     </figure>
   </section>
   <section class="kk-league" id="league" aria-labelledby="league-title">

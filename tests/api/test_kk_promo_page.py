@@ -76,9 +76,16 @@ async def test_public_landing_stays_on_mobile_and_campaign_links_keep_their_trac
     assert "startapp=kks_site" in plain.text and "location.replace" not in plain.text
     assert 'href="#league">Лига друзей</a>' in plain.text
     assert 'class="kk-example"' in plain.text and 'class="rail"' not in plain.text
+    example = plain.text.split('<figure class="kk-example">', 1)[1].split("</figure>", 1)[0]
+    assert "Победитель угадан</span><strong>+20 очков</strong>" in example
+    assert "<dt>Разница шайб</dt><dd>+10</dd>" in example
+    assert "<dt>Шайбы каждой команды</dt><dd>+10 за команду</dd>" in example
+    assert "<dt>Точный счёт</dt><dd><strong>50 всего</strong></dd>" in example
+    assert "Козырь недели</span><strong>×2 за один матч</strong>" in example
     assert plain.text.index('id="league"') < plain.text.index("Свои команды") < plain.text.index("Корона каждый месяц")
     assert '<meta name="robots" content="noindex">' in campaign.text
     assert 'class="rail"' in campaign.text and not any(url in campaign.text for url in landing_assets)
+    assert 'class="kk-scoring"' not in campaign.text
     assert "startapp=kks_insta" in campaign.text and "location.replace" in campaign.text
     assert "User-Agent" in campaign.headers["Vary"].split(", ")
 
