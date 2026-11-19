@@ -360,8 +360,12 @@ def check_outfit_card_sig(token: str, league_id: int, day: str, pid: str, item: 
     return hmac.compare_digest(outfit_card_sig(token, league_id, day, pid, item), sig or "")
 
 
+_PREP = re.compile(r"(?<![^ ])([вс]) ")
+
+
 def outfit_head(name: str, item: str) -> str:
-    return f"{name} {PHRASES[item]}"
+    """«Олег в маске с трубкой»: однобуквенный предлог держится со следующим словом — «в» не висит в конце строки."""
+    return f"{name} " + _PREP.sub("\\1\u00a0", PHRASES[item])
 
 
 def outfit_caption(*, name: str, item: str, stat: str) -> str:

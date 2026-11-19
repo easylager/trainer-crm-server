@@ -521,7 +521,7 @@ def result_text(
     total = points * (2 if doubled else 1)
     x2 = " с козырем" if doubled else ""
     # Слова вердикта те же, что ``verdict`` в kto-kogo-model.js: бот и Mini App называют исход одинаково.
-    head = {POINTS_EXACT: "В точку!", 30: "Почти в точку", 20: "Угадал победителя", 10: "Угадал шайбы"}.get(points)
+    head = {POINTS_EXACT: "В точку!", 30: "Почти в точку", 20: "Победитель угадан", 10: "Шайбы угаданы"}.get(points)
     if head is None:
         verdict = "Мимо. Бывает."
     elif points == POINTS_EXACT:
@@ -580,15 +580,15 @@ def cap_line(*, league_name: str, holders: tuple[str, ...] | list[str], mine: bo
     league = html.escape(league_name)
     if len(holders) == 1:
         who = "у тебя" if mine else html.escape(holders[0])
-        return f"<b>Кепка дня</b> в лиге «{league}» — {who}: хуже всех угадывал в этот день."
+        return f"<b>Кепка дня</b> в лиге «{league}» — {who}: хуже всех в этот вечер."
     names = [html.escape(n) for n in holders]
     joined = ", ".join(names[:-1]) + " и " + names[-1]
-    return f"<b>Кепка дня</b> в лиге «{league}» — {joined}: хуже всех угадывали в этот день."
+    return f"<b>Кепка дня</b> в лиге «{league}» — {joined}: хуже всех в этот вечер."
 
 
 def captain_line(*, league_name: str, offer: dict | None = None) -> str:
     """Строка сводки капитану вечера (TASK-432) и готовое предложение для выдачи в один тап (кнопка — ``offer_button``).
-    Имена не склоняем: «Олег — 0 из 4», «Олег — автор твоего ведра»."""
+    Имена не склоняем: «Олег — 0 из 4», «Олег — автор твоей каски»."""
     from src.application.hockey_league_captain import OUTFIT_WORDS
 
     head = f"<b>Ты капитан</b> в лиге «{html.escape(league_name)}»"
@@ -597,16 +597,16 @@ def captain_line(*, league_name: str, offer: dict | None = None) -> str:
     _, what, of_what = OUTFIT_WORDS[offer["item"]]
     name = html.escape(offer["name"])
     if offer["revenge"]:
-        return f"{head}. {name} — автор твоего {of_what}. Самое время вернуть — или выбери сам в «Вечере»."
+        return f"{head}. {name} — автор {of_what}. Самое время вернуть — или выбери другое в «Вечере»."
     if offer["me"]:
         return f"{head}. Выдать себе {what}? Или выбери кому в «Вечере»."
-    return f"{head}. {name} — {offer['hits']} из {offer['matches']}: выдать {what}? Или выбери сам в «Вечере»."
+    return f"{head}. {name} — {offer['hits']} из {offer['matches']}: выдать {what}? Или выбери другое в «Вечере»."
 
 
 def offer_button(league_id: int, day, offer: dict) -> dict:
     from src.application.hockey_league_captain import OUTFIT_WORDS
 
-    verb = "Вернуть" if offer["revenge"] else "Выдать"
+    verb = "Вернуть" if offer["revenge"] else "Выдать себе" if offer["me"] else "Выдать"
     return {
         "text": f"{verb} {OUTFIT_WORDS[offer['item']][1]}",
         "callback_data": f"{CB_OUTFIT}:{league_id}:{day:%y%m%d}:{offer['pid']}:{offer['item']}",

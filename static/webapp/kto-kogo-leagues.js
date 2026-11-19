@@ -1175,7 +1175,6 @@
             h('div', { class: 'kk-ready__row' }, [h('span', { class: 'kk-ready__ph', 'aria-hidden': 'true' }), h('span', { class: 'kk-ready__who is-empty', text: 'Здесь будет твой друг' })]),
             h('div', { class: 'kk-ready__row' }, [h('span', { class: 'kk-ready__ph', 'aria-hidden': 'true' }), h('span', { class: 'kk-ready__who is-empty', text: 'И ещё один' })]),
           ]),
-          h('p', { class: 'kk-ready__note', text: 'Кепка дня разыгрывается, когда в лиге трое' }),
         ]),
         h('div', { class: 'kk-ready__cta' }, [
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold kk-btn--lg kk-ready__go', disabled: err || state.busy ? 'true' : null, 'aria-disabled': err ? 'true' : 'false', onclick: function () { quickCreate(a); }, text: err || (state.busy ? 'Собираем…' : 'Позвать друзей') }),

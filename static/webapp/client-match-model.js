@@ -107,8 +107,8 @@
     var total = doubled ? points * 2 : points;
     if (points === EXACT) return 'В точку! +' + total;
     if (points === 30) return 'Почти в точку · +' + total;
-    if (points === 20) return 'Угадал победителя · +' + total;
-    if (points === 10) return 'Угадал шайбы · +' + total;
+    if (points === 20) return 'Победитель угадан · +' + total;
+    if (points === 10) return 'Шайбы угаданы · +' + total;
     return 'Мимо';
   }
 

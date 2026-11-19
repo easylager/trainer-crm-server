@@ -213,7 +213,7 @@
   function verdict(pointsWon) {
     if (pointsWon === 50) return { head: 'в точку!', sticker: '+50', tone: 'win', tail: 'точный счёт' };
     if (pointsWon === 30) return { head: 'почти в точку', sticker: '+30', tone: 'ok', tail: 'победитель и ещё часть счёта' };
-    if (pointsWon === 20) return { head: 'угадал победителя', sticker: '+20', tone: 'ok', tail: 'угадал победителя' };
+    if (pointsWon === 20) return { head: 'победитель угадан', sticker: '+20', tone: 'ok', tail: 'победитель без счёта' };
     if (pointsWon === 10) return { head: 'шайбы угаданы', sticker: '+10', tone: 'ok', tail: 'шайбы одной команды' };
     return { head: 'мимо', sticker: '0', tone: 'miss', tail: 'бывает' };
   }

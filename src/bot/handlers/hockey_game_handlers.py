@@ -217,7 +217,7 @@ async def on_outfit(cb: CallbackQuery) -> None:
         except AlreadyGiven:
             toast = "Экипировка этого вечера уже выдана — поменять можно в «Вечере»"
         except RightClosed:
-            toast = "Право капитана закрыто: был следующий вечер или лига закончилась"
+            toast = "Право капитана закрыто: уже сыгран следующий вечер или лига закончилась"
         except OutfitRefused as exc:
             toast = str(exc)
             drop = False
@@ -237,7 +237,7 @@ async def on_leave(cb: CallbackQuery) -> None:
         try:
             await leave_league(session, league_id=league_id, player_key=cb.from_user.id)
             await session.commit()
-            toast = "Ты вышел из лиги"
+            toast = "Готово: ты больше не в лиге"
         except (LookupError, PermissionError):
             toast = "Тебя уже нет в этой лиге"
     await cb.answer(toast, show_alert=True)

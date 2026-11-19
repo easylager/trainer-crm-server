@@ -200,7 +200,7 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     assert sasha.kind == "result"
     assert sasha.text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход 3:2. В точку! +50.\nТвоё место в «")
     assert sasha.text.endswith("»: 1-е из 4.")
-    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход — Юность. Угадал победителя: +20.")
+    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход — Юность. Победитель угадан: +20.")
     assert by_player[VOVA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход — Шахтёр. Мимо. Бывает.")
     labels = [b["text"] for row in sasha.buttons for b in row]
     assert "Следующий ход" in labels and "Таблица" in labels
@@ -226,7 +226,7 @@ async def test_two_results_at_once_go_as_one_summary_and_are_not_counted_in_budg
     assert len(notices) == 1
     text = notices[0].text
     assert text.startswith("<b>Итоги твоих ходов</b>\n")
-    assert "Юность — Шахтёр 2:1.</b> Твой ход — Юность. Угадал победителя: +20." in text
+    assert "Юность — Шахтёр 2:1.</b> Твой ход — Юность. Победитель угадан: +20." in text
     assert "Неман — Юность 0:1.</b> Твой ход — Неман. Мимо. Бывает." in text
     assert text.count("Твоё место") <= 1
     if "Твоё место" in text:
@@ -793,6 +793,6 @@ async def test_result_message_has_tribune_line_from_twenty_moves(db_session) -> 
     notices = await due_notices(db_session, now=done + hockey_notices.RESULT_SEND_DELAY)
     sasha = next(n for n in notices if n.player_key == SASHA)
     assert sasha.text.startswith(
-        "<b>Юность — Шахтёр 2:3.</b> Твой ход — Шахтёр. Угадал победителя: +20.\n"
+        "<b>Юность — Шахтёр 2:3.</b> Твой ход — Шахтёр. Победитель угадан: +20.\n"
         "Победителя угадали 10% игроков — и ты в их числе."
     )

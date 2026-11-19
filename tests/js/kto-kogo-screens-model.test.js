@@ -211,7 +211,7 @@ describe('итог и движение', () => {
     assert.equal(S.resultHead(50), 'В точку!');
     assert.equal(S.resultHead(0), 'Мимо');
     assert.equal(S.resultHead(30), 'Почти в точку');
-    assert.equal(S.resultHead(20), 'Угадал победителя');
+    assert.equal(S.resultHead(20), 'Победитель угадан');
     const rows = S.movementRows([
       { kind: 'slice', club: 'Юность', period_title: 'ноябрь', rank_before: 2, rank_after: 1, crown: true },
       { kind: 'slice', club: null, period_title: 'сезон 2026/27', rank_before: 214, rank_after: 214, crown: false },
@@ -551,9 +551,9 @@ describe('шторка «Как считаются очки»', () => {
     assert.deepEqual(r.rows.map((x) => x.value), [String(M.POINTS.winner), '+' + M.POINTS.diff, '+' + M.POINTS.goals, '+' + M.POINTS.goals, String(M.POINTS.exact)]);
     // Точный счёт = победитель + разница + шайбы хозяев + шайбы гостей.
     assert.equal(M.POINTS.winner + M.POINTS.diff + 2 * M.POINTS.goals, M.POINTS.exact);
-    assert.deepEqual(r.rows.map((x) => x.text).slice(1, 4), ['Угадал разницу шайб.', 'Угадал шайбы хозяев.', 'Угадал шайбы гостей.']);
+    assert.deepEqual(r.rows.map((x) => x.text).slice(1, 4), ['Угадана разница шайб.', 'Угаданы шайбы хозяев.', 'Угаданы шайбы гостей.']);
     assert.equal(r.rows[4].gold, true);
-    assert.equal(r.rows[0].text, 'Угадал победителя.');
+    assert.equal(r.rows[0].text, 'Угадан победитель.');
     assert.equal(r.trumpTitle, 'Козырь');
     assert.match(r.trumpText, /удвоятся/);
     assert.equal(M.PICK_CLOSES_BEFORE_SEC, 60);

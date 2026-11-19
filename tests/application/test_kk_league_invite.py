@@ -84,7 +84,7 @@ def test_week_one_text_is_the_owners_and_drafts_have_no_banned_words() -> None:
         for bad in ("ставк", "постав", "срок", "×"):
             assert bad not in body.lower()
     assert li.invite_caption(week=1, hits=5, played=8).startswith(
-        "За неделю ты угадал <b>5 из 8</b>. А твои друзья?\n\n"
+        "Твоя неделя — <b>5 из 8</b> угадано. А у друзей?\n\n"
     )
     assert li.invite_caption(week=2, hits=0, played=0) == li.WEEK_TEXTS[2]  # сыгранных ходов нет — без личной строки
 
@@ -166,7 +166,7 @@ async def test_photo_caption_buttons_and_personal_line(db_session, factory) -> N
     [p] = await li.produce_league_invite(db, now=FRI)
     n = p.notice
     assert n.kind == "lginvite" and n.photo.endswith("kk-league-invite-1.png")
-    assert n.text.startswith("За неделю ты угадал <b>2 из 3</b>. А твои друзья?\n\nСобери лигу")
+    assert n.text.startswith("Твоя неделя — <b>2 из 3</b> угадано. А у друзей?\n\nСобери лигу")
     labels = [b["text"] for row in n.buttons for b in row]
     assert labels == ["Создать лигу друзей", "Не присылать"]
     assert (

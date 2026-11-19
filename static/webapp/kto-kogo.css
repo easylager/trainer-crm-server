@@ -838,7 +838,6 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-ready__who { flex: 1; min-width: 0; font: 700 16px var(--kk-text); }
 .kk-ready__who.is-empty { font-weight: 400; color: var(--kk-muted); }
 .kk-ready__in { font: 500 14px var(--kk-text); color: var(--kk-muted); }
-.kk-ready__note { margin: 0; font: 500 14px/1.4 var(--kk-text); color: var(--kk-muted); text-align: center; }
 .kk-ready__cta { display: flex; flex-direction: column; gap: 8px; }
 .kk-ready__go { font-weight: 800; }
 .kk-ready__alt { min-height: 48px; border: 0; border-radius: 16px; background: transparent; color: var(--kk-link); font: 600 15px var(--kk-text); }
@@ -906,6 +905,15 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-face { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 56px; }
 .kk-face__nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px/1.2 var(--kk-text); color: var(--kk-soft); }
 .kk-face--more { justify-content: center; height: 48px; font: 700 14px var(--kk-text); color: var(--kk-muted); }
+
+/* Экран «сессия истекла» из mini-app-telegram-chrome.js: mini-app-components.css здесь не подключён, без этих
+   правил он выпадал голым текстом под экран игры. */
+.mini-app-recoverable-err { position: fixed; inset: 0; z-index: 10040; display: none; align-items: center; justify-content: center; box-sizing: border-box; padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); background: var(--kk-bg); font-family: var(--kk-text); }
+.mini-app-recoverable-err .bd-trainer-gate__card { width: 100%; max-width: 400px; box-sizing: border-box; padding: 24px 20px 20px; border-radius: 20px; background: var(--kk-card); text-align: center; }
+.mini-app-recoverable-err .bd-trainer-gate__icon { font-size: 36px; line-height: 1; margin-bottom: 12px; }
+.mini-app-recoverable-err .bd-trainer-gate__title { margin: 0 0 8px; font: 700 20px/1.25 var(--kk-text); color: var(--kk-ink); }
+.mini-app-recoverable-err .bd-trainer-gate__hint { margin: 0 0 18px; font: 500 15px/1.45 var(--kk-text); color: var(--kk-muted); }
+.mini-app-recoverable-err .bd-btn { width: 100%; min-height: 48px; border: 0; border-radius: 14px; background: var(--kk-gold); color: var(--kk-on-gold); font: 700 16px var(--kk-text); cursor: pointer; }
 
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.

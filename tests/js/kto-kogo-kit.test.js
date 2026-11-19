@@ -64,6 +64,13 @@ describe('право капитана в вечере', () => {
     assert.deepEqual(Kit.givenLine(items[2], 'bucket'), { title: 'Олег в экипировке', text: 'Ведро вместо шлема — до следующего вечера. Видят все в «КТО\u00a0КОГО».' });
     assert.equal(Kit.givenLine(items[0], 'foil').title, 'Ты в экипировке');
   });
+  it('ответка согласует род вещи: «автор твоей каски», «твоих бигудей»', () => {
+    const ev = (item) => Object.assign({}, EV, { items: items, captain: { suggest: { to: items[2].pid, item: item, revenge: item } } });
+    assert.equal(Kit.revengeLine(ev('hardhat')), 'Олег — автор твоей каски. Самое время вернуть.');
+    assert.equal(Kit.revengeLine(ev('curlers')), 'Олег — автор твоих бигудей. Самое время вернуть.');
+    assert.equal(Kit.revengeLine(ev('bucket')), 'Олег — автор твоего ведра. Самое время вернуть.');
+    for (const o of Kit.OUTFITS) assert.match(o.of, /^(твоего|твоей|твоих) /, o.id);
+  });
   it('подпись под строкой: моя выдача, выдача другого капитана, прошлый вечер; мне — плашка, без строки', () => {
     const mine = { captain: { award: { to: 'ol', item: 'bucket', from: 'Макс', from_me: true, current: true } } };
     assert.equal(Kit.headNote({ pid: 'ol', head: { item: 'bucket' } }, mine), 'Экипировка от тебя — до следующего вечера');

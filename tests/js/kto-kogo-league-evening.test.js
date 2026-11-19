@@ -88,8 +88,8 @@ describe('строка человека', () => {
   });
   it('почему без кепки: шарф дня, мало ходов; не разыгрывали — молчим', () => {
     assert.equal(S.eveningReason({ scarf: { club: 'Юность-Минск', picked: 'Неман' } }, EV), 'Юность-Минск простит? Ход — за Неман');
-    assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, EV), 'Ход 1 из 4 — не в споре за кепку');
-    assert.equal(S.eveningReason({ moves: 0, in_cap_race: false }, EV), 'Без ходов — не в споре за кепку');
+    assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, EV), 'Ход 1 из 4 — мало для итога вечера');
+    assert.equal(S.eveningReason({ moves: 0, in_cap_race: false }, EV), 'Без ходов — вне итога вечера');
     assert.equal(S.eveningReason({ moves: 3, in_cap_race: true }, EV), '');
     const few = Object.assign({}, EV, { cap: { decided: true, in_play: false, min_players: 3 } });
     assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, few), '');

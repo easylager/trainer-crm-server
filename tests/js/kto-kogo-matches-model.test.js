@@ -142,7 +142,7 @@ describe('десять состояний строки (макет States)', () 
 
   it('не угадал: нейтральная плашка с нулём, без красного смысла', () => {
     const r = S.rowModel(done({ my_pick: { side: 'home', home_score: null, away_score: null, points: 0, doubled: false }, my_points: 0 }), NOW);
-    assert.deepEqual(r.right, { kind: 'points', tone: 'zero', text: '0 · не' + NBSP + 'угадал', trump: false });
+    assert.deepEqual(r.right, { kind: 'points', tone: 'zero', text: '0' + NBSP + '·' + NBSP + 'мимо', trump: false });
   });
 
   it('очки ещё не посчитаны — «Считаем очки», а не ноль', () => {
@@ -157,9 +157,9 @@ describe('десять состояний строки (макет States)', () 
 
   it('не ходил: подпись без кнопки и без очков', () => {
     const r = S.rowModel(done(), NOW);
-    assert.deepEqual(r.move, { label: 'ТВОЙ ХОД', text: 'ты' + NBSP + 'не' + NBSP + 'ходил', muted: true });
+    assert.deepEqual(r.move, { label: 'ТВОЙ ХОД', text: 'без' + NBSP + 'хода', muted: true });
     assert.deepEqual(r.right, { kind: 'none' });
-    assert.equal(S.rowModel(mk({ starts_at: at(-H), open: false, phase: 'live' }), NOW).move.text, 'ты' + NBSP + 'не' + NBSP + 'ходил');
+    assert.equal(S.rowModel(mk({ starts_at: at(-H), open: false, phase: 'live' }), NOW).move.text, 'без' + NBSP + 'хода');
   });
 
   it('перенесён: новое время, «было …», ход сохранён', () => {
