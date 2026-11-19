@@ -169,8 +169,8 @@ async def test_invite_too_close_at_send_time(db_session, factory) -> None:
 
 
 def test_comeback_ladder_days() -> None:
-    steps = {d: ev.comeback_step(d) for d in (0, 2, 3, 9, 10, 29, 30, 31, 60)}
-    assert steps == {0: None, 2: None, 3: 1, 9: 1, 10: 2, 29: 2, 30: 3, 31: None, 60: None}
+    steps = {d: ev.comeback_step(d) for d in (0, 2, 3, 9, 10, 29, 30, 31, 32, 60)}
+    assert steps == {0: None, 2: None, 3: 1, 9: 1, 10: 2, 29: 2, 30: 3, 31: 3, 32: None, 60: None}
 
 
 @pytest.mark.asyncio
@@ -180,6 +180,16 @@ async def test_comeback_three_days_text_with_weekday(db_session) -> None:
     [p] = await ev.produce_comeback(db_session, now=WED)
     assert p.notice.kind == "comeback"
     assert plain(p.notice.text) == "<b>Юность~— Шахтёр</b> в~субботу в~17:00. КТО КОГО? 🏒"
+
+
+@pytest.mark.asyncio
+async def test_comeback_waits_out_friday_for_the_league_poster(db_session) -> None:
+    """Пятница — день постера лиги в том же дневном лимите: возврат молчит и уходит в субботу."""
+    fri, sat = at(10, day=13), at(10, day=14)
+    await active_player(db_session, days_ago=3, now=fri)
+    await seed_match(db_session, at(17, day=15), home="Юность", away="Шахтер")
+    assert await ev.produce_comeback(db_session, now=fri) == []
+    assert len(await ev.produce_comeback(db_session, now=sat)) == 1
 
 
 @pytest.mark.asyncio
@@ -217,7 +227,7 @@ async def test_comeback_ignores_attempts_before_the_last_pick(db_session) -> Non
 
 @pytest.mark.asyncio
 async def test_comeback_nothing_after_thirty_days_or_between_steps(db_session) -> None:
-    await active_player(db_session, days_ago=31)
+    await active_player(db_session, days_ago=32)  # третья ступень — 30-е и 31-е сутки
     await seed_match(db_session, at(19, day=13), home="Юность", away="Шахтер")
     assert await ev.produce_comeback(db_session, now=WED) == []
     await active_player(db_session, KATYA, days_ago=2)
@@ -436,6 +446,18 @@ async def test_consent_message_after_first_pick(db_session) -> None:
         ("Присылать", "kk:yes"),
         ("Не присылать", "kk:noall"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_consent_asked_once_does_not_block_other_kinds(db_session) -> None:
+    """Вопрос задан, ответа нет: повтор не предлагаем — иначе он по приоритету отнимал бы у игрока все поводы."""
+    await seed_player(db_session, SASHA, registered=REG)
+    mid = await seed_pick(db_session, SASHA, at(9, day=11))
+    await db_session.execute(
+        text("INSERT INTO hockey_notices (player_key, match_id, kind, sent_at) VALUES (:p, :m, 'consent', :at)"),
+        {"p": SASHA, "m": mid, "at": at(9, 30, day=11)},
+    )
+    assert await ev.produce_consent(db_session, now=WED) == []
 
 
 @pytest.mark.asyncio

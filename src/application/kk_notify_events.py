@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application import hockey_notices as hn
 from src.application import kk_notify_texts as tx
 from src.application.hockey_slices import club_scope, month_period, slice_rows
-from src.application.kk_league_invite import produce_league_invite
+from src.application.kk_league_invite import FRIDAY, produce_league_invite
 from src.application.kk_notify import Producer, Proposal, match_still_open
 from src.application.kk_notify_gate import (
     KIND_COMEBACK,
@@ -56,7 +56,8 @@ MATCH_MIN_LEFT = hn.NOMOVE_MIN_LEFT  # для строки матча в ито�
 COMEBACK_HORIZON = timedelta(days=6)
 LINE_HORIZON = timedelta(days=14)  # «ближайший матч» в итогах
 # Ступени возврата: (с какого дня молчания, до какого не включая). После 30-х суток не планируем.
-COMEBACK_STEPS = ((3, 10), (10, 30), (30, 31))
+# Третья ступень — 30-е и 31-е сутки: в пятницу возврат молчит (день постера лиги), 30-е в пятницу уйдёт в субботу.
+COMEBACK_STEPS = ((3, 10), (10, 30), (30, 32))
 PAUSE_DAYS = 30
 PAUSE_AFTER_SILENT = 2  # приглашений подряд без хода в течение суток
 PICK_WINDOW = timedelta(hours=24)
@@ -280,7 +281,9 @@ def _comeback_still_due(step: int):
 
 
 async def produce_comeback(session: AsyncSession, *, now: datetime) -> list[Proposal]:
-    if not in_window(now, MORNING_FROM, MORNING_TO):
+    # Пятница — день постера «Создать лигу друзей»: он идёт с 12:00 в том же дневном лимите, и утренний возврат
+    # отнял бы его на целую неделю. Возврат ждёт субботы — ступени длятся несколько суток, никто не теряется.
+    if not in_window(now, MORNING_FROM, MORNING_TO) or _local(now).weekday() == FRIDAY:
         return []
     out: list[Proposal] = []
     cache: dict = {}
@@ -532,6 +535,7 @@ async def produce_month(session: AsyncSession, *, now: datetime) -> list[Proposa
 # ---------- 5. согласие после первого хода ----------
 
 _FIRST_PICK = text("SELECT match_id FROM hockey_picks WHERE player_key = :player_key ORDER BY picked_at, id LIMIT 1")
+_CONSENT_ASKED = text("SELECT 1 FROM hockey_notices WHERE player_key = :player_key AND kind = 'consent' LIMIT 1")
 _CONSENT_NOW = text("""
     SELECT pr.notify_consent, COALESCE(pr.remind, true) AS remind, pr.bot_blocked_at
     FROM (SELECT CAST(:player_key AS BIGINT) AS player_key) AS q
@@ -550,7 +554,9 @@ async def produce_consent(session: AsyncSession, *, now: datetime) -> list[Propo
         if f.consent is not None or f.last_pick_at is None or f.phase(now) is Phase.OFF:
             continue
         anchor = (await session.execute(_FIRST_PICK, {"player_key": f.player_key})).scalar_one_or_none()
-        if anchor is None:
+        # Вопрос уже задан и ждёт ответа: повтор всё равно не уйдёт (тот же якорь), а по приоритету он отнимал бы у
+        # игрока все остальные поводы, включая пятничный постер.
+        if anchor is None or (await session.execute(_CONSENT_ASKED, {"player_key": f.player_key})).first():
             continue
         buttons = hn._rows(
             [

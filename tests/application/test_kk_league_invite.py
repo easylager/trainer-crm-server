@@ -301,6 +301,18 @@ async def test_goes_without_asked_consent_but_not_after_do_not_send(db_session, 
 
 
 @pytest.mark.asyncio
+async def test_goes_without_answer_while_the_consent_question_is_live(db_session, factory) -> None:
+    """Как в проде: вопрос «Присылать?» включён. Задан и без ответа — приглашение всё равно идёт."""
+    live = GateConfig(enabled=True, dry_run=False, texts_accepted=True, kinds=frozenset({"lginvite", "consent"}))
+    assert gate.consent_question_active(live)
+    await player(db_session, SASHA, consent=None)
+    out = PhotoOutbox()
+    [p] = await li.produce_league_invite(db_session, now=FRI)
+    await dispatch(factory, p, phase="active", tick_at=FRI, send=out, config=live, clock=lambda: FRI)
+    assert [chat for chat, *_ in out.sent] == [SASHA]
+
+
+@pytest.mark.asyncio
 async def test_silence_pause_does_not_stop_the_league_invite(db_session, factory) -> None:
     """Пауза «два приглашения без хода» глушит прочие поводы, но не приглашение собрать лигу (прогрев)."""
     await player(db_session, SASHA)
