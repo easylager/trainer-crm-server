@@ -37,6 +37,8 @@ async def _tables(db_session) -> list[str]:
 @pytest.mark.asyncio
 async def test_hockey_leagues_roundtrip_and_guards(db_session) -> None:
     # Жалобы на лиги (0318) и короны лиг (0270) ссылаются на лиги — снимаем их первыми.
+    await _run_migration_step(db_session, "downgrade", "0334_kk_league_outfits.py")
+    await _run_migration_step(db_session, "downgrade", "0331_kk_league_gestures.py")
     await _run_migration_step(db_session, "downgrade", "0318_kk_league_identity.py")
     await _run_migration_step(db_session, "downgrade", "0297_kk_bot_default_on.py")
     await _run_migration_step(db_session, "downgrade", "0295_kk_bot_notices.py")

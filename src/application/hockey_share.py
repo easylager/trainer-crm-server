@@ -16,7 +16,7 @@ from src.application.hockey_matches import STATUS_FINAL, MatchRow, get_match
 logger = logging.getLogger(__name__)
 
 CARD_KINDS = ("shared", "opened", "joined")
-CARDS = ("result", "league", "crown")
+CARDS = ("result", "league", "crown", "outfit")
 
 _MY_POINTS = text("""
     SELECT points FROM hockey_picks

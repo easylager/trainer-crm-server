@@ -7,7 +7,7 @@ Mini App просит сообщение — сервер собирает фо�
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -46,14 +46,15 @@ START_RESULT_CARD = "kkr"
 
 
 class ShareBody(BaseModel):
-    card: Literal["result", "league", "crown"]
+    card: Literal["result", "league", "crown", "outfit"]
     match_id: int | None = None
+    day: date | None = None  # карточка экипировки (TASK-432): вечер лиги
     league_id: int | None = None
     race_id: int | None = None
 
 
 class OpenedBody(BaseModel):
-    card: Literal["result", "league", "crown"]
+    card: Literal["result", "league", "crown", "outfit"]
 
 
 def card_link(prefix: str, code: str | None = None) -> str | None:
@@ -89,7 +90,7 @@ async def _prepare(
         result = {
             "type": "article",
             "id": result_id,
-            "title": "Кто кого",
+            "title": "КТО КОГО",
             "input_message_content": {"message_text": caption},
             "reply_markup": markup,
         }
@@ -129,7 +130,31 @@ async def post_client_hockey_share(
     settings = Settings()  # type: ignore[call-arg]
     root = _public_root()
 
-    if body.card == "crown":
+    if body.card == "outfit":
+        from src.application.hockey_kit_card import outfit_caption, outfit_card_sig
+        from src.application.hockey_league_captain import outfit_card
+        from src.application.hockey_leagues import member_league
+
+        if body.league_id is None or body.day is None:
+            raise HTTPException(status_code=422, detail="Нет вечера лиги")
+        try:
+            league = await member_league(session, league_id=body.league_id, player_key=player_key)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Лига не найдена") from None
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Нет доступа к этой лиге") from None
+        oc = await outfit_card(session, league=league, day=body.day, now=now)
+        if oc is None:
+            raise HTTPException(status_code=404, detail="В этот вечер экипировку не выдали")
+        caption = outfit_caption(name=oc.name, item=oc.item, stat=oc.stat)
+        url = card_link(START_LEAGUE_CARD, oc.invite_code)
+        button = {"text": "Вступить и угадать", "url": url}
+        stamp = f"{body.day:%y%m%d}"
+        sig = outfit_card_sig(settings.telegram_bot_token_client, league.id, stamp, oc.pid, oc.item)
+        photo = f"{root}/kk/o/{league.id}/{stamp}/{oc.pid}/{oc.item}/{sig}.png" if root else None
+        result_id = f"kko{league.id}d{stamp}{oc.pid}{oc.item}"[:64]
+        league_id, match_id = league.id, None
+    elif body.card == "crown":
         if body.race_id is None:
             raise HTTPException(status_code=422, detail="Нет месяца")
         race = await race_by_id(session, body.race_id)

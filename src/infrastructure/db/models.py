@@ -745,6 +745,8 @@ class HockeyLeague(Base):
     # Лицо лиги (TASK-361, миграция 0317): картинка в хранилище и строка «на что играем» — задаёт владелец.
     image_key: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     stake_text: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    # Метка входа, с которого лига создана в один тап (миграция 0332, TASK-431): lg1/lg2/lg3 — недели приглашения.
+    src: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -779,13 +781,68 @@ class HockeyLeagueMember(Base):
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeyLeagueGesture(Base):
+    """Жест в вечере лиги (TASK-431): «Стук клюшкой» или «2 минуты» — один от человека человеку за игровой день."""
+
+    __tablename__ = "hockey_league_gestures"
+    __table_args__ = (
+        CheckConstraint("kind IN ('stick', 'pen')", name="ck_hockey_league_gestures_kind"),
+        CheckConstraint("from_key <> to_key", name="ck_hockey_league_gestures_not_self"),
+        Index("ix_hockey_league_gestures_to", "league_id", "to_key", "day"),
+    )
+
+    league_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date(), primary_key=True)
+    from_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
+    )
+    to_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
+    )
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    # Облик (скин): смысл жеста — ``kind``, облик на счёт не влияет.
+    skin: Mapped[str] = mapped_column(String(24), nullable=False, server_default="base")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class HockeyLeagueOutfit(Base):
+    """Право капитана (TASK-432): капитан вечера выдаёт одну вещь экипировки за игровой день в лиге."""
+
+    __tablename__ = "hockey_league_outfits"
+    __table_args__ = (
+        Index("ix_hockey_league_outfits_to", "to_key"),
+        Index("ix_hockey_league_outfits_captain", "captain_key"),
+    )
+
+    league_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date(), primary_key=True)
+    captain_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    to_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    item: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Сообщение получателю: занято/ушло/сбой. Новый получатель — очередь заново.
+    notice_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notice_failed: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+
+
 class HockeyCardEvent(Base):
     """Карточка «Кто кого» в чате: отправили, открыли, вступили — без ключа игрока (TASK-300)."""
 
     __tablename__ = "hockey_card_events"
     __table_args__ = (
         CheckConstraint("kind IN ('shared', 'opened', 'joined')", name="ck_hockey_card_events_kind"),
-        CheckConstraint("card IN ('result', 'league')", name="ck_hockey_card_events_card"),
+        CheckConstraint("card IN ('result', 'league', 'crown', 'outfit')", name="ck_hockey_card_events_card"),
         Index("ix_hockey_card_events_created", "created_at"),
     )
 

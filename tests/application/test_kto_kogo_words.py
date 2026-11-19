@@ -12,6 +12,8 @@ FILES = (
     "src/application/hockey_slices.py",
     "src/application/hockey_races.py",
     "src/application/hockey_leagues.py",
+    "src/application/hockey_league_evening.py",
+    "src/application/kk_league_invite.py",
     "src/application/hockey_league_images.py",
     "src/application/hockey_league_reports.py",
     "src/application/hockey_game.py",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,7 @@ from src.api.routes.webapp_client_hockey import _match_out
 from src.application.hockey_leagues import MAX_CLUBS, friends_moves, friends_picks
 from src.application.hockey_screens import clubs_catalog, fan_profile, match_movement, player_stand
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["webapp"])
 
 # Один матч, в том числе отменённый и давний: в списке /matches их нет, а экрану нужны.
@@ -88,7 +90,26 @@ async def get_client_hockey_player_stand(
     out = await player_stand(session, public_id=public_id, viewer_key=client_catalog_telegram_key(principal))
     if out is None:
         raise HTTPException(status_code=404, detail="Игрок не найден")
-    return out
+    key = (await session.execute(_KEY_BY_PID, {"pid": public_id})).scalar_one_or_none()
+    return {**out, "outfit": await _outfit_of(session, key)}
+
+
+_KEY_BY_PID = text("SELECT player_key FROM hockey_players WHERE public_id = :pid")
+
+
+async def _outfit_of(session: AsyncSession, player_key: int | None) -> dict | None:
+    """Экипировка от капитанов лиг на стенде (TASK-432). Сбой подсчёта не роняет стенд."""
+    from src.application.hockey_league_captain import outside_outfits
+
+    if player_key is None:
+        return None
+    try:
+        async with session.begin_nested():
+            found = await outside_outfits(session, [player_key], now=datetime.now(timezone.utc))
+    except Exception:  # noqa: BLE001
+        logger.warning("kk stand outfit failed", exc_info=True)
+        return None
+    return found.get(player_key)
 
 
 @router.get("/client/hockey/profile")
@@ -97,4 +118,6 @@ async def get_client_hockey_profile(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Карточка болельщика: серия, короны, звания сезона, дуэли с людьми из общих лиг."""
-    return await fan_profile(session, player_key=client_catalog_telegram_key(principal), now=datetime.now(timezone.utc))
+    key = client_catalog_telegram_key(principal)
+    out = await fan_profile(session, player_key=key, now=datetime.now(timezone.utc))
+    return {**out, "outfit": await _outfit_of(session, key)}

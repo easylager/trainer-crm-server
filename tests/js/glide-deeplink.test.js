@@ -332,6 +332,13 @@ describe('«Кто кого» из сообщений бота (TASK-335)', () =
     assert.deepEqual(G.deepLinkTarget('kkn_42_a'), { key: 'kto-kogo', path: 'kto-kogo?pick=42&side=away' });
     assert.deepEqual(G.deepLinkTarget('kkn_42'), { key: 'kto-kogo', path: 'kto-kogo' });
     assert.deepEqual(G.deepLinkTarget('kkmo_7'), { key: 'kto-kogo', path: 'kto-kogo?month=7' });
+    // «Вечер в лиге» (TASK-431): kkv_<лига>_<ГГГГММДД>.
+    assert.deepEqual(G.deepLinkTarget('kkv_12_20261118'), { key: 'kto-kogo', path: 'kto-kogo?league=12&day=2026-11-18' });
+    assert.equal(G.deepLinkTarget('kkv_0_20261118'), null);
+    assert.equal(G.deepLinkTarget('kkv_12_2026-11-18'), null);
+    // «Собрать лигу» (TASK-431): kkg_<метка> — экран «Лига готова» и метка входа.
+    assert.deepEqual(G.deepLinkTarget('kkg_LG1'), { key: 'kto-kogo', path: 'kto-kogo?ready=1&src=lg1' });
+    assert.equal(G.deepLinkTarget('kkg_a'), null);
     assert.deepEqual(G.deepLinkTarget('kkoff'), { key: 'kto-kogo', path: 'kto-kogo?remind=off' });
     // Рекламный вход: kks_<метка> ведёт в игру с ?src=, метка 2–16 латиница/цифры.
     assert.deepEqual(G.deepLinkTarget('kks_push1'), { key: 'kto-kogo', path: 'kto-kogo?src=push1' });

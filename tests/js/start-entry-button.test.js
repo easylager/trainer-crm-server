@@ -173,7 +173,9 @@ describe('Страница игры читает параметр кнопки �
 
   it('kks_<метка> → метка входа и POST /client/hockey/entry', () => {
     assert.equal(M.promoSrc('kks_insta', null), 'insta');
-    assert.match(gameJs, /\/\^kks_\/\.test\(startParam\(\)\)/);
+    // kkg_<метка> (TASK-431, «Собрать лигу») считается тем же заходом по метке.
+    assert.match(gameJs, /\/\^kk\[sg\]_\/\.test\(startParam\(\)\)/);
+    assert.equal(M.promoSrc('kkg_lg1', null), 'lg1');
     assert.match(gameJs, /api\('POST', '\/client\/hockey\/entry'/);
   });
 

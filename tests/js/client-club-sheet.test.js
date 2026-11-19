@@ -377,7 +377,7 @@ describe('ClientClubSheet', () => {
     await flush();
     assert.equal(sheet.el.getAttribute('aria-labelledby'), 'cc-title');
     assert.equal(sheet.el.querySelector('.cc-title').textContent, 'За\u00a0кого болеешь?');
-    assert.equal(sheet.el.querySelector('.cc-sub').textContent, 'Её матчи будут первыми в\u00a0«Кто кого».');
+    assert.equal(sheet.el.querySelector('.cc-sub').textContent, 'Её матчи будут первыми в\u00a0«КТО КОГО».');
     assert.equal(sheet.el.querySelector('input').getAttribute('placeholder'), 'Название команды');
     assert.equal(sheet.el.querySelector('.cs-sr').textContent, 'Найти команду');
     assert.deepEqual(

@@ -96,6 +96,15 @@ class KindPolicy:
     # Нужно ли согласие на новые сообщения (``notify_consent``: ответ на первое сообщение или согласие по умолчанию
     # для игравших до выкатки). Итоги и события его не требуют.
     needs_consent: bool = False
+    # Не спрашивали о согласии (``notify_consent IS NULL``) — считать «да». Отказ («Не присылать») — всё равно нет.
+    # Владелец 2026-11-19: приглашение собрать лигу — всем игрокам, кроме отказавшихся, чтобы прогреть давно не ходивших.
+    consent_by_default: bool = False
+    # Слушается ли паузы «два приглашения без хода» (``notify_paused_until``). Приглашение собрать лигу — нет
+    # (владелец 2026-11-19: прогреть давно не ходивших); отказ, отключение типа и блокировка его всё равно стопорят.
+    respects_pause: bool = True
+    # Повод не держат общие выключатели KK_NOTIFY_* (включён, список видов, сухой прогон, приём текстов) — только свой
+    # (приглашение собрать лигу: KK_LEAGUE_INVITE_ENABLED). Допуск по человеку — согласие, лимиты, тишина — как у всех.
+    standalone: bool = False
     # Семья поводов: ``kk`` — игра (настройки ``hockey_player_prefs``, флаги ``KK_NOTIFY_*``), ``warm`` — прогрев
     # посетителей катков (``warm_prefs``, флаги ``WARM_*``).
     family: str = FAMILY_KK
@@ -112,6 +121,9 @@ KIND_POLICY: dict[str, KindPolicy] = {
     # «Лига продлена» — ответ на действие владельца лиги: вне бюджета и не зависит от согласия ``remind``
     # (письмо о лиге, в которой человек состоит, а не рассылка), но с тихими часами, блокировкой и отключением типа.
     "league": KindPolicy(budgeted=False, type_column="notify_league", respects_remind=False),
+    # «Капитан выдаёт тебе экипировку» (TASK-432) — как письмо лиги: ответ на действие друга, вне бюджета и согласия,
+    # но с тихими часами, блокировкой и своим «Не присылать такое».
+    "outfit": KindPolicy(budgeted=False, type_column="notify_outfit", respects_remind=False),
     "mfinal": KindPolicy(budgeted=True, type_column="notify_mfinal", priority=0, needs_consent=True),
     "overtook": KindPolicy(budgeted=True, type_column="notify_overtook", priority=1, needs_consent=True),
     "nomove": KindPolicy(budgeted=True, type_column="notify_nomove", priority=2, needs_consent=True),
@@ -124,6 +136,7 @@ KIND_COMEBACK = "comeback"  # возврат: 3, 10, 30 дней молчани�
 KIND_WEEK = "week"  # итог недели
 KIND_MONTH = "month"  # итог месяца
 KIND_CONSENT = "consent"  # вопрос о согласии после первого хода
+KIND_LEAGUE_INVITE = "lginvite"  # пятничное фото-приглашение собрать лигу, игрокам без лиги (TASK-431)
 
 
 def register_kind(kind: str, policy: KindPolicy, *, allow_unbudgeted: bool = False) -> None:
@@ -218,7 +231,8 @@ _PREFS = text("""
     SELECT COALESCE(pr.remind, true) AS remind, pr.bot_blocked_at, pr.notify_paused_until, pr.notify_consent,
            COALESCE(pr.notify_nomove, true) AS notify_nomove, COALESCE(pr.notify_result, true) AS notify_result,
            COALESCE(pr.notify_overtook, true) AS notify_overtook, COALESCE(pr.notify_mfinal, true) AS notify_mfinal,
-           COALESCE(pr.notify_league, true) AS notify_league
+           COALESCE(pr.notify_league, true) AS notify_league, COALESCE(pr.notify_lginvite, true) AS notify_lginvite,
+           COALESCE(pr.notify_outfit, true) AS notify_outfit
     FROM (SELECT CAST(:player_key AS BIGINT) AS player_key) AS q
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = q.player_key
     """)
@@ -254,6 +268,21 @@ register_kind(KIND_MONTH, KindPolicy(budgeted=True, weekly=True, new=True, prior
 register_kind(KIND_WEEK, KindPolicy(budgeted=True, weekly=True, new=True, priority=2, needs_consent=True))
 register_kind(KIND_INVITE, KindPolicy(budgeted=True, weekly=True, new=True, priority=3, needs_consent=True))
 register_kind(KIND_COMEBACK, KindPolicy(budgeted=True, weekly=True, new=True, priority=4, needs_consent=True))
+# Приглашение собрать лигу — ниже всех поводов игры (итоги и так вне бюджета); свой выключатель — «Не присылать» под ним.
+register_kind(
+    KIND_LEAGUE_INVITE,
+    KindPolicy(
+        budgeted=True,
+        weekly=True,
+        new=True,
+        priority=5,
+        needs_consent=True,
+        consent_by_default=True,
+        respects_pause=False,
+        standalone=True,
+        type_column="notify_lginvite",
+    ),
+)
 
 
 # Прогрев посетителей (TASK-428): те же правила и тот же бюджет. Приоритет внутри прохода: меньше — важнее.
@@ -352,13 +381,14 @@ async def _admit(
         cfg = cfg or GateConfig.from_settings(family=policy.family)
         if cfg.family != policy.family:  # выключатели чужой семьи не открывают этот повод
             return Admission(False, FAMILY_MISMATCH)
-        if not cfg.enabled:
-            return Admission(False, DISABLED)
-        if kind not in cfg.kinds:
-            return Admission(False, KIND_OFF)
-        # Тексты не приняты: только белый список. Сухой прогон ничего не отправляет, поэтому его аудитория не режется.
-        if not cfg.texts_accepted and player_key not in cfg.whitelist and not cfg.dry_run:
-            return Admission(False, TEXTS_NOT_ACCEPTED)
+        if not policy.standalone:
+            if not cfg.enabled:
+                return Admission(False, DISABLED)
+            if kind not in cfg.kinds:
+                return Admission(False, KIND_OFF)
+            # Тексты не приняты: только белый список. Сухой прогон ничего не шлёт, поэтому его аудитория не режется.
+            if not cfg.texts_accepted and player_key not in cfg.whitelist and not cfg.dry_run:
+                return Admission(False, TEXTS_NOT_ACCEPTED)
 
     if policy.family == FAMILY_WARM:
         warm = (await session.execute(_WARM_PREFS, {"player_key": player_key})).one()
@@ -403,12 +433,13 @@ async def _admit(
             # Не спрашивали. Новые поводы без согласия не идут никогда. Прежние (nomove, mfinal, overtook) идут, пока
             # вопрос о согласии никому не задаётся (флаги выключены или сухой прогон): иначе новые игроки молча
             # потеряли бы пуши, которые у них работают сейчас. Как только вопрос реально уходит — нужен ответ.
-            if policy.new:
+            if policy.new and not policy.consent_by_default:
                 return Admission(False, NO_CONSENT)
             cfg = cfg or GateConfig.from_settings()
             if consent_question_active(cfg):
                 return Admission(False, NO_CONSENT)
-    if policy.new and prefs.notify_paused_until is not None and _utc(prefs.notify_paused_until) > _utc(now):
+    paused = prefs.notify_paused_until is not None and _utc(prefs.notify_paused_until) > _utc(now)
+    if policy.new and policy.respects_pause and paused:
         return Admission(False, PAUSED)
     return await _limits(session, policy, kind=kind, player_key=player_key, now=now, cfg=cfg, recheck=recheck)
 
@@ -441,7 +472,7 @@ async def _limits(
         if stale:
             return Admission(False, f"{STALE_PREFIX}{stale}")
 
-    if policy.new and cfg is not None and cfg.dry_run:
+    if policy.new and not policy.standalone and cfg is not None and cfg.dry_run:
         return Admission(False, DRY_RUN, dry_run=True)
     return Admission(True, OK)
 
@@ -452,6 +483,7 @@ __all__ = [
     "FAMILY_KK",
     "FAMILY_WARM",
     "GAME_PRIORITY",
+    "KIND_LEAGUE_INVITE",
     "KIND_WEEKLY_LIMIT",
     "WARM_KINDS",
     "WARM_TODAY_WEEKLY_CAP",

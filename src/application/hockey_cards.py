@@ -552,10 +552,10 @@ def check_crown_card_sig(token: str, race_id: int, league_id: int, sig: str) -> 
 
 def crown_caption(*, title: str, where: str, winners: Sequence[str], won: bool) -> str:
     if won:
-        return f"Кто кого: корона за {title} {where} — моя. Новый месяц, все с нуля: попробуй забрать."
+        return f"КТО КОГО: корона за {title} {where} — моя. Новый месяц, все с нуля: попробуй забрать."
     if winners:
-        return f"Кто кого: корона за {title} {where} — {' и '.join(winners)}. Поздравляю! В новом месяце — реванш."
-    return f"Кто кого: {title} {where} без короны. Новый месяц, все с нуля — играем?"
+        return f"КТО КОГО: корона за {title} {where} — {' и '.join(winners)}. Поздравляю! В новом месяце — реванш."
+    return f"КТО КОГО: {title} {where} без короны. Новый месяц, все с нуля — играем?"
 
 
 def league_card_version(
@@ -575,7 +575,7 @@ def league_card_version(
 
 def result_caption(*, home: str, away: str, home_score: int, away_score: int, points: int) -> str:
     head, sticker = _VERDICT[points]
-    return f"Кто кого: {head} {home} — {away} {home_score}:{away_score}, {sticker}"
+    return f"КТО КОГО: {head} {home} — {away} {home_score}:{away_score}, {sticker}"
 
 
 def league_caption(name: str) -> str:

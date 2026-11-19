@@ -28,10 +28,10 @@ from src.shared.html_template import PUBLIC_ICON_LINKS
 router = APIRouter(tags=["public-kk-promo"])
 
 DEFAULT_SRC = "site"
-_TITLE = "Кто кого — угадай, кто победит в матче Динамо-Минск"
+_TITLE = "КТО КОГО — угадай, кто победит в матче Динамо-Минск"
 _DESCRIPTION = "Тапни за команду, набирай очки и соревнуйся с друзьями. Бесплатно, в Telegram."
 _LANDING_DESCRIPTION = (
-    "«Кто кого» — бесплатная хоккейная игра в Telegram. Угадывай победителей матчей, набирай очки "
+    "«КТО КОГО» — бесплатная хоккейная игра в Telegram. Угадывай победителей матчей, набирай очки "
     "и создай свою лигу для друзей."
 )
 _LOGO = "/logos/01-icon/glide-icon-teal-square-512.png"
@@ -209,7 +209,7 @@ def _landing_body(go: str, *, show_matches: bool) -> str:
 <main class="kk-frame">
   <section class="kk-hero" aria-labelledby="kk-title">
     <div>
-      <span class="kk-logo">Кто кого?</span>
+      <span class="kk-logo">КТО КОГО?</span>
       <h1 id="kk-title">Угадай, кто победит</h1>
       <p>Выбери команду до начала хоккейного матча. За верный выбор получишь очки.</p>
       <a class="kk-button" href="{play}">Играть в Telegram</a>
@@ -273,7 +273,7 @@ async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_le
     e = html.escape
     landing = s is None and hockey_event.enabled(cfg)
     robots = "index, follow" if landing else "noindex"
-    title = "Кто кого — игра с прогнозами на хоккей | Glide" if landing else _TITLE
+    title = "КТО КОГО — игра с прогнозами на хоккей | Glide" if landing else _TITLE
     description = _LANDING_DESCRIPTION if landing else _DESCRIPTION
     canonical = (
         f'<link rel="canonical" href="{e(base)}/kk">\n<meta property="og:url" content="{e(base)}/kk">'

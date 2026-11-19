@@ -255,7 +255,7 @@
     var content = el('div', 'cn');
     var title = el('h2', 'cn-title', 'Как тебя зовут?');
     title.id = 'cn-title';
-    var sub = el('p', 'cn-sub', 'Так тебя увидят в\u00a0таблицах «Кто кого» и\u00a0в\u00a0лигах друзей.');
+    var sub = el('p', 'cn-sub', 'Так тебя увидят в\u00a0таблицах «КТО КОГО» и\u00a0в\u00a0лигах друзей.');
     var field = el('label', 'cn-field');
     field.appendChild(el('span', 'cs-sr', 'Имя'));
     var input = document.createElement('input');

@@ -1,6 +1,7 @@
 """
 App settings loaded from env (.env + os.environ). Single entry point for config.
 """
+
 import json
 import os
 from functools import lru_cache
@@ -441,6 +442,16 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     kk_notify_kinds: str = ""
     # Белый список player_key для пробной отправки, через запятую.
     kk_notify_whitelist: str = ""
+    # Пятничное фото-приглашение «Создать лигу друзей» (TASK-431). Владелец 2026-11-19: работает сразу, без включения
+    # флагов — общие KK_NOTIFY_* его не держат. KK_LEAGUE_INVITE_ENABLED=0 — стоп-кран.
+    kk_league_invite_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = True
+    # Жесты вечера лиги («Стук клюшкой», «2 минуты», TASK-431). Владелец 2026-11-19 убрал их из релиза: вместо них
+    # право капитана (TASK-432). Выключено — API их не отдаёт и не принимает, экран прячет кнопки и следы.
+    kk_gestures_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
+    # Право капитана (TASK-432): в каких лигах капитан вечера выдаёт экипировку. По умолчанию «*» — везде (владелец
+    # 2026-11-19: без включения флагов). Пусто — стоп-кран, нигде; «1,7» — только в этих лигах. Где выключено —
+    # выдавать нельзя и экипировку не показываем; капитан и кепка дня в «Вечере» остаются.
+    kk_captain_leagues: str = "*"
     # Прогрев разовых посетителей (TASK-428): серия подписчикам катка и одно напоминание «знающим нас». Те же
     # правила, что у игры (kk_notify_gate), и общий с ней бюджет на человека. Всё закрыто по умолчанию.
     warm_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False

@@ -8,6 +8,9 @@
   --kk-muted: #566578; --kk-ink: #0d1424; --kk-soft: #3a475a; --kk-gold: #ffd23f; --kk-on-gold: #0d1424;
   --kk-win: #12803f; --kk-lose: #c0262d; --kk-crownbg: #fff3cc; --kk-crownink: #5c4500; --kk-me: #e0f0dc;
   --kk-scrim: rgba(13, 20, 36, 0.5); --kk-focus: #0d1424; --kk-gold-ink: #8a6400; --kk-danger: #b42318;
+  --kk-link: #2a6fb0; --kk-dot: #c3cdd9; --kk-dot-hit: #c9a21a; --kk-badge: #0d1424;
+  --kk-badge-sub: #c3cdd9; --kk-evd-miss: #c3cdd9;
+  --kk-stick: #245f9a; --kk-stick-bg: #e3eefa; --kk-stick-on: #ffffff; --kk-pen: #b42318; --kk-pen-bg: #fde8e6; --kk-pen-on: #ffffff;
   --kk-display: 'Dela Gothic One', 'Unbounded', var(--app-font-sans, system-ui), sans-serif;
   --kk-text: 'Golos Text', var(--app-font-sans, system-ui), sans-serif;
 }
@@ -17,6 +20,9 @@ body.kk-dark .kk {
   --kk-muted: #98adc0; --kk-soft: #c3d2dc; --kk-ink: #f1f5f7; --kk-win: #7ee0a1; --kk-lose: #ff8a8d;
   --kk-crownbg: #2a2410; --kk-crownink: #f6e7a6; --kk-me: #24364a; --kk-scrim: rgba(6, 12, 18, 0.6);
   --kk-focus: #ffd23f; --kk-gold-ink: #ffd23f; --kk-danger: #ff8a7a;
+  --kk-link: #8cc4f5; --kk-dot: #5f7186; --kk-dot-hit: #ffd23f; --kk-badge: #0b1018;
+  --kk-badge-sub: #c3d2dc; --kk-evd-miss: #4a5a6c;
+  --kk-stick: #8cc4f5; --kk-stick-bg: #1f3349; --kk-stick-on: #0d1424; --kk-pen: #ff8a7a; --kk-pen-bg: #3a2422; --kk-pen-on: #2a0e0b;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -709,6 +715,191 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-mom__shine { position: absolute; top: 0; left: 0; width: 40%; height: 100%; background: rgba(255, 255, 255, 0.55); animation: kk-mom-shine 3.2s ease-in-out 1.2s infinite; }
 @media (prefers-reduced-motion: reduce) { .kk-mom__halo, .kk-mom__stk, .kk-mom__shine { animation: none; } }
 
+/* Вечер лиги (TASK-431, design/kto-kogo-league-evening/League.dc.html): переключатель, строки людей, матчи дня. */
+.kk-ltabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 14px; background: var(--kk-chip); margin-top: 2px; }
+.kk-ltabs__b { min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--kk-muted); font: 700 15px var(--kk-text); padding: 0 4px; }
+.kk-ltabs__b[aria-selected='true'] { background: var(--kk-card); color: var(--kk-ink); box-shadow: 0 1px 3px rgba(13, 20, 36, 0.15); }
+.kk-ev__nav { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin: -2px -8px -6px; }
+.kk-ev__arrow { width: 44px; height: 44px; flex: none; border: 0; border-radius: 50%; background: transparent; color: var(--kk-muted); display: flex; align-items: center; justify-content: center; padding: 0; }
+.kk-ev__arrow:disabled { color: var(--kk-dot); cursor: default; }
+.kk-ev__day { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; min-width: 0; }
+.kk-ev__t { margin: 0; font: 400 19px/1.15 var(--kk-display); }
+.kk-ev__s { font: 500 14px/1.3 var(--kk-text); color: var(--kk-muted); }
+.kk-ev__people { background: var(--kk-card); border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+/* Строка v2: аватар со следом жестов · имя, отметки, подписи · очки и жесты-иконки справа. */
+.kk-ev__p { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; column-gap: 12px; padding: 14px; background: var(--kk-card); }
+.kk-ev__p + .kk-ev__p { border-top: 1px solid var(--kk-chip); }
+.kk-ev__p.is-me { background: var(--kk-me); }
+.kk-ava--soft { background: var(--kk-chip); color: var(--kk-ink); }
+.kk-ev__av { position: relative; width: 44px; height: 44px; }
+.kk-ev__av .kk-ava { font-weight: 800; }
+.kk-ev__av.is-bench .kk-ava { box-shadow: 0 0 0 2px var(--kk-pen); }
+.kk-stamp { position: absolute; display: flex; align-items: center; justify-content: center; box-sizing: border-box; font: 800 11px/1 var(--kk-text); font-variant-numeric: tabular-nums; border: 2px solid var(--kk-card); }
+.kk-ev__p.is-me .kk-stamp { border-color: var(--kk-me); }
+.kk-stamp--stick { top: -7px; right: -9px; min-width: 22px; height: 22px; padding: 0 4px; gap: 0; border-radius: 11px; font-size: 10px; background: var(--kk-stick); color: var(--kk-stick-on); }
+.kk-stamp--stick svg { stroke-width: 3; }
+.kk-stamp--pen { bottom: -7px; left: 2px; width: 40px; height: 20px; border-radius: 6px; background: var(--kk-pen); color: var(--kk-pen-on); }
+.kk-stamp--stick.is-new { animation: kk-stamp-pop 0.42s cubic-bezier(0.3, 1.6, 0.5, 1) var(--kk-mo, 0ms) both; }
+.kk-stamp--pen.is-new { animation: kk-stamp-drop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) calc(0.15s + var(--kk-mo, 0ms)) both; }
+.kk-ev__w { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.kk-ev__name { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font: 700 16px/1.2 var(--kk-text); }
+.kk-ev__nm { min-width: 0; overflow-wrap: anywhere; }
+.kk-ev__cap { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; border-radius: 10px; background: var(--kk-badge); color: var(--kk-gold); font: 700 12px/16px var(--kk-text); white-space: nowrap; }
+.kk-ev__scarf { padding: 2px 8px; border-radius: 10px; background: var(--kk-chip); color: var(--kk-soft); font: 700 12px/16px var(--kk-text); white-space: nowrap; }
+.kk-ev__dots { display: flex; align-items: center; gap: 4px; }
+/* Отметки матчей дня: попал — золото, мимо — заливка, без хода — пунктир. Своё имя: у .kk-dot есть пульс «идёт». */
+.kk-evd-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.kk-evd { width: 22px; height: 8px; box-sizing: border-box; border-radius: 4px; border: 1.5px dashed var(--kk-dot); background: transparent; }
+.kk-evd--hit { background: var(--kk-gold); border: 1.5px solid var(--kk-dot-hit); }
+.kk-evd--miss { background: var(--kk-evd-miss); border: 1.5px solid var(--kk-evd-miss); }
+.kk-evd--wait { border-style: dotted; }
+.kk-ev__mv { margin-left: 6px; font: 500 13px var(--kk-text); color: var(--kk-muted); white-space: nowrap; }
+.kk-ev__note { font: 500 13px/1.35 var(--kk-text); color: var(--kk-muted); }
+.kk-ev__p.is-me .kk-ev__note, .kk-ev__p.is-me .kk-ev__mv { color: var(--kk-soft); }
+.kk-ev__note--stick { color: var(--kk-stick); }
+.kk-ev__note--pen { color: var(--kk-pen); }
+.kk-ev__notes { grid-column: 2 / -1; display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.kk-ev__side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.kk-ev__pt { flex: none; font: 400 18px/1 var(--kk-display); color: var(--kk-ink); font-variant-numeric: tabular-nums; }
+.kk-ev__pt.is-zero { color: var(--kk-muted); }
+.kk-ev__acts { display: flex; gap: 6px; }
+.kk-gest { width: 44px; height: 44px; flex: none; border-radius: 14px; border: 2px solid var(--kk-line); background: var(--kk-card); color: var(--kk-muted); padding: 0; display: flex; align-items: center; justify-content: center; }
+.kk-gest svg { flex: none; overflow: visible; }
+.kk-gest--stick svg { transform-origin: 60% 85%; }
+.kk-gest__drain { fill: none; stroke: currentColor; stroke-dasharray: 44; stroke-dashoffset: 44; opacity: 0.45; }
+.kk-gest--stick[aria-pressed='true'] { border-color: var(--kk-stick); background: var(--kk-stick-bg); color: var(--kk-stick); }
+.kk-gest--pen[aria-pressed='true'] { border-color: var(--kk-pen); background: var(--kk-pen-bg); color: var(--kk-pen); }
+.kk-gest.is-knock, .kk-gest.is-drain { animation: kk-gest-press 0.26s ease-out var(--kk-mo, 0ms) both; }
+.kk-gest.is-knock svg { animation: kk-gest-knock 0.52s ease-out var(--kk-mo, 0ms) both; }
+.kk-gest.is-drain .kk-gest__drain { animation: kk-gest-drain 0.6s linear var(--kk-mo, 0ms) both; }
+/* Итог вечера: звезда (больше всех очков) и кепка. */
+.kk-ev__verdict { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.kk-ev__vd { border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.kk-ev__vd:only-child { grid-column: 1 / -1; }
+.kk-ev__vd--star { background: var(--kk-crownbg); color: var(--kk-crownink); }
+.kk-ev__vd--star svg { color: var(--kk-gold-ink); }
+.kk-ev__vd--cap { background: var(--kk-badge); color: var(--kk-gold); }
+.kk-ev__vl { font: 700 12px/1.2 var(--kk-text); letter-spacing: 0.04em; text-transform: uppercase; }
+.kk-ev__vt { font: 400 20px/1.15 var(--kk-display); overflow-wrap: anywhere; }
+.kk-ev__vs { font: 500 13px/1.35 var(--kk-text); }
+.kk-ev__vd--cap .kk-ev__vs, .kk-ev__vd--cap .kk-ev__vl { color: var(--kk-badge-sub); }
+@keyframes kk-gest-press { 40% { transform: scale(0.88); } }
+@keyframes kk-gest-knock { 18%, 54% { transform: rotate(-26deg); } 36%, 72% { transform: rotate(0); } }
+@keyframes kk-gest-drain { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 44; } }
+@keyframes kk-stamp-pop { 0% { transform: scale(0); opacity: 0; } 70% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes kk-stamp-drop { 0% { transform: translateY(-18px) scale(0.6); opacity: 0; } 60% { transform: translateY(2px) scale(1.08); opacity: 1; } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .kk-gest.is-knock, .kk-gest.is-drain, .kk-gest.is-knock svg, .kk-gest.is-drain .kk-gest__drain, .kk-stamp.is-new { animation: none; }
+}
+.kk-ev__matches { background: var(--kk-card); border-radius: 16px; padding: 4px 14px; }
+.kk-ev__m { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 40px; font: 600 15px/1.25 var(--kk-text); }
+.kk-ev__m + .kk-ev__m { border-top: 1px solid var(--kk-chip); }
+.kk-ev__n { width: 22px; height: 22px; border-radius: 50%; background: var(--kk-chip); color: var(--kk-soft); display: flex; align-items: center; justify-content: center; font: 700 12px var(--kk-text); }
+.kk-ev__mt { min-width: 0; overflow-wrap: anywhere; }
+.kk-ev__sc { font: 400 16px var(--kk-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kk-ev__foot { margin: -4px 4px 0; font: 500 13px/1.4 var(--kk-text); color: var(--kk-muted); text-align: center; }
+.kk-ev__link { display: inline-flex; align-items: center; min-height: 44px; margin: -12px 0; padding: 0 4px; border: 0; background: none; color: var(--kk-link); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Шторка правил: разделы «Очки · Кепка · Жесты» (Rules.dc.html). */
+.kk-rtabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.kk-rtab { min-height: 44px; padding: 0 16px; border: 0; border-radius: 22px; background: var(--kk-chip); color: var(--kk-soft); font: 700 14px var(--kk-text); }
+.kk-rtab[aria-selected='true'] { background: var(--kk-badge); color: var(--kk-gold); }
+.kk-capr__hero { display: flex; align-items: center; gap: 14px; }
+.kk-capr__ic { width: 56px; height: 56px; flex: none; border-radius: 50%; background: var(--kk-gold); display: flex; align-items: center; justify-content: center; transform: rotate(-8deg); }
+.kk-capr__lead { font: 700 18px/1.3 var(--kk-text); }
+.kk-capr__list { display: flex; flex-direction: column; gap: 12px; }
+.kk-capr__p { margin: 0; font: 500 15px/1.45 var(--kk-text); color: var(--kk-soft); }
+.kk-capr__p b { color: var(--kk-ink); }
+.kk-capr__ex { border-radius: 16px; background: var(--kk-bg); padding: 14px; display: flex; flex-direction: column; gap: 8px; font: 500 14px/1.45 var(--kk-text); }
+.kk-capr__exh { font: 700 13px/1.2 var(--kk-text); letter-spacing: 0.04em; text-transform: uppercase; color: var(--kk-muted); }
+.kk-capr__grid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 14px; align-items: baseline; }
+.kk-capr__n { font-weight: 600; }
+.kk-capr__m, .kk-capr__n.is-out, .kk-capr__v.is-out { color: var(--kk-muted); }
+.kk-capr__v { font-weight: 700; }
+.kk-capr__v.is-out { font-weight: 500; }
+.kk-capr__foot { font-size: 14px; line-height: 1.45; }
+
+/* Своя лига в один тап (TASK-431, design/kto-kogo-league-evening/Ready.dc.html). */
+.kk-ready { gap: 0; padding-top: 12px; padding-bottom: 24px; }
+.kk-ready__top { display: flex; }
+.kk-ready__body { display: flex; flex-direction: column; gap: 20px; padding: 20px 0 24px; }
+.kk-ready__tag { align-self: flex-start; transform: rotate(-3deg); background: var(--kk-gold); color: var(--kk-on-gold); font: 400 16px/1.2 var(--kk-display); padding: 6px 12px; border-radius: 10px; }
+.kk-ready__name { margin: 0; font: 400 36px/1.05 var(--kk-display); overflow-wrap: anywhere; }
+.kk-ready__tx { margin: 0; font: 400 16px/1.45 var(--kk-text); color: var(--kk-soft); }
+.kk-ready__lbl { font: 700 14px var(--kk-text); color: var(--kk-soft); }
+.kk-ready__input { min-height: 48px; width: 100%; border-radius: 14px; border: 2px solid var(--kk-line); background: var(--kk-card); color: var(--kk-ink); padding: 0 14px; font: 400 16px var(--kk-text); }
+.kk-ready .kk-seg { background: var(--kk-chip); }
+.kk-ready .kk-seg__b.is-on { background: var(--kk-card); color: var(--kk-ink); box-shadow: 0 1px 3px rgba(13, 20, 36, 0.15); }
+.kk-ready__list { background: var(--kk-card); border-radius: 16px; padding: 4px 14px; display: flex; flex-direction: column; }
+.kk-ready__row { display: flex; align-items: center; gap: 10px; min-height: 56px; }
+.kk-ready__row + .kk-ready__row { border-top: 1px solid var(--kk-chip); }
+.kk-ready__ph { width: 36px; height: 36px; flex: none; border-radius: 50%; border: 2px dashed var(--kk-dot); }
+.kk-ready__who { flex: 1; min-width: 0; font: 700 16px var(--kk-text); }
+.kk-ready__who.is-empty { font-weight: 400; color: var(--kk-muted); }
+.kk-ready__in { font: 500 14px var(--kk-text); color: var(--kk-muted); }
+.kk-ready__note { margin: 0; font: 500 14px/1.4 var(--kk-text); color: var(--kk-muted); text-align: center; }
+.kk-ready__cta { display: flex; flex-direction: column; gap: 8px; }
+.kk-ready__go { font-weight: 800; }
+.kk-ready__alt { min-height: 48px; border: 0; border-radius: 16px; background: transparent; color: var(--kk-link); font: 600 15px var(--kk-text); }
+
+/* ---------- Право капитана и экипировка (TASK-432, холст «Право капитана») ---------- */
+.kk-kit { position: relative; display: inline-flex; flex: none; vertical-align: middle; }
+.kk-kit__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.kk-kit__drop { transform-box: view-box; transform-origin: 50% 0; animation: kk-kit-drop 0.55s cubic-bezier(0.3, 1.5, 0.5, 1) calc(0.1s + var(--kk-mo, 0ms)) both; }
+.kk-kit__c { position: absolute; right: -5%; bottom: -5%; width: 42%; height: 42%; min-width: 16px; min-height: 16px; box-sizing: border-box; border-radius: 50%; background: #0d1424; border: 2px solid #ffd23f; color: #ffd23f; display: flex; align-items: center; justify-content: center; font: 900 max(10px, 0.6em)/1 var(--kk-text); }
+.kk-kit--room { margin: var(--kk-kit-up, 0) 0 var(--kk-kit-down, 0); }
+@keyframes kk-kit-drop { 0% { transform: translateY(-40%) scale(0.6); opacity: 0; } 60% { transform: translateY(3%) scale(1.06); opacity: 1; } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .kk-kit__drop { animation: none; } }
+
+.kk-ev__vd--captain { background: var(--kk-crownbg); color: var(--kk-crownink); }
+.kk-ev__vd--captain .kk-kit__c { position: static; width: 26px; height: 26px; font-size: 13px; }
+.kk-ev__captain { padding: 2px 8px; border-radius: 10px; background: var(--kk-crownbg); color: var(--kk-crownink); font: 700 12px/16px var(--kk-text); white-space: nowrap; }
+.kk-ev__note--kit { color: var(--kk-crownink); }
+
+.kk-cpt { border-radius: 20px; background: var(--kk-card); border: 2px solid var(--kk-gold-ink); padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.kk-cpt__t { margin: 0; font: 400 22px/1.1 var(--kk-display); }
+.kk-cpt__lead { margin: 0; font: 500 15px/1.45 var(--kk-text); color: var(--kk-soft); }
+.kk-cpt__rev { margin: -6px 0 0; font: 700 15px/1.4 var(--kk-text); color: var(--kk-crownink); }
+.kk-cpt__lbl { font: 800 12px/1 var(--kk-text); letter-spacing: 0.06em; color: var(--kk-muted); }
+.kk-cpt__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: -6px; }
+.kk-cpt__grid--items { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.kk-cpt__pick { min-height: 84px; min-width: 0; border-radius: 14px; border: 2px solid var(--kk-line); background: var(--kk-row); color: var(--kk-soft); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; padding: 10px 2px 8px; cursor: pointer; font: inherit; }
+.kk-cpt__grid--items .kk-cpt__pick { min-height: 96px; }
+.kk-cpt__pick[aria-pressed='true'] { border-color: var(--kk-gold-ink); background: var(--kk-crownbg); color: var(--kk-crownink); }
+.kk-cpt__pick:focus-visible, .kk-cpt__alt:focus-visible { outline: 3px solid var(--kk-focus); outline-offset: 2px; }
+.kk-cpt__nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 12px/1.2 var(--kk-text); }
+.kk-cpt__sub { font: 700 10px/1.2 var(--kk-text); color: var(--kk-muted); }
+.kk-cpt__pick[aria-pressed='true'] .kk-cpt__sub { color: inherit; }
+.kk-cpt__in { font: 700 11px/1.2 var(--kk-text); text-align: center; }
+.kk-cpt__thumb { padding: 8px 8px 10px 0; }
+.kk-cpt__view { display: flex; align-items: center; gap: 4px; }
+.kk-cpt__big { padding: 30px 22px 34px 4px; flex: none; }
+.kk-cpt__who { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kk-cpt__name { font: 800 18px/1.2 var(--kk-text); overflow-wrap: anywhere; }
+.kk-cpt__item { font: 500 15px/1.3 var(--kk-text); color: var(--kk-crownink); }
+.kk-cpt__score { font: 500 13px/1.3 var(--kk-text); color: var(--kk-muted); }
+.kk-cpt__done { display: flex; align-items: center; gap: 4px; }
+.kk-cpt__done .kk-cpt__big { padding: 20px 16px 22px 2px; }
+.kk-cpt__dt { font: 400 18px/1.15 var(--kk-display); }
+.kk-cpt__dl { font: 500 14px/1.4 var(--kk-text); color: var(--kk-soft); }
+.kk-cpt__alt { align-self: center; min-height: 44px; border: 0; background: none; color: var(--kk-link); font: 600 15px var(--kk-text); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+.kk-got { border-radius: 22px; background: var(--kk-badge); padding: 22px 18px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.kk-got__ava { padding: 40px 28px 46px; }
+.kk-got__t { margin: 0; font: 400 24px/1.1 var(--kk-display); color: var(--kk-gold); }
+.kk-got__x { margin: 0; font: 500 15px/1.45 var(--kk-text); color: var(--kk-badge-sub); }
+.kk-got__tail { margin: 0; font: 700 15px/1.45 var(--kk-text); color: var(--kk-gold); }
+
+.kk-r--kit { grid-template-columns: 32px auto minmax(0, 1fr) auto; }
+.kk-kitb { display: inline-flex; flex: none; width: 22px; height: 22px; }
+.kk-kitb svg { width: 100%; height: 100%; overflow: visible; }
+.kk-ev__p.has-kit { padding-top: 22px; padding-bottom: 22px; }
+.kk-kitlist { display: flex; flex-direction: column; gap: 12px; }
+.kk-kitlist__r { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
+.kk-kitlist__ava { padding: 18px 14px 18px 4px; }
+.kk-kitlist__t { font: 700 15px/1.3 var(--kk-text); }
+.kk-kitlist__s { font: 500 13px/1.4 var(--kk-text); color: var(--kk-soft); }
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.
@@ -722,3 +913,4 @@ body.kk-in-tab.kk-dark.client-shell-body { --app-canvas-bg: #17212b; }
 body.kk-in-tab .kk-scrim { z-index: 9300; }
 body.kk-in-tab .kk-toast { z-index: 9300; bottom: calc(var(--client-shell-tab-inset) + 12px); }
 body.kk-in-tab .kk-cta { bottom: var(--client-shell-tab-inset); z-index: 9000; }
+

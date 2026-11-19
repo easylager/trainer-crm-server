@@ -5,7 +5,8 @@
  * Экраны подключаются по одному и регистрируются через KK.register:
  *   kto-kogo-views.js   — матч с ходом, матч идёт, итог, края;
  *   kto-kogo-board.js   — хаб игры, таблица, карточка болельщика;
- *   kto-kogo-leagues.js — новая лига, лига изнутри, вход по ссылке, итоги месяца.
+ *   kto-kogo-leagues.js — новая лига, лига изнутри, вход по ссылке, итоги месяца;
+ *   kto-kogo-kit.js     — экипировка капитана и аватар с вещью (грузится сразу после ядра).
  * Чужие имена попадают в DOM только через textContent.
  */
 (function () {
@@ -42,6 +43,7 @@
     clubs: null,
     leagues: null,
     leagueTables: {}, // 'id|month' | 'id|all'
+    evenings: {}, // 'id|день' — «Вечер» лиги; 'id|' — вечер по умолчанию (TASK-431)
     tables: {}, // 'клуб|период'
     created: null,
     joinCode: '',
@@ -841,7 +843,7 @@
   /** Сообщение, когда игру открыли не из Telegram. */
   function outsideTelegram() {
     root.replaceChildren(h('main', { class: 'kk-main' }, [
-      emptyCard('Кто кого — в Telegram', 'Игра открывается из Glide в Telegram: там видно, кто из друзей за кого.'),
+      emptyCard('КТО КОГО — в Telegram', 'Игра открывается из Glide в Telegram: там видно, кто из друзей за кого.'),
     ]));
   }
 
@@ -895,7 +897,7 @@
       if (state.src) sessionStorage.setItem('kk_src', state.src);
       else state.src = M.promoSrc('', sessionStorage.getItem('kk_src'));
     } catch (e) { /* */ }
-    if (state.src && (params.get('src') || /^kks_/.test(startParam()))) {
+    if (state.src && (params.get('src') || /^kk[sg]_/.test(startParam()))) {
       var entryKey = 'kk_entry_' + state.src;
       var counted = false;
       try { counted = sessionStorage.getItem(entryKey) === '1'; } catch (e) { /* */ }
@@ -939,6 +941,11 @@
           // Экран из ссылки ложится поверх `hub`: «назад» возвращает в игру, а не закрывает приложение.
           var entry = M.entryScreen(code, openId, params.get('tab'));
           if (entry) go(entry.name, entry.args);
+          // «Вечер в лиге» из сводки (TASK-431): лига на вкладке «Вечер» за день из ссылки, поверх hub.
+          var evening = entry ? null : M.eveningEntry(startParam(), params.get('league'), params.get('day'));
+          if (evening) go('league', evening);
+          // «Собрать лигу» из еженедельного приглашения (TASK-431): экран «Лига готова» поверх hub.
+          else if (!entry && M.readyEntry(startParam(), params.get('ready'))) go('ready', {});
           if (month) {
             var owner = current();
             api('GET', '/client/hockey/races/' + month + '/result').then(function (data) {

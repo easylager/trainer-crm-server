@@ -1,6 +1,7 @@
 /**
- * «Кто кого» — лиги (TASK-334 S5): новая лига (команды + срок + сводка), лига изнутри (месяц / весь срок,
+ * «Кто кого» — лиги (TASK-334 S5): новая лига (команды + срок + сводка), лига изнутри (вечер / месяц / весь срок,
  * «Продлить», «Позвать»), вход по ссылке, итоги месяца. Холст: LeagueNew, League.
+ * «Вечер» лиги — кто как сходил за игровой день, кепка дня и жесты (TASK-431, design/kto-kogo-league-evening).
  * Лига = название + команды + срок; ходить отдельно не нужно, считаются матчи после вступления.
  */
 (function () {
@@ -223,13 +224,6 @@
       });
   }
 
-  function seg(items, current, onPick, label) {
-    return h('div', { class: 'kk-seg', role: 'group', 'aria-label': label }, items.map(function (it) {
-      var on = it[0] === current;
-      return h('button', { type: 'button', class: 'kk-seg__b' + (on ? ' is-on' : ''), 'aria-pressed': on ? 'true' : 'false', onclick: function () { onPick(it[0]); }, text: it[1] });
-    }));
-  }
-
   /** Строка-вариант: иконка, название, подстрока, кружок выбора справа. */
   function opt(icon_, label, sub, on, onclick) {
     return h('button', { type: 'button', class: 'kk-opt' + (on ? ' is-on' : ''), 'aria-pressed': on ? 'true' : 'false', onclick: onclick }, [
@@ -395,20 +389,19 @@
 
   function leagueRow(r) {
     var mark = S.titleMark(r.title);
-    var sub = (r.title && r.title.label ? (mark ? mark + NBSP : '') + r.title.label + (r.title.detail ? ' · ' + r.title.detail : '') + ' · ' : '') + S.rowSub(r);
-    return h('div', { class: 'kk-r' + (r.is_me ? ' is-me' : '') }, [
+    var marks = S.leagueMarks(r);
+    var sub = (r.title && r.title.label ? (mark ? mark + NBSP : '') + r.title.label + (r.title.detail ? ' · ' + r.title.detail : '') + ' · ' : '') + S.rowSub(r) + (marks ? ' · ' + marks : '');
+    return h('div', { class: 'kk-r kk-r--kit' + (r.is_me ? ' is-me' : '') }, [
       h('span', { class: 'kk-r__n' + (r.rank === 1 ? ' is-gold' : ''), text: String(r.rank) }),
+      leagueAva(r, 36),
       h('span', { class: 'kk-col kk-r__w' }, [h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]), h('span', { class: 'kk-sub', text: sub })]),
       h('span', { class: 'kk-r__pt', text: String(r.points) }),
     ]);
   }
 
-  /** Аватарка со значком звания: кепка на макушке, шарф на шее. Без звания — просто аватарка. */
-  function avatarWithMark(r, size) {
-    var a = K.ava(r.display_name, size);
-    var mark = S.titleMark(r.title);
-    if (!mark) return a;
-    return h('span', { class: 'kk-capwrap' }, [a, h('span', { class: 'kk-cap kk-cap--' + r.title.id, 'aria-hidden': 'true', text: mark })]);
+  /** Аватарка в таблице лиги (TASK-432): на голове — экипировка от капитана или кепка дня, у капитана — «C». */
+  function leagueAva(r, size) {
+    return K.kitAva(r.display_name, size, { head: r.head, captain: r.captain, cls: r.is_me ? '' : 'kk-ava--soft', wrap: 'kk-kit--room' });
   }
 
   /** Пьедестал лиги из первой версии игры: трое лучших колонками, звание (шарф, кепка) под именем. */
@@ -418,7 +411,7 @@
     return h('div', { class: 'kk-podium', role: 'group', 'aria-label': 'Первая тройка лиги' }, order.map(function (r, i) {
       var place = i === 1 ? 1 : i === 0 ? 2 : 3;
       return h('div', { class: 'kk-podium__col' }, [
-        avatarWithMark(r, place === 1 ? 60 : 48),
+        leagueAva(r, place === 1 ? 60 : 48),
         h('span', { class: 'kk-podium__name' }, [h('span', { class: 'kk-podium__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null]),
         r.title && r.title.label ? h('span', { class: 'kk-podium__title', text: r.title.label }) : h('span', { class: 'kk-podium__title' }),
         h('div', { class: 'kk-podium__block kk-podium__block--' + place }, [
@@ -491,7 +484,7 @@
       state.leagueTables = {};
       a.failed = false;
       // Всё сохранено: сбой перезагрузки таблицы показываем на экране с «Повторить», а не в закрытой шторке.
-      loadLeague(a, true).then(K.render, function (e) {
+      loadLeague(headArgs(a), true).then(K.render, function (e) {
         a.failed = true;
         K.render();
         K.fail(e);
@@ -503,7 +496,7 @@
       K.render();
       if (!touched) return;
       // Часть уже сохранена: перечитываем лигу, чтобы повторное «Сохранить» отправило только оставшееся.
-      var key = lkey(a);
+      var key = lkey(headArgs(a));
       K.api('GET', base + (a.tab === 'month' ? '?period=month' : '')).then(function (d) {
         state.leagues = null;
         state.leagueTables = {};
@@ -513,23 +506,471 @@
     });
   }
 
+  // ---------- Вечер лиги (TASK-431) ----------
+
+  var TABS_ID = 'kk-ltabs';
+
+  function ekey(a) {
+    return a.id + '|' + (a.day || '');
+  }
+
+  /** «Вечер» лиги за a.day (пусто — сегодня или последний день с матчами). Ответ кладём и под его день. */
+  function loadEvening(a, force) {
+    var key = ekey(a);
+    if (state.evenings[key] && !force) return Promise.resolve();
+    return K.api('GET', '/client/hockey/leagues/' + a.id + '/evening' + (a.day ? '?day=' + encodeURIComponent(a.day) : '')).then(function (d) {
+      state.evenings[key] = d;
+      if (d && d.day) state.evenings[a.id + '|' + d.day] = d;
+      // Жесты включает сервер (KK_GESTURES_ENABLED): выключены — нет и раздела «Жесты» в правилах. Так же право капитана.
+      state.gesturesOn = !!(d && d.gestures_on);
+      state.captainOn = !!(d && d.captain_on);
+    });
+  }
+
+  /** Переключатель вверху: Вечер · <Месяц> · Вся лига. */
+  function leagueTabs(a, monthName, onPick) {
+    var items = [['evening', 'Вечер'], ['month', monthName], ['all', 'Вся лига']];
+    return h('div', { class: 'kk-ltabs', role: 'tablist', 'aria-label': 'Лига', id: TABS_ID }, items.map(function (it) {
+      var on = a.tab === it[0];
+      return h('button', { type: 'button', role: 'tab', class: 'kk-ltabs__b', 'aria-selected': on ? 'true' : 'false', onclick: function () { if (!on) onPick(it[0]); }, text: it[1] });
+    }));
+  }
+
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  /** Кепка из макета (viewBox 64×44): купол и козырёк; band — белая полоса, как в шторке правил. */
+  function capSvg(w, hgt, fill, band) {
+    var s = document.createElementNS(SVG_NS, 'svg');
+    s.setAttribute('width', w);
+    s.setAttribute('height', hgt);
+    s.setAttribute('viewBox', '0 0 64 44');
+    s.setAttribute('aria-hidden', 'true');
+    ['M10 32 C10 14 20 6 32 6 C44 6 52 14 52 32 Z', 'M30 32 H61 C62 36 58 39 51 39 H30 Z'].forEach(function (d) {
+      var p = document.createElementNS(SVG_NS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('fill', fill);
+      s.appendChild(p);
+    });
+    if (band) {
+      var r = document.createElementNS(SVG_NS, 'rect');
+      r.setAttribute('x', '10');
+      r.setAttribute('y', '28');
+      r.setAttribute('width', '42');
+      r.setAttribute('height', '4');
+      r.setAttribute('fill', band);
+      s.appendChild(r);
+    }
+    return s;
+  }
+  K.capSvg = capSvg;
+
+  var STICK_ICON = ['M7 2l7 15h7', 'M3 21h8'];
+  var PEN_ICON = ['M12 7a7 7 0 1 0 0 14a7 7 0 0 0 0-14z', 'M12 14V10', 'M10 3h4'];
+
+  /** Анимация живёт окном времени: экран перерисовывается целиком, и класс, оставленный дольше, проиграл бы её снова. */
+  var MOTION_MS = 1100;
+
+  function fresh(at) {
+    return !!at && Date.now() - at < MOTION_MS;
+  }
+
+  /** Перерисовка посреди анимации продолжает её с того же кадра: отрицательная задержка = сколько уже прошло. */
+  function motionStyle(at) {
+    return '--kk-mo:-' + Math.max(0, Date.now() - at) + 'ms';
+  }
+
+  /** Прилетевшие мне жесты анимируем один раз на набор: что уже видел — помнит браузер (только удобство, не состояние игры). */
+  function revealAt(a, ev, r) {
+    a.reveal = a.reveal || {};
+    if (a.reveal[ev.day] !== undefined) return a.reveal[ev.day];
+    var sig = S.gestureSeenKey(r);
+    var key = 'kk-ev-seen:' + a.id + ':' + ev.day;
+    var seen = null;
+    try { seen = window.localStorage.getItem(key); } catch (e) { seen = sig; }
+    a.reveal[ev.day] = sig && seen !== sig ? Date.now() : 0;
+    if (a.reveal[ev.day]) {
+      try { window.localStorage.setItem(key, sig); } catch (e) { /* без хранилища — просто покажем снова */ }
+    }
+    return a.reveal[ev.day];
+  }
+
+  function gestureButtons(a, ev, r) {
+    return h('div', { class: 'kk-ev__acts', role: 'group', 'aria-label': 'Жест: ' + r.display_name }, S.GESTURES.map(function (g) {
+      var on = r.my_gesture === g[0];
+      var just = on && a.gave && a.gave.pid === r.pid && a.gave.kind === g[0] && fresh(a.gave.at);
+      var skin = S.gestureSkin(g[0], 'base');
+      return h('button', {
+        type: 'button', id: 'kk-g-' + r.pid + '-' + g[0], 'data-keep': '',
+        class: 'kk-gest kk-gest--' + g[0] + (just ? ' is-' + skin.motion : ''), style: just ? motionStyle(a.gave.at) : null,
+        'aria-pressed': on ? 'true' : 'false', 'aria-label': g[1],
+        onclick: function () { sendGesture(a, ev, r, g[0]); },
+      }, [g[0] === 'pen' ? penIcon() : icon(STICK_ICON, 20)]);
+    }));
+  }
+
+  /** Секундомер с кольцом, которое «сбегает» при нажатии. */
+  function penIcon() {
+    var s = icon(PEN_ICON, 20);
+    var ring = document.createElementNS(SVG_NS, 'circle');
+    ring.setAttribute('class', 'kk-gest__drain');
+    ring.setAttribute('cx', '12');
+    ring.setAttribute('cy', '14');
+    ring.setAttribute('r', '7');
+    ring.setAttribute('transform', 'rotate(-90 12 14)');
+    s.appendChild(ring);
+    return s;
+  }
+
+  function gestureHaptic(kind) {
+    var hp = S.gestureSkin(kind, 'base').haptic;
+    try {
+      var hf = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback;
+      if (!hf) return;
+      if (hp[0] === 'notification') hf.notificationOccurred(hp[1]);
+      else hf.impactOccurred(hp[1]);
+    } catch (e) { /* старые клиенты */ }
+  }
+
+  /**
+   * Жест — без пушей. Экран отвечает сразу (кнопка, след, вибрация), сервер подтверждает: его ответ — новый «Вечер»
+   * этого дня. Ошибка — возвращаем как было и говорим почему. Пока запрос идёт, повторные тапы по строке не шлём.
+   */
+  function sendGesture(a, ev, r, kind) {
+    if (r.busy) return;
+    var next = S.gestureNext(r.my_gesture, kind);
+    var was = { my_gesture: r.my_gesture, gestures: r.gestures };
+    r.my_gesture = next;
+    r.gestures = (r.gestures || []).filter(function (g) { return !g.from_me; })
+      .concat(next ? [{ kind: next, skin: 'base', from: 'Ты', from_me: true }] : []);
+    r.busy = true;
+    a.gave = next ? { pid: r.pid, kind: next, at: Date.now() } : null;
+    if (next) gestureHaptic(next);
+    K.render();
+    if (next) setTimeout(K.render, MOTION_MS);
+    K.api('PUT', '/client/hockey/leagues/' + a.id + '/evening/' + ev.day + '/gesture', { to: r.pid, kind: next })
+      .then(function (d) {
+        state.evenings[a.id + '|' + d.day] = d;
+        if (!a.day) state.evenings[a.id + '|'] = d;
+        // Минуты штрафа в таблице месяца изменились: таблицы перечитаются при переключении вкладки.
+        delete state.leagueTables[a.id + '|month'];
+        K.render();
+      }, function (e) {
+        r.my_gesture = was.my_gesture;
+        r.gestures = was.gestures;
+        r.busy = false;
+        a.gave = null;
+        K.render();
+        K.toast(e.message);
+      });
+  }
+
+  /** Аватар со следом жестов вечера: стуки — значок ×N сверху, скамейка — табличка «2:00» снизу. */
+  function eveningAvatar(a, ev, r) {
+    var st = S.gestureStamps(r);
+    // Мне — прилёт всех жестов набора; другу — только след того жеста, что я дал сейчас.
+    var at = r.is_me ? revealAt(a, ev, r) : a.gave && a.gave.pid === r.pid ? a.gave.at : 0;
+    var moving = fresh(at);
+    var kindOn = function (k) { return moving && (r.is_me || a.gave.kind === k); };
+    function stamp(k, kids) {
+      return h('span', { class: 'kk-stamp kk-stamp--' + k + (kindOn(k) ? ' is-new' : ''), style: kindOn(k) ? motionStyle(at) : null, 'aria-hidden': 'true' }, kids);
+    }
+    return h('div', { class: 'kk-ev__av' + (st.pens ? ' is-bench' : '') }, [
+      K.kitAva(r.display_name, 44, { head: r.head, captain: r.captain, cls: r.is_me ? '' : 'kk-ava--soft', dropAt: kitDropAt(a, ev, r) }),
+      st.sticks ? stamp('stick', [icon(STICK_ICON, 11), st.stickLabel]) : null,
+      st.pens ? stamp('pen', [st.penLabel]) : null,
+      st.say ? h('span', { class: 'kk-vh', text: st.say }) : null,
+    ]);
+  }
+
+  function eveningPerson(a, ev, r) {
+    var pts = S.eveningPoints(r, ev);
+    var notes = S.eveningNotes(r, ev);
+    var kitNote = K.Kit.headNote(r, ev);
+    if (kitNote) notes = [{ text: kitNote, tone: 'kit' }].concat(notes);
+    return h('div', { class: 'kk-ev__p' + (r.is_me ? ' is-me' : '') + (r.head ? ' has-kit' : '') }, [
+      eveningAvatar(a, ev, r),
+      h('div', { class: 'kk-ev__w' }, [
+        h('div', { class: 'kk-ev__name' }, [
+          h('span', { class: 'kk-ev__nm', text: r.is_me ? 'Ты' : r.display_name }),
+          r.captain ? h('span', { class: 'kk-ev__captain', text: 'капитан' }) : null,
+          r.cap ? h('span', { class: 'kk-ev__cap' }, [capSvg(18, 12, 'currentColor'), 'кепка дня']) : null,
+          r.scarf ? h('span', { class: 'kk-ev__scarf', text: 'в чужом шарфе' }) : null,
+        ]),
+        h('div', { class: 'kk-ev__dots' }, [
+          h('span', { class: 'kk-evd-row', 'aria-hidden': 'true' }, (r.marks || []).map(function (x) { return h('span', { class: 'kk-evd kk-evd--' + x.state }); })),
+          h('span', { class: 'kk-ev__mv', text: S.eveningMoves(r, ev) }),
+        ]),
+      ]),
+      h('div', { class: 'kk-ev__side' }, [
+        pts ? h('span', { class: 'kk-ev__pt' + (r.points ? '' : ' is-zero'), text: pts }) : null,
+        r.can_gesture ? gestureButtons(a, ev, r) : null,
+      ]),
+      notes.length ? h('div', { class: 'kk-ev__notes' }, notes.map(function (n) { return h('span', { class: 'kk-ev__note' + (n.tone ? ' kk-ev__note--' + n.tone : ''), text: n.text }); })) : null,
+    ]);
+  }
+
+  /** Итог вечера над строками: капитан и кепка. Вечер не сыгран — блока нет. */
+  function eveningVerdict(ev) {
+    var v = S.eveningVerdict(ev);
+    if (!v) return null;
+    return h('div', { class: 'kk-ev__verdict' }, [
+      v.captain ? h('div', { class: 'kk-ev__vd kk-ev__vd--captain' }, [
+        h('span', { class: 'kk-kit__c', 'aria-hidden': 'true', text: 'C' }),
+        h('span', { class: 'kk-ev__vl', text: v.captain.label }),
+        h('span', { class: 'kk-ev__vt', text: v.captain.name }),
+        h('span', { class: 'kk-ev__vs', text: v.captain.sub }),
+      ]) : null,
+      v.cap ? h('div', { class: 'kk-ev__vd kk-ev__vd--cap' }, [
+        capSvg(34, 24, 'currentColor'),
+        h('span', { class: 'kk-ev__vl', text: v.cap.label }),
+        h('span', { class: 'kk-ev__vt', text: v.cap.name }),
+        h('span', { class: 'kk-ev__vs', text: v.cap.sub }),
+      ]) : null,
+    ]);
+  }
+
+  // ---------- Право капитана (TASK-432, холст Dress / Dressed) ----------
+
+  /** Новую выдачу роняем на голову один раз на набор: что уже видел — помнит браузер (только удобство). */
+  function kitRevealAt(a, ev) {
+    var award = ev.captain && ev.captain.award;
+    if (!award || award.from_me || !award.current) return 0;
+    var sig = award.to + ':' + award.item + ':' + award.at;
+    a.kitReveal = a.kitReveal || {};
+    if (a.kitReveal[sig] !== undefined) return a.kitReveal[sig];
+    var key = 'kk-kit-seen:' + a.id + ':' + ev.day;
+    var seen = null;
+    try { seen = window.localStorage.getItem(key); } catch (e) { seen = sig; }
+    a.kitReveal[sig] = seen !== sig ? Date.now() : 0;
+    if (a.kitReveal[sig]) {
+      try { window.localStorage.setItem(key, sig); } catch (e) { /* без хранилища — просто покажем снова */ }
+    }
+    return a.kitReveal[sig];
+  }
+
+  /** Когда вещь падает на эту голову: только что выдал я — или новая выдача, которую я ещё не видел. */
+  function kitDropAt(a, ev, r) {
+    if (a.given && a.given.pid === r.pid && fresh(a.given.at)) return a.given.at;
+    var award = ev.captain && ev.captain.award;
+    if (!award || award.to !== r.pid) return 0;
+    var at = kitRevealAt(a, ev);
+    return fresh(at) ? at : 0;
+  }
+
+  /** Карточка экипировки в чат лиги: картинка «Олег разыскивается», кнопка под ней зовёт в эту лигу. */
+  function shareKitButton(a, ev, cls) {
+    return h('button', { type: 'button', class: cls, onclick: function () { K.shareCard({ card: 'outfit', league_id: a.id, day: ev.day }, null, null); }, text: 'Показать в чате' });
+  }
+
+  /** Плашка получателю: «Андрей выдаёт тебе экипировку». */
+  function receivedBlock(a, ev) {
+    var b = K.Kit.receivedBanner(ev);
+    var me = (ev.items || []).filter(function (r) { return r.is_me; })[0];
+    if (!b || !me) return null;
+    var at = kitRevealAt(a, ev);
+    return h('section', { class: 'kk-got', 'aria-label': 'Тебе выдали экипировку' }, [
+      h('div', { class: 'kk-got__ava' }, [K.kitAva(me.display_name, 128, { head: me.head, dropAt: fresh(at) ? at : 0 })]),
+      h('h3', { class: 'kk-got__t', text: b.title }),
+      h('p', { class: 'kk-got__x', text: b.text }),
+      h('p', { class: 'kk-got__tail', text: b.tail }),
+      shareKitButton(a, ev, 'kk-btn kk-btn--gold'),
+    ]);
+  }
+
+  /** Выбор в праве капитана живёт в аргументах экрана: кому, что, правим ли выданное. */
+  function kitDraft(a, ev) {
+    var award = ev.captain.award;
+    var sg = ev.captain.suggest;
+    if (!a.kit || a.kit.day !== ev.day) {
+      a.kit = {
+        day: ev.day,
+        to: award ? award.to : sg ? sg.to : K.Kit.defaultTarget(ev.items),
+        item: award ? award.item : sg ? sg.item : K.Kit.OUTFITS[0].id,
+        editing: !award, at: 0, busy: false,
+      };
+    }
+    if (!(ev.items || []).some(function (r) { return r.pid === a.kit.to; })) a.kit.to = K.Kit.defaultTarget(ev.items);
+    return a.kit;
+  }
+
+  function pickButton(id, on, onclick, kids) {
+    return h('button', { type: 'button', id: id, 'data-keep': '', class: 'kk-cpt__pick', 'aria-pressed': on ? 'true' : 'false', onclick: onclick }, kids);
+  }
+
+  function captainPanel(a, ev) {
+    var c = ev.captain;
+    if (!c || !c.right) return null;
+    var p = kitDraft(a, ev);
+    var items = ev.items || [];
+    var award = c.award;
+    if (award && !p.editing) {
+      var got = items.filter(function (r) { return r.pid === award.to; })[0];
+      var line = K.Kit.givenLine(got, award.item);
+      var at = a.given && fresh(a.given.at) ? a.given.at : 0;
+      return h('section', { class: 'kk-cpt', 'aria-label': 'Право капитана' }, [
+        h('div', { class: 'kk-cpt__done' }, [
+          got ? h('div', { class: 'kk-cpt__big' }, [K.kitAva(got.display_name, 64, { head: got.head, cls: got.is_me ? '' : 'kk-ava--soft', dropAt: at })]) : null,
+          h('div', { class: 'kk-cpt__who' }, [h('span', { class: 'kk-cpt__dt', text: line.title }), h('span', { class: 'kk-cpt__dl', text: line.text })]),
+        ]),
+        shareKitButton(a, ev, 'kk-btn kk-btn--gold'),
+        h('button', { type: 'button', class: 'kk-cpt__alt', id: 'kk-cpt-change', 'data-keep': '', onclick: function () { p.editing = true; p.to = award.to; p.item = award.item; p.at = 0; K.render(); }, text: 'Поменять' }),
+      ]);
+    }
+    var target = items.filter(function (r) { return r.pid === p.to; })[0] || items[0];
+    var chosen = K.Kit.outfit(p.item);
+    var preview = Object.assign({ item: p.item }, K.Kit.numbers(target, ev));
+    var dropAt = fresh(p.at) ? p.at : 0;
+    function choose(patch) {
+      Object.assign(p, patch, { at: Date.now() });
+      K.haptic();
+      K.render();
+    }
+    return h('section', { class: 'kk-cpt', 'aria-label': 'Право капитана' }, [
+      h('h3', { class: 'kk-cpt__t', text: 'Право капитана' }),
+      h('p', { class: 'kk-cpt__lead', text: 'Выбери экипировку и кому её выдать — любому в лиге, даже себе. До следующего вечера, увидят все в «КТО\u00a0КОГО».' }),
+      K.Kit.revengeLine(ev) ? h('p', { class: 'kk-cpt__rev', text: K.Kit.revengeLine(ev) }) : null,
+      h('span', { class: 'kk-cpt__lbl', id: 'kk-cpt-to', text: 'КОМУ' }),
+      h('div', { class: 'kk-cpt__grid', role: 'group', 'aria-labelledby': 'kk-cpt-to' }, items.map(function (r) {
+        return pickButton('kk-cpt-to-' + r.pid, r.pid === p.to, function () { if (r.pid !== p.to) choose({ to: r.pid }); }, [
+          K.kitAva(r.display_name, 36, { cls: r.is_me ? '' : 'kk-ava--soft' }),
+          h('span', { class: 'kk-cpt__nm', text: r.is_me ? 'Ты' : r.display_name }),
+          h('span', { class: 'kk-cpt__sub', text: K.Kit.targetSub(r, ev) }),
+        ]);
+      })),
+      target ? h('div', { class: 'kk-cpt__view' }, [
+        h('div', { class: 'kk-cpt__big' }, [K.kitAva(target.display_name, 104, { head: preview, cls: target.is_me ? '' : 'kk-ava--soft', dropAt: dropAt })]),
+        h('div', { class: 'kk-cpt__who' }, [
+          h('span', { class: 'kk-cpt__name', text: target.is_me ? 'Ты' : target.display_name }),
+          h('span', { class: 'kk-cpt__item', text: chosen ? chosen.full : '' }),
+          h('span', { class: 'kk-cpt__score', text: K.Kit.targetLine(target, ev) }),
+        ]),
+      ]) : null,
+      h('span', { class: 'kk-cpt__lbl', id: 'kk-cpt-what', text: 'ЧТО' }),
+      h('div', { class: 'kk-cpt__grid kk-cpt__grid--items', role: 'group', 'aria-labelledby': 'kk-cpt-what' }, K.Kit.OUTFITS.map(function (o) {
+        return pickButton('kk-cpt-it-' + o.id, o.id === p.item, function () { if (o.id !== p.item) choose({ item: o.id }); }, [
+          h('span', { class: 'kk-cpt__thumb' }, [K.kitAva(target ? target.display_name : '', 36, { head: Object.assign({}, preview, { item: o.id }), cls: 'kk-ava--soft' })]),
+          h('span', { class: 'kk-cpt__in', text: o.name }),
+        ]);
+      })),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--gold', id: 'kk-cpt-give', 'data-keep': '', disabled: p.busy || !target ? 'true' : null, onclick: function () { giveOutfit(a, ev, p); }, text: p.busy ? 'Выдаём…' : 'Выдать' }),
+      award ? h('button', { type: 'button', class: 'kk-cpt__alt', onclick: function () { p.editing = false; K.render(); }, text: 'Оставить как было' }) : null,
+    ]);
+  }
+
+  /**
+   * Выдать: экран отвечает сразу (вещь падает на голову, вибрация), сервер подтверждает новым «Вечером» дня.
+   * Ошибка — возвращаем как было и говорим почему. Пушей нет: строка — в вечерней сводке капитану.
+   */
+  function giveOutfit(a, ev, p) {
+    if (p.busy) return;
+    var items = ev.items || [];
+    var target = items.filter(function (r) { return r.pid === p.to; })[0];
+    if (!target) return;
+    var was = { award: ev.captain.award, heads: items.map(function (r) { return r.head; }) };
+    items.forEach(function (r) { if (r.head && r.head.item !== 'cap') r.head = r.cap ? { item: 'cap' } : null; });
+    target.head = Object.assign({ item: p.item }, K.Kit.numbers(target, ev));
+    ev.captain.award = { to: p.to, item: p.item, from: 'ты', from_me: true, at: new Date().toISOString(), current: true };
+    p.editing = false;
+    p.busy = true;
+    a.given = { pid: p.to, at: Date.now() };
+    K.haptic('success');
+    K.render();
+    K.api('PUT', '/client/hockey/leagues/' + a.id + '/evening/' + ev.day + '/outfit', { to: p.to, item: p.item })
+      .then(function (d) {
+        p.busy = false;
+        state.evenings[a.id + '|' + d.day] = d;
+        if (!a.day) state.evenings[a.id + '|'] = d;
+        // Голова и «C» в таблицах лиги поменялись: месяц перечитается при переключении, «Вся лига» — сразу.
+        delete state.leagueTables[a.id + '|month'];
+        state.tables = {}; // общая таблица тоже: там видна экипировка
+        loadLeague({ id: a.id, tab: 'all' }, true).then(K.render, function () {});
+        K.render();
+      }, function (e) {
+        p.busy = false;
+        p.editing = true;
+        ev.captain.award = was.award;
+        items.forEach(function (r, i) { r.head = was.heads[i]; });
+        a.given = null;
+        K.render();
+        K.toast(e.message);
+      });
+  }
+
+  function eveningBlock(a) {
+    var ev = state.evenings[ekey(a)];
+    if (!ev) return [a.eveningFailed ? K.retryCard('Вечер не загрузился.', function () { a.eveningFailed = false; openEvening(a, a.day); }) : K.loading()];
+    if (!ev.day) return [h('span', { class: 'kk-sub', text: 'У лиги ещё не было матчей. Первый вечер появится в день матча.' })];
+    function go(day) { openEvening(a, day); }
+    return [
+      h('div', { class: 'kk-ev__nav' }, [
+        h('button', { type: 'button', class: 'kk-ev__arrow', 'aria-label': 'Предыдущий вечер', disabled: ev.prev ? null : 'true', onclick: function () { go(ev.prev); } }, [icon(I.back)]),
+        h('div', { class: 'kk-ev__day' }, [h('h2', { class: 'kk-ev__t', text: S.eveningTitle(ev.day) }), h('span', { class: 'kk-ev__s', text: S.eveningSummary(ev) })]),
+        h('button', { type: 'button', class: 'kk-ev__arrow', 'aria-label': 'Следующий вечер', disabled: ev.next ? null : 'true', onclick: function () { go(ev.next); } }, [icon(I.chev)]),
+      ]),
+      receivedBlock(a, ev),
+      eveningVerdict(ev),
+      captainPanel(a, ev),
+      h('div', { class: 'kk-ev__people' }, (ev.items || []).map(function (r) { return eveningPerson(a, ev, r); })),
+      h('div', { class: 'kk-ev__matches' }, (ev.matches || []).map(function (m, i) {
+        return h('div', { class: 'kk-ev__m' }, [
+          h('span', { class: 'kk-ev__n', text: String(i + 1) }),
+          h('span', { class: 'kk-ev__mt', text: S.eveningMatchTitle(m) }),
+          h('span', { class: 'kk-ev__sc', text: S.eveningScore(m) }),
+        ]);
+      })),
+      h('p', { class: 'kk-ev__foot' }, [
+        S.eveningFoot(ev) + ' ',
+        h('button', { type: 'button', class: 'kk-ev__link', id: 'kk-ev-rules', 'aria-haspopup': 'dialog', onclick: function () { state.sheet = { kind: 'points', tab: state.captainOn ? 'captain' : 'cap', returnId: 'kk-ev-rules' }; K.render(); }, text: 'Как считаем' }),
+      ]),
+    ];
+  }
+
+  /** Перейти на день (стрелки): данные дня — свой запрос; пока он идёт, на экране прежний вечер. */
+  function openEvening(a, day) {
+    a.day = day || '';
+    a.eveningFailed = false;
+    K.render();
+    loadEvening(a).then(K.render, function (e) { a.eveningFailed = true; K.render(); K.fail(e); });
+  }
+
+  /** Шапке лиги (название, лицо, кто владелец) нужна таблица: на «Вечере» берём таблицу всей лиги. */
+  function headArgs(a) {
+    return a.tab === 'evening' ? { id: a.id, tab: 'all' } : a;
+  }
+
+  /** Вкладки месяца и всей лиги: пьедестал, таблица (с минутами штрафа и кепками), стена корон. */
+  function tableBlock(a, l) {
+    var items = l.items || [];
+    var me = items.filter(function (r) { return r.is_me; })[0];
+    return [
+      h('div', { class: 'kk-crownbar' + (S.leagueCrownMuted(l) ? ' kk-crownbar--muted' : '') }, [K.crownIcon(18), h('span', { text: S.leagueCrownLine(l, a.tab, me, items[0] ? items[0].points : 0) })]),
+      S.podiumOrder(items) ? leaguePodium(items) : null,
+      items.length > 1 ? h('div', { class: 'kk-tbl' }, (S.podiumOrder(items) ? items.slice(3) : items).map(leagueRow)) : h('span', { class: 'kk-sub', text: 'Пока в лиге только ты. Позови своих — таблица оживёт после первого матча.' }),
+      S.titlesNote(items) ? h('span', { class: 'kk-sub', text: S.titlesNote(items) }) : null,
+      a.tab === 'all' ? crownWall(l.wall) : null,
+    ];
+  }
+
   K.register('league', {
     enter: function (a) {
-      a.tab = a.tab || 'all';
+      // Тап по лиге открывает «Вечер» (TASK-431); шапке лиги нужна её таблица — для вечера берём «Вся лига».
+      a.tab = a.tab || 'evening';
       a.failed = false;
-      Promise.all([loadLeague(a, true), K.loadClubs().catch(function () {})]).then(K.render, function (e) {
+      a.eveningFailed = false;
+      var head = loadLeague(headArgs(a), true);
+      if (a.tab === 'evening') loadEvening(a, true).then(K.render, function (e) { a.eveningFailed = true; K.render(); K.fail(e); });
+      Promise.all([head, K.loadClubs().catch(function () {})]).then(K.render, function (e) {
         K.fail(e);
         a.failed = true;
         K.render();
       });
     },
     render: function (a) {
-      a.tab = a.tab || 'all';
-      var l = state.leagueTables[lkey(a)];
+      a.tab = a.tab || 'evening';
+      var l = state.leagueTables[lkey(headArgs(a))];
       var monthName = S.periodLabel(S.monthKey(nowIso()));
       if (!l) return [h('main', { class: 'kk-main' }, [K.topbar('Лига', null), a.failed ? K.retryCard('Лига не загрузилась.', function () { a.failed = false; K.render(); K.replace('league', a); }) : K.loading()])];
       var items = l.items || [];
-      var me = items.filter(function (r) { return r.is_me; })[0];
       var face = Id().faceOf(l);
       var main = h('main', { class: 'kk-main' }, [
         h('header', { class: 'kk-lhead' + (face ? ' kk-lhead--img' : '') }, [
@@ -542,26 +983,24 @@
           stakeEl(l, 'kk-lstake'),
           h('div', { class: 'kk-lmeta' }, [h('span', { class: 'kk-logos' }, clubLogos(l)), h('span', { text: S.leagueMeta(l, items.length) + (l.active ? '' : ' · закончилась') })]),
         ]),
-        seg([['month', monthName], ['all', 'Вся лига']], a.tab, function (id) {
+        leagueTabs(a, monthName, function (id) {
           a.tab = id;
           a.failed = false;
           K.render();
+          if (id === 'evening') return openEvening(a, a.day);
           loadLeague(a).then(K.render, function (e) { K.fail(e); a.failed = true; K.render(); });
-        }, 'Период таблицы'),
-        h('div', { class: 'kk-crownbar' + (S.leagueCrownMuted(l) ? ' kk-crownbar--muted' : '') }, [K.crownIcon(18), h('span', { text: S.leagueCrownLine(l, a.tab, me, items[0] ? items[0].points : 0) })]),
-        S.podiumOrder(items) ? leaguePodium(items) : null,
-        items.length > 1 ? h('div', { class: 'kk-tbl' }, (S.podiumOrder(items) ? items.slice(3) : items).map(leagueRow)) : h('span', { class: 'kk-sub', text: 'Пока в лиге только ты. Позови своих — таблица оживёт после первого матча.' }),
-        S.titlesNote(items) ? h('span', { class: 'kk-sub', text: S.titlesNote(items) }) : null,
-        a.tab === 'all' ? crownWall(l.wall) : null,
+        }),
+      ].concat(a.tab === 'evening' ? eveningBlock(a) : tableBlock(a, l)).concat([
         h('div', { class: 'kk-two kk-two--cta' }, [
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l)); }, text: 'Позвать в лигу' }),
           l.is_owner ? h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { state.sheet = { kind: 'extend' }; K.render(); }, text: 'Продлить' }) : null,
         ]),
-      ]);
+      ]));
       return [main];
     },
     sheet: function (s, a) {
-      var l = state.leagueTables[lkey(a)] || {};
+      var l = state.leagueTables[lkey(headArgs(a))] || {};
+      if (s.kind === 'points') return K.hubCards.pointsSheet();
       if (s.kind === 'menu') {
         return K.sheet('Лига', null, [
           l.is_owner ? h('button', { type: 'button', class: 'kk-pr', onclick: function () { state.sheet = editDraft(l); K.render(); } }, [h('span', { text: 'Изменить лигу' })]) : null,
@@ -634,6 +1073,115 @@
         ]);
       }
       return null;
+    },
+  });
+
+  // ---------- Своя лига в один тап (TASK-431, макет Ready.dc.html) ----------
+
+  function readyForm(a) {
+    if (!a.form) a.form = { scope: 'all', clubs: [], stake: '' };
+    return a.form;
+  }
+
+  /** «Позвать друзей»: лига создаётся только здесь (не при открытии экрана), потом — приглашение в чат. */
+  function quickCreate(a) {
+    var f = readyForm(a);
+    var err = S.readyError(f) || Id().stakeError(f.stake);
+    if (err) return K.toast(err);
+    if (state.busy) return;
+    state.busy = true;
+    K.render();
+    var owner = K.current();
+    K.api('POST', '/client/hockey/leagues/quick', S.readyBody(f, Id().cleanStake(f.stake), state.src))
+      .then(function (l) {
+        state.busy = false;
+        state.leagues = null;
+        state.created = l;
+        K.haptic('success');
+        // Назад с лиги — не на «Лига готова»: повторный тап создал бы вопрос «а лига уже есть?».
+        if (K.current() === owner) K.replace('league', { id: l.id, tab: 'evening' });
+        K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l));
+      }, function (e) {
+        state.busy = false;
+        K.render();
+        K.toast(e.message);
+      });
+  }
+
+  function readyClubs(f) {
+    var clubs = state.clubs || [];
+    var maxClubs = state.maxClubs || null;
+    return h('div', { class: 'kk-clubgrid' }, clubs.map(function (c) {
+      var on = f.clubs.indexOf(c.name) >= 0;
+      return h('button', {
+        type: 'button', class: 'kk-club' + (on ? ' is-on' : ''), 'aria-pressed': on ? 'true' : 'false',
+        onclick: function () {
+          if (!on && maxClubs && f.clubs.length >= maxClubs) return K.toast('Не больше ' + maxClubs + ' команд');
+          f.clubs = on ? f.clubs.filter(function (x) { return x !== c.name; }) : f.clubs.concat([c.name]);
+          K.render();
+        },
+      }, [K.logoDisc(c, 34), h('span', { class: 'kk-club__n', text: S.clubShort(c.name) }), on ? h('span', { class: 'kk-ok', 'aria-hidden': 'true' }, [icon(I.check, 12)]) : null]);
+    }));
+  }
+
+  K.register('ready', {
+    enter: function (a) {
+      var me = K.current();
+      readyForm(a);
+      a.info = null;
+      a.failed = false;
+      K.api('GET', '/client/hockey/leagues/quick').then(function (d) {
+        // Своя действующая лига уже есть — вторую не собираем, открываем её «Вечер».
+        if (d.league_id) {
+          if (K.current() === me) K.replace('league', { id: d.league_id, tab: 'evening' });
+          return;
+        }
+        a.info = d;
+        K.render();
+      }, function (e) {
+        a.failed = true;
+        K.render();
+        K.fail(e);
+      });
+      K.loadClubs().then(K.render, function () {});
+    },
+    render: function (a) {
+      var f = readyForm(a);
+      var back = h('div', { class: 'kk-ready__top' }, [h('button', { type: 'button', class: 'kk-round', 'aria-label': 'Назад', onclick: K.back }, [icon(I.back)])]);
+      if (!a.info) {
+        return [h('main', { class: 'kk-main kk-ready' }, [back, a.failed ? K.retryCard('Не загрузилось.', function () { K.replace('ready', {}); }) : K.loading()])];
+      }
+      var err = S.readyError(f);
+      return [h('main', { class: 'kk-main kk-ready' }, [
+        back,
+        h('div', { class: 'kk-ready__body' }, [
+          h('span', { class: 'kk-ready__tag', 'aria-hidden': 'true', text: 'ТВОЯ ЛИГА ГОТОВА' }),
+          h('h1', { class: 'kk-ready__name', text: a.info.name }),
+          h('p', { class: 'kk-ready__tx', text: S.readyLine(f.scope, f.clubs) }),
+          h('div', { class: 'kk-fld' }, [
+            h('label', { for: 'kk-rstake', class: 'kk-ready__lbl', text: 'На что играем' }),
+            h('input', { id: 'kk-rstake', class: 'kk-ready__input', type: 'text', maxlength: String(Id().STAKE_MAX), autocomplete: 'off', value: f.stake, oninput: function (e) { f.stake = e.target.value; } }),
+          ]),
+          h('div', { class: 'kk-fld' }, [
+            h('span', { class: 'kk-ready__lbl', id: 'kk-rscope', text: 'Какие матчи' }),
+            h('div', { class: 'kk-seg', role: 'group', 'aria-labelledby': 'kk-rscope' }, S.READY_SCOPES.map(function (it) {
+              var on = f.scope === it[0];
+              return h('button', { type: 'button', class: 'kk-seg__b' + (on ? ' is-on' : ''), 'aria-pressed': on ? 'true' : 'false', onclick: function () { f.scope = it[0]; K.render(); }, text: it[1] });
+            })),
+            f.scope === 'clubs' ? readyClubs(f) : null,
+          ]),
+          h('div', { class: 'kk-ready__list' }, [
+            h('div', { class: 'kk-ready__row' }, [K.ava(state.profile && state.profile.display_name ? state.profile.display_name : a.info.name.replace(/^Лига\s+/, ''), 36), h('span', { class: 'kk-ready__who', text: 'Ты' }), h('span', { class: 'kk-ready__in', text: 'уже в лиге' })]),
+            h('div', { class: 'kk-ready__row' }, [h('span', { class: 'kk-ready__ph', 'aria-hidden': 'true' }), h('span', { class: 'kk-ready__who is-empty', text: 'Здесь будет твой друг' })]),
+            h('div', { class: 'kk-ready__row' }, [h('span', { class: 'kk-ready__ph', 'aria-hidden': 'true' }), h('span', { class: 'kk-ready__who is-empty', text: 'И ещё один' })]),
+          ]),
+          h('p', { class: 'kk-ready__note', text: 'Кепка дня разыгрывается, когда в лиге трое' }),
+        ]),
+        h('div', { class: 'kk-ready__cta' }, [
+          h('button', { type: 'button', class: 'kk-btn kk-btn--gold kk-btn--lg kk-ready__go', disabled: err || state.busy ? 'true' : null, 'aria-disabled': err ? 'true' : 'false', onclick: function () { quickCreate(a); }, text: err || (state.busy ? 'Собираем…' : 'Позвать друзей') }),
+          h('button', { type: 'button', class: 'kk-ready__alt', onclick: function () { K.go('leagueNew', {}); }, text: 'Изменить лигу' }),
+        ]),
+      ])];
     },
   });
 
@@ -748,10 +1296,10 @@
     var where = res.league ? ' в «' + res.league.name + '»' : '';
     var who = (res.winners || []).join(' и ');
     var text = res.won
-      ? 'Корона «Кто кого» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
+      ? 'Корона «КТО\u00a0КОГО» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
       : who
-        ? 'Корона «Кто кого» за ' + res.title + where + ' досталась: ' + who + '. В новом месяце — реванш.'
-        : '«Кто кого» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
+        ? 'Корона «КТО\u00a0КОГО» за ' + res.title + where + ' досталась: ' + who + '. В новом месяце — реванш.'
+        : '«КТО\u00a0КОГО» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
     K.shareCard({ card: 'crown', race_id: res.race_id }, league ? league.invite_url : null, text);
   }
 })();

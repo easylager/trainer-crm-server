@@ -128,7 +128,7 @@ def test_text_obeys_text_rules() -> None:
 
 def test_text_content_and_typography() -> None:
     full, bad, empty = sample_texts()
-    assert full.startswith("<b>«Кто кого»: неделя 9–15 ноября</b>")
+    assert full.startswith("<b>«КТО КОГО»: неделя 9–15 ноября</b>")
     assert "Игроков 23: активных 12, остывают 4, отвалились 5, без хода 1, выключили 1." in full
     assert "Отвалились за неделю: 2. Вернулись: 1." in full
     assert "Отправлено 113: итогов хода 105, «нет хода» 8." in full

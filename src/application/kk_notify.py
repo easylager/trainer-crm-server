@@ -198,7 +198,11 @@ async def dispatch(
             await session.commit()  # «занято» видно всем до вызова Telegram; блокировка снята
 
         try:
-            outcome = hn._outcome(await send(player_key, notice.text, notice.buttons))
+            photo = getattr(notice, "photo", None)
+            if photo:  # фото с подписью (TASK-431); прочие отправители и подмены в тестах фото не принимают
+                outcome = hn._outcome(await send(player_key, notice.text, notice.buttons, photo=photo))
+            else:
+                outcome = hn._outcome(await send(player_key, notice.text, notice.buttons))
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные
             logger.warning("kk_notify %s/%s send failed", kind, notice.match_ids, exc_info=True)
             outcome = hn.FAILED
@@ -245,13 +249,14 @@ async def run_tick(
     counts: dict[str, int] = {}
     try:
         cfg = config or GateConfig.from_settings()
-        if not cfg.enabled:
-            return counts
         if producers is None:
             from src.application.kk_notify_events import PRODUCERS as event_producers
 
             producers = event_producers
-        active = [k for k in producers if k in cfg.kinds and k in KIND_POLICY]
+        # Самостоятельные поводы (приглашение собрать лигу) идут и при выключенных общих флагах; прочие — по флагам.
+        active = [
+            k for k in producers if k in KIND_POLICY and (KIND_POLICY[k].standalone or (cfg.enabled and k in cfg.kinds))
+        ]
         if not active:
             return counts
         try:  # пауза «два приглашения без хода»: сбой не мешает проходу
@@ -262,8 +267,6 @@ async def run_tick(
                 await session.commit()
         except Exception:  # noqa: BLE001
             logger.warning("kk_notify tick: silence pause failed", exc_info=True)
-        async with session_factory() as session:
-            facts: dict[int, PlayerFacts] = {f.player_key: f for f in await load_player_facts(session, as_of=now)}
     except Exception:  # noqa: BLE001
         logger.warning("kk_notify tick: setup failed", exc_info=True)
         return {"error": 1}
@@ -292,6 +295,15 @@ async def run_tick(
                 )
                 continue
             by_player.setdefault(proposal.notice.player_key, []).append(proposal)
+
+    if not by_player:  # некому писать (пятничное приглашение вне окна) — факты по всем игрокам не грузим
+        return counts
+    try:
+        async with session_factory() as session:
+            facts: dict[int, PlayerFacts] = {f.player_key: f for f in await load_player_facts(session, as_of=now)}
+    except Exception:  # noqa: BLE001
+        logger.warning("kk_notify tick: setup failed", exc_info=True)
+        return {"error": 1}
 
     for player_key, proposals in sorted(by_player.items()):
         chosen = proposals[0]

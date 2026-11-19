@@ -368,7 +368,7 @@ async def place_page(
         if site_matches.scope_of(settings).dinamo:
             related.append((site_matches.DINAMO_HOME_PATH, "Домашние матчи «Динамо-Минск»"))
         if hockey_event.enabled(settings):
-            related.append(("/kk", "Игра «Кто кого»"))
+            related.append(("/kk", "Игра «КТО КОГО»"))
         view["related_links"] = related
     html = render_place_page(
         view,

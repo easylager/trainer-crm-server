@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Лига</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&amp;family=Golos+Text:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; min-height: 1300px; box-sizing: border-box; display: flex; flex-direction: column; background: #f2f5fa; font-family: 'Golos Text', system-ui, sans-serif; color: #0d1424">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 0">
+    <button aria-label="Назад" style="width: 44px; height: 44px; border-radius: 50%; border: 0; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d1424" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </button>
+    <button aria-label="Настройки лиги" style="width: 44px; height: 44px; border-radius: 50%; border: 0; background: #ffffff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="#0d1424" aria-hidden="true"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg>
+    </button>
+  </div>
+  <div style="padding: 4px 20px 0; display: flex; flex-direction: column; gap: 4px">
+    <div style="font-family: 'Dela Gothic One', sans-serif; font-size: 30px; line-height: 1.1">Бригада</div>
+    <div style="font-size: 15px; color: #3a475a">На кону: пиво</div>
+    <div style="font-size: 14px; color: #566578">Динамо + Экстралига · 5 человек</div>
+  </div>
+
+  <div role="tablist" aria-label="Лига" style="margin: 16px 16px 0; padding: 4px; border-radius: 14px; background: #e3e9f2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+      <button role="tab" aria-selected="{{t.selected}}" onClick="{{t.pick}}" style="min-height: 40px; border-radius: 10px; border: 0; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; background: {{t.bg}}; color: {{t.ink}}; box-shadow: {{t.shadow}}">{{t.label}}</button>
+    </sc-for>
+  </div>
+
+  <sc-if value="{{isEvening}}" hint-placeholder-val="{{true}}">
+    <div style="display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 0">
+        <button aria-label="Предыдущий вечер" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#566578" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+        </button>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 2px">
+          <div style="font-family: 'Dela Gothic One', sans-serif; font-size: 19px">Вечер 18 ноября</div>
+          <div style="font-size: 14px; color: #566578">Динамо — СКА 3:2 · ещё 3 матча</div>
+        </div>
+        <button aria-label="Следующий вечер" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c3cdd9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg>
+        </button>
+      </div>
+
+      <div style="margin: 8px 16px 0; background: #ffffff; border-radius: 16px; display: flex; flex-direction: column">
+        <sc-for list="{{people}}" as="p" hint-placeholder-count="5">
+          <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-top: {{p.border}}; background: {{p.bg}}; border-radius: {{p.radius}}">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: {{p.avaBg}}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex: none">{{p.initial}}</div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-weight: 700; font-size: 16px">
+                  {{p.name}}
+                  <sc-if value="{{p.cap}}" hint-placeholder-val="{{false}}">
+                    <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; padding: 2px 8px 2px 6px; border-radius: 10px; background: #0d1424; color: #ffd23f">
+                      <svg width="18" height="12" viewBox="0 0 64 44" aria-hidden="true"><path d="M10 32 C10 14 20 6 32 6 C44 6 52 14 52 32 Z" fill="#ffd23f"></path><path d="M30 32 H61 C62 36 58 39 51 39 H30 Z" fill="#ffd23f"></path></svg>кепка дня
+                    </span>
+                  </sc-if>
+                  <sc-if value="{{p.scarf}}" hint-placeholder-val="{{false}}">
+                    <span style="font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #e3e9f2; color: #3a475a">в чужом шарфе</span>
+                  </sc-if>
+                </div>
+                <div style="display: flex; align-items: center; gap: 4px">
+                  <sc-for list="{{p.dots}}" as="d" hint-placeholder-count="4">
+                    <div style="width: 22px; height: 8px; border-radius: 4px; background: {{d.bg}}; border: 1.5px solid {{d.line}}"></div>
+                  </sc-for>
+                  <div style="font-size: 13px; color: #566578; margin-left: 6px">{{p.moves}}</div>
+                </div>
+              </div>
+              <div style="font-family: 'Dela Gothic One', sans-serif; font-size: 18px; color: {{p.ptsInk}}">{{p.points}}</div>
+            </div>
+            <sc-if value="{{p.note}}" hint-placeholder-val="{{false}}">
+              <div style="font-size: 13px; color: #566578; padding-left: 46px">{{p.note}}</div>
+            </sc-if>
+            <sc-if value="{{p.canReact}}" hint-placeholder-val="{{true}}">
+              <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding-left: 46px">
+                <sc-for list="{{p.chips}}" as="c" hint-placeholder-count="2">
+                  <button onClick="{{c.pick}}" aria-pressed="{{c.pressed}}" style="min-height: 44px; border-radius: 22px; font: inherit; font-size: 14px; font-weight: 700; padding: 0 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; border: 2px solid {{c.border}}; background: {{c.bg}}; color: {{c.ink}}">
+                    <sc-if value="{{c.isStick}}" hint-placeholder-val="{{false}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 2l7 15h7"></path><path d="M3 21h8"></path></svg></sc-if>
+                    <sc-if value="{{c.isPen}}" hint-placeholder-val="{{false}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="14" r="7"></circle><path d="M12 14V10"></path><path d="M10 3h4"></path></svg></sc-if>
+                    {{c.label}}
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="margin: 12px 16px 0; background: #ffffff; border-radius: 16px; padding: 4px 14px">
+        <sc-for list="{{matches}}" as="m" hint-placeholder-count="4">
+          <div style="display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 40px; border-top: {{m.border}}; font-size: 15px">
+            <div style="width: 22px; height: 22px; border-radius: 50%; background: #e3e9f2; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #3a475a">{{m.n}}</div>
+            <div style="font-weight: 600">{{m.title}}</div>
+            <div style="font-family: 'Dela Gothic One', sans-serif; font-size: 16px">{{m.score}}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="padding: 10px 20px 0; font-size: 13px; color: #566578; text-align: center">Кепка дня — тому, кто хуже всех угадывал в этот вечер. <a href="Rules.dc.html" style="color: #2a6fb0">Как считаем</a></div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isTable}}" hint-placeholder-val="{{false}}">
+    <div style="display: flex; flex-direction: column">
+      <div style="margin: 14px 16px 0; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 14px; background: #fff3cc; color: #5c4500; font-size: 14px; font-weight: 600">
+        <svg width="20" height="16" viewBox="0 0 24 18" aria-hidden="true"><path d="M2 16 L4 4 L9 9 L12 2 L15 9 L20 4 L22 16 Z" fill="#c9a21a"></path></svg>
+        {{crownLine}}
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 8px; padding: 20px 16px 0">
+        <sc-for list="{{podium}}" as="s" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+            <div style="width: {{s.size}}; height: {{s.size}}; border-radius: 50%; background: {{s.avaBg}}; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px">{{s.initial}}</div>
+            <div style="font-weight: 700; font-size: 15px">{{s.name}}</div>
+            <div style="width: 100%; height: {{s.block}}; border-radius: 14px 14px 0 0; background: {{s.blockBg}}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px">
+              <div style="font-family: 'Dela Gothic One', sans-serif; font-size: 22px">{{s.place}}</div>
+              <div style="font-size: 14px; font-weight: 700">{{s.points}}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin: 0 16px; background: #ffffff; border-radius: 0 0 16px 16px; display: flex; flex-direction: column">
+        <sc-for list="{{rest}}" as="r" hint-placeholder-count="2">
+          <div style="display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 6px 14px; border-top: 1px solid #e3e9f2">
+            <div style="width: 22px; font-weight: 800; font-size: 16px; color: #566578; text-align: center">{{r.place}}</div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+              <div style="font-weight: 700; font-size: 16px">{{r.name}}</div>
+              <div style="font-size: 13px; color: #566578">{{r.sub}}</div>
+            </div>
+            <div style="font-family: 'Dela Gothic One', sans-serif; font-size: 18px">{{r.points}}</div>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{isAll}}" hint-placeholder-val="{{false}}">
+        <div style="margin: 16px 16px 0; display: flex; flex-direction: column; gap: 8px">
+          <div style="font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: #566578">КОРОНЫ ЛИГИ</div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+            <div style="background: #ffffff; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 700; color: #566578">ОКТЯБРЬ</span><span style="font-weight: 700">Аня</span></div>
+            <div style="background: #ffffff; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 700; color: #566578">НОЯБРЬ</span><span style="color: #566578">идёт</span></div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 20px 16px 24px">
+    <button style="min-height: 52px; border-radius: 16px; border: 0; background: #ffd23f; color: #0d1424; font: inherit; font-weight: 800; font-size: 15px; cursor: pointer">Позвать в лигу</button>
+    <button style="min-height: 52px; border-radius: 16px; border: 2px solid #d3dae6; background: #ffffff; color: #0d1424; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer">{{secondCta}}</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tab":{"editor":"enum","options":["evening","month","all"],"default":"evening"},"$preview":{"width":390,"height":1300}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: null, reacts: { oleg: 'pen', anya: 'stick' } };
+  }
+  renderVals() {
+    const tab = this.state.tab || this.props.tab || 'evening';
+    const tabs = [['evening', 'Вечер'], ['month', 'Ноябрь'], ['all', 'Вся лига']].map(([id, label]) => ({
+      label,
+      selected: tab === id ? 'true' : 'false',
+      bg: tab === id ? '#ffffff' : 'transparent',
+      ink: tab === id ? '#0d1424' : '#566578',
+      shadow: tab === id ? '0 1px 3px rgba(13,20,36,0.15)' : 'none',
+      pick: () => this.setState({ tab: id }),
+    }));
+
+    const matches = [
+      { title: 'Динамо — СКА', score: '3:2' },
+      { title: 'Юность — Неман', score: '4:1' },
+      { title: 'Гомель — Шахтёр', score: '2:3' },
+      { title: 'Металлург — Лида', score: '5:2' },
+    ].map((m, i) => ({ ...m, n: i + 1, border: i ? '1px solid #e3e9f2' : '0' }));
+
+    const gestures = [['stick', 'Стук клюшкой'], ['pen', '2 минуты']];
+    const rows = [
+      { id: 'me', name: 'Ты', initial: 'М', me: true, pts: [50, 20, 0, 30], note: 'Аня постучала клюшкой' },
+      { id: 'anya', name: 'Аня', initial: 'А', pts: [30, 20, 20, 10] },
+      { id: 'sasha', name: 'Саша', initial: 'С', pts: [20, 0, null, 30] },
+      { id: 'oleg', name: 'Олег', initial: 'О', pts: [0, 10, null, 0], cap: true, note: 'Ты и Саша дали 2 минуты' },
+      { id: 'dima', name: 'Дима', initial: 'Д', pts: [null, 20, null, null], scarf: true, note: 'Болеет за Юность, сходил за Неман' },
+    ];
+    const people = rows.map((r, i) => {
+      const made = r.pts.filter((x) => x !== null);
+      const sum = made.reduce((a, b) => a + b, 0);
+      const picked = this.state.reacts[r.id];
+      return {
+        ...r,
+        note: r.note || '',
+        border: i ? '1px solid #e3e9f2' : '0',
+        bg: r.me ? '#e0f0dc' : 'transparent',
+        radius: i === 0 ? '16px 16px 0 0' : (i === rows.length - 1 ? '0 0 16px 16px' : '0'),
+        avaBg: r.me ? '#ffd23f' : '#e3e9f2',
+        points: `+${sum}`,
+        ptsInk: sum ? '#0d1424' : '#566578',
+        moves: `${made.filter((x) => x > 0).length} из ${r.pts.length}`,
+        dots: r.pts.map((x) => ({
+          bg: x === null ? 'transparent' : (x > 0 ? '#ffd23f' : '#c3cdd9'),
+          line: x === null ? '#c3cdd9' : (x > 0 ? '#c9a21a' : '#c3cdd9'),
+        })),
+        canReact: !r.me,
+        chips: gestures.map(([key, label]) => ({
+          label,
+          isStick: key === 'stick',
+          isPen: key === 'pen',
+          pressed: picked === key ? 'true' : 'false',
+          border: picked === key ? '#0d1424' : '#d3dae6',
+          bg: picked === key ? '#ffd23f' : '#ffffff',
+          ink: picked === key ? '#0d1424' : '#3a475a',
+          pick: () => this.setState({ reacts: { ...this.state.reacts, [r.id]: picked === key ? undefined : key } }),
+        })),
+      };
+    });
+
+    const isAll = tab === 'all';
+    const table = isAll
+      ? [
+          { name: 'Аня', initial: 'А', points: 1240, sub: '1 корона · 2 мин штрафа' },
+          { name: 'Ты', initial: 'М', points: 1190, me: true, sub: '9 стуков' },
+          { name: 'Саша', initial: 'С', points: 980, sub: '4 мин штрафа' },
+          { name: 'Олег', initial: 'О', points: 760, sub: '12 мин штрафа · 3 кепки' },
+          { name: 'Дима', initial: 'Д', points: 610, sub: '6 мин штрафа' },
+        ]
+      : [
+          { name: 'Ты', initial: 'М', points: 610, me: true, sub: '9 стуков' },
+          { name: 'Аня', initial: 'А', points: 580, sub: '' },
+          { name: 'Саша', initial: 'С', points: 430, sub: '4 мин штрафа' },
+          { name: 'Олег', initial: 'О', points: 260, sub: '12 мин штрафа · 3 кепки' },
+          { name: 'Дима', initial: 'Д', points: 240, sub: '6 мин штрафа' },
+        ];
+    const top = [table[1], table[0], table[2]];
+    const podium = top.map((r, i) => {
+      const place = i === 1 ? 1 : (i === 0 ? 2 : 3);
+      return {
+        ...r,
+        place,
+        size: place === 1 ? '60px' : '48px',
+        avaBg: r.me ? '#ffd23f' : '#ffffff',
+        block: place === 1 ? '96px' : (place === 2 ? '72px' : '56px'),
+        blockBg: place === 1 ? '#ffd23f' : '#ffffff',
+      };
+    });
+    const rest = table.slice(3).map((r, i) => ({ ...r, place: i + 4 }));
+    return {
+      tabs,
+      isEvening: tab === 'evening',
+      isTable: tab !== 'evening',
+      isAll,
+      matches,
+      people,
+      podium,
+      rest,
+      crownLine: isAll ? 'Корона лиги — у лидера, когда лига закончится' : 'Корону за ноябрь заберёт лидер 30 ноября. Сейчас — ты',
+      secondCta: 'Продлить',
+    };
+  }
+}
+</script>
+</body>
+</html>

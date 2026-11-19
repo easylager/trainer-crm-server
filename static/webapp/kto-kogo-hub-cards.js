@@ -287,16 +287,92 @@
     return h('div', { class: 'kk-rl__tables' }, [btn, panel]);
   }
 
-  function pointsSheet() {
+  // Разделы шторки (TASK-431): очки, кепка дня, жесты вечера лиги. Раздел живёт в state.sheet.tab.
+  var RULE_TABS = [['points', 'Очки'], ['cap', 'Кепка'], ['captain', 'Капитан'], ['gestures', 'Жесты']];
+
+  function ruleTabs(tab) {
+    var tabs = RULE_TABS.filter(function (t) {
+      if (t[0] === 'gestures') return state.gesturesOn;
+      if (t[0] === 'captain') return state.captainOn;
+      return true;
+    });
+    return h('div', { class: 'kk-rtabs', role: 'tablist', 'aria-label': 'Правила' }, tabs.map(function (t) {
+      var on = t[0] === tab;
+      return h('button', {
+        type: 'button', role: 'tab', class: 'kk-rtab', 'aria-selected': on ? 'true' : 'false', id: 'kk-rtab-' + t[0], 'data-keep': '',
+        onclick: function () { if (state.sheet) { state.sheet.tab = t[0]; K.render(); } },
+        text: t[1],
+      });
+    }));
+  }
+
+  /** Раздел «Кепка» (макет Rules.dc.html) и «Жесты»: жирное начало абзаца и текст. */
+  function ruleList(items) {
+    return h('div', { class: 'kk-capr__list' }, items.map(function (x) {
+      return h('p', { class: 'kk-capr__p' }, [h('b', { text: x.k }), ' ' + x.t]);
+    }));
+  }
+
+  function capSection() {
+    var r = S.capRules();
+    return [
+      h('div', { class: 'kk-capr__hero' }, [
+        h('span', { class: 'kk-capr__ic', 'aria-hidden': 'true' }, [K.capSvg ? K.capSvg(40, 28, '#0d1424', '#ffffff') : null]),
+        h('span', { class: 'kk-capr__lead', text: r.lead }),
+      ]),
+      ruleList(r.items),
+      h('div', { class: 'kk-capr__ex' }, [
+        h('span', { class: 'kk-capr__exh', text: r.exampleTitle }),
+        h('div', { class: 'kk-capr__grid' }, r.example.reduce(function (acc, x) {
+          return acc.concat([
+            h('span', { class: 'kk-capr__n' + (x.out ? ' is-out' : ''), text: x.name }),
+            h('span', { class: 'kk-capr__m', text: x.moves }),
+            h('span', { class: 'kk-capr__v' + (x.out ? ' is-out' : ''), text: x.value }),
+          ]);
+        }, [])),
+      ]),
+      h('span', { class: 'kk-sub kk-capr__foot', text: r.foot }),
+    ];
+  }
+
+  function gestureSection() {
+    var r = S.gestureRules();
+    return [h('span', { class: 'kk-capr__lead', text: r.lead }), ruleList(r.items)];
+  }
+
+  /** Раздел «Капитан» (TASK-432): правила и вся коллекция «Экипировка капитана». */
+  function captainSection() {
+    var r = K.Kit.captainRules();
+    return [
+      h('span', { class: 'kk-capr__lead', text: r.lead }),
+      ruleList(r.items),
+      h('span', { class: 'kk-lbl', text: r.collectionTitle.toUpperCase() }),
+      h('div', { class: 'kk-kitlist' }, K.Kit.OUTFITS.map(function (o) {
+        return h('div', { class: 'kk-kitlist__r' }, [
+          h('span', { class: 'kk-kitlist__ava' }, [K.kitAva('О', 44, { head: { item: o.id, stat: 'ЗА 0 ИЗ 4', score: '1:2' }, cls: 'kk-ava--soft' })]),
+          h('span', { class: 'kk-col' }, [h('span', { class: 'kk-kitlist__t', text: o.full }), h('span', { class: 'kk-kitlist__s', text: o.joke })]),
+        ]);
+      })),
+      h('span', { class: 'kk-sub', text: r.collectionNote }),
+    ];
+  }
+
+  function pointsSection() {
     var r = S.pointsRules();
-    return K.sheet('Как считаются очки', null, [
+    return [
       h('div', { class: 'kk-rl' }, r.rows.map(function (x) {
         return h('div', { class: 'kk-rl__r' }, [h('span', { class: 'kk-rl__v' + (x.gold ? ' is-gold' : ''), text: x.value }), h('span', { class: 'kk-rl__t', text: x.text })]);
       })),
       h('div', { class: 'kk-rl__trump' }, [h('b', { text: r.trumpTitle }), h('span', { text: r.trumpText })]),
       tablesBlock(r),
       h('span', { class: 'kk-sub', text: r.foot }),
-    ], 'kk-sheet--pts');
+    ];
+  }
+
+  function pointsSheet() {
+    var tab = (state.sheet && state.sheet.tab) || 'points';
+    var body = tab === 'cap' ? capSection() : tab === 'captain' ? captainSection() : tab === 'gestures' ? gestureSection() : pointsSection();
+    return K.sheet('Как считаются очки?', null, [ruleTabs(tab)].concat(body), 'kk-sheet--pts');
   }
 
   K.hubCards = { hero: heroCard, pending: pendingSection, day: daySection, pointsLink: pointsLink, pointsSheet: pointsSheet };

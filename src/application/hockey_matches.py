@@ -539,7 +539,7 @@ async def list_matches(
 def format_review_alert(row: MatchRow, reason: str | None) -> str:
     when = _utc(row.starts_at).astimezone(MINSK_TZ).strftime("%d.%m %H:%M")
     return (
-        f"Кто кого: нет подтверждённого итога\n"
+        f"КТО КОГО: нет подтверждённого итога\n"
         f"{row.home_team} — {row.away_team}, {when}\n"
         f"{reason or 'причина не записана'}\n"
         "Ввести счёт: команда /hockey в этом боте"
@@ -599,10 +599,10 @@ def fallback_ok_text(parts: list[tuple[str, str]]) -> str | None:
         return None
     if len(parts) == 1:
         down, via = parts[0]
-        return f"Кто кого: {down} не отвечает. Сейчас на запасном — {via}, с ним всё в порядке."
+        return f"КТО КОГО: {down} не отвечает. Сейчас на запасном — {via}, с ним всё в порядке."
     downs = " и ".join(down for down, _ in parts)
     vias = " и ".join(via for _, via in parts)
-    return f"Кто кого: {downs} не отвечают. Сейчас на запасных — {vias}, с ними всё в порядке."
+    return f"КТО КОГО: {downs} не отвечают. Сейчас на запасных — {vias}, с ними всё в порядке."
 
 
 class LoopHealth:
@@ -650,7 +650,7 @@ class LoopHealth:
         if self.fails[what] < self.threshold or what in self.alerted:
             return None
         self.alerted.add(what)
-        return f"Кто кого: {what} не работает {self.fails[what]} раз подряд\n{reason}\n" + (
+        return f"КТО КОГО: {what} не работает {self.fails[what]} раз подряд\n{reason}\n" + (
             note or "Матчи и итоги не обновляются. Итог можно ввести вручную: команда /hockey в этом боте"
         )
 

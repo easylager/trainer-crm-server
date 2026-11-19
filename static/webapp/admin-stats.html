@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Сейчас · Админ</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=202611187"></script>
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611187" />
-  <link rel="stylesheet" href="theme.css?v=202611187" />
-  <link rel="stylesheet" href="admin-analytics-shared.css?v=202611187" />
+  <script src="mini-app-telegram-chrome.js?v=202611191"></script>
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611191" />
+  <link rel="stylesheet" href="theme.css?v=202611191" />
+  <link rel="stylesheet" href="admin-analytics-shared.css?v=202611191" />
   <style>
     .pulse-action { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.12); }
     .pulse-action.danger { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); }
@@ -317,7 +317,7 @@
   <div id="content">
     <div class="adm-loading">Загрузка…</div>
   </div>
-  <script src="admin-analytics-shared.js?v=202611187"></script>
+  <script src="admin-analytics-shared.js?v=202611191"></script>
   <script>
     (function () {
       var A = window.AdmAnalytics;
@@ -613,7 +613,7 @@
       function renderKkPromo(rows) {
         rows = rows || [];
         if (!rows.length) return '';
-        var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">«Кто кого» · по меткам</div>';
+        var html = '<div class="adm-section" style="margin-top:14px"><div class="adm-section-title">«КТО КОГО» · по меткам</div>';
         html += '<div class="adm-card" style="padding:0"><div class="adm-scroll"><table class="adm-table"><thead><tr>';
         html += '<th>Метка</th><th class="num">Заходов</th><th class="num">Новых</th><th class="num">С ходом</th><th class="num">Вернулись</th>';
         html += '</tr></thead><tbody>';

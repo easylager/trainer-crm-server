@@ -555,20 +555,28 @@
     };
   }
 
-  /** Значок звания на аватарке и в строке: «Кепка позора» — 🧢 на макушке, «В чужом шарфе» — 🧣 на шее (как в первой версии). */
+  /** Значок звания на аватарке и в строке: «Кепка дня» — 🧢 на макушке, «В чужом шарфе» — 🧣 на шее (как в первой версии). */
   var TITLE_MARK = { cap: '🧢', scarf: '🧣' };
 
   function titleMark(title) {
     return (title && TITLE_MARK[title.id]) || '';
   }
 
-  /** Пояснение под таблицей лиги: что значат звания, которые на ней висят (шарф, кепка). Нет званий — нет строки. */
+  /**
+   * Пояснение под таблицей лиги: шарф (звание) и что на головах — кепка дня, экипировка, «C» (TASK-432).
+   * Нечего пояснять — нет строки.
+   */
   function titlesNote(items) {
     var has = {};
-    (items || []).forEach(function (r) { if (r.title && r.title.id) has[r.title.id] = true; });
+    (items || []).forEach(function (r) {
+      if (r.title && r.title.id) has[r.title.id] = true;
+      if (r.head) has[r.head.item === 'cap' ? 'cap' : 'kit'] = true;
+      if (r.captain) has.captain = true;
+    });
     var parts = [];
-    if (has.scarf) parts.push('Шарф — за ход против Динамо на ближайший матч.');
-    if (has.cap) parts.push('Кепка — тому, кто в последнем матче лиги не угадал победителя, когда кто-то из друзей угадал. Снимается со следующим матчем.');
+    if (has.scarf) parts.push('Шарф — за ход против своей команды на её ближайший матч.');
+    if (has.cap) parts.push('Кепка дня — тому, кто хуже всех угадывал в последний сыгранный вечер лиги. Носит до следующего.');
+    if (has.captain || has.kit) parts.push('«C» — капитан последнего вечера: выдаёт экипировку, её носят до следующего вечера.');
     return parts.join(' ');
   }
 
@@ -916,6 +924,244 @@
 
   function leagueMeta(l, members) {
     return leagueSub(l) + ' · ' + members + NBSP + Base.plural(members, 'человек', 'человека', 'человек');
+  }
+
+  // ---------- вечер лиги (TASK-431, макет design/kto-kogo-league-evening/League.dc.html) ----------
+
+  /** Жесты вечера: ключ — как у сервера, подпись — на кнопке. */
+  var GESTURES = [['stick', 'Стук клюшкой'], ['pen', '2' + NBSP + 'минуты']];
+
+  /** «Вечер 18 ноября» по игровому дню '2026-11-18' (день уже минский, часовой пояс не нужен). */
+  function eveningTitle(day) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || '');
+    return m ? 'Вечер ' + Number(m[3]) + NBSP + Base.MONTHS[Number(m[2]) - 1] : 'Вечер';
+  }
+
+  function eveningMatchTitle(m) {
+    return clubShort(m.home) + ' — ' + clubShort(m.away);
+  }
+
+  /** Счёт матча дня; несыгранный — «идёт» или время начала. Ходов и очков тут нет. */
+  function eveningScore(m) {
+    if (m.status === 'final' && m.home_score != null && m.away_score != null) return m.home_score + ':' + m.away_score;
+    return m.started ? 'идёт' : timeOnly(m.starts_at);
+  }
+
+  /** Подзаголовок дня: один матч — «Динамо — СКА 3:2»; несколько — «4 матча · все сыграны» / «сыграно 2» / «первый в 19:00». */
+  function eveningSummary(ev) {
+    var ms = (ev && ev.matches) || [];
+    if (!ms.length) return '';
+    if (ms.length === 1) return eveningMatchTitle(ms[0]) + ' ' + eveningScore(ms[0]);
+    var head = ms.length + NBSP + Base.plural(ms.length, 'матч', 'матча', 'матчей') + ' · ';
+    var played = ms.filter(function (m) { return m.status === 'final'; }).length;
+    if (played === ms.length) return head + 'все сыграны';
+    if (!ms.some(function (m) { return m.started; })) return head + 'первый в ' + timeOnly(ms[0].starts_at);
+    return head + 'сыграно ' + played;
+  }
+
+  /** «3 из 4»: в плюсе из всех матчей дня. */
+  function eveningMoves(r, ev) {
+    return (r.hits || 0) + ' из ' + (((ev && ev.matches) || []).length);
+  }
+
+  /** Очки за день — числом только когда в дне есть сыгранный матч: до матча очков не показываем. */
+  function eveningPoints(r, ev) {
+    var played = ((ev && ev.matches) || []).some(function (m) { return m.status === 'final'; });
+    return played ? '+' + (r.points || 0) : '';
+  }
+
+  function joinNames(names) {
+    if (names.length < 2) return names[0] || '';
+    return names.slice(0, -1).join(', ') + ' и ' + names[names.length - 1];
+  }
+
+  /** «ты», «Андрей», «ты и Андрей»: я — первым. */
+  function whoList(rows) {
+    var mine = rows.filter(function (r) { return r.is_me; }).map(function () { return 'ты'; });
+    return joinNames(mine.concat(rows.filter(function (r) { return !r.is_me; }).map(function (r) { return r.display_name; })));
+  }
+
+  var FEW_WORD = { 2: 'двоих', 3: 'троих', 4: 'четверых', 5: 'пятерых' };
+
+  /**
+   * Итог сыгранного вечера: капитан и кепка дня — оба по правилу сервера (средний за ход среди тех, кто в споре).
+   * Имена без склонения (пол и падеж неизвестны): метка «Капитан» / «Кепка дня» и имя крупно.
+   */
+  function eveningVerdict(ev) {
+    if (!ev || !ev.complete) return null;
+    var items = ev.items || [];
+    var captains = items.filter(function (r) { return r.captain; });
+    var caps = items.filter(function (r) { return r.cap; });
+    var captain = null;
+    if (captains.length === 1) captain = { label: 'Капитан', name: captains[0].is_me ? 'ты' : captains[0].display_name, sub: eveningMoves(captains[0], ev) + ' · +' + (captains[0].points || 0) };
+    else if (captains.length) captain = { label: 'Капитаны', name: whoList(captains), sub: 'Выдаёт тот, кто успеет первым' };
+    var cap = null;
+    if (caps.length === 1 && caps[0].is_me) cap = { label: 'Кепка дня', name: 'у тебя', sub: eveningMoves(caps[0], ev) + '. Носишь до следующего вечера' };
+    else if (caps.length === 1) cap = { label: 'Кепка дня', name: caps[0].display_name, sub: eveningMoves(caps[0], ev) + ' · носит до следующего вечера' };
+    else if (caps.length) cap = { label: 'Кепка дня', name: whoList(caps), sub: 'Носят до следующего вечера' };
+    else if (ev.cap && ev.cap.decided && !ev.cap.in_play) cap = { label: 'Кепка дня', name: 'не разыграна', sub: 'В споре меньше ' + (FEW_WORD[ev.cap.min_players] || ev.cap.min_players) + ' — и капитана нет' };
+    return captain || cap ? { captain: captain, cap: cap } : null;
+  }
+
+  /** Что прилетело мне (строка «Ты»): «Андрей стучит тебе клюшкой · Мария отправляет тебя на скамейку». Настоящее время — пол не нужен. */
+  function gestureNote(r) {
+    var by = { stick: [], pen: [] };
+    (r.gestures || []).forEach(function (g) { if (by[g.kind] && !g.from_me) by[g.kind].push(g.from); });
+    var parts = [];
+    if (by.stick.length) parts.push(joinNames(by.stick) + (by.stick.length > 1 ? ' стучат' : ' стучит') + ' тебе клюшкой');
+    if (by.pen.length) parts.push(joinNames(by.pen) + (by.pen.length > 1 ? ' отправляют' : ' отправляет') + ' тебя на скамейку');
+    return parts.join(' · ');
+  }
+
+  var MONTHS_IN = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'];
+
+  /** Что значит мой жест другу: подпись под его строкой, пока жест стоит. */
+  function myGestureNote(r, ev) {
+    if (!r || r.is_me) return '';
+    if (r.my_gesture === 'stick') return 'Твой стук горит у друга до следующего вечера';
+    if (r.my_gesture !== 'pen') return '';
+    var m = /^\d{4}-(\d{2})-/.exec((ev && ev.day) || '');
+    return 'На скамейке до следующего вечера · +2' + NBSP + 'мин' + (m ? ' в ' + MONTHS_IN[Number(m[1]) - 1] : '');
+  }
+
+  /** Почему без кепки: шарф дня или мало ходов для спора (только когда кепку разыгрывали). */
+  function eveningReason(r, ev) {
+    if (r.scarf) return clubShort(r.scarf.club) + ' простит? Ход — за ' + clubShort(r.scarf.picked);
+    var cap = ev && ev.cap;
+    if (!cap || !cap.in_play || r.in_cap_race) return '';
+    var n = ((ev && ev.matches) || []).length;
+    if (!r.moves) return 'Без ходов — не в споре за кепку';
+    return Base.plural(r.moves, 'Ход', 'Хода', 'Ходов') + ' ' + r.moves + ' из ' + n + ' — не в споре за кепку';
+  }
+
+  /** Строки под именем: что прилетело мне, почему без кепки, что значит мой жест (tone — цвет жеста). */
+  function eveningNotes(r, ev) {
+    var out = [];
+    if (r.is_me) out.push({ text: gestureNote(r), tone: '' });
+    out.push({ text: eveningReason(r, ev), tone: '' });
+    out.push({ text: myGestureNote(r, ev), tone: r.my_gesture || '' });
+    return out.filter(function (n) { return n.text; });
+  }
+
+  /** След на аватаре: сколько стуков (×N) и минут на скамейке («2:00», «4:00») за этот вечер. */
+  function gestureStamps(r) {
+    var sticks = 0;
+    var pens = 0;
+    (r.gestures || []).forEach(function (g) { if (g.kind === 'stick') sticks += 1; else if (g.kind === 'pen') pens += 1; });
+    var say = [];
+    if (sticks) say.push(sticks + NBSP + Base.plural(sticks, 'стук', 'стука', 'стуков'));
+    if (pens) say.push('на скамейке ' + pens * 2 + NBSP + 'мин');
+    return { sticks: sticks, stickLabel: sticks > 1 ? '×' + sticks : '', pens: pens, penLabel: pens ? pens * 2 + ':00' : '', say: say.join(', ') };
+  }
+
+  /** Подпись «стуки и скамейки, что прилетели мне» — чтобы анимацию прилёта показать один раз. */
+  function gestureSeenKey(r) {
+    return (r.gestures || []).filter(function (g) { return !g.from_me; }).map(function (g) { return g.kind + ':' + g.from; }).sort().join('|');
+  }
+
+  /**
+   * Облик жеста (скин) отдельно от смысла: смысл (kind) считается в игре, облик — только как выглядит и ощущается.
+   * motion — класс анимации, haptic — вибрация Telegram. Неизвестный скин — базовый.
+   */
+  var GESTURE_SKINS = {
+    base: {
+      stick: { motion: 'knock', haptic: ['impact', 'rigid'] },
+      pen: { motion: 'drain', haptic: ['notification', 'warning'] },
+    },
+  };
+
+  function gestureSkin(kind, skin) {
+    var set = GESTURE_SKINS[skin] || GESTURE_SKINS.base;
+    return set[kind] || GESTURE_SKINS.base[kind] || null;
+  }
+
+  /** Строка под карточкой вечера. Кепку не разыграли (в споре меньше троих) — так и пишем. */
+  function eveningFoot(ev) {
+    var cap = ev && ev.cap;
+    if (cap && cap.decided && !cap.in_play) return 'Кепку и капитана в этот вечер не разыграли: в споре меньше ' + (FEW_WORD[cap.min_players] || cap.min_players) + '.';
+    if (ev && ev.captain_on) return 'Капитан — лучший за вечер, в кепке дня — худший. Капитан выдаёт экипировку кому угодно, даже себе. Носят до следующего вечера.';
+    if (!(ev && ev.gestures_on)) return 'Капитан — лучший за вечер, в кепке дня — худший. Носят до следующего вечера.';
+    return 'Кепку даёт игра, стук и скамейку — друзья. Всё держится до следующего вечера.';
+  }
+
+  /** Тап по жесту: тот же жест снимает его, другой — меняет. */
+  function gestureNext(current, kind) {
+    return current === kind ? null : kind;
+  }
+
+  /** Строка таблицы месяца: «12 мин штрафа · 3 кепки · 9 стуков»; нулевые части не показываем. */
+  function leagueMarks(r) {
+    var parts = [];
+    if (r && r.penalty_minutes) parts.push(r.penalty_minutes + NBSP + 'мин штрафа');
+    if (r && r.caps) parts.push(r.caps + NBSP + Base.plural(r.caps, 'кепка', 'кепки', 'кепок'));
+    if (r && r.sticks) parts.push(r.sticks + NBSP + Base.plural(r.sticks, 'стук', 'стука', 'стуков'));
+    return parts.join(' · ');
+  }
+
+  /** Шторка правил, раздел «Кепка» (макет Rules.dc.html). */
+  function capRules() {
+    return {
+      lead: 'Кепка дня достаётся тому, кто хуже всех угадывал в этот день',
+      items: [
+        { k: 'Как сравниваем.', t: 'Очки за день делим на число ходов — у кого меньше в среднем за ход, тот и в кепке.' },
+        { k: 'Кто в споре.', t: 'Только те, кто сходил хотя бы на половину матчей дня. Пропустил — кепки нет, но и очков тоже.' },
+        { k: 'Когда.', t: 'Решается после последнего матча дня. Носишь до следующего игрового дня лиги.' },
+        { k: 'Ничья.', t: 'Хуже всех сразу двое — кепка у обоих. Все угадали одинаково — кепки нет.' },
+        { k: 'Сколько нужно.', t: 'Кепка разыгрывается, если в этот день сходили хотя бы трое.' },
+      ],
+      exampleTitle: 'Пример: вечер из 4 матчей',
+      example: [
+        { name: 'Аня', moves: '4 хода · +80', value: '20 за ход' },
+        { name: 'Саша', moves: '3 хода · +50', value: '17 за ход' },
+        { name: 'Олег', moves: '3 хода · +10', value: '3 за ход — кепка' },
+        { name: 'Дима', moves: '1 ход · +20', value: 'не в споре', out: true },
+      ],
+      foot: 'Кепки за месяц видны в таблице лиги: «3 кепки». 1-го числа — с нуля, вместе с короной.',
+    };
+  }
+
+  /** Шторка правил, раздел «Жесты». Черновик агента: в макете раздела нет, текст утверждает владелец. */
+  function gestureRules() {
+    return {
+      lead: 'Вечер сыгран — можно ответить другу жестом',
+      items: [
+        { k: 'Стук клюшкой.', t: 'Так в хоккее хвалят своих — клюшкой по борту. Горит у друга до следующего вечера.' },
+        { k: '2 минуты.', t: 'На скамейку штрафников — за промах, за чужой шарф или просто так. Минуты копятся в таблице месяца.' },
+        { k: 'Сколько.', t: 'Один жест каждому другу за вечер. Можно сменить или снять, себе — нельзя.' },
+        { k: 'Где видно.', t: 'Значок на аватаре и строка в таблице лиги: «4 мин штрафа · 3 стука». Без уведомлений — друг увидит, когда откроет лигу.' },
+      ],
+    };
+  }
+
+  // ---------- своя лига в один тап (TASK-431, макет Ready.dc.html) ----------
+
+  /** Переключатель «Какие матчи» на экране «Лига готова»: ключ — scope для сервера. */
+  var READY_SCOPES = [['all', 'Все'], ['dinamo', 'Динамо'], ['clubs', 'Свои команды']];
+  var READY_TAIL = 'Название и картинку можно поменять потом.';
+
+  /** Строка под названием: что считаем и до когда. */
+  function readyLine(scope, clubs) {
+    if (scope === 'dinamo') return 'Матчи Динамо-Минск, до конца сезона. ' + READY_TAIL;
+    if (scope === 'clubs') {
+      var names = (clubs || []).map(clubName);
+      if (!names.length) return 'Выбери свои команды — считаем их матчи до конца сезона.';
+      return 'Матчи: ' + names.join(', ') + ' — до конца сезона. ' + READY_TAIL;
+    }
+    return 'Все матчи «КТО КОГО», до конца сезона. ' + READY_TAIL;
+  }
+
+  /** Что мешает нажать «Позвать друзей». Пусто — можно. */
+  function readyError(form) {
+    if (form && form.scope === 'clubs' && !(form.clubs || []).length) return 'Выбери команду';
+    return '';
+  }
+
+  /** Тело «Позвать друзей»: набор команд, «на что играем» (уже очищенная строка) и метка входа. */
+  function readyBody(form, stake, src) {
+    var body = { scope: form.scope, clubs: form.scope === 'clubs' ? (form.clubs || []).slice() : [] };
+    if (stake) body.stake_text = stake;
+    if (src) body.src = src;
+    return body;
   }
 
   function inviteText(name, l) {
@@ -1516,6 +1762,31 @@
     titleMark: titleMark,
     titlesNote: titlesNote,
     TRIBUNE_MIN: TRIBUNE_MIN,
+    GESTURES: GESTURES,
+    eveningTitle: eveningTitle,
+    eveningMatchTitle: eveningMatchTitle,
+    eveningScore: eveningScore,
+    eveningSummary: eveningSummary,
+    eveningMoves: eveningMoves,
+    eveningPoints: eveningPoints,
+    eveningVerdict: eveningVerdict,
+    gestureNote: gestureNote,
+    myGestureNote: myGestureNote,
+    gestureStamps: gestureStamps,
+    gestureSeenKey: gestureSeenKey,
+    GESTURE_SKINS: GESTURE_SKINS,
+    gestureSkin: gestureSkin,
+    eveningReason: eveningReason,
+    eveningNotes: eveningNotes,
+    eveningFoot: eveningFoot,
+    gestureNext: gestureNext,
+    leagueMarks: leagueMarks,
+    capRules: capRules,
+    gestureRules: gestureRules,
+    READY_SCOPES: READY_SCOPES,
+    readyLine: readyLine,
+    readyError: readyError,
+    readyBody: readyBody,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -31,10 +31,10 @@ async def test_page_has_og_tags_and_telegram_button_with_label() -> None:
         resp = await client.get("/kk", params={"s": "Push1"})
     assert resp.status_code == 200
     page = resp.text
-    assert 'property="og:title"' in page and "Кто кого" in page
+    assert 'property="og:title"' in page and "КТО КОГО" in page
     assert 'property="og:description"' in page
     # Первый шаг игры — один тап за команду: превью не обещает «угадай счёт».
-    assert 'content="Кто кого — угадай, кто победит в матче Динамо-Минск"' in page
+    assert 'content="КТО КОГО — угадай, кто победит в матче Динамо-Минск"' in page
     assert 'content="Тапни за команду, набирай очки и соревнуйся с друзьями. Бесплатно, в Telegram."' in page
     assert "точный счёт" not in page and "угадай счёт" not in page
     assert 'href="https://t.me/glide_test_bot?startapp=kks_push1"' in page

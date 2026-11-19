@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Сообщение «Собери лигу»</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&amp;family=Golos+Text:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; background: #d5e0ea; font-family: 'Golos Text', system-ui, sans-serif; color: #0d1424">
+  <div style="height: 60px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: #ffffff; border-bottom: 1px solid #d3dae6">
+    <div style="width: 44px"></div>
+    <div style="width: 38px; height: 38px; border-radius: 50%; background: #0d1424; color: #ffd23f; display: flex; align-items: center; justify-content: center; font-family: 'Dela Gothic One', sans-serif; font-size: 16px">G</div>
+    <div style="display: flex; flex-direction: column; gap: 1px">
+      <div style="font-weight: 700; font-size: 16px">Glide</div>
+      <div style="font-size: 13px; color: #566578">бот</div>
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; padding: 12px 12px 16px">
+    <div style="align-self: center; background: rgba(13,20,36,0.38); color: #ffffff; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 12px">Пятница</div>
+    <div style="align-self: flex-start; display: flex; flex-direction: column; gap: 6px; width: 330px">
+      <div style="background: #ffffff; border-radius: 16px 16px 16px 6px; overflow: hidden; display: flex; flex-direction: column">
+        <div style="width: 330px; height: 186px; overflow: hidden; position: relative">
+          <div style="width: 1280px; height: 720px; transform: scale(0.2578); transform-origin: 0 0">
+            <dc-import name="Cover" hint-size="1280px,720px"></dc-import>
+          </div>
+        </div>
+        <div style="padding: 10px 12px 7px; font-size: 15px; line-height: 1.45; display: flex; flex-direction: column; gap: 6px">
+          <div>За неделю ты угадал <b>5 из 8</b>. А твои друзья?</div>
+          <div>Собери лигу и договоритесь, на что играете — на пиво, на шашлык или на честь. Каждый вечер видно, кто угадал лучше, кто носит кепку, а кого пора удалить на 2 минуты. В конце месяца — корона и расплата.</div>
+          <div style="text-align: right; font-size: 12px; color: #566578">12:00</div>
+        </div>
+      </div>
+      <a href="Ready.dc.html" style="min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: rgba(13,20,36,0.34); color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none">Собрать лигу</a>
+      <a href="#" style="min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: rgba(13,20,36,0.22); color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none">Не присылать</a>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

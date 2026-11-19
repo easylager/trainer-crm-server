@@ -38,7 +38,7 @@
   var MORE_ITEMS = [
     {
       path: 'kto-kogo',
-      label: 'Кто кого',
+      label: 'КТО КОГО',
       iconId: 'kto-kogo',
       hint: 'Угадывай матчи Динамо и Экстралиги',
     },
@@ -375,7 +375,7 @@
     if (uiFlags.bookings_tab) {
       tabs.push({ id: 'bookings', label: 'Записи', path: 'client-bookings', icon: TAB_ICONS.bookings });
     }
-    tabs.push({ id: 'kk', label: 'Кто кого', path: 'kto-kogo', icon: TAB_ICONS.kk });
+    tabs.push({ id: 'kk', label: 'КТО КОГО', path: 'kto-kogo', icon: TAB_ICONS.kk });
     tabs.push({ id: 'me', label: 'Я', path: 'client-me', icon: TAB_ICONS.me });
     return tabs;
   }
@@ -1686,20 +1686,21 @@
    */
   var KK_BASE = '/static/webapp/';
   var KK_ASSET_VERSIONS = [
-    ['kto-kogo.css', '202611187'],
-    ['kto-kogo-model.js', '202611187'],
-    ['kto-kogo-screens-model.js', '202611187'],
-    ['kto-kogo.js', '202611187'],
-    ['kto-kogo-views.js', '202611187'],
-    ['kto-kogo-hub-cards.js', '202611187'],
-    ['kto-kogo-board.js', '202611187'],
-    ['kto-kogo-stand.js', '202611187'],
-    ['kto-kogo-leagues.js', '202611187'],
-    ['kto-kogo-coin-model.js', '202611187'],
-    ['kto-kogo-coin.js', '202611187'],
-    ['kto-kogo-matches.js', '202611187'],
-    ['kto-kogo-league-identity.js', '202611187'],
-    ['kto-kogo-boot.js', '202611187'],
+    ['kto-kogo.css', '202611191'],
+    ['kto-kogo-model.js', '202611191'],
+    ['kto-kogo-screens-model.js', '202611191'],
+    ['kto-kogo.js', '202611191'],
+    ['kto-kogo-kit.js', '202611191'],
+    ['kto-kogo-views.js', '202611191'],
+    ['kto-kogo-hub-cards.js', '202611191'],
+    ['kto-kogo-board.js', '202611191'],
+    ['kto-kogo-stand.js', '202611191'],
+    ['kto-kogo-leagues.js', '202611191'],
+    ['kto-kogo-coin-model.js', '202611191'],
+    ['kto-kogo-coin.js', '202611191'],
+    ['kto-kogo-matches.js', '202611191'],
+    ['kto-kogo-league-identity.js', '202611191'],
+    ['kto-kogo-boot.js', '202611191'],
   ];
   /* Сервер подставляет в html всех страниц одну метку ?v= (asset_stamp.py), а не литерал из kto-kogo.html.
      Поэтому берём метку самой оболочки (ASSET_V — из её же <script src>); литерал из списка — запасной,

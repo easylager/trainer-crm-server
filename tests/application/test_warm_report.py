@@ -101,14 +101,14 @@ async def test_weekly_report_has_warm_block_and_survives_its_failure(db_session,
         return True
 
     assert await report.send_weekly_report_if_due(factory, now=at(10, day=16), send=admin) == "sent"
-    assert "<b>Разовые посетители</b>" in sent[0] and "«Кто кого»" in sent[0]
+    assert "<b>Разовые посетители</b>" in sent[0] and "«КТО КОГО»" in sent[0]
 
     async def boom(*a, **kw):
         raise RuntimeError("warm down")
 
     monkeypatch.setattr(wr, "collect", boom)
     assert await report.send_weekly_report_if_due(factory, now=at(10, day=23), send=admin) == "sent"
-    assert "Разовые посетители" not in sent[1] and "«Кто кого»" in sent[1]
+    assert "Разовые посетители" not in sent[1] and "«КТО КОГО»" in sent[1]
 
 
 @pytest.mark.asyncio

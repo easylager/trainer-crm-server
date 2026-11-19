@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import os
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
@@ -80,12 +81,22 @@ KIND_MFINAL = "mfinal"
 KIND_MOVED = "moved"
 KIND_MOVED_FREE = "mvfree"
 KIND_RESCORE = "rescore"  # итог поправили после рассылки: «Мы ошиблись с итогом…»
+KIND_OUTFIT = "outfit"  # получателю: капитан выдаёт ему экипировку (TASK-432)
 KIND_BEFORE = "before"  # прежнее «за час»: больше не шлём, записи остались в таблице
 # Приоритет внутри дневного бюджета (меньше — важнее).
 PRIORITY = {KIND_MFINAL: 0, KIND_OVERTOOK: 1, KIND_NOMOVE: 2}
 # Короткие коды типов в callback_data (лимит Telegram — 64 байта).
-TYPE_CODES = {"nm": KIND_NOMOVE, "rs": KIND_RESULT, "ot": KIND_OVERTOOK, "mf": KIND_MFINAL}
+TYPE_CODES = {
+    "nm": KIND_NOMOVE,
+    "rs": KIND_RESULT,
+    "ot": KIND_OVERTOOK,
+    "mf": KIND_MFINAL,
+    "li": "lginvite",
+    "of": KIND_OUTFIT,
+}
 CODE_OF = {v: k for k, v in TYPE_CODES.items()}
+# Типы со своей колонкой, которых нет в настройках Mini App (``TYPE_COLUMN``): письма лиги и приглашение собрать лигу.
+EXTRA_TYPE_COLUMN = {"league": "notify_league", "lginvite": "notify_lginvite", KIND_OUTFIT: "notify_outfit"}
 TYPE_COLUMN = {
     KIND_NOMOVE: "notify_nomove",
     KIND_RESULT: "notify_result",
@@ -97,6 +108,8 @@ TYPE_TITLES = {
     KIND_RESULT: "итоги ходов",
     KIND_OVERTOOK: "«тебя обошли»",
     KIND_MFINAL: "«последний матч месяца»",
+    "lginvite": "приглашения собрать лигу",
+    KIND_OUTFIT: "экипировка от капитана",
 }
 
 NOMOVE_AHEAD = timedelta(hours=3)
@@ -119,12 +132,14 @@ START_PICK = "kkn"
 START_MONTH = "kkmo"
 START_OFF = "kkoff"
 START_LEAGUE = "kkl"
+START_EVENING = "kkv"  # kkv_<лига>_<ГГГГММДД> — «Вечер» лиги за игровой день (TASK-431)
 
 # callback_data кнопок в чате.
 CB_PICK = "kk:p"  # kk:p:<матч>:<h|a>
 CB_NEXT = "kk:n"
 CB_OFF = "kk:off"  # kk:off:<тип>
 CB_LEAVE = "kk:lv"  # kk:lv:<лига>
+CB_OUTFIT = "kk:o"  # kk:o:<лига>:<ггммдд>:<pid получателя>:<вещь> — выдача капитана в один тап (TASK-432)
 
 SENT = "ok"
 BLOCKED = "blocked"
@@ -161,6 +176,8 @@ class Notice:
     also: tuple[int, ...] = field(default=())
     # Строка в hockey_notices уже есть (повод ставится событием, не сканом): claim пропускаем.
     preclaimed: bool = False
+    # Фото к сообщению (путь к файлу): текст уходит подписью (sendPhoto). Только у новых поводов (TASK-431).
+    photo: str | None = None
 
     @property
     def match_ids(self) -> tuple[int, ...]:
@@ -276,8 +293,8 @@ async def get_prefs(session: AsyncSession, player_key: int) -> dict:
 
 
 async def set_type(session: AsyncSession, player_key: int, kind: str, on: bool) -> None:
-    """Включить или отключить один тип сообщений. ``kind`` — один из ``TYPE_COLUMN`` или ``league``."""
-    column = "notify_league" if kind == "league" else TYPE_COLUMN[kind]
+    """Включить или отключить один тип сообщений. ``kind`` — один из ``TYPE_COLUMN`` или ``EXTRA_TYPE_COLUMN``."""
+    column = EXTRA_TYPE_COLUMN.get(kind) or TYPE_COLUMN[kind]
     await session.execute(_SET_TYPE, {"player_key": player_key})
     await session.execute(
         text(f"UPDATE hockey_player_prefs SET {column} = :on, updated_at = now() WHERE player_key = :player_key"),
@@ -349,7 +366,7 @@ _DUE_NOMOVE = text(f"""
     """)
 
 _DUE_RESULT = text(f"""
-    SELECT p.player_key, m.id AS match_id, m.home_team, m.away_team, m.starts_at,
+    SELECT p.player_key, m.id AS match_id, m.home_team, m.away_team, m.starts_at, m.league,
            m.home_score AS final_home, m.away_score AS final_away,
            p.side, p.home_score, p.away_score, p.doubled, p.points,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
@@ -556,6 +573,48 @@ def tribune_line(
         club = html.escape(club_name(home if side == "home" else away))
         return f"Трибуна тоже промахнулась: {pct[side]}% были за {club}."
     return f"Победителя угадали {pct[winner]}% игроков."
+
+
+def cap_line(*, league_name: str, holders: tuple[str, ...] | list[str], mine: bool) -> str:
+    """Строка сводки про кепку дня в лиге (TASK-431). Имена и названия не склоняем: «в лиге «Бригада» — у тебя», но «— Олег»."""
+    league = html.escape(league_name)
+    if len(holders) == 1:
+        who = "у тебя" if mine else html.escape(holders[0])
+        return f"<b>Кепка дня</b> в лиге «{league}» — {who}: хуже всех угадывал в этот день."
+    names = [html.escape(n) for n in holders]
+    joined = ", ".join(names[:-1]) + " и " + names[-1]
+    return f"<b>Кепка дня</b> в лиге «{league}» — {joined}: хуже всех угадывали в этот день."
+
+
+def captain_line(*, league_name: str, offer: dict | None = None) -> str:
+    """Строка сводки капитану вечера (TASK-432) и готовое предложение для выдачи в один тап (кнопка — ``offer_button``).
+    Имена не склоняем: «Олег — 0 из 4», «Олег — автор твоего ведра»."""
+    from src.application.hockey_league_captain import OUTFIT_WORDS
+
+    head = f"<b>Ты капитан</b> в лиге «{html.escape(league_name)}»"
+    if not offer or offer["item"] not in OUTFIT_WORDS:
+        return head + " — выдай экипировку кому хочешь, хоть себе."
+    _, what, of_what = OUTFIT_WORDS[offer["item"]]
+    name = html.escape(offer["name"])
+    if offer["revenge"]:
+        return f"{head}. {name} — автор твоего {of_what}. Самое время вернуть — или выбери сам в «Вечере»."
+    if offer["me"]:
+        return f"{head}. Выдать себе {what}? Или выбери кому в «Вечере»."
+    return f"{head}. {name} — {offer['hits']} из {offer['matches']}: выдать {what}? Или выбери сам в «Вечере»."
+
+
+def offer_button(league_id: int, day, offer: dict) -> dict:
+    from src.application.hockey_league_captain import OUTFIT_WORDS
+
+    verb = "Вернуть" if offer["revenge"] else "Выдать"
+    return {
+        "text": f"{verb} {OUTFIT_WORDS[offer['item']][1]}",
+        "callback_data": f"{CB_OUTFIT}:{league_id}:{day:%y%m%d}:{offer['pid']}:{offer['item']}",
+    }
+
+
+def evening_button(league_id: int, day) -> dict | None:
+    return url_button("Вечер в лиге", f"{START_EVENING}_{league_id}_{day:%Y%m%d}")
 
 
 def summary_text(lines: list[str]) -> str:
@@ -825,17 +884,45 @@ async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) 
             body = summary_text(texts)
         if place:
             body += "\n" + place
+        # Кепка дня решилась матчем из этой сводки — по строке на лигу; кнопка ведёт в «Вечер» первой (TASK-431).
+        news = await _cap_news(session, player_key, rows, now=now, cache=cache.setdefault("cap_news", {}))
+        offer, evening = None, news[0] if news else None
+        for item in news:
+            if item.holders:
+                body += "\n" + cap_line(league_name=item.league_name, holders=item.holders, mine=item.mine)
+            if item.captain:
+                # Кнопка в один тап — одна на сообщение: предложение пишем только в той лиге, где кнопка.
+                one_tap = offer is None and item.offer is not None
+                body += "\n" + captain_line(league_name=item.league_name, offer=item.offer if one_tap else None)
+                if one_tap:
+                    offer, evening = offer_button(item.league_id, item.day, item.offer), item
         buttons = _rows(
             [
                 {"text": "Следующий ход", "callback_data": CB_NEXT},
                 url_button("Таблица", f"{START_PICK}_{rows[-1].match_id}"),
             ],
+            [offer] if offer else [],
+            [evening_button(evening.league_id, evening.day)] if evening else [],
             off_button(KIND_RESULT),
         )
         out.append(
             Notice(KIND_RESULT, player_key, rows[0].match_id, body, buttons, also=tuple(r.match_id for r in rows[1:]))
         )
     return out
+
+
+async def _cap_news(session: AsyncSession, player_key: int, rows: list, *, now: datetime, cache: dict) -> list:
+    """Сбой подсчёта кепки не должен задержать итог: без строки про кепку сводка уходит как раньше."""
+    from src.application.hockey_league_evening import cap_news
+
+    try:
+        async with session.begin_nested():
+            return await cap_news(
+                session, player_key=player_key, matches=[dict(r._mapping) for r in rows], now=now, cache=cache
+            )
+    except Exception:  # noqa: BLE001
+        logger.warning("kk cap news failed for %s", player_key, exc_info=True)
+        return []
 
 
 async def _nomove_candidates(session: AsyncSession, *, now: datetime) -> dict[int, Notice]:
@@ -1467,6 +1554,107 @@ async def deliver_league_notices(session_factory, *, now: datetime, send: Sender
     return counts
 
 
+# ---------- «капитан выдаёт тебе экипировку» (TASK-432) ----------
+
+# Очередь — в самих выдачах: свежие, не себе, лига идёт. Действительна ли выдача, проверяем перед отправкой.
+_DUE_OUTFIT_NOTICES = text("""
+    SELECT o.league_id, o.day, o.to_key, l.name AS league_name
+    FROM hockey_league_outfits AS o
+    JOIN hockey_leagues AS l ON l.id = o.league_id
+    WHERE o.notice_claimed_at IS NULL AND o.to_key <> o.captain_key AND o.updated_at >= :since AND l.ends_at > :now
+    ORDER BY o.updated_at, o.league_id
+    """)
+
+_CLAIM_OUTFIT_NOTICE = text("""
+    UPDATE hockey_league_outfits SET notice_claimed_at = :now
+    WHERE league_id = :league_id AND day = :day AND to_key = :to_key AND notice_claimed_at IS NULL
+    RETURNING to_key
+    """)
+
+_RELEASE_OUTFIT_NOTICE = text("""
+    UPDATE hockey_league_outfits SET notice_claimed_at = NULL
+    WHERE league_id = :league_id AND day = :day AND to_key = :to_key AND notice_sent_at IS NULL
+    """)
+
+_DONE_OUTFIT_NOTICE = text("""
+    UPDATE hockey_league_outfits
+    SET notice_sent_at = CASE WHEN CAST(:ok AS BOOLEAN) THEN CAST(:now AS TIMESTAMPTZ) END, notice_failed = :failed
+    WHERE league_id = :league_id AND day = :day AND to_key = :to_key
+    """)
+
+OUTFIT_NOTICE_WINDOW = timedelta(days=2)
+
+
+def outfit_text(*, captain: str, league_name: str, item: str) -> str:
+    """Получателю: кто, где и что. Настоящее время — пол не нужен."""
+    from src.application.hockey_league_captain import OUTFIT_WORDS
+
+    full = OUTFIT_WORDS[item][0]
+    return (
+        f"<b>{html.escape(captain)} выдаёт тебе экипировку</b> в лиге «{html.escape(league_name)}»: "
+        f"{full} — до следующего вечера. Видят все в «КТО КОГО».\nСтань капитаном — и выдавать будешь ты."
+    )
+
+
+async def deliver_outfit_notices(session_factory, *, now: datetime, send: Sender) -> dict[str, int]:
+    """Сообщения «капитан выдаёт тебе экипировку». Как письма лиги: ответ на действие друга — вне дневного бюджета
+    и согласия, ночью ждут утра, «Не присылать такое» и блокировка — через допуск. Выдача уже не действует (вечер
+    сменился, капитан другой, лига выключена) — сообщение не шлём, строку закрываем."""
+    from src.application.hockey_league_captain import captain_enabled, evening_state
+    from src.application.hockey_leagues import _LEAGUE_BY_ID, _league
+
+    counts = {"sent": 0, "failed": 0, "blocked": 0, "skipped": 0}
+    if in_quiet_hours(now):
+        return counts
+    async with session_factory() as session:
+        params = {"since": _utc(now) - OUTFIT_NOTICE_WINDOW, "now": _utc(now)}
+        due = list((await session.execute(_DUE_OUTFIT_NOTICES, params)).all())
+    for r in due:
+        key_params = {"league_id": r.league_id, "day": r.day, "to_key": r.to_key}
+        async with session_factory() as session:
+            await lock_player(session, r.to_key)
+            if (await session.execute(_CLAIM_OUTFIT_NOTICE, {**key_params, "now": _utc(now)})).first() is None:
+                continue
+            league = _league((await session.execute(_LEAGUE_BY_ID, {"league_id": r.league_id})).one())
+            state = await evening_state(session, league, r.day, now=now)
+            award = state.award
+            stale = not captain_enabled(league.id) or not state.current or award is None or award.to_key != r.to_key
+            admission = None if stale else await admit(session, kind=KIND_OUTFIT, player_key=r.to_key, now=now)
+            await session.commit()
+        if stale or not admission.allowed:  # type: ignore[union-attr]
+            counts["skipped"] += 1
+            if admission is not None:
+                await _journal_refusal(
+                    session_factory, Notice(KIND_OUTFIT, r.to_key, 0, "", []), admission.reason, now=now
+                )
+            continue
+        text_ = outfit_text(captain=award.captain_name, league_name=r.league_name, item=award.item)  # type: ignore[union-attr]
+        buttons = _rows([evening_button(r.league_id, r.day)], off_button(KIND_OUTFIT))
+        try:
+            outcome = _outcome(await send(r.to_key, text_, buttons))
+        except Exception:  # noqa: BLE001
+            logger.warning("kto-kogo outfit notice %s/%s failed", r.league_id, r.day, exc_info=True)
+            outcome = FAILED
+        if outcome == GONE:
+            outcome = BLOCKED
+        retry_key = (KIND_OUTFIT, r.league_id, r.day, r.to_key)
+        if outcome == RETRY and not _attempt(retry_key):
+            outcome = FAILED
+        async with session_factory() as session:
+            if outcome == RETRY:
+                await session.execute(_RELEASE_OUTFIT_NOTICE, key_params)
+            else:
+                _RETRIES.pop(retry_key, None)
+                done = {**key_params, "ok": outcome == SENT, "failed": outcome != SENT, "now": _utc(now)}
+                await session.execute(_DONE_OUTFIT_NOTICE, done)
+                if outcome == BLOCKED:
+                    await mark_blocked(session, r.to_key, now=now)
+            await session.commit()
+        name = {SENT: "sent", BLOCKED: "blocked", RETRY: "retry"}.get(outcome, "failed")
+        counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
 # Telegram режет рассылку ботом на ~30 сообщений/с; держимся с запасом.
 _THROTTLE_SEC = 1 / 25
 # Дольше этого просьбу подождать (RetryAfter) не ждём: сообщение вернётся в очередь на следующий проход.
@@ -1511,19 +1699,56 @@ async def _throttle() -> None:
     _last_send = time.monotonic()
 
 
-async def send_via_client_bot_gone(chat_id: int, text_body: str, buttons: list[list[dict]]) -> str:
+async def send_via_client_bot_gone(
+    chat_id: int, text_body: str, buttons: list[list[dict]], *, photo: str | None = None
+) -> str:
     """Тот же отправитель, но «чат не найден» и «аккаунт удалён» отдаёт как ``gone`` (трактуется как блокировка)."""
-    return await send_via_client_bot(chat_id, text_body, buttons, detect_gone=True)
+    return await send_via_client_bot(chat_id, text_body, buttons, detect_gone=True, photo=photo)
+
+
+# Картинка уже лежит у Telegram: шлём её ``file_id``, а не грузим файл заново каждому (пятничная рассылка — сотни
+# одинаковых постеров). Ключ — путь и время изменения файла: заменили постер — загрузится заново.
+_PHOTO_IDS: dict[tuple[str, float], str] = {}
+
+
+async def _send_photo(bot: Any, chat_id: int, photo: str, caption: str, markup: Any) -> None:
+    from aiogram.exceptions import TelegramBadRequest
+    from aiogram.types import FSInputFile
+
+    try:
+        key = (photo, os.path.getmtime(photo))
+    except OSError:
+        key = (photo, 0.0)
+    cached = _PHOTO_IDS.get(key)
+    if cached:
+        try:
+            await bot.send_photo(chat_id=chat_id, photo=cached, caption=caption, reply_markup=markup)
+            return
+        except TelegramBadRequest as exc:
+            if "file" not in str(exc).lower():
+                raise
+            _PHOTO_IDS.pop(key, None)  # file_id устарел (другой бот, чистка у Telegram) — загрузим файл
+    sent = await bot.send_photo(chat_id=chat_id, photo=FSInputFile(photo), caption=caption, reply_markup=markup)
+    sizes = getattr(sent, "photo", None) or []
+    if sizes:
+        _PHOTO_IDS[key] = sizes[-1].file_id
 
 
 async def send_via_client_bot(
-    chat_id: int, text_body: str, buttons: list[list[dict]], *, detect_gone: bool = False, bot: Any = None
+    chat_id: int,
+    text_body: str,
+    buttons: list[list[dict]],
+    *,
+    detect_gone: bool = False,
+    bot: Any = None,
+    photo: str | None = None,
 ) -> str:
     """Личное сообщение клиентским ботом: ``ok``, ``blocked`` (запретил писать), ``retry`` (429, сеть, 5xx —
     повторим позже) или ``failed`` (BadRequest и прочее постоянное).
 
     ``bot`` — свой экземпляр у другого цикла (прогрев, TASK-428): общий ``_bot`` закрывает цикл матчей в конце
-    прохода, и чужая отправка в этот момент упала бы на закрытой сессии."""
+    прохода, и чужая отправка в этот момент упала бы на закрытой сессии. ``photo`` — путь к картинке: тогда уходит
+    фото с текстом в подписи (sendPhoto)."""
     from aiogram.exceptions import (
         TelegramBadRequest,
         TelegramForbiddenError,
@@ -1544,7 +1769,10 @@ async def send_via_client_bot(
     for attempt in (1, 2):
         await _throttle()
         try:
-            await bot.send_message(chat_id=int(chat_id), text=text_body, reply_markup=markup)
+            if photo:
+                await _send_photo(bot, int(chat_id), photo, text_body, markup)
+            else:
+                await bot.send_message(chat_id=int(chat_id), text=text_body, reply_markup=markup)
             return SENT
         except TelegramForbiddenError:
             logger.info("kto-kogo notice to %s: bot blocked", chat_id)
@@ -1585,6 +1813,7 @@ __all__ = [
     "KIND_RESULT",
     "Notice",
     "Overtake",
+    "START_EVENING",
     "START_LEAGUE",
     "START_MONTH",
     "START_OFF",
@@ -1596,7 +1825,9 @@ __all__ = [
     "clear_blocked",
     "cleanup_old_notices",
     "deliver",
+    "cap_line",
     "deliver_league_notices",
+    "deliver_outfit_notices",
     "due_notices",
     "fan_club",
     "get_prefs",

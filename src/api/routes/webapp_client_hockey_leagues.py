@@ -39,11 +39,33 @@ from src.application.hockey_leagues import (
     league_titles,
     leave_league,
     matches_in_terms,
+    member_league,
     owned_league,
+    own_active_league,
+    player_display_name,
     player_leagues,
+    quick_league,
+    quick_name,
     set_league_image,
     term_options,
     update_league,
+)
+from src.application.hockey_league_captain import (
+    AlreadyGiven,
+    NotCaptain,
+    OutfitRefused,
+    RightClosed,
+    captain_enabled,
+    current_state,
+    set_outfit,
+)
+from src.application.hockey_league_evening import (
+    DayNotPlayed,
+    GestureRefused,
+    gestures_enabled,
+    league_evening,
+    period_marks,
+    set_gesture,
 )
 from src.application.hockey_races import crown_counts, league_crown_wall, race_summary
 from src.application.hockey_share import record_card_event
@@ -88,6 +110,30 @@ class JoinLeagueBody(BaseModel):
     display_name: str | None = None
     # С какой карточки в чате пришёл: для воронки TASK-300.
     from_card: Literal["result", "league"] | None = None
+
+
+class GestureBody(BaseModel):
+    """Жест участнику за игровой день: ``to`` — его ``pid`` из «Вечера», ``kind`` пустой — снять."""
+
+    to: str
+    kind: Literal["stick", "pen"] | None = None
+
+
+class OutfitBody(BaseModel):
+    """Право капитана: кому (``pid`` из «Вечера», можно себе) и какую вещь из «Экипировки капитана»."""
+
+    to: str
+    item: str
+
+
+class QuickLeagueBody(BaseModel):
+    """«Лига готова» (TASK-431): какие матчи, «на что играем» и метка входа (``lg1``…) — для отчёта по входам."""
+
+    scope: Literal["all", "dinamo", "clubs"] = "all"
+    clubs: list[str] = []
+    stake_text: str | None = None
+    display_name: str | None = None
+    src: str | None = None
 
 
 class PatchLeagueBody(BaseModel):
@@ -282,6 +328,56 @@ async def get_client_hockey_league_term_options(
     return term_options(now=datetime.now(timezone.utc))
 
 
+@router.get("/client/hockey/leagues/quick")
+async def get_client_hockey_league_quick(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Экран «Лига готова»: имя будущей лиги или своя действующая лига (тогда экран открывает её «Вечер»).
+    Лигу здесь не создаём — только по кнопке «Позвать друзей»."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    existing = await own_active_league(session, player_key=player_key, now=now)
+    if existing is not None:
+        return {"league_id": existing.id, "name": existing.name}
+    known = await player_display_name(session, player_key)
+    return {
+        "league_id": None,
+        "name": quick_name(known or _player_name(None, _init_raw(init_data, x_telegram_init_data))),
+    }
+
+
+@router.post("/client/hockey/leagues/quick")
+async def post_client_hockey_league_quick(
+    body: QuickLeagueBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Позвать друзей»: своя лига до конца сезона в один тап. Своя действующая уже есть — вернём её (``created``)."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league, created = await quick_league(
+            session,
+            player_key=player_key,
+            display_name=_player_name(body.display_name, _init_raw(init_data, x_telegram_init_data)),
+            now=now,
+            scope=body.scope,
+            clubs=body.clubs,
+            stake_text=body.stake_text,
+            src=body.src,
+        )
+        payload = await _created_out(session, league, player_key, now)
+    except (ValueError, TooManyLeagues) as exc:
+        _raise_league(exc)
+    await session.commit()
+    return {**payload, "created": created}
+
+
 @router.post("/client/hockey/leagues/join")
 async def post_client_hockey_league_join(
     body: JoinLeagueBody,
@@ -337,6 +433,13 @@ async def get_client_hockey_league(
     )
     titles = await league_titles(session, league_id=league_id, now=now)
     crowns = await crown_counts(session, league_id=league_id, player_keys=[row.player_key for row in rows])
+    # Минуты штрафа, стуки и кепки дня — за показанный период (месяц или весь срок лиги).
+    league = await member_league(session, league_id=league_id, player_key=player_key)
+    since, until = (chosen.since, chosen.until) if chosen else (league.starts_at, league.ends_at)
+    marks = await period_marks(session, league, since=since, until=until, now=now)  # type: ignore[arg-type]
+    # Голова и нашивка «C» — по последнему сыгранному вечеру лиги (TASK-432), в любой вкладке таблицы.
+    state = await current_state(session, league, now=now)
+    heads_on = captain_enabled(league.id) and state is not None and state.current
     return {
         "id": summary.id,
         "name": summary.name,
@@ -348,8 +451,101 @@ async def get_client_hockey_league(
         "period": None if chosen is None else {"key": chosen.key, "title": chosen.title},
         "race": await race_summary(session, now=now),
         "wall": await league_crown_wall(session, league_id=league_id, now=now),
-        "items": [{**_table_row(row, player_key, titles), "crowns": crowns.get(row.player_key, 0)} for row in rows],
+        "items": [
+            {
+                **_table_row(row, player_key, titles),
+                "crowns": crowns.get(row.player_key, 0),
+                **_marks_out(marks, row),
+                "head": None if state is None else state.head(row.player_key, enabled=heads_on),
+                "captain": state is not None and row.player_key in state.cap.captains,
+            }
+            for row in rows
+        ],
     }
+
+
+def _marks_out(marks: dict, row: LeagueRow) -> dict:
+    found = marks.get(row.player_key)
+    if found is None:
+        return {"penalty_minutes": 0, "sticks": 0, "caps": 0}
+    return {"penalty_minutes": found.penalty_minutes, "sticks": found.sticks, "caps": found.caps}
+
+
+@router.get("/client/hockey/leagues/{league_id}/evening")
+async def get_client_hockey_league_evening(
+    league_id: int,
+    day: date | None = Query(None, description="игровой день 2026-11-18; пусто — сегодня или последний с матчами"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """«Вечер» лиги: матчи игрового дня, строка каждого участника, соседние дни с матчами. Только для участника."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league = await member_league(session, league_id=league_id, player_key=player_key)
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
+
+
+@router.put("/client/hockey/leagues/{league_id}/evening/{day}/gesture")
+async def put_client_hockey_league_gesture(
+    league_id: int,
+    day: date,
+    body: GestureBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Жест другу за сыгранный день лиги: дать, сменить или снять. Пушей нет — ответ: «Вечер» этого дня."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league = await member_league(session, league_id=league_id, player_key=player_key)
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    if not gestures_enabled():
+        raise HTTPException(status_code=404, detail="Жестов в лиге пока нет")
+    try:
+        await set_gesture(session, league=league, from_key=player_key, to_pid=body.to, day=day, kind=body.kind, now=now)
+    except GestureRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DayNotPlayed as exc:
+        raise HTTPException(status_code=409, detail="Жесты откроются, когда сыграют все матчи вечера") from exc
+    await session.commit()
+    return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
+
+
+@router.put("/client/hockey/leagues/{league_id}/evening/{day}/outfit")
+async def put_client_hockey_league_outfit(
+    league_id: int,
+    day: date,
+    body: OutfitBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Право капитана: выдать или поменять экипировку вечера. Пушей нет — ответ: «Вечер» этого дня."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league = await member_league(session, league_id=league_id, player_key=player_key)
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    if not captain_enabled(league.id):
+        raise HTTPException(status_code=404, detail="Экипировки в лиге пока нет")
+    try:
+        await set_outfit(
+            session, league=league, captain_key=player_key, to_pid=body.to, item=body.item, day=day, now=now
+        )
+    except OutfitRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NotCaptain as exc:
+        raise HTTPException(status_code=403, detail="Выдаёт только капитан вечера") from exc
+    except RightClosed as exc:
+        raise HTTPException(status_code=409, detail="Право капитана — до следующего вечера лиги") from exc
+    except AlreadyGiven as exc:
+        raise HTTPException(status_code=409, detail=f"Экипировку этого вечера уже выдаёт {exc.name}") from exc
+    await session.commit()
+    return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
 
 
 @router.patch("/client/hockey/leagues/{league_id}")
@@ -394,7 +590,9 @@ async def post_client_hockey_league_image(
     except LeagueImageError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     try:
-        league, previous = await set_league_image(session, league_id=league_id, player_key=player_key, image_key=new_key)
+        league, previous = await set_league_image(
+            session, league_id=league_id, player_key=player_key, image_key=new_key
+        )
         payload = await _created_out(session, league, player_key, now)
     except (LookupError, PermissionError) as exc:
         await release_image(session, new_key)  # пока файл ждал, лигу удалили или передали: он никому не нужен
