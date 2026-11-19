@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import os
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
@@ -1558,6 +1559,34 @@ async def send_via_client_bot_gone(
     return await send_via_client_bot(chat_id, text_body, buttons, detect_gone=True, photo=photo)
 
 
+# Картинка уже лежит у Telegram: шлём её ``file_id``, а не грузим файл заново каждому (пятничная рассылка — сотни
+# одинаковых постеров). Ключ — путь и время изменения файла: заменили постер — загрузится заново.
+_PHOTO_IDS: dict[tuple[str, float], str] = {}
+
+
+async def _send_photo(bot: Any, chat_id: int, photo: str, caption: str, markup: Any) -> None:
+    from aiogram.exceptions import TelegramBadRequest
+    from aiogram.types import FSInputFile
+
+    try:
+        key = (photo, os.path.getmtime(photo))
+    except OSError:
+        key = (photo, 0.0)
+    cached = _PHOTO_IDS.get(key)
+    if cached:
+        try:
+            await bot.send_photo(chat_id=chat_id, photo=cached, caption=caption, reply_markup=markup)
+            return
+        except TelegramBadRequest as exc:
+            if "file" not in str(exc).lower():
+                raise
+            _PHOTO_IDS.pop(key, None)  # file_id устарел (другой бот, чистка у Telegram) — загрузим файл
+    sent = await bot.send_photo(chat_id=chat_id, photo=FSInputFile(photo), caption=caption, reply_markup=markup)
+    sizes = getattr(sent, "photo", None) or []
+    if sizes:
+        _PHOTO_IDS[key] = sizes[-1].file_id
+
+
 async def send_via_client_bot(
     chat_id: int,
     text_body: str,
@@ -1594,11 +1623,7 @@ async def send_via_client_bot(
         await _throttle()
         try:
             if photo:
-                from aiogram.types import FSInputFile
-
-                await bot.send_photo(
-                    chat_id=int(chat_id), photo=FSInputFile(photo), caption=text_body, reply_markup=markup
-                )
+                await _send_photo(bot, int(chat_id), photo, text_body, markup)
             else:
                 await bot.send_message(chat_id=int(chat_id), text=text_body, reply_markup=markup)
             return SENT

@@ -105,9 +105,11 @@ async def test_audience_active_without_league(db_session) -> None:
     await player(db, SASHA)
     await player(db, KATYA)
     await league_with(db, KATYA)  # своя лига — не зовём
-    await player(db, LESHA, picked=FRI - timedelta(days=8))  # ходил давно — не зовём
+    await player(db, LESHA, picked=FRI - timedelta(days=40))  # ходил давно — тоже зовём: прогреть
     got = await li.produce_league_invite(db, now=FRI)
-    assert [p.notice.player_key for p in got] == [SASHA]
+    assert sorted(p.notice.player_key for p in got) == sorted([SASHA, LESHA])
+    lesha = next(p for p in got if p.notice.player_key == LESHA)
+    assert not lesha.notice.text.startswith("За неделю")  # за неделю ходов нет — без личной строки
 
 
 @pytest.mark.asyncio
@@ -139,7 +141,8 @@ async def test_friday_noon_window_and_switch(db_session, monkeypatch) -> None:
     assert await li.produce_league_invite(db_session, now=at(12, 0, day=19)) == []  # четверг
     assert await li.produce_league_invite(db_session, now=at(11, 59, day=20)) == []
     assert len(await li.produce_league_invite(db_session, now=at(12, 0, day=20))) == 1
-    assert await li.produce_league_invite(db_session, now=at(14, 0, day=20)) == []
+    assert len(await li.produce_league_invite(db_session, now=at(19, 59, day=20))) == 1  # деплой в обед — успеем
+    assert await li.produce_league_invite(db_session, now=at(20, 0, day=20)) == []
     monkeypatch.setenv("KK_LEAGUE_INVITE_ENABLED", "0")
     assert await li.produce_league_invite(db_session, now=FRI) == []  # выключено по умолчанию и здесь
 
@@ -245,3 +248,38 @@ async def test_tick_sends_once_within_budget_and_needs_the_kind_flag(db_session,
         factory, now=later, send=out, producers={"lginvite": li.produce_league_invite}, config=CFG, clock=lambda: later
     )
     assert len(out.sent) == 1  # в эту пятницу второго нет
+
+
+@pytest.mark.asyncio
+async def test_poster_uploads_once_then_goes_by_file_id(tmp_path) -> None:
+    """Сотни одинаковых постеров: файл грузится один раз, дальше — file_id; устаревший file_id — загрузим снова."""
+    from types import SimpleNamespace
+
+    from aiogram.exceptions import TelegramBadRequest
+    from aiogram.methods import SendPhoto
+    from aiogram.types import FSInputFile
+
+    poster = tmp_path / "p.png"
+    poster.write_bytes(b"png")
+    calls: list[str] = []
+
+    class Bot:
+        stale = False
+
+        async def send_photo(self, *, chat_id, photo, caption, reply_markup):
+            if isinstance(photo, FSInputFile):
+                calls.append("upload")
+                return SimpleNamespace(photo=[SimpleNamespace(file_id="small"), SimpleNamespace(file_id="big")])
+            calls.append(photo)
+            if self.stale:
+                raise TelegramBadRequest(method=SendPhoto(chat_id=1, photo="x"), message="wrong file identifier")
+            return SimpleNamespace(photo=[])
+
+    hn._PHOTO_IDS.clear()
+    bot = Bot()
+    for _ in range(3):
+        await hn._send_photo(bot, 1, str(poster), "c", None)
+    assert calls == ["upload", "big", "big"]
+    bot.stale = True
+    await hn._send_photo(bot, 1, str(poster), "c", None)
+    assert calls[-2:] == ["big", "upload"]
