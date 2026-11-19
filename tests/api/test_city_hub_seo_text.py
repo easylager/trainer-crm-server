@@ -103,6 +103,7 @@ async def test_minsk_ribbon_is_one_tile_per_rink(app_use_test_db, db_session) ->
     assert re.search(r'<link rel="canonical" href="https?://[^/"]+/c/minsk"', html)
     assert '<h1 class="b-hero__title">Катки Минска</h1>' in html
     assert 'href="#rinks">Список катков</a>' in html
+    assert html.index('id="city-sections"') < html.index('id="rinks"')
     listing = html.split('id="rinks"', 1)[1].split("</section>", 1)[0]
     assert "ул. Тестовая, 5 · Прокат коньков" in listing
     assert "Катки на ближайшие 7 дней" in listing

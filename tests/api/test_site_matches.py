@@ -380,6 +380,7 @@ async def test_city_page_feed_tile_and_bell_only_with_matches(app_use_test_db, d
     mid = await _match(db_session)
     html = (await _get("/c/minsk")).text
     assert "Хоккей в Минске" in html and 'data-route="Хоккей"' in html and "matches.css" in html
+    assert html.index("Хоккей в Минске") < html.index('id="rinks"')
     assert (await _path(db_session, mid)) in html and f"startapp=mbell_{mid}" in html
     assert 'aria-label="Напомнить о матче Юность — Шахтер"' in html
     assert not has_forbidden_words(html)
