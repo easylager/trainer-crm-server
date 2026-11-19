@@ -1034,9 +1034,18 @@
     return Base.plural(r.moves, 'Ход', 'Хода', 'Ходов') + ' ' + r.moves + ' из ' + n + ' — не в споре за кепку';
   }
 
+  /** Козырь удвоил очки за матч вечера: иначе «+20» за один промах с шайбами непонятен. */
+  function trumpNote(r, ev) {
+    var ms = (ev && ev.matches) || [];
+    var i = -1;
+    (r.marks || []).forEach(function (x, k) { if (i < 0 && x.doubled && x.points) i = k; });
+    if (i < 0) return '';
+    return 'Козырь удвоил очки' + (ms.length > 1 && ms[i] ? ' за ' + eveningMatchTitle(ms[i]) : '');
+  }
+
   /** Строки под именем: что прилетело мне, почему без кепки, что значит мой жест (tone — цвет жеста). */
   function eveningNotes(r, ev) {
-    var out = [];
+    var out = [{ text: trumpNote(r, ev), tone: '' }];
     if (r.is_me) out.push({ text: gestureNote(r), tone: '' });
     out.push({ text: eveningReason(r, ev), tone: '' });
     out.push({ text: myGestureNote(r, ev), tone: r.my_gesture || '' });

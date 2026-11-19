@@ -170,6 +170,8 @@
       return -1;
     }
     var at = first('miss');
+    var part = first('part');
+    if (part >= 0 && (at < 0 || part < at)) at = part;
     if (at < 0) at = first('none');
     if (at < 0) at = ms.length - 1;
     var m = ms[at];

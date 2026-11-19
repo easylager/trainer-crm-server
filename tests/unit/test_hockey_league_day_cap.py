@@ -91,3 +91,17 @@ def test_captains_tie_and_no_captain_without_a_decided_race() -> None:
     assert day_cap({1: (20, 2), 2: (40, 4), 3: (10, 1)}, matches=2, complete=True).captains == {2}
     assert day_cap({1: (0, 2), 2: (50, 2)}, matches=2, complete=True).captains == {2}  # вдвоём — тоже
     assert day_cap({1: (0, 2), 2: (50, 2), 3: (40, 2)}, matches=3, complete=False).captains == frozenset()
+
+
+def test_goals_only_points_are_part_not_a_hit() -> None:
+    # Саша (прод, 17.11): ход за хозяев 3:2 при итоге 1:2 — угаданы шайбы гостей, +10, козырь — +20. Не «угадал».
+    from datetime import datetime, timezone
+
+    from src.application.hockey_league_evening import HIT, MISS, PART, DayMatch, DayRow, Member, mark
+
+    m = DayMatch(1, "Нефтехимик", "Динамо-Минск", datetime(2026, 11, 17, tzinfo=timezone.utc), "final", 1, 2)
+    pick = {"points": 10, "doubled": True, "final": True}
+    assert mark(pick, m) == PART
+    assert mark({**pick, "points": 20}, m) == HIT and mark({**pick, "points": 0}, m) == MISS
+    row = DayRow(member=Member(1, "Саша", "p", m.starts_at), picks={1: pick})
+    assert (row.hits, row.moves, row.points) == (0, 1, 20)

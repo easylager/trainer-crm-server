@@ -40,8 +40,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.hockey_slices_sql import SCOPE_SQL
 from src.ingestion.hockey_sources import MINSK_TZ
 
-# Отметка хода по матчу дня: в плюсе, мимо, ждёт итога (матч не сыгран), без хода.
-HIT, MISS, WAIT, NONE = "hit", "miss", "wait", "none"
+# Отметка хода по матчу дня: угадан победитель, очки только за шайбы (победитель не угадан), мимо, ждёт итога
+# (матч не сыгран), без хода. «X из N» в вечере — угаданные победители (владелец 2026-11-19: +10 за шайбы при чужом
+# победителе — не «угадал»).
+HIT, PART, MISS, WAIT, NONE = "hit", "part", "miss", "wait", "none"
 
 # Кепка дня: сколько человек должно быть в споре и какая доля матчей дня нужна, чтобы в него попасть.
 CAP_MIN_CONTENDERS = 2  # владелец 2026-11-19: вдвоём тоже играют — кепка и капитан есть и в лиге на двоих
@@ -122,7 +124,10 @@ class DayRow:
 
     @property
     def hits(self) -> int:
-        return sum(1 for p in self.scored if p["points"] > 0)
+        """Угаданные победители (очки хода без козыря — от ``POINTS_WINNER``)."""
+        from src.application.hockey_game import POINTS_WINNER
+
+        return sum(1 for p in self.scored if p["points"] >= POINTS_WINNER)
 
 
 _DAYS = text(f"""
@@ -241,7 +246,11 @@ def mark(pick: dict | None, match: DayMatch) -> str:
     if pick is None:
         return NONE
     if match.status == "final" and pick["points"] is not None:
-        return HIT if pick["points"] > 0 else MISS
+        from src.application.hockey_game import POINTS_WINNER
+
+        if pick["points"] >= POINTS_WINNER:
+            return HIT
+        return PART if pick["points"] > 0 else MISS
     return WAIT
 
 
@@ -793,6 +802,7 @@ __all__ = [
     "scarf_of",
     "window_caps",
     "HIT",
+    "PART",
     "MISS",
     "NONE",
     "WAIT",

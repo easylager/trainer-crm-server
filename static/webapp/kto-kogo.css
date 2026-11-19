@@ -749,10 +749,11 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-ev__dots { display: flex; align-items: center; gap: 4px; }
 /* Отметки матчей дня: попал — золото, мимо — заливка, без хода — пунктир. Своё имя: у .kk-dot есть пульс «идёт». */
 .kk-evd-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.kk-evd { width: 22px; height: 8px; box-sizing: border-box; border-radius: 4px; border: 1.5px dashed var(--kk-dot); background: transparent; }
+.kk-evd { width: 22px; height: 8px; box-sizing: border-box; border-radius: 4px; border: 1.5px solid var(--kk-dot); background: transparent; }
 .kk-evd--hit { background: var(--kk-gold); border: 1.5px solid var(--kk-dot-hit); }
 .kk-evd--miss { background: var(--kk-evd-miss); border: 1.5px solid var(--kk-evd-miss); }
-.kk-evd--wait { border-style: dotted; }
+.kk-evd--part { background: linear-gradient(90deg, var(--kk-gold) 50%, transparent 50%); border: 1.5px solid var(--kk-dot-hit); }
+.kk-evd--wait { background: var(--kk-dot); opacity: 0.45; }
 .kk-ev__mv { margin-left: 6px; font: 500 13px var(--kk-text); color: var(--kk-muted); white-space: nowrap; }
 .kk-ev__note { font: 500 13px/1.35 var(--kk-text); color: var(--kk-muted); }
 .kk-ev__p.is-me .kk-ev__note, .kk-ev__p.is-me .kk-ev__mv { color: var(--kk-soft); }
