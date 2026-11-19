@@ -563,7 +563,7 @@ async def test_arena_page_has_match_row_and_here_block_and_honest_note(app_use_t
     assert "Матчи здесь" in html and "m-ticket" in html and "вечернего катания нет" in html
     assert (await _path(db_session, mid)) in html
     assert 'href="/hockey">Расписание хоккейных матчей</a>' in html
-    assert 'href="/kk">Игра «Кто кого»</a>' in html
+    assert 'href="/kk">Игра «КТО КОГО»</a>' in html
     # Сеанс вечером → строка нейтральная, ничего о катании не утверждает
     await db_session.execute(
         text("""INSERT INTO ice_sessions (arena_id, kind, status, starts_at_utc, ends_at_utc, starts_at_local, ends_at_local,

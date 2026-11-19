@@ -501,7 +501,7 @@ async def test_loop_pass_alerts_honestly_while_the_fallback_works(db_session, mo
     notices = [health.take_fallback_notice(extraliga="flashscore.com", dinamo="sportmail.ru") for _ in range(3)]
     assert notices[:2] == [None, None]
     assert notices[2] == (
-        "Кто кого: hockey.by и календарь Динамо не отвечают. "
+        "КТО КОГО: hockey.by и календарь Динамо не отвечают. "
         "Сейчас на запасных — flashscore.com и sportmail.ru, с ними всё в порядке."
     )
     assert "не обновляются" not in (notices[2] or "") and "/hockey" not in (notices[2] or "")

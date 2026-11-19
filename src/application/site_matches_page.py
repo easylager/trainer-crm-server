@@ -80,7 +80,7 @@ def bell_link(base_url: str, match_id: int, *, city_id: int | None = None) -> st
 
 
 def game_link(base_url: str, match_id: int, *, city_id: int | None = None) -> str | None:
-    """«Кто кого» → Mini App на матче (``startapp=kkm_<id>``)."""
+    """«КТО КОГО» → Mini App на матче (``startapp=kkm_<id>``)."""
     return public_telegram_cta_url(
         base_url, start_param=match_start_param(match_id), surface=MATCH_SURFACE, city_id=city_id
     )
@@ -148,7 +148,7 @@ def scripts_html() -> str:
 
 
 def assets_tail() -> str:
-    """Шторка и скрипт — один раз в конец страницы, где есть колокольчик или «Кто кого»."""
+    """Шторка и скрипт — один раз в конец страницы, где есть колокольчик или «КТО КОГО»."""
     return sheet_html() + scripts_html()
 
 
@@ -361,7 +361,7 @@ def render_matches_list(
     if data["club"]:
         first_line = "Все матчи клуба — дома и на выезде"
     game_link_html = (
-        '<a class="m-text-link" href="/kk">Угадай победителя в игре «Кто кого»</a>'
+        '<a class="m-text-link" href="/kk">Угадай победителя в игре «КТО КОГО»</a>'
         if hockey_event.enabled() else ""
     )
     dinamo_link_html = (
@@ -402,7 +402,7 @@ def render_dinamo_home(data: Mapping[str, Any], *, base_url: str) -> str:
     destination = arena_path(arena)
     arena_link = f'<a class="m-text-link" href="{_e(destination)}">Минск-Арена на Glide</a>' if destination else ""
     map_link = f'<a class="m-text-link" href="{_e(yandex_link(arena))}">Как добраться</a>' if arena else ""
-    game = '<a class="m-text-link" href="/kk">Угадай победителя в игре «Кто кого»</a>' if hockey_event.enabled() else ""
+    game = '<a class="m-text-link" href="/kk">Угадай победителя в игре «КТО КОГО»</a>' if hockey_event.enabled() else ""
     rows = []
     for day, matches in groupby(data["matches"], key=lambda match: match["day"]):
         rows.append(f'<section class="m-day"><h3 class="m-day__h">{_e(day_heading(day, data["today"]))}</h3>')
@@ -706,7 +706,7 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
         else ""
     )
     rules_link = (
-        '<a class="m-text-link" href="/kk">Как играть в «Кто кого»</a>'
+        '<a class="m-text-link" href="/kk">Как играть в «КТО КОГО»</a>'
         if game["kind"] != "soon" and hockey_event.enabled() else ""
     )
     return (
