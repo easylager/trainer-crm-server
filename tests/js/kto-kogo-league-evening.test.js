@@ -278,3 +278,13 @@ describe('козырь в вечере', () => {
     assert.deepEqual(S.eveningNotes({ marks: [{ state: 'hit', doubled: false, points: 20 }] }, ev), []);
   });
 });
+
+describe('приглашение в лигу, где ты уже есть', () => {
+  it('своя лига узнаётся по ссылке-приглашению или id; чужая — нет', () => {
+    const mine = [{ id: 7, invite_url: 'https://t.me/bot?start=kk_AB12' }, { id: 9, invite_url: 'https://t.me/bot?start=kk_ZZ99' }];
+    assert.equal(S.joinedLeague(mine, { invite_url: 'https://t.me/bot?start=kk_AB12' }).id, 7);
+    assert.equal(S.joinedLeague(mine, { id: 9 }).id, 9);
+    assert.equal(S.joinedLeague(mine, { invite_url: 'https://t.me/bot?start=kk_NEW1' }), null);
+    assert.equal(S.joinedLeague(null, { invite_url: 'x' }), null);
+  });
+});

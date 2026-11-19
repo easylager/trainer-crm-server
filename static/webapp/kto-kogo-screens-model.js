@@ -1173,6 +1173,14 @@
     return body;
   }
 
+  /** Лига из приглашения — уже моя? Сверяем по ссылке-приглашению (она одна на лигу), запасной ключ — id. */
+  function joinedLeague(leagues, preview) {
+    if (!preview) return null;
+    return (leagues || []).filter(function (l) {
+      return (preview.invite_url && l.invite_url === preview.invite_url) || (preview.id != null && l.id === preview.id);
+    })[0] || null;
+  }
+
   function inviteText(name, l) {
     var what = l && l.scope !== 'all' ? ': ' + scopeText(l.scope, l.clubs) : l ? '' : ': Динамо-Минск';
     return 'Угадываем хоккейные матчи' + what + ' — лига «' + name + '». Тапни за команду, посмотрим, кто кого.';
@@ -1794,6 +1802,7 @@
     gestureRules: gestureRules,
     READY_SCOPES: READY_SCOPES,
     readyLine: readyLine,
+    joinedLeague: joinedLeague,
     readyError: readyError,
     readyBody: readyBody,
   };

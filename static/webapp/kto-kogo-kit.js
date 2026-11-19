@@ -77,13 +77,13 @@
       ['circle', { cx: '50', cy: '-14', r: '8', fill: '#e5484d', stroke: INK, 'stroke-width': '3' }],
       ['rect', { x: '12', y: '-6', width: '76', height: '36', rx: '6', fill: '#0b0f14', stroke: INK, 'stroke-width': '3.5' }],
       ['rect', { x: '16', y: '-2', width: '68', height: '28', rx: '3', fill: '#161c25' }],
-      ['text', { x: '50', y: '20', 'text-anchor': 'middle', 'font-size': '22', 'font-weight': '900', 'letter-spacing': '1', fill: '#ffb020' }, '{score}'],
+      ['text', { x: '50', y: '20', 'text-anchor': 'middle', 'font-size': '22', 'font-weight': '900', 'letter-spacing': '1', fill: '#ffb020', 'data-max': '60' }, '{score}'],
       ['rect', { x: '4', y: '28', width: '92', height: '9', rx: '4', fill: '#e5484d', stroke: INK, 'stroke-width': '3' }],
     ],
     wanted: [
       ['path', { 'fill-rule': 'evenodd', d: 'M-16 -26 H116 V130 H-16 Z M50 6 A44 44 0 1 0 50.1 6 Z', fill: '#ead7a8', stroke: '#6b4e2e', 'stroke-width': '3' }],
-      ['text', { x: '50', y: '-9', 'text-anchor': 'middle', 'font-size': '12.5', 'font-weight': '900', 'letter-spacing': '.5', fill: '#4a3218' }, 'РАЗЫСКИВАЕТСЯ'],
-      ['text', { x: '50', y: '121', 'text-anchor': 'middle', 'font-size': '13', 'font-weight': '900', fill: '#b42318' }, '{stat}'],
+      ['text', { x: '50', y: '-9', 'text-anchor': 'middle', 'font-size': '12.5', 'font-weight': '900', 'letter-spacing': '.5', fill: '#4a3218', 'data-max': '104' }, 'РАЗЫСКИВАЕТСЯ'],
+      ['text', { x: '50', y: '121', 'text-anchor': 'middle', 'font-size': '13', 'font-weight': '900', fill: '#b42318', 'data-max': '100' }, '{stat}'],
     ],
     snorkel: [
       ['path', { d: 'M2 46 Q50 34 98 46', fill: 'none', stroke: INK, 'stroke-width': '5' }],
@@ -101,7 +101,7 @@
       ['path', { d: 'M30 -14 Q22 10 22 46 M70 -14 Q78 10 78 46', fill: 'none', stroke: '#d9a90b', 'stroke-width': '3' }],
       ['rect', { x: '-10', y: '42', width: '120', height: '13', rx: '5', fill: '#facc15', stroke: INK, 'stroke-width': '3.5' }],
       ['rect', { x: '14', y: '8', width: '72', height: '20', rx: '3', fill: '#ffffff', stroke: INK, 'stroke-width': '2.5' }],
-      ['text', { x: '50', y: '23.5', 'text-anchor': 'middle', 'font-size': '14', 'font-weight': '900', 'letter-spacing': '.5', fill: INK }, 'РЕМОНТ'],
+      ['text', { x: '50', y: '23.5', 'text-anchor': 'middle', 'font-size': '14', 'font-weight': '900', 'letter-spacing': '.5', fill: INK, 'data-max': '64' }, 'РЕМОНТ'],
     ],
     curlers: [
       ['rect', { x: '6', y: '14', width: '22', height: '14', rx: '6', fill: '#f472b6', stroke: INK, 'stroke-width': '3', transform: 'rotate(-30 17 21)' }],
@@ -126,13 +126,6 @@
       ['circle', { cx: '18', cy: '6', r: '3.5', fill: INK }],
       ['circle', { cx: '82', cy: '6', r: '3.5', fill: INK }],
     ],
-  };
-
-  /** Рамка вещи без аватара (viewBox) — для значка у имени в общей таблице. */
-  var BOX = {
-    cap: '10 -10 90 60', half: '0 66 100 64', bag: '-2 8 104 102', sieve: '14 4 72 92', scorehat: '2 -24 96 64',
-    wanted: '-18 -28 136 160', snorkel: '0 -24 120 100', hardhat: '-12 -22 124 80', curlers: '0 -6 100 40',
-    foil: '8 -14 86 52', bucket: '2 -18 96 78',
   };
 
   /** Сколько вещь выходит за круг аватара (в долях размера): столько места строке нужно сверху и снизу. */
@@ -357,19 +350,6 @@
     }, kids);
   }
 
-  /** Значок вещи у имени (общая таблица): только сама вещь, без аватара; диктору — что это и от кого. */
-  function kitBadge(head) {
-    var svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', BOX[head.item] || '0 0 100 100');
-    svg.setAttribute('aria-hidden', 'true');
-    var g = document.createElementNS(SVG_NS, 'g');
-    g.setAttribute('stroke-linejoin', 'round');
-    draw(g, SHAPES[head.item] || [], head);
-    svg.appendChild(g);
-    return K.h('span', { class: 'kk-kitb' }, [svg, K.h('span', { class: 'kk-vh', text: outsideNote(head) })]);
-  }
-
   K.kitAva = kitAva;
-  K.kitBadge = kitBadge;
   K.Kit = api;
 })(typeof window !== 'undefined' ? window : globalThis);
