@@ -96,6 +96,9 @@ class KindPolicy:
     # Нужно ли согласие на новые сообщения (``notify_consent``: ответ на первое сообщение или согласие по умолчанию
     # для игравших до выкатки). Итоги и события его не требуют.
     needs_consent: bool = False
+    # Не спрашивали о согласии (``notify_consent IS NULL``) — считать «да». Отказ («Не присылать») — всё равно нет.
+    # Владелец 2026-11-19: приглашение собрать лигу — всем игрокам, кроме отказавшихся, чтобы прогреть давно не ходивших.
+    consent_by_default: bool = False
     # Семья поводов: ``kk`` — игра (настройки ``hockey_player_prefs``, флаги ``KK_NOTIFY_*``), ``warm`` — прогрев
     # посетителей катков (``warm_prefs``, флаги ``WARM_*``).
     family: str = FAMILY_KK
@@ -258,7 +261,15 @@ register_kind(KIND_COMEBACK, KindPolicy(budgeted=True, weekly=True, new=True, pr
 # Приглашение собрать лигу — ниже всех поводов игры (итоги и так вне бюджета); свой выключатель — «Не присылать» под ним.
 register_kind(
     KIND_LEAGUE_INVITE,
-    KindPolicy(budgeted=True, weekly=True, new=True, priority=5, needs_consent=True, type_column="notify_lginvite"),
+    KindPolicy(
+        budgeted=True,
+        weekly=True,
+        new=True,
+        priority=5,
+        needs_consent=True,
+        consent_by_default=True,
+        type_column="notify_lginvite",
+    ),
 )
 
 
@@ -409,7 +420,7 @@ async def _admit(
             # Не спрашивали. Новые поводы без согласия не идут никогда. Прежние (nomove, mfinal, overtook) идут, пока
             # вопрос о согласии никому не задаётся (флаги выключены или сухой прогон): иначе новые игроки молча
             # потеряли бы пуши, которые у них работают сейчас. Как только вопрос реально уходит — нужен ответ.
-            if policy.new:
+            if policy.new and not policy.consent_by_default:
                 return Admission(False, NO_CONSENT)
             cfg = cfg or GateConfig.from_settings()
             if consent_question_active(cfg):

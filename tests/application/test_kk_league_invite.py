@@ -283,3 +283,18 @@ async def test_poster_uploads_once_then_goes_by_file_id(tmp_path) -> None:
     bot.stale = True
     await hn._send_photo(bot, 1, str(poster), "c", None)
     assert calls[-2:] == ["big", "upload"]
+
+
+@pytest.mark.asyncio
+async def test_goes_without_asked_consent_but_not_after_do_not_send(db_session, factory) -> None:
+    """Владелец 2026-11-19: о согласии не спрашивали — приглашение идёт; нажал «Не присылать» — нет."""
+    await player(db_session, SASHA, consent=None)
+    await player(db_session, KATYA, consent=False)
+    out = PhotoOutbox()
+    results = {}
+    for p in await li.produce_league_invite(db_session, now=FRI):
+        r = await dispatch(factory, p, phase="active", tick_at=FRI, send=out, config=CFG, clock=lambda: FRI)
+        results[p.notice.player_key] = r.reason
+    assert [chat for chat, *_ in out.sent] == [SASHA]
+    assert results[KATYA] != "ok"
+    assert gate.KIND_POLICY["lginvite"].consent_by_default and not gate.KIND_POLICY["invite"].consent_by_default
