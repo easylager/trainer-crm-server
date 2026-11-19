@@ -31,7 +31,7 @@ CLIENT_START_WELCOME = (
 )
 # /start <параметр> с публичной страницы, который не забрала ни одна особая ветка cmd_start:
 # одна фраза и одна кнопка на тот же экран Mini App (public_entry_via_start).
-CLIENT_START_ENTRY_GAME = "<b>Кто кого</b> — игра для болельщиков: угадайте, кто победит в матче."
+CLIENT_START_ENTRY_GAME = "<b>КТО КОГО</b> — игра для болельщиков: угадайте, кто победит в матче."
 CLIENT_BUTTON_START_ENTRY_GAME = "Играть"
 CLIENT_START_ENTRY_APP = "Откройте Glide, чтобы продолжить."
 CLIENT_BUTTON_START_ENTRY_APP = "Открыть"

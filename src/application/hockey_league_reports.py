@@ -112,7 +112,7 @@ def format_report_alert(report: LeagueReport) -> str:
     image_url, _ = image_urls(league.image_key)
     link = _absolute(image_url)
     lines = [
-        "<b>Жалоба на лигу «Кто кого»</b>",
+        "<b>Жалоба на лигу «КТО КОГО»</b>",
         f"Лига #{league.id}: «{html.escape(league.name)}»",
         f"На что играем: «{html.escape(league.stake_text)}»" if league.stake_text else "На что играем: не задано",
         f"Картинка: {html.escape(link)}" if link else ("Картинка: есть" if league.image_key else "Картинка: нет"),

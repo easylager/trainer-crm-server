@@ -113,7 +113,7 @@ async def test_result_card_share_signed_image_and_miss(app_use_test_db, db_sessi
         body = r.json()
         assert body["prepared_message_id"] == "PM-1"
         assert body["url"] == "https://t.me/glide_test_bot?startapp=kkr"
-        assert body["text"] == "Кто кого: в точку! Динамо-Минск — ХК Сочи 3:2, +50"
+        assert body["text"] == "КТО КОГО: в точку! Динамо-Минск — ХК Сочи 3:2, +50"
         call = prepared[-1]
         assert call["user_id"] == ME
         assert call["button"] == {"text": "А ты угадаешь?", "url": body["url"]}
@@ -252,7 +252,7 @@ async def test_crown_card_share_and_signed_image(app_use_test_db, db_session, pr
         with patch_client_principal(ME):
             mine = await client.post("/api/webapp/client/hockey/share", json={"card": "crown", "race_id": race.id})
         assert mine.status_code == 200, mine.text
-        assert mine.json()["text"].startswith("Кто кого: корона за ноябрь в «ОХМ» — моя.")
+        assert mine.json()["text"].startswith("КТО КОГО: корона за ноябрь в «ОХМ» — моя.")
         assert mine.json()["url"] == f"https://t.me/glide_test_bot?startapp=kkl_{league.invite_code}"
         photo = prepared[-1]["photo"]
         assert photo.startswith(f"https://glide.test/kk/c/{race.id}/{league.id}/")

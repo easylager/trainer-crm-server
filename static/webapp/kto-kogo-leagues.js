@@ -1125,10 +1125,10 @@
     var where = res.league ? ' в «' + res.league.name + '»' : '';
     var who = (res.winners || []).join(' и ');
     var text = res.won
-      ? 'Корона «Кто кого» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
+      ? 'Корона «КТО КОГО» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
       : who
-        ? 'Корона «Кто кого» за ' + res.title + where + ' досталась: ' + who + '. В новом месяце — реванш.'
-        : '«Кто кого» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
+        ? 'Корона «КТО КОГО» за ' + res.title + where + ' досталась: ' + who + '. В новом месяце — реванш.'
+        : '«КТО КОГО» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
     K.shareCard({ card: 'crown', race_id: res.race_id }, league ? league.invite_url : null, text);
   }
 })();

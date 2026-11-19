@@ -273,7 +273,7 @@ def _range(start: datetime, end: datetime) -> str:
 def render_report(data: ReportData, th: Thresholds) -> str:
     p = data.phases_now
     total = sum(p.values())
-    lines = [f"<b>«Кто кого»: неделя {_range(data.week_start, data.week_end)}</b>", ""]
+    lines = [f"<b>«КТО КОГО»: неделя {_range(data.week_start, data.week_end)}</b>", ""]
     anomalies = detect_anomalies(data, th)
     if anomalies:
         lines.append("<b>Что не так</b>")

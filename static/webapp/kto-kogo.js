@@ -842,7 +842,7 @@
   /** Сообщение, когда игру открыли не из Telegram. */
   function outsideTelegram() {
     root.replaceChildren(h('main', { class: 'kk-main' }, [
-      emptyCard('Кто кого — в Telegram', 'Игра открывается из Glide в Telegram: там видно, кто из друзей за кого.'),
+      emptyCard('КТО КОГО — в Telegram', 'Игра открывается из Glide в Telegram: там видно, кто из друзей за кого.'),
     ]));
   }
 

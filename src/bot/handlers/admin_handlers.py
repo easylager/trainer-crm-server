@@ -966,7 +966,7 @@ async def cmd_hockey(message: Message) -> None:
         await message.answer("Не настроен webapp_base_url. Укажите в .env.")
         return
     await message.answer(
-        "🏒 Матчи «Кто кого» — итоги и ручной ввод счёта",
+        "🏒 Матчи «КТО КОГО» — итоги и ручной ввод счёта",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Открыть матчи", web_app=WebAppInfo(url=url))],
         ]),

@@ -141,7 +141,7 @@
     var content = el('div', 'cc');
     var title = el('h2', 'cc-title', 'За\u00a0кого болеешь?');
     title.id = 'cc-title';
-    var sub = el('p', 'cc-sub', 'Её матчи будут первыми в\u00a0«Кто кого».');
+    var sub = el('p', 'cc-sub', 'Её матчи будут первыми в\u00a0«КТО КОГО».');
 
     var search = el('label', 'cc-search');
     search.appendChild(svgIcon());
