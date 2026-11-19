@@ -702,9 +702,9 @@ def page_title(view: Mapping[str, Any], *, invite: bool = False) -> str:
         # официального имени арены и сниппет тянет short_description из «О катке».
         if city:
             if _seo_rink_title(view, city):
-                return f"{name}, {city} — каток, расписание массового катания | Glideclub"
-            return f"Массовое катание — {name}, {city} | Glideclub"
-        return f"Массовое катание — {name} | Glideclub"
+                return f"{name}, {city} — каток, расписание массового катания | Glide"
+            return f"Массовое катание — {name}, {city} | Glide"
+        return f"Массовое катание — {name} | Glide"
     if vt == "shop":
         services = ", ".join(s.lower() for s in _services(card))
         # Одно слово «розница» в title — слишком мало для поиска: называем, что это за место.
@@ -798,11 +798,14 @@ def search_description(view: Mapping[str, Any]) -> str:
         visit = _place_visit(view)
         currency = str(card.get("currency_code") or "BYN")
         where_tail = _where(card).replace(" · ", ", ")
+        lead = "Расписание массового катания на неделю"
+        default_head = f"{lead}, цены и как добраться"
+        if not (slots or view.get("session_count")) and _brief_on(view):
+            lead = default_head = "Каток для массового катания"
 
         def _compose(with_services: bool) -> str:
             bits = search_bits(visit, currency=currency, slots=slots, with_services=with_services)
-            head = "Расписание массового катания на неделю"
-            head = f"{head}. " + ". ".join(bits) if bits else "Расписание массового катания на неделю, цены и как добраться"
+            head = ". ".join([lead, *bits]) if bits else default_head
             return f"{head}. {where_tail}." if where_tail else f"{head}."
 
         answer = _brief_description(view, slots=slots, visit=visit, currency=currency, where_tail=where_tail)
@@ -819,8 +822,8 @@ def search_description(view: Mapping[str, Any]) -> str:
     else:
         noun = card.get("venue_noun") or "Место"
         city = _city(card)
-        head = f"{noun} ({city}) в каталоге Glideclub: адрес, телефон и как добраться" if city else (
-            f"{noun} в каталоге Glideclub: адрес, телефон и как добраться"
+        head = f"{noun} ({city}) в каталоге Glide: адрес, телефон и как добраться" if city else (
+            f"{noun} в каталоге Glide: адрес, телефон и как добраться"
         )
     where = _where(card).replace(" · ", ", ")
     return f"{head}. {where}." if where else f"{head}."
@@ -1291,11 +1294,14 @@ def _place_share_scripts_html(
 def _place_hub_footer_links(*, city: str, city_page_url: str | None, public_skate: bool) -> str:
     """Внутренние ссылки: городской хаб и корень. «Массовое катание» — только у катков."""
     if not city_page_url or not city:
-        return '<a href="/">Массовое катание по Беларуси</a>' if public_skate else '<a href="/">Каталог Glideclub</a>'
+        return '<a href="/">Массовое катание по Беларуси</a>' if public_skate else '<a href="/">Каталог Glide</a>'
     from src.shared.city_locative import city_locative
 
     where = city_locative(city)
-    if public_skate:
+    if public_skate and city_slug(city) == "minsk":
+        city_page_url = "/c/minsk"
+        hub = "Все катки Минска"
+    elif public_skate:
         hub = f"Массовое катание в {where}" if where else f"Массовое катание — {format_public_name(city)}"
     else:
         hub = f"Каталог в {where}" if where else f"Каталог — {format_public_name(city)}"
@@ -1339,6 +1345,7 @@ def render_place_page(
     invite: bool = False,
     share_src: str | None = None,
     country: str | None = None,
+    noindex: bool = False,
 ) -> str:
     card = view["card"]
     title = page_title(view, invite=invite)
@@ -1358,8 +1365,8 @@ def render_place_page(
         city_page_url=city_page_url,
         public_skate=has_public_skating(card.get("venue_type")),
     )
-    # Ссылка с ?s= / ?i= — та же страница; в индекс идёт только каноническая.
-    robots = "noindex, follow" if (view.get("focus") is not None or invite or bool(share_src)) else "index, follow"
+    # В индекс идёт основная карточка; варианты сеанса, даты и шаринга сохраняют канонический URL.
+    robots = "noindex, follow" if (noindex or view.get("focus") is not None or invite or share_src) else "index, follow"
 
     from src.application.public_analytics import public_analytics_head_html_from_settings
     from src.application.public_web_cta import public_page_view_beacon_script
@@ -1415,7 +1422,7 @@ def render_place_page(
         replacements["__BODY__"] += breadcrumb_script(
             canonical_url,
             [
-                ("Glideclub", "/"),
+                ("Glide", "/"),
                 (format_public_name(city), f"/c/{city_slug(city)}"),
                 (format_public_name(str(card.get("name") or "")), canonical_url),
             ],
@@ -2745,6 +2752,16 @@ def _b_matches_here(view: Mapping[str, Any]) -> str:
     return here_section(matches, today=view.get("today"))
 
 
+def _b_related_links(view: Mapping[str, Any]) -> str:
+    from src.application.style_b import section
+
+    links = view.get("related_links")
+    if not links:
+        return ""
+    anchors = "".join(f'<a class="b-link" href="{_esc(href)}">{_esc(label)}</a>' for href, label in links)
+    return section("Ещё на Glide", f'<div class="b-links">{anchors}</div>', sec_id="related")
+
+
 def watch_offer_site_html(arena_id: int, href: str) -> str:
     """TASK-428: скрипт предложения подписки на каток (сам решает, показывать ли; см. watch-offer.js)."""
     wv = _esc(_webapp_bundle_version())
@@ -2821,22 +2838,28 @@ def render_place_body_b(
     trainers_html = _b_trainers(
         view, school_html=school_in_trainers_html(vv.get("school")), learn_line=learn_line
     )
-    ice_and_trainers = ice_html + trainers_html
+    nearby = _b_nearby(view)
+    # При пустом расписании в Минске показываем ближайший лёд сразу после блока катания.
+    nearby_early = _brief_on(view) and not any(
+        view.get(key) for key in ("days", "ohm_days", "figure_days", "family_days", "focus")
+    )
     # Порядок блоков — arena_visit_info.PLACE_BLOCKS: cover, ice, facts, services, trainers, partners, more.
-    # «Лёд рядом» — после контактов, в самом низу тела (как на /c/ у однокатковых городов).
     parts = [
         _b_hero(card, status_html=_b_status(view), chips_html=_b_hero_chips(card, links)),
         _b_plan(view, invite=invite),
-        ice_and_trainers,
+        ice_html,
+        nearby if nearby_early else "",
+        trainers_html,
         "" if trainers_listed else render_learn_block(learn_block),
         _b_matches_here(view),
+        _b_related_links(view),
         facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
         services_html(vv, title=_rental_section_title(card, hours) if hours.get("rental_title") else "Прокат и услуги"),
         _b_partners(card),
         more_html(vv, coach_html=coach_in_more, tel_href=str(links.get("tel") or "")),
         _b_about(card),
         _b_contacts(card, links),
-        _b_nearby(view),
+        "" if nearby_early else nearby,
     ]
     body = "".join(parts)
     return body + phone_beacon_script(body) + offer_html

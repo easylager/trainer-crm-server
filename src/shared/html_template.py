@@ -18,8 +18,8 @@ _PLACEHOLDER_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
 # Иконка бренда на каждой SSR-странице. Файл отдаёт маршрут ``/favicon.ico``.
 PUBLIC_ICON_LINKS = (
     '<link rel="icon" href="/favicon.ico" type="image/png" />\n'
-    '  <link rel="icon" type="image/png" sizes="120x120" href="/favicon-120.png" />\n'
-    '  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-512.png" />'
+    '  <link rel="icon" type="image/png" sizes="120x120" href="/favicon-120.png?v=2" />\n'
+    '  <link rel="apple-touch-icon" href="/logos/01-icon/glide-icon-teal-square-light-512.png" />'
 )
 
 
@@ -27,6 +27,7 @@ PUBLIC_ICON_LINKS = (
 #: страницы шаблона, а своё значение (``profile``, ``place``) нужно только некоторым. Сырая метка в HTML не уходит.
 DEFAULT_VALUES: Mapping[str, str] = {
     "__OG_TYPE__": "website",
+    "__PUBLIC_ICON_LINKS__": PUBLIC_ICON_LINKS,
     # Волна 0: страницы без контекста es_* не подключают скрипт (пусто).
     "__GLIDE_TRACK__": "",
 }

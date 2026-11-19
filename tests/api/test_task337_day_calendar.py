@@ -134,8 +134,14 @@ async def test_any_day_on_home_and_in_hub(app_use_test_db, db_session) -> None:
     name, slug, target = await _city_with_rinks(db_session)  # 4 сеанса в один из дней недели
     async with _client() as client:
         home = await client.get("/", params={"when": "any"}, cookies={"glide_city": slug})
+        default_home = await client.get("/")
         hub = await client.get(f"/c/{slug}", params={"w": "any"})
         default_hub = await client.get(f"/c/{slug}")
+    assert home.status_code == default_home.status_code == 200
+    assert 'name="robots" content="noindex, follow"' in home.text
+    assert 'name="robots" content="index, follow"' in default_home.text
+    canonical = re.search(r'<link rel="canonical" href="([^"]+)"', home.text)
+    assert canonical and canonical.group(1).endswith("/") and canonical.group(0) in default_home.text
     # главная: плитка «ВСЕ / 7 дн», в полосе ничего не активно, город ведёт в хаб «любой день»
     assert 'class="b-cal__date b-cal__date--any"' in home.text
     strip = re.search(r'<nav class="b-when.*?</nav>', home.text, re.S).group(0)

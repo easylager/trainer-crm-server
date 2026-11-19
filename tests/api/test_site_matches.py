@@ -80,6 +80,43 @@ async def _get(path: str, **kw):
         return await c.get(path, **kw)
 
 
+@pytest.mark.asyncio
+async def test_dinamo_home_schedule_is_canonical_and_excludes_away_matches(app_use_test_db, db_session, monkeypatch):
+    await _world(db_session)
+    home = await _match(db_session, site_matches.DINAMO, "Локомотив", league="khl",
+                        starts=NOW + timedelta(days=45), tickets=None)
+    await db_session.execute(
+        text("UPDATE hockey_matches SET source_match_id = '12345' WHERE id = :id"), {"id": home}
+    )
+    away = await _match(db_session, "Локомотив", site_matches.DINAMO, league="khl", tickets=None)
+    cancelled = await _match(db_session, site_matches.DINAMO, "Локомотив", league="khl", status="cancelled")
+    await _match(db_session)
+    path = site_matches.DINAMO_HOME_PATH
+    home_path = await _path(db_session, home)
+    await db_session.commit()
+
+    r = await _get(path)
+    assert r.status_code == 200
+    assert "<h1 class=\"m-title\">Домашние матчи «Динамо-Минск»</h1>" in r.text
+    assert f'<link rel="canonical" href="https://glide.example{path}"' in r.text
+    assert 'content="index, follow"' in r.text
+    assert f'href="{home_path}"' in r.text and "Победителей, 111" in r.text
+    assert "https://hcdinamo.by/tickets/?match=12345" in r.text and 'href="/kk"' in r.text
+    assert f'href="/m/{away}-' not in r.text and f'href="/m/{cancelled}-' not in r.text
+    assert f'href="{path}"' in (await _get("/hockey")).text
+    assert f'href="{path}"' in (await _get("/c/minsk")).text
+    assert f'href="{path}"' in (await _get(home_path)).text
+    filtered = await _get("/hockey?club=dinamo-minsk")
+    assert 'content="noindex, follow"' in filtered.text
+    assert '<link rel="canonical" href="https://glide.example/hockey"' in filtered.text
+    loc = f"<loc>https://glide.example{path}</loc>"
+    assert (await _get("/sitemap.xml")).text.count(loc) == 1
+
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "0")
+    assert (await _get(path)).status_code == 404
+    assert loc not in (await _get("/sitemap.xml")).text
+
+
 # ── Страница матча ───────────────────────────────────────────────────
 
 
@@ -321,6 +358,7 @@ async def test_list_own_city_first_chip_filter_noindex(app_use_test_db, db_sessi
     assert (await _path(db_session, gr)) in filtered and (await _path(db_session, mn)) not in filtered and "noindex" in filtered
     plain = (await _get("/hockey")).text
     assert "index, follow" in plain and not has_forbidden_words(plain)
+    assert 'href="/kk"' in plain
 
 
 @pytest.mark.asyncio
@@ -342,6 +380,7 @@ async def test_city_page_feed_tile_and_bell_only_with_matches(app_use_test_db, d
     mid = await _match(db_session)
     html = (await _get("/c/minsk")).text
     assert "Хоккей в Минске" in html and 'data-route="Хоккей"' in html and "matches.css" in html
+    assert html.index("Хоккей в Минске") < html.index('id="rinks"')
     assert (await _path(db_session, mid)) in html and f"startapp=mbell_{mid}" in html
     assert 'aria-label="Напомнить о матче Юность — Шахтер"' in html
     assert not has_forbidden_words(html)
@@ -523,6 +562,8 @@ async def test_arena_page_has_match_row_and_here_block_and_honest_note(app_use_t
     html = r.text
     assert "Матчи здесь" in html and "m-ticket" in html and "вечернего катания нет" in html
     assert (await _path(db_session, mid)) in html
+    assert 'href="/hockey">Расписание хоккейных матчей</a>' in html
+    assert 'href="/kk">Игра «Кто кого»</a>' in html
     # Сеанс вечером → строка нейтральная, ничего о катании не утверждает
     await db_session.execute(
         text("""INSERT INTO ice_sessions (arena_id, kind, status, starts_at_utc, ends_at_utc, starts_at_local, ends_at_local,
@@ -543,6 +584,7 @@ async def test_arena_without_matches_and_flag_off_unchanged(app_use_test_db, db_
     monkeypatch.setenv("SITE_MATCHES_ENABLED", "0")
     html = (await _get("/p/minsk/chizhovka-arena")).text
     assert "Матчи здесь" not in html and "matches.css" not in html
+    assert 'href="/hockey"' not in html
 
 
 @pytest.mark.asyncio

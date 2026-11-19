@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.application import site_matches
 from src.application.ice_city_day import city_slug, resolve_city_by_ref
-from src.application.site_matches_page import cache_header, render_match_page, render_matches_list
+from src.application.site_matches_page import cache_header, render_dinamo_home, render_match_page, render_matches_list
 from src.shared.config import Settings
 
 router = APIRouter(tags=["public-matches"])
@@ -24,7 +24,7 @@ _NOT_FOUND = """<!DOCTYPE html>
 <html lang="ru"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>Матч не найден — Glideclub</title>
+<title>Матч не найден — Glide</title>
 __PUBLIC_FONTS_HEAD__
 <style>body{font-family:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f7;color:#0d1b26;
 margin:0;padding:48px 20px;text-align:center}h1{font-weight:600;letter-spacing:-.01em}a{color:#0B6E70;font-weight:600}</style></head>
@@ -72,6 +72,17 @@ async def hockey_list(
         noindex=bool(club or city),
     )
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300", "Vary": "Cookie"})
+
+
+@router.api_route(site_matches.DINAMO_HOME_PATH, methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def dinamo_home(request: Request, session: AsyncSession = Depends(get_session)):
+    if not site_matches.scope_of().dinamo:
+        return _not_found()
+    headers = {"Cache-Control": "public, max-age=60, stale-while-revalidate=300"}
+    if request.method == "HEAD":
+        return Response(headers=headers)
+    data = await site_matches.dinamo_home_schedule(session, now=_now())
+    return HTMLResponse(render_dinamo_home(data, base_url=_base()), headers=headers)
 
 
 async def _load(session: AsyncSession, ref: str):

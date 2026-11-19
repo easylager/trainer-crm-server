@@ -831,11 +831,11 @@ def _single_topic(page: Mapping[str, Any]) -> str:
 def page_title(page: Mapping[str, Any]) -> str:
     """«Имя — тренер по фигурному катанию в Минске» с одним направлением, общая фраза — с несколькими.
 
-    К title добавляется « · Glideclub», только если вся строка помещается в 60 знаков.
+    К title добавляется « · Glide», только если вся строка помещается в 60 знаков.
     """
     place = trainer_place_phrase(str(page.get("city_name") or ""), _single_topic(page))
     base = f"{page['name']} — {place}"
-    branded = f"{base} · Glideclub"
+    branded = f"{base} · Glide"
     return branded if len(branded) <= TITLE_LIMIT else base
 
 
@@ -1730,7 +1730,7 @@ def render_trainer_page(
         + _SCROLLER_SCRIPT
         + _REVIEWS_SCRIPT
     )
-    crumbs = [("Glideclub", f"{base}/")]
+    crumbs = [("Glide", f"{base}/")]
     if city:
         crumbs.append((format_public_name(str(city["name"])), f"{base}/c/{city_slug(str(city['name']))}"))
         crumbs.append(("Тренеры", f"{base}{catalog_path(str(city['name']))}"))

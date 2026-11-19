@@ -95,7 +95,7 @@ async def test_listed_trainer_with_booking_has_page_windows_and_book_cta(app_use
     assert "Нужен Telegram — запись и переписка идут там." in html
     assert "Всё время на неделю" in html and "нет окон" in html
     assert 'id="tp-mbar"' in html and "Записаться на " in html
-    # Вордмарк в шапке — «Glide», не «Glideclub».
+    # Вордмарк в шапке — «Glide».
     assert '<a class="b-brand" href="/">Glide</a>' in html
     # Каток — ссылкой на страницу катка сайта, не в Telegram.
     assert f'href="https://glide.example{place["path"]}"' in html

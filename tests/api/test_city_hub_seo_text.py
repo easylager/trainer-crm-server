@@ -65,15 +65,30 @@ def _ribbon(html: str) -> str:
 @pytest.mark.asyncio
 async def test_minsk_ribbon_is_one_tile_per_rink(app_use_test_db, db_session) -> None:
     cid = await _minsk(db_session)
-    cheap = await _insert_arena(db_session, cid, name="Дешёвый каток")
+    cheap = await _insert_arena(db_session, cid, name="Дешёвый каток", address="ул. Тестовая, 5")
     dear = await _insert_arena(db_session, cid, name="Дорогой каток")
     solo = await _insert_arena(db_session, cid, name="Одиночный каток")
+    quiet = await _insert_arena(db_session, cid, name="Каток без сеансов")
+    hockey = await _insert_arena(db_session, cid, name="Тренировочная арена")
+    shop = await _insert_arena(db_session, cid, name="Магазин коньков")
+    await db_session.execute(text("UPDATE arenas SET venue_type = 'shop' WHERE id = :id"), {"id": shop})
+    await db_session.execute(
+        text("""UPDATE arena_profiles SET amenities = '{"skate_rental": true}' WHERE arena_id = :id"""),
+        {"id": cheap},
+    )
+    await db_session.execute(
+        text("""UPDATE arena_profiles SET amenities = '{"hockey_center": true}' WHERE arena_id = :id"""),
+        {"id": hockey},
+    )
+    profiles = await db_session.execute(text("SELECT arena_id, slug FROM arena_profiles WHERE city_id = :id"), {"id": cid})
+    slugs = {arena_id: slug for arena_id, slug in profiles}
     day = _tomorrow()
     for hh in ("10:00", "12:00", "08:30"):
         await _session(db_session, cheap, day=day, hhmm=hh, minutes=45, adult=700, child=500, rental=300)
     await _session(db_session, dear, day=day, hhmm="18:00", minutes=90, adult=1500, child=900)
     await _session(db_session, dear, day=day, hhmm="20:00", minutes=90, adult=1500, child=900)
     await _session(db_session, solo, day=day, hhmm="22:00", minutes=45)
+    await _session(db_session, quiet, day=_today() + timedelta(days=7), hhmm="10:00", adult=9900)
     await db_session.commit()
 
     html = await _get("/c/minsk")
@@ -84,6 +99,32 @@ async def test_minsk_ribbon_is_one_tile_per_rink(app_use_test_db, db_session) ->
     assert ribbon.count("b-tile__more") == 2  # у одиночного сеанса строки нет
     assert "8:30" in ribbon  # бейдж — ближайший сеанс катка
     assert "Частые вопросы" not in html and "FAQPage" not in html  # карточку вопросов убрали: спроса нет
+
+    assert re.search(r'<link rel="canonical" href="https?://[^/"]+/c/minsk"', html)
+    assert '<h1 class="b-hero__title">Катки Минска</h1>' in html
+    assert 'href="#rinks">Список катков</a>' in html
+    assert html.index('id="city-sections"') < html.index('id="rinks"')
+    listing = html.split('id="rinks"', 1)[1].split("</section>", 1)[0]
+    assert "ул. Тестовая, 5 · Прокат коньков" in listing
+    assert "Катки на ближайшие 7 дней" in listing
+    assert "Ближайший сеанс: завтра в 8:30" in listing
+    assert "взрослый 7 BYN · детский 5 BYN · взрослый с прокатом 10 BYN" in listing
+    assert listing.count("Ближайший сеанс:") == 3
+    assert "На ближайшие 7 дней сеансы не опубликованы" in listing and "99 BYN" not in listing
+    for rink in (cheap, dear, solo, quiet):
+        assert f'href="/p/minsk/{slugs[rink]}"' in listing
+    hockey_row = listing.split(f'href="/p/minsk/{slugs[hockey]}"', 1)[1].split("</div>", 1)[0]
+    assert "Массового катания нет" in hockey_row
+    assert listing.count("Массового катания нет") == 1
+    assert "?s=" not in listing
+    assert "Магазин коньков" not in listing
+
+    async with _client() as client:
+        home, place = await client.get("/"), await client.get(f"/p/minsk/{slugs[quiet]}")
+        filtered = await client.get("/c/minsk?w=today")
+    assert 'href="/c/minsk">Катки Минска</a>' in home.text
+    assert 'href="/c/minsk">Все катки Минска</a>' in place.text
+    assert filtered.text.split('id="rinks"', 1)[1].split("</section>", 1)[0] == listing
 
 
 @pytest.mark.asyncio
@@ -97,6 +138,7 @@ async def test_other_city_page_is_unchanged(app_use_test_db, db_session) -> None
     html = await _get(f"/c/{city_slug('Молодечно')}")
     assert "b-seo" not in html and "b-tile__more" not in html
     assert "Частые вопросы" not in html
+    assert 'id="rinks"' not in html
 
 
 @pytest.mark.asyncio

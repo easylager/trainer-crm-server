@@ -44,11 +44,11 @@ def test_locative_covers_tricky_names_and_falls_back_to_none() -> None:
 
 
 def test_city_title_matches_the_search_query() -> None:
-    assert city_hub_document_title(_hub()) == "Массовое катание в Минске — расписание катков | Glideclub"
+    assert city_hub_document_title(_hub()) == "Катки Минска — массовое катание и расписание | Glide"
 
 
 def test_city_title_without_sessions_keeps_the_sections() -> None:
-    assert city_hub_document_title(_hub(skate_counts={"all": 0})) == "Катки в Минске — массовое катание и расписание | Glideclub"
+    assert city_hub_document_title(_hub(skate_counts={"all": 0})) == "Катки Минска — массовое катание и расписание | Glide"
 
 
 def test_catalog_home_snippet_leads_with_mass_skating_keyword() -> None:
@@ -71,7 +71,7 @@ def test_catalog_home_snippet_leads_with_mass_skating_keyword() -> None:
 def test_city_search_description_has_no_session_counts() -> None:
     text = city_hub_search_description(_hub()).replace(" ", " ")
     assert text == (
-        "Массовое катание в Минске: расписание сеансов, цены и адреса. "
+        "Где покататься на коньках в Минске: адреса катков, расписание массового катания и цены. "
         "Чижовка-арена, ТЦ Замок, ТЦ DiaMond city и ещё 2 катка. "
         "Заточка коньков — 3 места."
     )
@@ -103,7 +103,7 @@ def test_place_search_description_has_no_date_but_preview_still_does() -> None:
 
     text = search_description(_place_view())
     assert text.startswith("Расписание массового катания на неделю, цены и как добраться. ")
-    assert page_title(_place_view()) == "ТЦ Замок, Минск — каток, расписание массового катания | Glideclub"
+    assert page_title(_place_view()) == "ТЦ Замок, Минск — каток, расписание массового катания | Glide"
     assert "пр-т Победителей, 65" in text
     assert not re.search(r"\d{1,2}:\d{2}|окт", text)
     assert "17:15" in og_description(_place_view())
@@ -120,7 +120,7 @@ def test_minsk_rink_title_only_for_minsk_with_schedule() -> None:
 
     # Регионы и места без публикуемого расписания остаются на прежнем шаблоне.
     for city in ("Молодечно", "Мозырь", "Берёза"):
-        assert page_title(_view_in(city)) == f"Массовое катание — ТЦ Замок, {city} | Glideclub"
+        assert page_title(_view_in(city)) == f"Массовое катание — ТЦ Замок, {city} | Glide"
     for mode in ("phone", "season_closed"):
         assert page_title(_view_in("Минск", schedule_mode=mode)).startswith("Массовое катание — ")
 
@@ -142,7 +142,7 @@ def test_minsk_ice_without_public_skate_keeps_own_title() -> None:
 def test_breadcrumbs_are_absolute_or_absent() -> None:
     html = breadcrumb_script(
         "https://glideclub.by/p/minsk/zamok",
-        [("Glideclub", "/"), ("Минск", "/c/minsk"), ("ТЦ Замок", "https://glideclub.by/p/minsk/zamok")],
+        [("Glide", "/"), ("Минск", "/c/minsk"), ("ТЦ Замок", "https://glideclub.by/p/minsk/zamok")],
     )
     data = json.loads(re.search(r">(.*)</script>", html).group(1))
     assert data["@type"] == "BreadcrumbList"

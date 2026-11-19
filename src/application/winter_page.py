@@ -229,8 +229,12 @@ def pill(item: Mapping[str, Any]) -> str:
     tone = STATE_TONE.get(state, "wait")
     return (
         f'<span class="w-pill w-pill--{tone}">{_icon(STATE_ICON.get(state, "clock"))}'
-        f"{_esc(STATE_LABEL.get(state, 'Ждём заливку'))}</span>"
+        f"{_esc(_state_label(item))}</span>"
     )
+
+
+def _state_label(item: Mapping[str, Any]) -> str:
+    return "Есть сеансы" if item.get("checked_by") == "schedule" else STATE_LABEL.get(item.get("state"), "Ждём заливку")
 
 
 def pending_line(item: Mapping[str, Any]) -> str:
@@ -255,10 +259,12 @@ def checked_line(item: Mapping[str, Any], now: datetime | None = None) -> str:
     pend = pending_line(item)
     if pend:
         return pend
-    if item.get("checked_by") in ("admin", "source") and item.get("state_at"):
+    if item.get("checked_by") in ("admin", "source", "schedule") and item.get("state_at"):
         moment = _parse_iso(item["state_at"])
         if moment is None:
             return ""
+        if item.get("checked_by") == "schedule":
+            return f"Расписание проверено {day_month_ru(moment, now)}"
         verb = "Заливку подтвердили" if item.get("state") == "flooded" else "Проверено"
         return f"{verb} {day_month_ru(moment, now)}"
     return ""
@@ -330,7 +336,7 @@ def _card(item: Mapping[str, Any], city_name: str) -> str:
     dispute = dispute_note(item)
     meta = card_meta(item)
     dist = _distance(item.get("distance_km"))
-    label = f"{item['name']}, {STATE_LABEL.get(item.get('state'), 'Ждём заливку')}"
+    label = f"{item['name']}, {_state_label(item)}"
     return (
         f'<li class="w-li"><a class="w-card" href="{_esc(href)}" data-w-id="{int(item["id"])}" aria-label="{_esc(label)}">'
         f"{_thumb(item)}"
@@ -436,8 +442,9 @@ def render_city_page(
         f'<a class="w-suggest" href="{_esc(suggest_href)}"><span>{_icon("route")}</span>'
         "<span><b>Нет вашего катка или коробки?</b><span>Отметьте точку на карте — проверим и добавим</span></span></a>"
     )
+    city_label = "Катки Минска и расписание массового катания" if city_slug(name) == "minsk" else name
     body = (
-        f'<a class="w-back" href="{_esc(city_href)}">{_icon("back")}{_esc(name)}</a>'
+        f'<a class="w-back" href="{_esc(city_href)}">{_icon("back")}{_esc(city_label)}</a>'
         f'<h1 class="w-title">{("Зимой в " + _esc(where)) if where else ("Зимой: " + _esc(name))}</h1>'
         f"{head_note}{bell_html}{controls}{list_html}{suggest}"
     )
@@ -460,7 +467,7 @@ def render_city_page(
         "как добраться. Отметки о льде от людей."
     )
     return _shell(
-        title=f"Зимой {('в ' + where) if where else name}: катки и хоккейные коробки | Glideclub",
+        title=f"Зимой {('в ' + where) if where else name}: катки и хоккейные коробки | Glide",
         description=description,
         canonical=canonical,
         robots="index, follow" if total else "noindex, follow",
@@ -689,7 +696,7 @@ def render_point_page(
         "Часы и цена сезона 2025/26, как добраться, отметки о льде от людей."
     )
     robots = "index, follow" if indexable and not item.get("doubtful") else "noindex, follow"
-    title = f"{item['name']} — зимой {('в ' + where) if where else name} | Glideclub"
+    title = f"{item['name']} — зимой {('в ' + where) if where else name} | Glide"
     return _shell(
         title=title,
         description=description,
@@ -721,7 +728,7 @@ def render_gone_page(*, city: Mapping[str, Any] | None, name: str | None, list_h
         f"{links}</div>"
     )
     return _shell(
-        title="Точки больше нет в каталоге | Glideclub",
+        title="Точки больше нет в каталоге | Glide",
         description="Эту зимнюю точку убрали из каталога Glide.",
         canonical="",
         robots="noindex, follow",
