@@ -181,3 +181,35 @@ async def test_switched_off_hides_outfits_but_keeps_cap_and_captain(db_session, 
     assert ev["captain"] == {"right": False, "award": None} and by["Макс"]["captain"]
     assert by["Аня"]["head"] is None and by["Саша"]["head"] == {"item": "cap"}
     assert await outside_outfits(db, [ANYA], now=NOW) == {}
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_co_captains_do_not_overwrite_each_other(db_session) -> None:
+    """Оба прочли «выдачи нет»: запись второго не затирает выдачу первого, пока тот ещё капитан."""
+    from src.application.hockey_league_captain import _UPSERT, day_award
+
+    db = db_session
+    league_id = await _league(db, scope="extraliga")
+    day = await _played_day(db, league_id, D1, {ME: (50, 20), ANYA: (20, 50), SASHA: (0, 0)})
+    await _give(db, league_id, ANYA, SASHA, "snorkel", day)
+    params = {"league_id": league_id, "day": day, "to_key": SASHA, "item": "bag", "captains": [ME, ANYA]}
+    assert (await db.execute(_UPSERT, {**params, "captain_key": ME})).scalar_one_or_none() is None
+    assert (await day_award(db, league_id, day)).item == "snorkel"
+    # Выдавший больше не капитан — его выдачу перезаписать можно.
+    assert (await db.execute(_UPSERT, {**params, "captain_key": ME, "captains": [ME]})).scalar_one() == ME
+
+
+@pytest.mark.asyncio
+async def test_digest_invites_only_captains_whose_right_is_open(db_session) -> None:
+    from src.application.hockey_league_evening import _open_captains, cap_of_rows, day_matches, day_rows, league_members
+
+    db = db_session
+    league_id = await _league(db, scope="extraliga")
+    day = await _played_day(db, league_id, D1, {ME: (50, 20), ANYA: (20, 50), SASHA: (0, 0)})
+    league = await member_league(db, league_id=league_id, player_key=ME)
+    ms = await day_matches(db, league, day)
+    cap = cap_of_rows(await day_rows(db, league_id, await league_members(db, league_id, now=NOW), ms), ms)
+    assert await _open_captains(db, league, day, cap, NOW) == {ME, ANYA}
+    await _give(db, league_id, ANYA, SASHA, "bag", day)
+    assert await _open_captains(db, league, day, cap, NOW) == {ANYA}  # выдала Аня — Максу звать нечего
+    assert await _open_captains(db, league, day, cap, league.ends_at + timedelta(hours=1)) == frozenset()

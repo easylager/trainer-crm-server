@@ -23,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.hockey_league_evening import (
+    _MEMBER_BY_PID,
     MISS,
     NONE,
     DayCap,
@@ -93,12 +94,9 @@ _UPSERT = text("""
     ON CONFLICT (league_id, day) DO UPDATE
     SET captain_key = EXCLUDED.captain_key, to_key = EXCLUDED.to_key, item = EXCLUDED.item,
         updated_at = EXCLUDED.updated_at
-    """)
-
-_MEMBER_BY_PID = text("""
-    SELECT pl.player_key FROM hockey_league_members AS mb
-    JOIN hockey_players AS pl ON pl.player_key = mb.player_key
-    WHERE mb.league_id = :league_id AND pl.public_id = :pid
+    WHERE hockey_league_outfits.captain_key = EXCLUDED.captain_key
+       OR NOT (hockey_league_outfits.captain_key = ANY(:captains))
+    RETURNING captain_key
     """)
 
 # Последняя выдача в каждой лиге этих людей: более ранние вечера уже точно не последние сыгранные.
@@ -160,8 +158,10 @@ async def evening_state(
     now: datetime,
     rows: list[DayRow] | None = None,
     matches: list[DayMatch] | None = None,
+    last_day: date | None = None,
 ) -> EveningState:
-    """Состояние вечера ``day``. ``rows``/``matches`` — если вызывающий их уже посчитал."""
+    """Состояние вечера ``day``. ``rows``/``matches``/``last_day`` (последний сыгранный вечер лиги) — если
+    вызывающий их уже посчитал."""
     if matches is None:
         matches = await day_matches(session, league, day)
     if rows is None:
@@ -170,18 +170,17 @@ async def evening_state(
     award = await day_award(session, league.id, day)
     if not award_valid(award, cap, {r.member.player_key for r in rows}):
         award = None
-    current = (
-        day_complete(matches)
-        and _utc(league.ends_at) > _utc(now)
-        and await last_complete_day(session, league, now=now) == day
-    )
+    if day_complete(matches) and _utc(league.ends_at) > _utc(now):
+        current = (last_day or await last_complete_day(session, league, now=now)) == day
+    else:
+        current = False
     return EveningState(day=day, cap=cap, rows=rows, matches=matches, award=award, current=current)
 
 
 async def current_state(session: AsyncSession, league, *, now: datetime) -> EveningState | None:
     """Что сейчас «на головах» в лиге: последний сыгранный вечер (нет такого — ``None``)."""
     day = await last_complete_day(session, league, now=now)
-    return None if day is None else await evening_state(session, league, day, now=now)
+    return None if day is None else await evening_state(session, league, day, now=now, last_day=day)
 
 
 async def set_outfit(
@@ -205,8 +204,19 @@ async def set_outfit(
         raise NotCaptain()
     if state.award is not None and state.award.captain_key != captain_key:
         raise AlreadyGiven(state.award.captain_name)
-    params = {"league_id": league.id, "day": day, "captain_key": captain_key, "to_key": to_key, "item": item}
-    await session.execute(_UPSERT, params)
+    # Два капитана жмут одновременно: оба прочли «выдачи нет», запись решает. Перезаписать можно только свою выдачу
+    # или выдачу того, кто уже не капитан; иначе первый успел — второму AlreadyGiven.
+    params = {
+        "league_id": league.id,
+        "day": day,
+        "captain_key": captain_key,
+        "to_key": to_key,
+        "item": item,
+        "captains": list(state.cap.captains),
+    }
+    if (await session.execute(_UPSERT, params)).scalar_one_or_none() is None:
+        award = await day_award(session, league.id, day)
+        raise AlreadyGiven(award.captain_name if award else "")
 
 
 async def outside_outfits(session: AsyncSession, player_keys: list[int], *, now: datetime) -> dict[int, dict]:

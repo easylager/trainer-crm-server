@@ -366,15 +366,6 @@ async def window_caps(
     return out
 
 
-async def current_cap(session: AsyncSession, league, *, now: datetime) -> frozenset[int]:
-    """Кто сейчас в кепке: кепка последнего сыгранного дня лиги (нет решения или кепки — никто)."""
-    day = await last_complete_day(session, league, now=now)
-    if day is None:
-        return frozenset()
-    caps = await window_caps(session, league, since=day_bounds(day)[0], until=day_bounds(day)[1], now=now)
-    return caps[day].holders if day in caps else frozenset()
-
-
 def scarf_of(row: DayRow, matches: list[DayMatch]) -> dict | None:
     """«В чужом шарфе» за день: ход против своей команды на её матч этого дня. Нет своей команды — нет шарфа."""
     club = row.member.club
@@ -576,7 +567,12 @@ async def cap_news(
                     members = {m.player_key: m.display_name for m in await league_members(session, league.id, now=now)}
                     cap = caps.get(day)
                     if cap is not None and cap.holders:
-                        cache[key] = (closing, cap.holders, members, cap.captains)
+                        cache[key] = (
+                            closing,
+                            cap.holders,
+                            members,
+                            await _open_captains(session, league, day, cap, now),
+                        )
             found = cache[key]
             if found is None or found[0] not in ids:
                 continue
@@ -593,6 +589,18 @@ async def cap_news(
                 )
             )
     return out
+
+
+async def _open_captains(session: AsyncSession, league, day: date, cap: DayCap, now: datetime) -> frozenset[int]:
+    """Капитаны, у которых право выдать ещё открыто: лига идёт, и никто из капитанов вечера ещё не выдал."""
+    from src.application.hockey_league_captain import day_award
+
+    if _utc(league.ends_at) <= _utc(now):
+        return frozenset()
+    award = await day_award(session, league.id, day)
+    if award is not None and award.captain_key in cap.captains:
+        return frozenset({award.captain_key})
+    return cap.captains
 
 
 def neighbours(days: list[date], day: date) -> tuple[date | None, date | None]:
@@ -733,7 +741,6 @@ __all__ = [
     "DayCap",
     "cap_min_moves",
     "cap_of_rows",
-    "current_cap",
     "day_cap",
     "last_complete_day",
     "scarf_of",

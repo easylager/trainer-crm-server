@@ -868,6 +868,7 @@
         if (!a.day) state.evenings[a.id + '|'] = d;
         // Голова и «C» в таблицах лиги поменялись: месяц перечитается при переключении, «Вся лига» — сразу.
         delete state.leagueTables[a.id + '|month'];
+        state.tables = {}; // общая таблица тоже: там видна экипировка
         loadLeague({ id: a.id, tab: 'all' }, true).then(K.render, function () {});
         K.render();
       }, function (e) {

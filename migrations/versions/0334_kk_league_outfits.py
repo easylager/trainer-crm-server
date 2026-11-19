@@ -43,10 +43,12 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
-    # Экипировка снаружи лиги (общая таблица): что сейчас выдано этим людям.
-    op.create_index("ix_hockey_league_outfits_to", "hockey_league_outfits", ["to_key", "day"])
+    # Ключ (league_id, day) обслуживает чтение; индексы ниже — для каскадного удаления игрока.
+    op.create_index("ix_hockey_league_outfits_to", "hockey_league_outfits", ["to_key"])
+    op.create_index("ix_hockey_league_outfits_captain", "hockey_league_outfits", ["captain_key"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_hockey_league_outfits_captain", table_name="hockey_league_outfits")
     op.drop_index("ix_hockey_league_outfits_to", table_name="hockey_league_outfits")
     op.drop_table("hockey_league_outfits")

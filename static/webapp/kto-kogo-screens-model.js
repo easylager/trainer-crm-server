@@ -562,13 +562,21 @@
     return (title && TITLE_MARK[title.id]) || '';
   }
 
-  /** Пояснение под таблицей лиги: что значат звания, которые на ней висят (шарф, кепка). Нет званий — нет строки. */
+  /**
+   * Пояснение под таблицей лиги: шарф (звание) и что на головах — кепка дня, экипировка, «C» (TASK-432).
+   * Нечего пояснять — нет строки.
+   */
   function titlesNote(items) {
     var has = {};
-    (items || []).forEach(function (r) { if (r.title && r.title.id) has[r.title.id] = true; });
+    (items || []).forEach(function (r) {
+      if (r.title && r.title.id) has[r.title.id] = true;
+      if (r.head) has[r.head.item === 'cap' ? 'cap' : 'kit'] = true;
+      if (r.captain) has.captain = true;
+    });
     var parts = [];
     if (has.scarf) parts.push('Шарф — за ход против своей команды на её ближайший матч.');
     if (has.cap) parts.push('Кепка дня — тому, кто хуже всех угадывал в последний сыгранный вечер лиги. Носит до следующего.');
+    if (has.captain || has.kit) parts.push('«C» — капитан последнего вечера: выдаёт экипировку, её носят до следующего вечера.');
     return parts.join(' ');
   }
 

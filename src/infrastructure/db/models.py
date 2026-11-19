@@ -812,7 +812,10 @@ class HockeyLeagueOutfit(Base):
     """Право капитана (TASK-432): капитан вечера выдаёт одну вещь экипировки за игровой день в лиге."""
 
     __tablename__ = "hockey_league_outfits"
-    __table_args__ = (Index("ix_hockey_league_outfits_to", "to_key", "day"),)
+    __table_args__ = (
+        Index("ix_hockey_league_outfits_to", "to_key"),
+        Index("ix_hockey_league_outfits_captain", "captain_key"),
+    )
 
     league_id: Mapped[int] = mapped_column(
         BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), primary_key=True

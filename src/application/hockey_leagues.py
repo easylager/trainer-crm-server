@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import secrets
 import unicodedata
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 
@@ -812,7 +812,7 @@ async def league_table_rows(session: AsyncSession, league: League, *, period: Pe
 # ---------- звания в таблице лиги (владелец 2026-10-20) ----------
 # Одно на человека: шутим над ходом, а не над человеком. Всё — из готовых ходов.
 # Если подходит несколько — берём самое яркое по этому порядку.
-TITLE_ORDER = ("cap", "scarf", "vanga", "streak", "optimist")
+TITLE_ORDER = ("scarf", "vanga", "streak", "optimist")
 VANGA_MIN = 2
 STREAK_MIN = 3
 OPTIMIST_MARGIN = 2
@@ -846,16 +846,11 @@ def _plural(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
-def pick_titles(
-    picks: list[dict], *, fans: Mapping[int, str] | None = None, caps: Collection[int] = ()
-) -> dict[int, dict[str, str]]:
+def pick_titles(picks: list[dict], *, fans: Mapping[int, str] | None = None) -> dict[int, dict[str, str]]:
     """Звания участников лиги по их ходам за сезон (чистая функция, ходы — по времени матча).
 
     ``fans`` — «своя» команда игрока (как у бота: «болею за», иначе клуб, за который чаще всего ходил).
-    ``caps`` — кто сейчас в кепке дня (``hockey_league_evening.current_cap``).
 
-    - cap «Кепка дня» — хуже всех угадывал в последний сыгранный игровой день лиги (TASK-431, правило —
-      в ``hockey_league_evening``); носится до следующего сыгранного дня;
     - scarf «В чужом шарфе» — ход против своей команды на её ближайший матч, на который есть ход;
       нет своей команды — нет шарфа;
     - vanga «Ванга» — единственный лидер лиги по точным счетам, от VANGA_MIN точных;
@@ -866,9 +861,6 @@ def pick_titles(
 
     def give(player: int, key: str, label: str, detail: str = "") -> None:
         found.setdefault(player, {})[key] = {"id": key, "label": label, "detail": detail}
-
-    for player in caps:
-        give(player, "cap", "Кепка дня")
 
     scored = [p for p in picks if p["status"] == "final" and p["points"] is not None]
 

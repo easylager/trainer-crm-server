@@ -684,9 +684,10 @@ describe('пьедестал лиги', () => {
   it('пояснение к званиям: только о тех, что висят на таблице', () => {
     assert.equal(S.titlesNote([{ title: null }, {}]), '');
     assert.match(S.titlesNote([{ title: { id: 'scarf' } }]), /^Шарф — за ход против своей команды/);
-    const both = S.titlesNote([{ title: { id: 'cap' } }, { title: { id: 'scarf' } }]);
+    const both = S.titlesNote([{ head: { item: 'cap' } }, { title: { id: 'scarf' } }]);
     assert.match(both, /Шарф/);
     assert.match(both, /Кепка дня — тому, кто хуже всех угадывал в последний сыгранный вечер лиги/);
+    assert.match(S.titlesNote([{ captain: true }, { head: { item: 'bucket' } }]), /^«C» — капитан последнего вечера/);
   });
 });
 
