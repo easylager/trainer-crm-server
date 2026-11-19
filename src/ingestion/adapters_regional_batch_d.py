@@ -419,8 +419,10 @@ class MolodechnoSrcParser(IceParser):
 # --------------------------------------------------------------------------
 
 _ENTRY_TITLE_LINK = re.compile(r'<h2 class="entry-title"><a href="([^"]+)"[^>]*>([^<]*)</a></h2>', re.S)
-_IMG_FULL = re.compile(r'<img[^>]+class="[^"]*size-full[^"]*"[^>]+src="([^"]+\.jpg)"', re.I)
-_WEEK_FILENAME = re.compile(r"(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{4})")
+# Клуб выкладывает то JPG, то PNG (16.11.2026 — «16-22.11.2026.png»).
+_IMG_FULL = re.compile(r'<img[^>]+class="[^"]*size-full[^"]*"[^>]+src="([^"]+\.(?:jpe?g|png|webp))"', re.I)
+# «19.10-25.10.2026» или без месяца у начала, если он тот же: «16-22.11.2026».
+_WEEK_FILENAME = re.compile(r"(\d{2})(?:\.(\d{2}))?-(\d{2})\.(\d{2})\.(\d{4})")
 _HEADER_DAY = re.compile(r"^\d{1,2}$")
 _OCR_TIME_TOKEN = re.compile(r"^(\d{1,2})[.:](\d{2})-(\d{1,2})[.:](\d{2})$")
 _WEEKDAY_TOKEN = re.compile(
@@ -488,11 +490,12 @@ def _shklov_month_year(filename: str) -> tuple[int, int]:
 
 
 def _shklov_week_window(filename: str) -> tuple[date, date] | None:
-    """Период недели из имени файла ``19.10-25.10.2026.jpg``; переход через год учтён."""
+    """Период недели из имени файла ``19.10-25.10.2026.jpg`` или ``16-22.11.2026.png``; переход через год учтён."""
     m = _WEEK_FILENAME.search(filename)
     if not m:
         return None
-    start_day, start_month, end_day, end_month, year = (int(g) for g in m.groups())
+    start_day, end_day, end_month, year = int(m.group(1)), int(m.group(3)), int(m.group(4)), int(m.group(5))
+    start_month = int(m.group(2)) if m.group(2) else end_month
     try:
         end = date(year, end_month, end_day)
         start = date(year - 1 if start_month > end_month else year, start_month, start_day)

@@ -352,6 +352,18 @@ def test_shklov_week_window_across_month_and_year_boundaries() -> None:
     assert _shklov_week_window("28.12-03.01.2027.jpg") == (date(2026, 12, 28), date(2027, 1, 3))
 
 
+def test_shklov_takes_png_poster_with_short_week_name() -> None:
+    """16.11.2026 клуб выложил «16-22.11.2026.png»: парсер искал только .jpg и полный «16.11-22.11»."""
+    from src.ingestion.adapters_regional_batch_d import _shklov_find_image_url, _shklov_week_window
+
+    post = (
+        '<img fetchpriority="high" class="size-full wp-image-2204 aligncenter" '
+        'src="http://sportshklov.by/wp-content/uploads/2026/11/16-22.11.2026.png" alt="" width="1041">'
+    )
+    assert _shklov_find_image_url(post) == "http://sportshklov.by/wp-content/uploads/2026/11/16-22.11.2026.png"
+    assert _shklov_week_window("16-22.11.2026.png") == (date(2026, 11, 16), date(2026, 11, 22))
+
+
 @pytest.mark.asyncio
 async def test_shklov_real_photo_with_typo_gets_corrected_dates() -> None:
     skip_unless_tesseract_rus()
