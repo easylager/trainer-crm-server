@@ -79,6 +79,7 @@ async def league_with(db, key: int, *, member: bool = True) -> None:
 def test_week_one_text_is_the_owners_and_drafts_have_no_banned_words() -> None:
     assert li.WEEK_TEXTS[1].startswith("Собери лигу и договоритесь, на что играете — на пиво, на шашлык или на честь.")
     assert li.WEEK_TEXTS[1].endswith("В конце месяца — корона и расплата.")
+    assert "2 минуты" not in li.WEEK_TEXTS[1]  # жесты в релиз не вошли
     for body in li.WEEK_TEXTS.values():
         for bad in ("ставк", "постав", "срок", "×"):
             assert bad not in body.lower()
@@ -103,10 +104,26 @@ async def test_audience_active_without_league(db_session) -> None:
     db = db_session
     await player(db, SASHA)
     await player(db, KATYA)
-    await league_with(db, KATYA)  # в лиге — не зовём
+    await league_with(db, KATYA)  # своя лига — не зовём
     await player(db, LESHA, picked=FRI - timedelta(days=8))  # ходил давно — не зовём
     got = await li.produce_league_invite(db, now=FRI)
     assert [p.notice.player_key for p in got] == [SASHA]
+
+
+@pytest.mark.asyncio
+async def test_member_of_a_friends_league_is_invited_to_create_own(db_session) -> None:
+    """Владелец 2026-11-19: зовём, если нет СВОЕЙ лиги — в чужой состоять можно."""
+    await player(db_session, SASHA)
+    await player(db_session, KATYA)
+    await league_with(db_session, KATYA)
+    katya_league = (
+        await db_session.execute(text("SELECT id FROM hockey_leagues WHERE owner_key = :k"), {"k": KATYA})
+    ).scalar_one()
+    await db_session.execute(
+        text("INSERT INTO hockey_league_members (league_id, player_key) VALUES (:l, :k)"),
+        {"l": katya_league, "k": SASHA},
+    )
+    assert [p.notice.player_key for p in await li.produce_league_invite(db_session, now=FRI)] == [SASHA]
 
 
 @pytest.mark.asyncio
@@ -146,7 +163,7 @@ async def test_photo_caption_buttons_and_personal_line(db_session, factory) -> N
     assert n.kind == "lginvite" and n.photo.endswith("kk-league-invite-1.png")
     assert n.text.startswith("За неделю ты угадал <b>2 из 3</b>. А твои друзья?\n\nСобери лигу")
     labels = [b["text"] for row in n.buttons for b in row]
-    assert labels == ["Собрать лигу", "Не присылать"]
+    assert labels == ["Создать лигу друзей", "Не присылать"]
     assert (
         "kkg_lg1" in n.buttons[0][0]["url"]
     )  # метка входа недели → hockey_entry_events, first_src, hockey_leagues.src
@@ -190,7 +207,7 @@ async def test_missing_cover_skips_the_week_and_warns(db_session, tmp_path, capl
 
 
 @pytest.mark.asyncio
-async def test_stops_when_player_joins_a_league_before_sending(db_session, factory) -> None:
+async def test_stops_when_player_creates_own_league_before_sending(db_session, factory) -> None:
     await player(db_session, SASHA)
     [p] = await li.produce_league_invite(db_session, now=FRI)
     await league_with(db_session, SASHA)

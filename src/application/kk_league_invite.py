@@ -3,15 +3,17 @@
 Повод нового движка уведомлений (``kk_notify``): сам ничего не отправляет, только предлагает ``Proposal``; допуск,
 бюджет 1 в день и 3 в неделю, тишина 23–09, согласие, «Не присылать» и блокировка — ``kk_notify_gate``.
 
-* Кому: игрок сделал ход за последние 7 суток и не состоит ни в одной лиге (и своей лиги у него нет).
+* Кому: игрок сделал ход за последние 7 суток и у него нет своей действующей лиги (владелец 2026-11-19: в чужой
+  лиге состоять можно — зовём создать свою).
 * Когда: пятница, 12:00 по Минску (окно до ``WINDOW_TO``, чтобы проход цикла не промахнулся). Приоритет — ниже всех
   поводов игры; итоги ходов и так вне бюджета.
-* Серия из трёх недель: неделя N — обложка N и текст N. Стоп: создал или вступил в лигу, отправлено три,
+* Серия из трёх недель: неделя N — постер N и текст N (1 «Лига друзей», 2 «Корона каждый месяц», 3 «Свои команды»).
+  Стоп: создал свою лигу, отправлено три,
   «Не присылать» (тип ``lginvite`` выключается в настройках игрока).
-* Сообщение — фото и подпись, кнопки «Собрать лигу» (``kkg_lg<N>`` → экран «Лига готова», метка входа ``lg<N>``
+* Сообщение — фото и подпись, кнопки «Создать лигу друзей» (``kkg_lg<N>`` → экран «Лига готова», метка входа ``lg<N>``
   доходит до ``hockey_entry_events`` и ``hockey_leagues.src``) и «Не присылать».
 
-Выключено по умолчанию (``KK_LEAGUE_INVITE_ENABLED``). Обложки кладёт менеджер в ``static/share/kk-league-invite-N.png``;
+Выключено по умолчанию (``KK_LEAGUE_INVITE_ENABLED``). Постеры владельца — ``static/share/kk-league-invite-N.png``;
 нет файла — сообщение этой недели не уходит, в лог пишется предупреждение.
 """
 
@@ -42,20 +44,19 @@ START_READY = "kkg"  # kkg_<метка> — экран «Лига готова»
 CB_OFF_INVITE = f"{hn.CB_OFF}:{hn.CODE_OF[KIND_LEAGUE_INVITE]}"
 COVERS = Path(__file__).resolve().parents[2] / "static" / "share"
 
-# Тексты недель. Неделя 1 утверждена владельцем 2026-11-18; 2 и 3 — черновики агента, ждут утверждения.
+# Подписи к постерам владельца (2026-11-19). Неделя 1 — утверждённый текст 2026-11-18 без «2 минут» (жесты убраны
+# из релиза); 2 и 3 дописывают постер, а не повторяют его, — ждут утверждения владельца.
 WEEK_TEXTS = {
     1: (
         "Собери лигу и договоритесь, на что играете — на пиво, на шашлык или на честь. Каждый вечер видно, "
-        "кто угадал лучше, кто носит кепку, а кого пора удалить на 2 минуты. В конце месяца — корона и расплата."
+        "кто угадал лучше и кто носит кепку дня. В конце месяца — корона и расплата."
     ),
-    # ЧЕРНОВИК: корона каждый месяц и стена корон лиги (стенд игрока из TASK-430 в релизе выключен — о нём ни слова).
     2: (
-        "Корона в лиге разыгрывается каждый месяц, и у лиги есть стена корон: кто и когда её забирал, видно всем. "
-        "Собери своих — к весне станет ясно, кто у вас главный."
+        "Каждый месяц лучший в лиге забирает корону — и она навсегда остаётся на трибуне победителя. "
+        "Собери своих: к весне станет ясно, кто у вас главный."
     ),
-    # ЧЕРНОВИК: свои команды — Динамо, Юность, несколько или всё сразу.
     3: (
-        "Лигу можно собрать на свои команды: только Динамо, только Юность, несколько клубов или всё сразу. "
+        "Лигу можно собрать на свои команды: только Динамо, только Юность, пара клубов или всё сразу. "
         "Ходы те же, что в общей игре, — отдельно ходить не нужно, а таблица только для своих."
     ),
 }
@@ -79,7 +80,7 @@ def invite_caption(*, week: int, hits: int, played: int) -> str:
 
 def invite_buttons(week: int) -> list[list[dict]]:
     return hn._rows(
-        [hn.url_button("Собрать лигу", f"{START_READY}_{src_label(week)}")],
+        [hn.url_button("Создать лигу друзей", f"{START_READY}_{src_label(week)}")],
         [{"text": "Не присылать", "callback_data": CB_OFF_INVITE}],
     )
 
@@ -103,8 +104,7 @@ _AUDIENCE = text("""
               AND m.starts_at >= :since AND m.starts_at < :now)::int AS hits
     FROM hockey_players AS pl
     WHERE EXISTS (SELECT 1 FROM hockey_picks AS p WHERE p.player_key = pl.player_key AND p.picked_at >= :since)
-      AND NOT EXISTS (SELECT 1 FROM hockey_league_members AS mb WHERE mb.player_key = pl.player_key)
-      AND NOT EXISTS (SELECT 1 FROM hockey_leagues AS l WHERE l.owner_key = pl.player_key)
+      AND NOT EXISTS (SELECT 1 FROM hockey_leagues AS l WHERE l.owner_key = pl.player_key AND l.ends_at > :now)
     ORDER BY pl.player_key
     """)
 
@@ -115,9 +115,9 @@ _SERIES = text("""
     FROM hockey_notices WHERE player_key = :player_key AND kind = 'lginvite'
     """)
 
+# Своя действующая лига появилась — серия кончилась (в чужой лиге состоять можно).
 _IN_LEAGUE = text("""
-    SELECT EXISTS (SELECT 1 FROM hockey_league_members WHERE player_key = :player_key)
-        OR EXISTS (SELECT 1 FROM hockey_leagues WHERE owner_key = :player_key)
+    SELECT EXISTS (SELECT 1 FROM hockey_leagues WHERE owner_key = :player_key AND ends_at > :now)
     """)
 
 
@@ -132,7 +132,7 @@ def _still_due(week: int):
     async def check(session: AsyncSession, player_key: int, now: datetime) -> str | None:
         if not in_window(now):
             return "out_of_window"
-        if (await session.execute(_IN_LEAGUE, {"player_key": player_key})).scalar_one():
+        if (await session.execute(_IN_LEAGUE, {"player_key": player_key, "now": now})).scalar_one():
             return "in_league"
         sent, _ = await _series(session, player_key)
         if sent + 1 != week:
