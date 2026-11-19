@@ -226,3 +226,60 @@ async def test_gestures_off_by_default_hide_everywhere(app_use_test_db, db_sessi
             table = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}")).json()
             saved = next(x for x in table["items"] if x["display_name"] == "Саша")
             assert saved["penalty_minutes"] == 0 and saved["caps"] == 1
+
+
+@pytest.mark.asyncio
+async def test_captain_gives_outfit_seen_in_league_table_and_standings(app_use_test_db, db_session) -> None:
+    """Право капитана (TASK-432): выдача через API, голова и «C» в таблице лиги, экипировка в общей таблице."""
+    db = db_session
+    league_id = await _league(db)
+    m = await _match(db, datetime.now(timezone.utc) - timedelta(days=3))
+    for key, pts in ((ME, 50), (ANYA, 20), (SASHA, 0)):
+        await _pick(db, key, m, "home", pts)
+    await db.commit()
+    anya, sasha = await _pid(db, ANYA), await _pid(db, SASHA)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with as_player(ANYA):
+            ev = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}/evening")).json()
+            url = f"/api/webapp/client/hockey/leagues/{league_id}/evening/{ev['day']}/outfit"
+            assert ev["captain"]["right"] is False
+            assert (await client.put(url, json={"to": sasha, "item": "bag"})).status_code == 403
+        with as_player(ME):
+            assert (await client.put(url, json={"to": sasha, "item": "crown"})).status_code == 400
+            r = await client.put(url, json={"to": sasha, "item": "bucket"})
+            assert r.status_code == 200, r.text
+            row = next(x for x in r.json()["items"] if x["display_name"] == "Саша")
+            assert row["head"]["item"] == "bucket" and r.json()["captain"]["award"]["from_me"] is True
+            table = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}")).json()
+            by = {x["display_name"]: x for x in table["items"]}
+            assert by["Саша"]["head"]["item"] == "bucket" and by["Макс"]["captain"] is True
+            assert by["Аня"]["head"] is None and not by["Аня"]["captain"]
+            # Себе — тоже можно; «me» в общей таблице есть всегда, если ходил: там и проверяем экипировку снаружи.
+            assert (await client.put(url, json={"to": await _pid(db, ME), "item": "foil"})).status_code == 200
+            standings = (await client.get("/api/webapp/client/hockey/standings")).json()
+            assert standings["me"]["outfit"]["item"] == "foil"
+            assert [(x["item"], x["n"]) for x in standings["me"]["outfit"]["items"]] == [("foil", 1)]
+            assert all(x["outfit"] is None for x in standings["items"] if x["pid"] == anya)
+        with as_player(STRANGER):
+            assert (await client.put(url, json={"to": sasha, "item": "bag"})).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_outfit_off_switch(app_use_test_db, db_session, monkeypatch) -> None:
+    monkeypatch.setenv("KK_CAPTAIN_ENABLED", "0")
+    db = db_session
+    league_id = await _league(db)
+    m = await _match(db, datetime.now(timezone.utc) - timedelta(days=3))
+    for key, pts in ((ME, 50), (ANYA, 20), (SASHA, 0)):
+        await _pick(db, key, m, "home", pts)
+    await db.commit()
+    sasha = await _pid(db, SASHA)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with as_player(ME):
+            ev = (await client.get(f"/api/webapp/client/hockey/leagues/{league_id}/evening")).json()
+            assert ev["captain_on"] is False and ev["captain"]["right"] is False
+            r = await client.put(
+                f"/api/webapp/client/hockey/leagues/{league_id}/evening/{ev['day']}/outfit",
+                json={"to": sasha, "item": "bag"},
+            )
+            assert r.status_code == 404

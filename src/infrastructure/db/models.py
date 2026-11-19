@@ -808,6 +808,27 @@ class HockeyLeagueGesture(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeyLeagueOutfit(Base):
+    """Право капитана (TASK-432): капитан вечера выдаёт одну вещь экипировки за игровой день в лиге."""
+
+    __tablename__ = "hockey_league_outfits"
+    __table_args__ = (Index("ix_hockey_league_outfits_to", "to_key", "day"),)
+
+    league_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date(), primary_key=True)
+    captain_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    to_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    item: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class HockeyCardEvent(Base):
     """Карточка «Кто кого» в чате: отправили, открыли, вступили — без ключа игрока (TASK-300)."""
 

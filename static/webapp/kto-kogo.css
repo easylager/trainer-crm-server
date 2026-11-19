@@ -842,6 +842,69 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-ready__go { font-weight: 800; }
 .kk-ready__alt { min-height: 48px; border: 0; border-radius: 16px; background: transparent; color: var(--kk-link); font: 600 15px var(--kk-text); }
 
+/* ---------- Право капитана и экипировка (TASK-432, холст «Право капитана») ---------- */
+.kk-kit { position: relative; display: inline-flex; flex: none; vertical-align: middle; }
+.kk-kit__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.kk-kit__drop { transform-box: view-box; transform-origin: 50% 0; animation: kk-kit-drop 0.55s cubic-bezier(0.3, 1.5, 0.5, 1) calc(0.1s + var(--kk-mo, 0ms)) both; }
+.kk-kit__c { position: absolute; right: -5%; bottom: -5%; width: 42%; height: 42%; min-width: 16px; min-height: 16px; box-sizing: border-box; border-radius: 50%; background: #0d1424; border: 2px solid #ffd23f; color: #ffd23f; display: flex; align-items: center; justify-content: center; font: 900 max(10px, 0.6em)/1 var(--kk-text); }
+.kk-kit--room { margin: var(--kk-kit-up, 0) 0 var(--kk-kit-down, 0); }
+@keyframes kk-kit-drop { 0% { transform: translateY(-40%) scale(0.6); opacity: 0; } 60% { transform: translateY(3%) scale(1.06); opacity: 1; } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .kk-kit__drop { animation: none; } }
+
+.kk-ev__vd--captain { background: var(--kk-crownbg); color: var(--kk-crownink); }
+.kk-ev__vd--captain .kk-kit__c { position: static; width: 26px; height: 26px; font-size: 13px; }
+.kk-ev__captain { padding: 2px 8px; border-radius: 10px; background: var(--kk-crownbg); color: var(--kk-crownink); font: 700 12px/16px var(--kk-text); white-space: nowrap; }
+.kk-ev__note--kit { color: var(--kk-crownink); }
+
+.kk-cpt { border-radius: 20px; background: var(--kk-card); border: 2px solid var(--kk-gold-ink); padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.kk-cpt__t { margin: 0; font: 400 22px/1.1 var(--kk-display); }
+.kk-cpt__lead { margin: 0; font: 500 15px/1.45 var(--kk-text); color: var(--kk-soft); }
+.kk-cpt__lbl { font: 800 12px/1 var(--kk-text); letter-spacing: 0.06em; color: var(--kk-muted); }
+.kk-cpt__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: -6px; }
+.kk-cpt__grid--items { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.kk-cpt__pick { min-height: 84px; min-width: 0; border-radius: 14px; border: 2px solid var(--kk-line); background: var(--kk-row); color: var(--kk-soft); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; padding: 10px 2px 8px; cursor: pointer; font: inherit; }
+.kk-cpt__grid--items .kk-cpt__pick { min-height: 96px; }
+.kk-cpt__pick[aria-pressed='true'] { border-color: var(--kk-gold-ink); background: var(--kk-crownbg); color: var(--kk-crownink); }
+.kk-cpt__pick:focus-visible, .kk-cpt__alt:focus-visible { outline: 3px solid var(--kk-focus); outline-offset: 2px; }
+.kk-cpt__nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 12px/1.2 var(--kk-text); }
+.kk-cpt__sub { font: 700 10px/1.2 var(--kk-text); color: var(--kk-muted); }
+.kk-cpt__pick[aria-pressed='true'] .kk-cpt__sub { color: inherit; }
+.kk-cpt__in { font: 700 11px/1.2 var(--kk-text); text-align: center; }
+.kk-cpt__thumb { padding: 8px 8px 10px 0; }
+.kk-cpt__view { display: flex; align-items: center; gap: 4px; }
+.kk-cpt__big { padding: 30px 22px 34px 4px; flex: none; }
+.kk-cpt__who { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kk-cpt__name { font: 800 18px/1.2 var(--kk-text); overflow-wrap: anywhere; }
+.kk-cpt__item { font: 500 15px/1.3 var(--kk-text); color: var(--kk-crownink); }
+.kk-cpt__score { font: 500 13px/1.3 var(--kk-text); color: var(--kk-muted); }
+.kk-cpt__done { display: flex; align-items: center; gap: 4px; }
+.kk-cpt__done .kk-cpt__big { padding: 20px 16px 22px 2px; }
+.kk-cpt__dt { font: 400 18px/1.15 var(--kk-display); }
+.kk-cpt__dl { font: 500 14px/1.4 var(--kk-text); color: var(--kk-soft); }
+.kk-cpt__alt { align-self: center; min-height: 44px; border: 0; background: none; color: var(--kk-link); font: 600 15px var(--kk-text); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+.kk-got { border-radius: 22px; background: var(--kk-badge); padding: 22px 18px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.kk-got__ava { padding: 40px 28px 46px; }
+.kk-got__t { margin: 0; font: 400 24px/1.1 var(--kk-display); color: var(--kk-gold); }
+.kk-got__x { margin: 0; font: 500 15px/1.45 var(--kk-text); color: var(--kk-badge-sub); }
+.kk-got__tail { margin: 0; font: 700 15px/1.45 var(--kk-text); color: var(--kk-gold); }
+
+.kk-r--kit { grid-template-columns: 32px auto minmax(0, 1fr) auto; }
+.kk-r__ava { display: inline-flex; }
+.kk-r__avb { display: inline-flex; border: 0; padding: 0; background: none; color: inherit; cursor: pointer; border-radius: 12px; position: relative; z-index: 1; }
+.kk-ev__p.has-kit { padding-top: 22px; padding-bottom: 22px; }
+.kk-r__avb:focus-visible, .kk-r__open:focus-visible { outline: 3px solid var(--kk-focus); outline-offset: 2px; }
+.kk-r--stretch { position: relative; }
+.kk-r__open { border: 0; padding: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.kk-r__open::after { content: ''; position: absolute; inset: 0; border-radius: 14px; }
+.kk-r__kit { font: 500 12px/1.3 var(--kk-text); color: var(--kk-crownink); }
+
+.kk-kitlist { display: flex; flex-direction: column; gap: 12px; }
+.kk-kitlist__r { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
+.kk-kitlist__ava { padding: 18px 14px 18px 4px; }
+.kk-kitlist__t { font: 700 15px/1.3 var(--kk-text); }
+.kk-kitlist__s { font: 500 13px/1.4 var(--kk-text); color: var(--kk-soft); }
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.
@@ -855,3 +918,4 @@ body.kk-in-tab.kk-dark.client-shell-body { --app-canvas-bg: #17212b; }
 body.kk-in-tab .kk-scrim { z-index: 9300; }
 body.kk-in-tab .kk-toast { z-index: 9300; bottom: calc(var(--client-shell-tab-inset) + 12px); }
 body.kk-in-tab .kk-cta { bottom: var(--client-shell-tab-inset); z-index: 9000; }
+

@@ -575,6 +575,11 @@ def cap_line(*, league_name: str, holders: tuple[str, ...] | list[str], mine: bo
     return f"<b>Кепка дня</b> в лиге «{league}» — {joined}: хуже всех угадывали в этот день."
 
 
+def captain_line(*, league_name: str) -> str:
+    """Строка сводки капитану вечера (TASK-432): у него право выдать экипировку до следующего вечера лиги."""
+    return f"<b>Ты капитан</b> в лиге «{html.escape(league_name)}» — выдай экипировку кому хочешь, хоть себе."
+
+
 def evening_button(league_id: int, day) -> dict | None:
     return url_button("Вечер в лиге", f"{START_EVENING}_{league_id}_{day:%Y%m%d}")
 
@@ -848,8 +853,13 @@ async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) 
             body += "\n" + place
         # Кепка дня решилась матчем из этой сводки — по строке на лигу; кнопка ведёт в «Вечер» первой (TASK-431).
         news = await _cap_news(session, player_key, rows, now=now, cache=cache.setdefault("cap_news", {}))
+        from src.application.hockey_league_captain import captain_enabled
+
+        captains_on = captain_enabled() if news else False
         for item in news:
             body += "\n" + cap_line(league_name=item.league_name, holders=item.holders, mine=item.mine)
+            if item.captain and captains_on:
+                body += "\n" + captain_line(league_name=item.league_name)
         buttons = _rows(
             [
                 {"text": "Следующий ход", "callback_data": CB_NEXT},

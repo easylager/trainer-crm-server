@@ -918,15 +918,13 @@ def pick_titles(
 
 
 async def league_titles(session: AsyncSession, *, league_id: int, now: datetime) -> dict[int, dict[str, str]]:
-    from src.application.hockey_league_evening import current_cap
-
+    """Звания под именем в таблице лиги. Кепку дня не даём: она на голове (TASK-432), текстом её не повторяем."""
     now = _utc(now)
     league = _league((await session.execute(_LEAGUE_BY_ID, {"league_id": league_id})).one())
     params = {"league_id": league_id, "since": league.starts_at, **league.match_scope.params}
     picks = [dict(r._mapping) for r in (await session.execute(_TITLE_PICKS, params)).all()]
     if not picks:
         return {}
-    caps = await current_cap(session, league, now=now)
     from src.application.hockey_notices import _FAN_CLUB, FAN_WINDOW
 
     fans_sql = text(f"""
@@ -938,7 +936,7 @@ async def league_titles(session: AsyncSession, *, league_id: int, now: datetime)
         """)
     params = {"league_id": league_id, "now": now, "fan_since": now - FAN_WINDOW}
     fans = {r.player_key: r.club for r in (await session.execute(fans_sql, params)).all() if r.club}
-    return pick_titles(picks, fans=fans, caps=caps)
+    return pick_titles(picks, fans=fans)
 
 
 _RECENT = object()

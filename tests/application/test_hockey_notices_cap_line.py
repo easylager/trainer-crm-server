@@ -118,7 +118,12 @@ async def test_summary_gets_the_cap_line_only_when_its_match_closes_the_day(db_s
     await _finish(db, last, 2, 3, at(21, 30))
     notices = {n.player_key: n for n in await due_notices(db, now=at(21, 40))}
     assert set(notices) == {ANYA, MAX, OLEG}  # Дима не ходил — итога нет, строки тоже
-    assert notices[ANYA].text.endswith("<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех угадывал в этот день.")
+    # Аня — капитан вечера (TASK-432): после строки про кепку — её право, отдельной строкой.
+    assert notices[ANYA].text.endswith(
+        "<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех угадывал в этот день.\n"
+        "<b>Ты капитан</b> в лиге «Бригада» — выдай экипировку кому хочешь, хоть себе."
+    )
+    assert "Ты капитан" not in notices[MAX].text and "Ты капитан" not in notices[OLEG].text
     assert notices[OLEG].text.endswith("<b>Кепка дня</b> в лиге «Бригада» — у тебя: хуже всех угадывал в этот день.")
     urls = [b.get("url", "") for row in notices[MAX].buttons for b in row]
     labels = [b["text"] for row in notices[MAX].buttons for b in row]

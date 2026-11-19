@@ -65,3 +65,17 @@ def test_one_team_league_day_is_one_match() -> None:
     stats = {1: (0, 1), 2: (20, 1), 3: (50, 1), 4: (0, 0)}
     cap = day_cap(stats, matches=1, complete=True)
     assert cap.need_moves == 1 and cap.holders == {1} and 4 not in cap.contenders
+
+
+def test_captain_is_the_best_average_among_the_same_contenders() -> None:
+    # Капитан (TASK-432) — зеркало кепки: лучший средний за ход; не в споре — не капитан, даже с лучшим средним.
+    stats = {1: (80, 4), 2: (50, 3), 3: (10, 3), 4: (50, 1)}
+    cap = day_cap(stats, matches=4, complete=True)
+    assert cap.captains == {1} and cap.holders == {3}
+
+
+def test_captains_tie_and_no_captain_without_a_decided_race() -> None:
+    assert day_cap({1: (40, 2), 2: (40, 2), 3: (0, 2)}, matches=2, complete=True).captains == {1, 2}
+    assert day_cap({1: (20, 2), 2: (20, 2), 3: (20, 2)}, matches=2, complete=True).captains == frozenset()
+    assert day_cap({1: (0, 2), 2: (50, 2)}, matches=2, complete=True).captains == frozenset()  # в споре двое
+    assert day_cap({1: (0, 2), 2: (50, 2), 3: (40, 2)}, matches=3, complete=False).captains == frozenset()

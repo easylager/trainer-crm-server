@@ -50,6 +50,15 @@ from src.application.hockey_leagues import (
     term_options,
     update_league,
 )
+from src.application.hockey_league_captain import (
+    AlreadyGiven,
+    NotCaptain,
+    OutfitRefused,
+    RightClosed,
+    captain_enabled,
+    current_state,
+    set_outfit,
+)
 from src.application.hockey_league_evening import (
     DayNotPlayed,
     GestureRefused,
@@ -108,6 +117,13 @@ class GestureBody(BaseModel):
 
     to: str
     kind: Literal["stick", "pen"] | None = None
+
+
+class OutfitBody(BaseModel):
+    """Право капитана: кому (``pid`` из «Вечера», можно себе) и какую вещь из «Экипировки капитана»."""
+
+    to: str
+    item: str
 
 
 class QuickLeagueBody(BaseModel):
@@ -421,6 +437,9 @@ async def get_client_hockey_league(
     league = await member_league(session, league_id=league_id, player_key=player_key)
     since, until = (chosen.since, chosen.until) if chosen else (league.starts_at, league.ends_at)
     marks = await period_marks(session, league, since=since, until=until, now=now)  # type: ignore[arg-type]
+    # Голова и нашивка «C» — по последнему сыгранному вечеру лиги (TASK-432), в любой вкладке таблицы.
+    state = await current_state(session, league, now=now)
+    heads_on = captain_enabled() and state is not None and state.current
     return {
         "id": summary.id,
         "name": summary.name,
@@ -433,7 +452,13 @@ async def get_client_hockey_league(
         "race": await race_summary(session, now=now),
         "wall": await league_crown_wall(session, league_id=league_id, now=now),
         "items": [
-            {**_table_row(row, player_key, titles), "crowns": crowns.get(row.player_key, 0), **_marks_out(marks, row)}
+            {
+                **_table_row(row, player_key, titles),
+                "crowns": crowns.get(row.player_key, 0),
+                **_marks_out(marks, row),
+                "head": None if state is None else state.head(row.player_key, enabled=heads_on),
+                "captain": state is not None and row.player_key in state.cap.captains,
+            }
             for row in rows
         ],
     }
@@ -486,6 +511,39 @@ async def put_client_hockey_league_gesture(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DayNotPlayed as exc:
         raise HTTPException(status_code=409, detail="Жесты откроются, когда сыграют все матчи вечера") from exc
+    await session.commit()
+    return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
+
+
+@router.put("/client/hockey/leagues/{league_id}/evening/{day}/outfit")
+async def put_client_hockey_league_outfit(
+    league_id: int,
+    day: date,
+    body: OutfitBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Право капитана: выдать или поменять экипировку вечера. Пушей нет — ответ: «Вечер» этого дня."""
+    now = datetime.now(timezone.utc)
+    player_key = client_catalog_telegram_key(principal)
+    try:
+        league = await member_league(session, league_id=league_id, player_key=player_key)
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    if not captain_enabled():
+        raise HTTPException(status_code=404, detail="Экипировки в лиге пока нет")
+    try:
+        await set_outfit(
+            session, league=league, captain_key=player_key, to_pid=body.to, item=body.item, day=day, now=now
+        )
+    except OutfitRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NotCaptain as exc:
+        raise HTTPException(status_code=403, detail="Выдаёт только капитан вечера") from exc
+    except RightClosed as exc:
+        raise HTTPException(status_code=409, detail="Право капитана — до следующего вечера лиги") from exc
+    except AlreadyGiven as exc:
+        raise HTTPException(status_code=409, detail=f"Экипировку этого вечера уже выдаёт {exc.name}") from exc
     await session.commit()
     return await league_evening(session, league=league, player_key=player_key, now=now, day=day)
 

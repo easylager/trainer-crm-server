@@ -288,16 +288,39 @@
     ]);
   }
 
+  /**
+   * Строка общей таблицы. Тап по строке открывает стенд игрока (TASK-430); у строки без pid (старый ответ) — просто
+   * текст. Экипировка от капитанов лиг (TASK-432) — на аватаре, тап по аватару — что на человеке сейчас.
+   */
   function rowEl(r) {
-    // Тап по строке открывает стенд игрока (TASK-430); у строки без pid (лиги, старый ответ) строка просто текст.
     var open = r.pid ? function () { if (r.is_me) K.go('stand', {}); else K.go('player', { pid: r.pid }); } : null;
-    return h(open ? 'button' : 'div', open ? { type: 'button', class: 'kk-r kk-r--btn' + (r.is_me ? ' is-me' : ''), onclick: open } : { class: 'kk-r' + (r.is_me ? ' is-me' : '') }, [
+    var kit = r.outfit && K.Kit.outfit(r.outfit.item) ? r.outfit : null;
+    var ava = K.kitAva(r.display_name, 36, { head: kit, cls: r.is_me ? '' : 'kk-ava--soft', wrap: 'kk-kit--room' });
+    var avaCell = kit
+      ? h('button', { type: 'button', class: 'kk-r__avb', 'aria-haspopup': 'dialog', 'aria-label': 'Экипировка: ' + r.display_name, onclick: function () { state.sheet = { kind: 'kit', row: r }; K.render(); } }, [ava])
+      : h('span', { class: 'kk-r__ava' }, [ava]);
+    var body = [
+      h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]),
+      kit ? h('span', { class: 'kk-r__kit', text: K.Kit.outsideNote(kit) }) : h('span', { class: 'kk-sub', text: S.rowSub(r) }),
+    ];
+    var me = r.is_me ? ' is-me' : '';
+    return h('div', { class: 'kk-r kk-r--kit' + (open ? ' kk-r--stretch' : '') + me }, [
       h('span', { class: 'kk-r__n' + (r.rank === 1 ? ' is-gold' : ''), text: String(r.rank) }),
-      h('span', { class: 'kk-col kk-r__w' }, [
-        h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]),
-        h('span', { class: 'kk-sub', text: S.rowSub(r) }),
-      ]),
+      avaCell,
+      open ? h('button', { type: 'button', class: 'kk-r__open kk-col kk-r__w', onclick: open }, body) : h('span', { class: 'kk-col kk-r__w' }, body),
       h('span', { class: 'kk-r__pt', text: S.spaced(r.points) }),
+    ]);
+  }
+
+  /** Что сейчас на человеке: вещи от капитанов его лиг, последняя выданная — первой. Названий лиг нет. */
+  function kitSheet(r) {
+    return K.sheet(r.display_name, 'Экипировка от капитанов лиг — до следующего вечера их лиги', [
+      h('div', { class: 'kk-kitlist' }, K.Kit.outsideList(r.outfit).map(function (x) {
+        return h('div', { class: 'kk-kitlist__r' }, [
+          h('span', { class: 'kk-kitlist__ava' }, [K.kitAva(r.display_name, 44, { head: { item: x.id, stat: x.stat, score: x.score }, cls: r.is_me ? '' : 'kk-ava--soft' })]),
+          h('span', { class: 'kk-col' }, [h('span', { class: 'kk-kitlist__t', text: x.full }), h('span', { class: 'kk-kitlist__s', text: x.from })]),
+        ]);
+      })),
     ]);
   }
 
@@ -371,6 +394,7 @@
       return [main];
     },
     sheet: function (s, a) {
+      if (s.kind === 'kit') return kitSheet(s.row);
       if (s.kind === 'team') {
         var clubs = state.clubs || [];
         var cells = [{ name: null, short: 'Все матчи', all: true }].concat(clubs);

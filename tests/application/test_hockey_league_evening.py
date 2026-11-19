@@ -173,6 +173,7 @@ async def test_moves_before_joining_do_not_count(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_day_cap_is_worn_until_the_next_played_day(db_session) -> None:
+    from src.application.hockey_league_captain import current_state
     from src.application.hockey_leagues import league_titles
 
     db = db_session
@@ -196,7 +197,10 @@ async def test_day_cap_is_worn_until_the_next_played_day(db_session) -> None:
 
     today = await _evening(db, league_id)
     assert today["cap"]["decided"] is False and not any(r["cap"] for r in today["items"])
-    assert (await league_titles(db, league_id=league_id, now=NOW))[SASHA]["id"] == "cap"
+    # Кепка — на голове (TASK-432), текстом в звании её не повторяем; капитан вчерашнего дня — Макс.
+    state = await current_state(db, await member_league(db, league_id=league_id, player_key=ME), now=NOW)
+    assert state.head(SASHA, enabled=True) == {"item": "cap"} and state.cap.captains == {ME}
+    assert SASHA not in await league_titles(db, league_id=league_id, now=NOW)
 
     # Второй матч сыгран: в споре двое (Саша не ходил) — кепка не разыгрывается и со Саши снята.
     await db.execute(
@@ -210,6 +214,9 @@ async def test_day_cap_is_worn_until_the_next_played_day(db_session) -> None:
     assert after["cap"]["decided"] and not after["cap"]["in_play"]
     titles = await league_titles(db, league_id=league_id, now=NOW + timedelta(hours=4))
     assert all(t["id"] != "cap" for t in titles.values())
+    league = await member_league(db, league_id=league_id, player_key=ME)
+    later_state = await current_state(db, league, now=NOW + timedelta(hours=4))
+    assert later_state.head(SASHA, enabled=True) is None and not later_state.cap.captains
 
 
 @pytest.mark.asyncio

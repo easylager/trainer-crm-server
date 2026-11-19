@@ -16,6 +16,9 @@
 * хуже всех сразу несколько — кепка у каждого; все равны — кепки нет;
 * разыгрывается, если в споре хотя бы ``CAP_MIN_CONTENDERS``.
 
+Капитан вечера (TASK-432) — зеркало кепки: лучший средний за ход среди тех же, кто в споре; несколько лучших —
+капитанов несколько; все равны — ни кепки, ни капитана. Право капитана — в ``hockey_league_captain``.
+
 Пороги — константы ниже: владелец пересмотрит их через пару недель.
 
 Жесты: «Стук клюшкой» и «2 минуты» (2 минуты штрафа). Один жест от человека человеку за игровой день в лиге,
@@ -284,6 +287,7 @@ class DayCap:
 
     holders: frozenset[int] = frozenset()
     contenders: frozenset[int] = frozenset()
+    captains: frozenset[int] = frozenset()  # капитан вечера (TASK-432): лучший средний за ход, зеркально кепке
     need_moves: int = 1
     decided: bool = False
     in_play: bool = False  # в споре хватило людей
@@ -300,9 +304,17 @@ def day_cap(stats: Mapping[int, tuple[int, int]], *, matches: int, complete: boo
     if len(contenders) < CAP_MIN_CONTENDERS:
         return DayCap(contenders=contenders, need_moves=need, decided=True)
     average = {k: Fraction(stats[k][0], stats[k][1]) for k in contenders}
-    low = min(average.values())
-    holders = frozenset() if low == max(average.values()) else frozenset(k for k, v in average.items() if v == low)
-    return DayCap(holders=holders, contenders=contenders, need_moves=need, decided=True, in_play=True)
+    low, high = min(average.values()), max(average.values())
+    if low == high:
+        return DayCap(contenders=contenders, need_moves=need, decided=True, in_play=True)
+    return DayCap(
+        holders=frozenset(k for k, v in average.items() if v == low),
+        contenders=contenders,
+        captains=frozenset(k for k, v in average.items() if v == high),
+        need_moves=need,
+        decided=True,
+        in_play=True,
+    )
 
 
 def cap_of_rows(rows: list[DayRow], matches: list[DayMatch]) -> DayCap:
@@ -528,6 +540,7 @@ class CapNews:
     day: date
     holders: tuple[str, ...]  # имена, «я» — первым
     mine: bool
+    captain: bool = False  # этот игрок — капитан вечера: строка «выдай экипировку» (TASK-432)
 
 
 async def cap_news(
@@ -563,11 +576,11 @@ async def cap_news(
                     members = {m.player_key: m.display_name for m in await league_members(session, league.id, now=now)}
                     cap = caps.get(day)
                     if cap is not None and cap.holders:
-                        cache[key] = (closing, cap.holders, members)
+                        cache[key] = (closing, cap.holders, members, cap.captains)
             found = cache[key]
             if found is None or found[0] not in ids:
                 continue
-            _, holders, members = found
+            _, holders, members, captains = found
             names = sorted(members.get(k, "") for k in holders if k != player_key)
             out.append(
                 CapNews(
@@ -576,6 +589,7 @@ async def cap_news(
                     day=day,
                     holders=tuple((["ты"] if player_key in holders else []) + names),
                     mine=player_key in holders,
+                    captain=player_key in captains,
                 )
             )
     return out
@@ -593,6 +607,8 @@ def _sort_key(row: DayRow, me: int) -> tuple:
 
 async def league_evening(session: AsyncSession, *, league, player_key: int, now: datetime, day: date | None) -> dict:
     """«Вечер» лиги за день ``day`` (``None`` — по умолчанию). Участие проверяет вызывающий."""
+    from src.application.hockey_league_captain import captain_enabled, evening_state
+
     now = _utc(now)
     today = game_day(now)
     days = visible_days(await league_days(session, league), today)
@@ -605,6 +621,8 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
             "next": None,
             "complete": False,
             "gestures_on": gestures_enabled(),
+            "captain_on": captain_enabled(),
+            "captain": None,
             "cap": None,
             "matches": [],
             "items": [],
@@ -617,6 +635,11 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
     complete = day_complete(matches)
     gestures_on = gestures_enabled()
     gestures = await day_gestures(session, league.id, day) if gestures_on else []
+    # Право капитана (TASK-432): голова каждого, капитаны вечера и выдача (только действительная).
+    captain_on = captain_enabled()
+    state = await evening_state(session, league, day, now=now, rows=rows, matches=matches)
+    award = state.award if captain_on else None
+    pids = {r.member.player_key: r.member.pid for r in rows}
     items = []
     for row in sorted(rows, key=lambda r: _sort_key(r, player_key)):
         mine = row.member.player_key == player_key
@@ -630,6 +653,8 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
                 "moves": row.moves,
                 "points": row.points,
                 "cap": row.member.player_key in cap.holders,
+                "captain": row.member.player_key in cap.captains,
+                "head": state.head(row.member.player_key, enabled=captain_on),
                 "in_cap_race": row.member.player_key in cap.contenders,
                 "scarf": scarf_of(row, matches),
                 # Жесты этой строке: от кого и какой (``from_me`` — мой); ``my_gesture`` — что дал я. Себе — нельзя.
@@ -660,6 +685,24 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
         "next": None if nxt is None else nxt.isoformat(),
         "complete": complete,
         "gestures_on": gestures_on,
+        "captain_on": captain_on,
+        # Право капитана: ``right`` — я капитан этого вечера и могу выдать или поменять; ``award`` — что выдано.
+        "captain": {
+            "right": captain_on
+            and state.current
+            and player_key in cap.captains
+            and (award is None or award.captain_key == player_key),
+            "award": None
+            if award is None
+            else {
+                "to": pids[award.to_key],
+                "item": award.item,
+                "from": award.captain_name,
+                "from_me": award.captain_key == player_key,
+                "at": _utc(award.updated_at).isoformat(),
+                "current": state.current,
+            },
+        },
         # Кепка дня: решилась ли, разыгрывалась ли (хватило ли людей) и сколько ходов нужно, чтобы быть в споре.
         "cap": {
             "decided": cap.decided,

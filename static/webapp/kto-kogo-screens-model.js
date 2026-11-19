@@ -975,30 +975,30 @@
 
   var FEW_WORD = { 2: 'двоих', 3: 'троих', 4: 'четверых', 5: 'пятерых' };
 
+  /** Очки за ход, округлённо: так сравниваются капитан и кепка. */
+  function perMove(r) {
+    return r && r.moves ? Math.round((r.points || 0) / r.moves) : 0;
+  }
+
   /**
-   * Итог сыгранного вечера (макет v2): звезда — больше всех очков, кепка — по правилу кепки дня.
-   * Имена без склонения (пол и падеж неизвестны): метка «Звезда вечера» / «Кепка дня» и имя крупно.
+   * Итог сыгранного вечера: капитан и кепка дня — оба по правилу сервера (средний за ход среди тех, кто в споре).
+   * Имена без склонения (пол и падеж неизвестны): метка «Капитан» / «Кепка дня» и имя крупно.
    */
   function eveningVerdict(ev) {
     if (!ev || !ev.complete) return null;
     var items = ev.items || [];
-    var best = 0;
-    items.forEach(function (r) { if (r.moves && r.points > best) best = r.points; });
-    // Звезда — когда было с кем сравнить: ходили хотя бы двое.
-    if (items.filter(function (r) { return r.moves; }).length < 2) best = 0;
-    var stars = best ? items.filter(function (r) { return r.moves && r.points === best; }) : [];
+    var captains = items.filter(function (r) { return r.captain; });
     var caps = items.filter(function (r) { return r.cap; });
-    var star = stars.length ? {
-      label: 'Звезда вечера',
-      name: whoList(stars),
-      sub: stars.length === 1 ? eveningMoves(stars[0], ev) + ' · +' + best : '+' + best + ' у каждого',
-    } : null;
+    var captain = null;
+    // Капитана решает средний за ход (как кепку), поэтому он и в подписи: «2 из 4 · 40 за ход».
+    if (captains.length === 1) captain = { label: 'Капитан', name: captains[0].is_me ? 'ты' : captains[0].display_name, sub: eveningMoves(captains[0], ev) + ' · ' + perMove(captains[0]) + NBSP + 'за ход' };
+    else if (captains.length) captain = { label: 'Капитаны', name: whoList(captains), sub: 'Выдаёт тот, кто успеет первым' };
     var cap = null;
     if (caps.length === 1 && caps[0].is_me) cap = { label: 'Кепка дня', name: 'у тебя', sub: eveningMoves(caps[0], ev) + '. Носишь до следующего вечера' };
     else if (caps.length === 1) cap = { label: 'Кепка дня', name: caps[0].display_name, sub: eveningMoves(caps[0], ev) + ' · носит до следующего вечера' };
     else if (caps.length) cap = { label: 'Кепка дня', name: whoList(caps), sub: 'Носят до следующего вечера' };
-    else if (ev.cap && ev.cap.decided && !ev.cap.in_play) cap = { label: 'Кепка дня', name: 'не разыграна', sub: 'В споре меньше ' + (FEW_WORD[ev.cap.min_players] || ev.cap.min_players) };
-    return star || cap ? { star: star, cap: cap } : null;
+    else if (ev.cap && ev.cap.decided && !ev.cap.in_play) cap = { label: 'Кепка дня', name: 'не разыграна', sub: 'В споре меньше ' + (FEW_WORD[ev.cap.min_players] || ev.cap.min_players) + ' — и капитана нет' };
+    return captain || cap ? { captain: captain, cap: cap } : null;
   }
 
   /** Что прилетело мне (строка «Ты»): «Андрей стучит тебе клюшкой · Мария отправляет тебя на скамейку». Настоящее время — пол не нужен. */
@@ -1076,8 +1076,9 @@
   /** Строка под карточкой вечера. Кепку не разыграли (в споре меньше троих) — так и пишем. */
   function eveningFoot(ev) {
     var cap = ev && ev.cap;
-    if (cap && cap.decided && !cap.in_play) return 'Кепку в этот вечер не разыграли: в споре меньше ' + (FEW_WORD[cap.min_players] || cap.min_players) + '.';
-    if (!(ev && ev.gestures_on)) return 'Звезда — лучшему за вечер, кепка дня — худшему. Носят до следующего вечера.';
+    if (cap && cap.decided && !cap.in_play) return 'Кепку и капитана в этот вечер не разыграли: в споре меньше ' + (FEW_WORD[cap.min_players] || cap.min_players) + '.';
+    if (ev && ev.captain_on) return 'Капитан — лучший за вечер, в кепке дня — худший. Капитан выдаёт экипировку кому угодно, даже себе. Носят до следующего вечера.';
+    if (!(ev && ev.gestures_on)) return 'Капитан — лучший за вечер, в кепке дня — худший. Носят до следующего вечера.';
     return 'Кепку даёт игра, стук и скамейку — друзья. Всё держится до следующего вечера.';
   }
 

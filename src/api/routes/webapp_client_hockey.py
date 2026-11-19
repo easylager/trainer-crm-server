@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
@@ -55,6 +56,7 @@ from src.application.hockey_leagues import friends_moves, friends_picks
 from src.application.hockey_teams import team_card
 from src.shared.telegram_webapp import parse_user_json_from_init_data
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["webapp"])
 
 _TABLE_LIMIT = 50
@@ -327,6 +329,21 @@ async def _my_season_row(session: AsyncSession, player_key: int, now: datetime):
     return await slice_row_of(session, scope=club_scope(None), period=parse_period(None, now), player_key=player_key)
 
 
+async def _outfits_by_pid(session: AsyncSession, rows: list, keys, *, now: datetime) -> dict:
+    """Сбой подсчёта экипировки не должен ронять таблицу: тогда таблица просто без неё."""
+    from src.application.hockey_league_captain import outside_outfits
+
+    wanted = set(keys)
+    pids = {r.player_key: r.pid for r in rows if r.player_key in wanted}
+    try:
+        async with session.begin_nested():
+            found = await outside_outfits(session, list(pids), now=now)
+    except Exception:  # noqa: BLE001
+        logger.warning("kk outfits failed", exc_info=True)
+        return {}
+    return {pids[k]: v for k, v in found.items()}
+
+
 @router.get("/client/hockey/standings")
 async def get_client_hockey_standings(
     club: str | None = Query(None, description="клуб — только его матчи; пусто — «Все»"),
@@ -346,10 +363,15 @@ async def get_client_hockey_standings(
         raise HTTPException(status_code=400, detail="Неизвестный период") from None
     rows = await slice_rows_cached(session, scope=club_scope(club), period=chosen)
     # Короны нужны только тем, кого таблица показывает: верх, сам игрок и соседи.
-    crowns = await crown_totals(session, player_keys=shown_keys(rows, player_key, limit=_TABLE_LIMIT))
+    shown = shown_keys(rows, player_key, limit=_TABLE_LIMIT)
+    crowns = await crown_totals(session, player_keys=shown)
     view = table_view(
         rows, player_key=player_key, crowns=crowns, limit=_TABLE_LIMIT, crown_possible=chosen.kind == "month"
     )
+    # Экипировка от капитанов лиг (TASK-432) видна и в общей таблице: только у показанных строк.
+    outfits = await _outfits_by_pid(session, rows, shown, now=now)
+    for item in [*view["items"], *view["neighbors"], *([view["me"]] if view["me"] else [])]:
+        item["outfit"] = outfits.get(item["pid"])
     return {
         "club": club,
         "period": {"key": chosen.key, "kind": chosen.kind, "title": chosen.title, "ends_at": chosen.until.isoformat()},
