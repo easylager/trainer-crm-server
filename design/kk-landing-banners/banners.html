@@ -1,0 +1,114 @@
+<!doctype html>
+<!-- Исходник баннеров лендинга /kk (static/landing/kk/*.webp): 400×320, рендер ×3 — scripts/render_kk_landing_banners.sh -->
+<html lang="ru"><head><meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Golos+Text:wght@500;600;700&display=block" rel="stylesheet">
+<style>
+  :root { --bg: #19212a; --card: #242c37; --tile: #1f2732; --shadow: #13191f; --line: #313a47;
+    --ink: #f2f5f7; --muted: #9aa6b4; --gold: #f8d45d; --dark: #0e1423; --dash: #3a4350; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 400px; height: 320px; overflow: hidden; background: var(--bg);
+    font: 500 13px/1.25 'Golos Text', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  .scene { display: none; position: relative; width: 400px; height: 320px; }
+  .scene:target { display: block; }
+  .card, .card-shadow { position: absolute; left: 18px; top: 10px; width: 352px; border-radius: 18px; transform: rotate(2.4deg); transform-origin: 50% 50%; }
+  .card-shadow { background: var(--shadow); top: 22px; left: 14px; }
+  .card { background: var(--card); padding: 18px 20px; }
+  h3 { margin: 0; font: 400 19px/1.1 'Dela Gothic One', sans-serif; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .head small { color: var(--muted); font-size: 12px; }
+  .av { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2f3743; font: 400 13px 'Dela Gothic One', sans-serif; }
+  .av.gold { background: var(--gold); color: var(--dark); }
+  /* Экипировка капитана — рисунки из холста «Кто кого — вечер лиги v2» (Ava.dc.html), viewBox 100×100 поверх аватара */
+  .av { position: relative; }
+  .capt { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--dark); border: 1.5px solid var(--gold); color: var(--gold); font: 900 9px/1 'Golos Text', sans-serif; }
+  .title { padding: 1px 8px; border-radius: 10px; border: 1px solid var(--gold); color: var(--gold); font-size: 10px; font-weight: 700; }
+  .crowns { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 6px; background: var(--gold); color: var(--dark); font: 400 11px 'Dela Gothic One', sans-serif; }
+  .av svg.kit { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  /* Вечер в лиге */
+  .row { display: flex; align-items: center; gap: 12px; height: 54px; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .who { flex: 1; }
+  .who b { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  .dots { display: flex; gap: 4px; margin-top: 6px; }
+  .dots i { width: 22px; height: 6px; border-radius: 3px; background: var(--dash); }
+  .dots i.y { background: var(--gold); }
+  .pts { font: 400 18px 'Dela Gothic One', sans-serif; }
+  .pts.gold { color: var(--gold); }
+  .cap { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; background: var(--gold); color: var(--dark); font-size: 10px; font-weight: 700; }
+  /* Какие матчи */
+  .opt { display: flex; align-items: center; gap: 10px; height: 58px; border-bottom: 1px solid var(--line); }
+  .opt:last-child { border-bottom: 0; }
+  .logos { display: flex; width: 78px; }
+  .logos img { width: 33px; height: 33px; margin-right: -9px; padding: 3px; border-radius: 50%; background: #fff; border: 2px solid var(--card); object-fit: contain; }
+  .opt .t { flex: 1; }
+  .opt b { display: block; font-weight: 700; font-size: 14px; }
+  .opt span { color: var(--muted); font-size: 11.5px; }
+  .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #6b7684; }
+  .radio.on { border: 0; background: var(--gold); }
+  /* Трибуна */
+  .trib { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .trib .av { width: 38px; height: 38px; font-size: 14px; }
+  .trib small { display: block; color: var(--muted); font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 78px; padding-top: 12px; border-radius: 12px; background: var(--tile); font-size: 11px; font-weight: 700; }
+  .tile .ic { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #39424f; color: var(--gold); }
+  .tile .ic img { width: 38px; height: 38px; padding: 4px; border-radius: 50%; background: #fff; object-fit: contain; }
+  .tile.dim { color: var(--muted); opacity: .62; }
+  .tile.dim .ic img { background: #9aa3ad; opacity: .75; }
+  .badge { position: absolute; top: -6px; right: 4px; display: flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 6px; background: var(--gold); color: var(--dark); font: 400 11px 'Dela Gothic One', sans-serif; }
+  svg.crown { width: 1em; height: 1em; fill: currentColor; }
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><symbol id="crown" viewBox="0 0 24 24"><path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z"/></symbol>
+<symbol id="cap" viewBox="0 0 24 24"><path d="M3 15c0-5 4-9 9-9s8 3 8 7v2h3v2H3z"/></symbol></svg>
+
+<section class="scene" id="friends-league">
+  <div class="card-shadow" style="height:282px"></div>
+  <div class="card" style="height:282px">
+    <div class="head"><h3>Вечер в лиге</h3><small>4 матча</small></div>
+    <div class="row"><span class="av gold">Л<span class="capt" aria-label="Капитан">C</span></span><div class="who"><b>Лера <span class="crowns"><svg class="crown"><use href="#crown"/></svg>2</span></b><div class="dots"><i class="y"></i><i class="y"></i><i></i><i class="y"></i></div></div><span class="pts gold">+100</span></div>
+    <div class="row"><span class="av">М</span><div class="who"><b>Макс <span class="title">ванга</span></b><div class="dots"><i class="y"></i><i></i><i class="y"></i><i class="y"></i></div></div><span class="pts">+80</span></div>
+    <div class="row"><span class="av">Г<svg class="kit" viewBox="0 0 100 100" aria-hidden="true" stroke-linejoin="round">
+      <path d="M6 70 Q50 94 94 70 L94 85 Q50 109 6 85 Z" fill="#1f5fa8" stroke="#0d1424" stroke-width="3"/>
+      <path d="M20 77 L28 80 L28 95 L20 92 Z M40 82 L48 83 L48 98 L40 97 Z M60 83 L68 82 L68 97 L60 98 Z M80 79 L87 76 L87 91 L80 94 Z" fill="#fff"/>
+      <path d="M64 86 L78 83 L84 112 L70 115 Z" fill="#1f5fa8" stroke="#0d1424" stroke-width="3"/>
+      <path d="M67 97 L80 94 L81 100 L68 103 Z" fill="#fff"/>
+    </svg></span><div class="who"><b>Глеб</b><div class="dots"><i class="y"></i><i></i><i></i><i class="y"></i></div></div><span class="pts">+50</span></div>
+    <div class="row"><span class="av">Р<svg class="kit" viewBox="0 0 100 100" aria-hidden="true" stroke-linejoin="round">
+      <path d="M2 46 Q50 34 98 46" fill="none" stroke="#0d1424" stroke-width="5"/>
+      <rect x="16" y="30" width="68" height="34" rx="12" fill="#7dd3fc" fill-opacity=".85" stroke="#0d1424" stroke-width="3.5"/>
+      <path d="M50 30 V64" stroke="#0d1424" stroke-width="3"/>
+      <path d="M24 38 L32 36" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M92 52 V2 a7 7 0 0 1 14 0 V6" fill="none" stroke="#f97316" stroke-width="8" stroke-linecap="round"/>
+      <path d="M92 52 Q92 70 74 74" fill="none" stroke="#f97316" stroke-width="8" stroke-linecap="round"/>
+      <circle cx="112" cy="-8" r="3.5" fill="none" stroke="#7dd3fc" stroke-width="2"/>
+      <circle cx="106" cy="-18" r="2.5" fill="none" stroke="#7dd3fc" stroke-width="2"/>
+    </svg></span><div class="who"><b>Руслан <span class="cap">маска с трубкой</span></b><div class="dots"><i></i><i class="y"></i><i></i><i></i></div></div><span class="pts">+10</span></div>
+  </div>
+</section>
+
+<section class="scene" id="favorite-teams">
+  <div class="card-shadow" style="top:42px;height:232px"></div>
+  <div class="card" style="top:30px;height:232px">
+    <div class="head"><h3>Какие матчи</h3></div>
+    <div class="opt"><div class="logos"><img src="../../static/webapp/hockey-logos/dinamo-minsk.png"><img src="../../static/webapp/hockey-logos/yunost.png"><img src="../../static/webapp/hockey-logos/neman.png"></div><div class="t"><b>Все матчи</b><span>Динамо и вся Экстралига</span></div><span class="radio"></span></div>
+    <div class="opt"><div class="logos"><img src="../../static/webapp/hockey-logos/dinamo-minsk.png"></div><div class="t"><b>Только Динамо</b><span>Каждый матч минского «Динамо»</span></div><span class="radio"></span></div>
+    <div class="opt"><div class="logos"><img src="../../static/webapp/hockey-logos/yunost.png"><img src="../../static/webapp/hockey-logos/shakhter.png"><img src="../../static/webapp/hockey-logos/neman.png"></div><div class="t"><b>Свои команды</b><span>Юность, Шахтёр и Неман</span></div><span class="radio on"></span></div>
+  </div>
+</section>
+
+<section class="scene" id="monthly-crowns">
+  <div class="card-shadow" style="top:42px;height:242px"></div>
+  <div class="card" style="top:30px;height:242px">
+    <div class="trib"><span class="av gold">Л</span><div><h3>Трибуна Леры</h3><small>5 корон</small></div></div>
+    <div class="grid">
+      <div class="tile"><span class="badge"><svg class="crown"><use href="#crown"/></svg>2</span><span class="ic"><svg class="crown" style="font-size:18px"><use href="#crown"/></svg></span>Лиги</div>
+      <div class="tile"><span class="badge"><svg class="crown"><use href="#crown"/></svg>1</span><span class="ic"><svg class="crown" style="font-size:18px"><use href="#crown"/></svg></span>Общая</div>
+      <div class="tile"><span class="badge"><svg class="crown"><use href="#crown"/></svg>2</span><span class="ic"><img src="../../static/webapp/hockey-logos/dinamo-minsk.png"></span>Динамо</div>
+      <div class="tile dim"><span class="ic"><img src="../../static/webapp/hockey-logos/yunost.png"></span>Юность</div>
+      <div class="tile dim"><span class="ic"><img src="../../static/webapp/hockey-logos/neman.png"></span>Неман</div>
+      <div class="tile dim"><span class="ic"><img src="../../static/webapp/hockey-logos/shakhter.png"></span>Шахтёр</div>
+    </div>
+  </div>
+</section>
+</body></html>
