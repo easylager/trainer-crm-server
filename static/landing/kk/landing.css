@@ -37,6 +37,34 @@ a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
 .kk-nav { display: flex; justify-content: flex-end; flex-wrap: wrap; column-gap: 22px; font-size: .91rem; }
 .kk-nav a { display: inline-flex; align-items: center; min-height: 44px; }
 .kk-nav a:hover, .kk-footer a:hover { text-decoration: underline; text-underline-offset: 4px; }
+/* Лента клубов: края гаснут в цвет фона накладкой, а не mask-image — одинаково во встроенных браузерах. */
+.kk-rail { position: relative; overflow: hidden; max-width: 1440px; margin-inline: auto; padding: 14px 0 4px; }
+.kk-rail::before, .kk-rail::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  z-index: 1;
+  width: 14%;
+  max-width: 160px;
+  pointer-events: none;
+}
+.kk-rail::before { left: 0; background: linear-gradient(90deg, var(--kk-bg), transparent); }
+.kk-rail::after { right: 0; background: linear-gradient(270deg, var(--kk-bg), transparent); }
+.kk-rail-track { display: flex; width: max-content; animation: kk-crawl var(--kk-rail-dur, 60s) linear infinite; }
+.kk-rail img {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin-right: 18px;
+  padding: 5px;
+  border-radius: 50%;
+  background: #fff;
+  object-fit: contain;
+  box-shadow: 0 0 0 1px var(--kk-line);
+}
+@keyframes kk-crawl { to { transform: translate3d(-50%, 0, 0); } }
+@media (prefers-reduced-motion: reduce) { .kk-rail-track { animation: none; } }
+
 .kk-footer { min-height: 88px; margin-top: 26px; border-top: 1px solid var(--kk-line); }
 .kk-footer a { font-size: .91rem; }
 
