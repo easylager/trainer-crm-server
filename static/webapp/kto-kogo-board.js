@@ -288,13 +288,17 @@
     ]);
   }
 
+  /**
+   * Строка общей таблицы. Тап по строке открывает стенд игрока (TASK-430); у строки без pid (лиги, старый ответ) строка
+   * просто текст. Экипировка от капитанов лиг (TASK-432) — значком у имени; что именно и от кого — на стенде.
+   */
   function rowEl(r) {
-    // Тап по строке открывает стенд игрока (TASK-430); у строки без pid (лиги, старый ответ) строка просто текст.
     var open = r.pid ? function () { if (r.is_me) K.go('stand', {}); else K.go('player', { pid: r.pid }); } : null;
+    var kit = r.outfit && K.Kit.outfit(r.outfit.item) ? r.outfit : null;
     return h(open ? 'button' : 'div', open ? { type: 'button', class: 'kk-r kk-r--btn' + (r.is_me ? ' is-me' : ''), onclick: open } : { class: 'kk-r' + (r.is_me ? ' is-me' : '') }, [
       h('span', { class: 'kk-r__n' + (r.rank === 1 ? ' is-gold' : ''), text: String(r.rank) }),
       h('span', { class: 'kk-col kk-r__w' }, [
-        h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]),
+        h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns), kit ? K.kitBadge(kit) : null]),
         h('span', { class: 'kk-sub', text: S.rowSub(r) }),
       ]),
       h('span', { class: 'kk-r__pt', text: S.spaced(r.points) }),

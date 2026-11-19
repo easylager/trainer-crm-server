@@ -1690,6 +1690,7 @@
     ['kto-kogo-model.js', '202611191'],
     ['kto-kogo-screens-model.js', '202611191'],
     ['kto-kogo.js', '202611191'],
+    ['kto-kogo-kit.js', '202611191'],
     ['kto-kogo-views.js', '202611191'],
     ['kto-kogo-hub-cards.js', '202611191'],
     ['kto-kogo-board.js', '202611191'],

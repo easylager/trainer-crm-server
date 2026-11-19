@@ -31,13 +31,10 @@ def _p(
     }
 
 
-def test_cap_is_the_day_cap_passed_in_not_the_last_match() -> None:
-    # Кепку дня считает «Вечер» лиги (TASK-431); прежняя «Кепка позора» за последний матч больше не выдаётся.
+def test_no_cap_title_it_is_worn_on_the_head() -> None:
+    # Кепку дня считает «Вечер» лиги (TASK-431) и рисует на голове (TASK-432): званием она не бывает.
     picks = [_p(1, 11, points=50), _p(2, 11, points=0), _p(3, 11, points=0)]
     assert pick_titles(picks) == {}
-    titles = pick_titles(picks, caps={1})
-    assert titles == {1: {"id": "cap", "label": "Кепка дня", "detail": ""}}
-    assert set(pick_titles(picks, caps={2, 3})) == {2, 3}
 
 
 DINAMO = "Динамо-Минск"
@@ -78,10 +75,9 @@ def test_scarf_looks_only_at_the_nearest_match_of_your_team_and_needs_one() -> N
     assert pick_titles([_p(1, 31, points=None, status="scheduled", side="away")]) == {}
 
 
-def test_cap_wins_over_scarf_for_one_person() -> None:
+def test_scarf_for_a_move_against_own_team() -> None:
     picks = [_p(1, 11, points=0), _p(2, 11, points=30), _p(1, 12, points=None, status="scheduled", side="away")]
     assert pick_titles(picks, fans={1: "Динамо-Минск"})[1]["id"] == "scarf"
-    assert pick_titles(picks, fans={1: "Динамо-Минск"}, caps={1})[1]["id"] == "cap"
 
 
 def _s(

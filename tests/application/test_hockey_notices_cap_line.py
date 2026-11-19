@@ -14,6 +14,13 @@ from src.application.hockey_matches import set_manual_result
 from src.application.hockey_notices import cap_line, deliver, due_notices
 from src.ingestion.hockey_sources import MINSK_TZ
 
+
+@pytest.fixture(autouse=True)
+def _captain_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Право капитана включено во всех лигах (KK_CAPTAIN_LEAGUES=*); тесты выключения ставят своё."""
+    monkeypatch.setenv("KK_CAPTAIN_LEAGUES", "*")
+
+
 OLEG, ANYA, MAX, DIMA = 9431001, 9431002, 9431003, 9431004
 NAMES = {OLEG: "Олег", ANYA: "Аня", MAX: "Макс", DIMA: "Дима"}
 
@@ -118,7 +125,19 @@ async def test_summary_gets_the_cap_line_only_when_its_match_closes_the_day(db_s
     await _finish(db, last, 2, 3, at(21, 30))
     notices = {n.player_key: n for n in await due_notices(db, now=at(21, 40))}
     assert set(notices) == {ANYA, MAX, OLEG}  # Дима не ходил — итога нет, строки тоже
-    assert notices[ANYA].text.endswith("<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех угадывал в этот день.")
+    # Аня — капитан вечера (TASK-432): после строки про кепку — её право, отдельной строкой.
+    assert notices[ANYA].text.endswith(
+        "<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех угадывал в этот день.\n"
+        "<b>Ты капитан</b> в лиге «Бригада». Олег — 0 из 2: выдать плакат? Или выбери сам в «Вечере»."
+    )
+    # Выдача в один тап: кнопка «Выдать плакат» над «Вечером в лиге» — Олегу, вечер 10 ноября.
+    give = [b for row in notices[ANYA].buttons for b in row if b.get("callback_data", "").startswith("kk:o:")]
+    assert [b["text"] for b in give] == ["Выдать плакат"]
+    assert give[0]["callback_data"].startswith(f"kk:o:{league_id}:261110:") and give[0]["callback_data"].endswith(
+        ":wanted"
+    )
+    assert not any("kk:o:" in b.get("callback_data", "") for row in notices[MAX].buttons for b in row)
+    assert "Ты капитан" not in notices[MAX].text and "Ты капитан" not in notices[OLEG].text
     assert notices[OLEG].text.endswith("<b>Кепка дня</b> в лиге «Бригада» — у тебя: хуже всех угадывал в этот день.")
     urls = [b.get("url", "") for row in notices[MAX].buttons for b in row]
     labels = [b["text"] for row in notices[MAX].buttons for b in row]

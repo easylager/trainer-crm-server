@@ -445,8 +445,12 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # KK_LEAGUE_INVITE_ENABLED=1; поверх — общие флаги KK_NOTIFY_* и вид «lginvite» в KK_NOTIFY_KINDS.
     kk_league_invite_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # Жесты вечера лиги («Стук клюшкой», «2 минуты», TASK-431). Владелец 2026-11-19 убрал их из релиза: вместо них
-    # готовится «Звезда наряжает кепку». Выключено — API их не отдаёт и не принимает, экран прячет кнопки и следы.
+    # право капитана (TASK-432). Выключено — API их не отдаёт и не принимает, экран прячет кнопки и следы.
     kk_gestures_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
+    # Право капитана (TASK-432): в каких лигах капитан вечера выдаёт экипировку. Пусто — нигде, «*» — везде,
+    # «1,7» — только в этих лигах (проверка на своих лигах до включения всем). Где выключено — выдавать нельзя и
+    # экипировку не показываем; капитан и кепка дня в «Вечере» остаются.
+    kk_captain_leagues: str = ""
     # Прогрев разовых посетителей (TASK-428): серия подписчикам катка и одно напоминание «знающим нас». Те же
     # правила, что у игры (kk_notify_gate), и общий с ней бюджет на человека. Всё закрыто по умолчанию.
     warm_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False

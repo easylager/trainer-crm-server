@@ -808,13 +808,41 @@ class HockeyLeagueGesture(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class HockeyLeagueOutfit(Base):
+    """Право капитана (TASK-432): капитан вечера выдаёт одну вещь экипировки за игровой день в лиге."""
+
+    __tablename__ = "hockey_league_outfits"
+    __table_args__ = (
+        Index("ix_hockey_league_outfits_to", "to_key"),
+        Index("ix_hockey_league_outfits_captain", "captain_key"),
+    )
+
+    league_id: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_leagues.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date(), primary_key=True)
+    captain_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    to_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), nullable=False
+    )
+    item: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Сообщение получателю: занято/ушло/сбой. Новый получатель — очередь заново.
+    notice_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notice_failed: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
+
+
 class HockeyCardEvent(Base):
     """Карточка «Кто кого» в чате: отправили, открыли, вступили — без ключа игрока (TASK-300)."""
 
     __tablename__ = "hockey_card_events"
     __table_args__ = (
         CheckConstraint("kind IN ('shared', 'opened', 'joined')", name="ck_hockey_card_events_kind"),
-        CheckConstraint("card IN ('result', 'league')", name="ck_hockey_card_events_card"),
+        CheckConstraint("card IN ('result', 'league', 'crown', 'outfit')", name="ck_hockey_card_events_card"),
         Index("ix_hockey_card_events_created", "created_at"),
     )
 

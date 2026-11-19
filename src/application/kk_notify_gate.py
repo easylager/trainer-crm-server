@@ -118,6 +118,9 @@ KIND_POLICY: dict[str, KindPolicy] = {
     # «Лига продлена» — ответ на действие владельца лиги: вне бюджета и не зависит от согласия ``remind``
     # (письмо о лиге, в которой человек состоит, а не рассылка), но с тихими часами, блокировкой и отключением типа.
     "league": KindPolicy(budgeted=False, type_column="notify_league", respects_remind=False),
+    # «Капитан выдаёт тебе экипировку» (TASK-432) — как письмо лиги: ответ на действие друга, вне бюджета и согласия,
+    # но с тихими часами, блокировкой и своим «Не присылать такое».
+    "outfit": KindPolicy(budgeted=False, type_column="notify_outfit", respects_remind=False),
     "mfinal": KindPolicy(budgeted=True, type_column="notify_mfinal", priority=0, needs_consent=True),
     "overtook": KindPolicy(budgeted=True, type_column="notify_overtook", priority=1, needs_consent=True),
     "nomove": KindPolicy(budgeted=True, type_column="notify_nomove", priority=2, needs_consent=True),
@@ -225,7 +228,8 @@ _PREFS = text("""
     SELECT COALESCE(pr.remind, true) AS remind, pr.bot_blocked_at, pr.notify_paused_until, pr.notify_consent,
            COALESCE(pr.notify_nomove, true) AS notify_nomove, COALESCE(pr.notify_result, true) AS notify_result,
            COALESCE(pr.notify_overtook, true) AS notify_overtook, COALESCE(pr.notify_mfinal, true) AS notify_mfinal,
-           COALESCE(pr.notify_league, true) AS notify_league, COALESCE(pr.notify_lginvite, true) AS notify_lginvite
+           COALESCE(pr.notify_league, true) AS notify_league, COALESCE(pr.notify_lginvite, true) AS notify_lginvite,
+           COALESCE(pr.notify_outfit, true) AS notify_outfit
     FROM (SELECT CAST(:player_key AS BIGINT) AS player_key) AS q
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = q.player_key
     """)

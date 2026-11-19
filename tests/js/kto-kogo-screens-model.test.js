@@ -425,7 +425,7 @@ describe('карточка болельщика', () => {
 });
 
 describe('слова игры', () => {
-  const FILES = ['kto-kogo-model.js', 'kto-kogo-screens-model.js', 'kto-kogo.js', 'kto-kogo-views.js', 'kto-kogo-hub-cards.js', 'kto-kogo-board.js', 'kto-kogo-leagues.js', 'kto-kogo-matches.js', 'kto-kogo-boot.js'];
+  const FILES = ['kto-kogo-model.js', 'kto-kogo-screens-model.js', 'kto-kogo.js', 'kto-kogo-kit.js', 'kto-kogo-views.js', 'kto-kogo-hub-cards.js', 'kto-kogo-board.js', 'kto-kogo-leagues.js', 'kto-kogo-matches.js', 'kto-kogo-boot.js'];
   const BANNED = /ставк|коэффициент|прогноз|пари\b|выигрыш|букмекер|банк\b|ставь|поставить|срок/i;
   it('в строках игроку нет азартных слов', () => {
     for (const f of FILES) {
@@ -684,9 +684,10 @@ describe('пьедестал лиги', () => {
   it('пояснение к званиям: только о тех, что висят на таблице', () => {
     assert.equal(S.titlesNote([{ title: null }, {}]), '');
     assert.match(S.titlesNote([{ title: { id: 'scarf' } }]), /^Шарф — за ход против своей команды/);
-    const both = S.titlesNote([{ title: { id: 'cap' } }, { title: { id: 'scarf' } }]);
+    const both = S.titlesNote([{ head: { item: 'cap' } }, { title: { id: 'scarf' } }]);
     assert.match(both, /Шарф/);
     assert.match(both, /Кепка дня — тому, кто хуже всех угадывал в последний сыгранный вечер лиги/);
+    assert.match(S.titlesNote([{ captain: true }, { head: { item: 'bucket' } }]), /^«C» — капитан последнего вечера/);
   });
 });
 

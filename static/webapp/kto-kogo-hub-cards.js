@@ -288,10 +288,14 @@
   }
 
   // Разделы шторки (TASK-431): очки, кепка дня, жесты вечера лиги. Раздел живёт в state.sheet.tab.
-  var RULE_TABS = [['points', 'Очки'], ['cap', 'Кепка'], ['gestures', 'Жесты']];
+  var RULE_TABS = [['points', 'Очки'], ['cap', 'Кепка'], ['captain', 'Капитан'], ['gestures', 'Жесты']];
 
   function ruleTabs(tab) {
-    var tabs = RULE_TABS.filter(function (t) { return t[0] !== 'gestures' || state.gesturesOn; });
+    var tabs = RULE_TABS.filter(function (t) {
+      if (t[0] === 'gestures') return state.gesturesOn;
+      if (t[0] === 'captain') return state.captainOn;
+      return true;
+    });
     return h('div', { class: 'kk-rtabs', role: 'tablist', 'aria-label': 'Правила' }, tabs.map(function (t) {
       var on = t[0] === tab;
       return h('button', {
@@ -336,6 +340,23 @@
     return [h('span', { class: 'kk-capr__lead', text: r.lead }), ruleList(r.items)];
   }
 
+  /** Раздел «Капитан» (TASK-432): правила и вся коллекция «Экипировка капитана». */
+  function captainSection() {
+    var r = K.Kit.captainRules();
+    return [
+      h('span', { class: 'kk-capr__lead', text: r.lead }),
+      ruleList(r.items),
+      h('span', { class: 'kk-lbl', text: r.collectionTitle.toUpperCase() }),
+      h('div', { class: 'kk-kitlist' }, K.Kit.OUTFITS.map(function (o) {
+        return h('div', { class: 'kk-kitlist__r' }, [
+          h('span', { class: 'kk-kitlist__ava' }, [K.kitAva('О', 44, { head: { item: o.id, stat: 'ЗА 0 ИЗ 4', score: '1:2' }, cls: 'kk-ava--soft' })]),
+          h('span', { class: 'kk-col' }, [h('span', { class: 'kk-kitlist__t', text: o.full }), h('span', { class: 'kk-kitlist__s', text: o.joke })]),
+        ]);
+      })),
+      h('span', { class: 'kk-sub', text: r.collectionNote }),
+    ];
+  }
+
   function pointsSection() {
     var r = S.pointsRules();
     return [
@@ -350,7 +371,7 @@
 
   function pointsSheet() {
     var tab = (state.sheet && state.sheet.tab) || 'points';
-    var body = tab === 'cap' ? capSection() : tab === 'gestures' ? gestureSection() : pointsSection();
+    var body = tab === 'cap' ? capSection() : tab === 'captain' ? captainSection() : tab === 'gestures' ? gestureSection() : pointsSection();
     return K.sheet('Как считаются очки?', null, [ruleTabs(tab)].concat(body), 'kk-sheet--pts');
   }
 

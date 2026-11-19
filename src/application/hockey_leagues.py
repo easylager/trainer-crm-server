@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import secrets
 import unicodedata
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 
@@ -812,7 +812,7 @@ async def league_table_rows(session: AsyncSession, league: League, *, period: Pe
 # ---------- звания в таблице лиги (владелец 2026-10-20) ----------
 # Одно на человека: шутим над ходом, а не над человеком. Всё — из готовых ходов.
 # Если подходит несколько — берём самое яркое по этому порядку.
-TITLE_ORDER = ("cap", "scarf", "vanga", "streak", "optimist")
+TITLE_ORDER = ("scarf", "vanga", "streak", "optimist")
 VANGA_MIN = 2
 STREAK_MIN = 3
 OPTIMIST_MARGIN = 2
@@ -846,16 +846,11 @@ def _plural(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
-def pick_titles(
-    picks: list[dict], *, fans: Mapping[int, str] | None = None, caps: Collection[int] = ()
-) -> dict[int, dict[str, str]]:
+def pick_titles(picks: list[dict], *, fans: Mapping[int, str] | None = None) -> dict[int, dict[str, str]]:
     """Звания участников лиги по их ходам за сезон (чистая функция, ходы — по времени матча).
 
     ``fans`` — «своя» команда игрока (как у бота: «болею за», иначе клуб, за который чаще всего ходил).
-    ``caps`` — кто сейчас в кепке дня (``hockey_league_evening.current_cap``).
 
-    - cap «Кепка дня» — хуже всех угадывал в последний сыгранный игровой день лиги (TASK-431, правило —
-      в ``hockey_league_evening``); носится до следующего сыгранного дня;
     - scarf «В чужом шарфе» — ход против своей команды на её ближайший матч, на который есть ход;
       нет своей команды — нет шарфа;
     - vanga «Ванга» — единственный лидер лиги по точным счетам, от VANGA_MIN точных;
@@ -866,9 +861,6 @@ def pick_titles(
 
     def give(player: int, key: str, label: str, detail: str = "") -> None:
         found.setdefault(player, {})[key] = {"id": key, "label": label, "detail": detail}
-
-    for player in caps:
-        give(player, "cap", "Кепка дня")
 
     scored = [p for p in picks if p["status"] == "final" and p["points"] is not None]
 
@@ -918,15 +910,13 @@ def pick_titles(
 
 
 async def league_titles(session: AsyncSession, *, league_id: int, now: datetime) -> dict[int, dict[str, str]]:
-    from src.application.hockey_league_evening import current_cap
-
+    """Звания под именем в таблице лиги. Кепку дня не даём: она на голове (TASK-432), текстом её не повторяем."""
     now = _utc(now)
     league = _league((await session.execute(_LEAGUE_BY_ID, {"league_id": league_id})).one())
     params = {"league_id": league_id, "since": league.starts_at, **league.match_scope.params}
     picks = [dict(r._mapping) for r in (await session.execute(_TITLE_PICKS, params)).all()]
     if not picks:
         return {}
-    caps = await current_cap(session, league, now=now)
     from src.application.hockey_notices import _FAN_CLUB, FAN_WINDOW
 
     fans_sql = text(f"""
@@ -938,7 +928,7 @@ async def league_titles(session: AsyncSession, *, league_id: int, now: datetime)
         """)
     params = {"league_id": league_id, "now": now, "fan_since": now - FAN_WINDOW}
     fans = {r.player_key: r.club for r in (await session.execute(fans_sql, params)).all() if r.club}
-    return pick_titles(picks, fans=fans, caps=caps)
+    return pick_titles(picks, fans=fans)
 
 
 _RECENT = object()

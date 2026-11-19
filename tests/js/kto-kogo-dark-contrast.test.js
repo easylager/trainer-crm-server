@@ -83,6 +83,18 @@ describe('тёмная тема: токены владельца и контра
     }
   });
 
+  it('право капитана (TASK-432): подписи экипировки, выбор и плашка получателю читаются в обеих темах', () => {
+    for (const t of [light, dark]) {
+      const pairs = [
+        ['kk-crownink', 'kk-row', 4.5], ['kk-crownink', 'kk-card', 4.5], ['kk-crownink', 'kk-me', 4.5], ['kk-crownink', 'kk-crownbg', 4.5],
+        ['kk-muted', 'kk-row', 4.5], ['kk-soft', 'kk-row', 4.5], ['kk-soft', 'kk-card', 4.5], ['kk-link', 'kk-card', 4.5],
+        ['kk-gold', 'kk-badge', 4.5], ['kk-badge-sub', 'kk-badge', 4.5], ['kk-gold-ink', 'kk-card', 3], ['kk-gold-ink', 'kk-crownbg', 3],
+      ];
+      const low = pairs.filter(([a, b, min]) => ratio(t[a], t[b]) < min).map(([a, b, min]) => `${a}/${b} ${ratio(t[a], t[b]).toFixed(2)} < ${min}`);
+      assert.deepEqual(low, [], t === light ? 'светлая' : 'тёмная');
+    }
+  });
+
   it('красный и зелёный не применяются к результатам', () => {
     const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
     const users = rules.split('}').filter((r) => /var\(--kk-(win|lose)\)/.test(r) && !/^\s*(body\.kk-dark )?\.kk\s*\{/.test(r.trim() + '{'));

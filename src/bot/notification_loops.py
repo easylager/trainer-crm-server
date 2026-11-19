@@ -3552,12 +3552,17 @@ async def run_hockey_matches_loop() -> None:
                     close_client_bot,
                     deliver,
                     deliver_league_notices,
+                    deliver_outfit_notices,
                     send_via_client_bot_gone,
                 )
 
                 try:
                     counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot_gone)
                     counts["league_notices"] = await deliver_league_notices(
+                        async_session_factory, now=now, send=send_via_client_bot_gone
+                    )
+                    # «Капитан выдаёт тебе экипировку» (TASK-432): только в лигах из KK_CAPTAIN_LEAGUES.
+                    counts["outfit_notices"] = await deliver_outfit_notices(
                         async_session_factory, now=now, send=send_via_client_bot_gone
                     )
                     # Новые поводы (TASK-426): закрыты флагами, без поводов — пустой проход.

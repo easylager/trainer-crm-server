@@ -93,29 +93,32 @@ describe('строка человека', () => {
     assert.equal(S.eveningReason({ moves: 3, in_cap_race: true }, EV), '');
     const few = Object.assign({}, EV, { cap: { decided: true, in_play: false, min_players: 3 } });
     assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, few), '');
-    assert.equal(S.eveningFoot(few), 'Кепку в этот вечер не разыграли: в споре меньше троих.');
-    assert.equal(S.eveningFoot(EV), 'Звезда — лучшему за вечер, кепка дня — худшему. Носят до следующего вечера.');
+    assert.equal(S.eveningFoot(few), 'Кепку и капитана в этот вечер не разыграли: в споре меньше троих.');
+    assert.equal(S.eveningFoot(EV), 'Капитан — лучший за вечер, в кепке дня — худший. Носят до следующего вечера.');
+    assert.equal(S.eveningFoot(Object.assign({}, EV, { captain_on: true })), 'Капитан — лучший за вечер, в кепке дня — худший. Капитан выдаёт экипировку кому угодно, даже себе. Носят до следующего вечера.');
     assert.equal(S.eveningFoot(Object.assign({}, EV, { gestures_on: true })), 'Кепку даёт игра, стук и скамейку — друзья. Всё держится до следующего вечера.');
   });
-  it('итог вечера: звезда и кепка, имена без склонения; вечер не сыгран — итога нет', () => {
+  it('итог вечера: капитан и кепка от сервера, имена без склонения; вечер не сыгран — итога нет', () => {
     const items = [
       { display_name: 'Макс', is_me: true, hits: 0, moves: 4, points: 0, cap: true },
-      { display_name: 'Андрей', hits: 4, moves: 4, points: 130, cap: false },
+      { display_name: 'Андрей', hits: 4, moves: 4, points: 130, cap: false, captain: true },
       { display_name: 'Мария', hits: 3, moves: 4, points: 70, cap: false },
     ];
     const ev = Object.assign({}, EV, { items });
     assert.deepEqual(S.eveningVerdict(ev), {
-      star: { label: 'Звезда вечера', name: 'Андрей', sub: '4 из 4 · +130' },
+      captain: { label: 'Капитан', name: 'Андрей', sub: '4 из 4 · +130' },
       cap: { label: 'Кепка дня', name: 'у тебя', sub: '0 из 4. Носишь до следующего вечера' },
     });
     const other = Object.assign({}, EV, { items: items.map((r) => Object.assign({}, r, { cap: r.display_name === 'Мария' })) });
     assert.equal(S.eveningVerdict(other).cap.name, 'Мария');
     assert.equal(S.eveningVerdict(other).cap.sub, '3 из 4 · носит до следующего вечера');
-    const tie = Object.assign({}, EV, { items: [Object.assign({}, items[1]), Object.assign({}, items[2], { points: 130 }), Object.assign({}, items[0], { points: 130, cap: false })] });
-    assert.deepEqual(S.eveningVerdict(tie).star, { label: 'Звезда вечера', name: 'ты, Андрей и Мария', sub: '+130 у каждого' });
-    const few = Object.assign({}, EV, { items: [items[1]], cap: { decided: true, in_play: false, min_players: 3 } });
-    assert.equal(S.eveningVerdict(few).star, null, 'звезда — когда ходили хотя бы двое');
-    assert.deepEqual(S.eveningVerdict(few).cap, { label: 'Кепка дня', name: 'не разыграна', sub: 'В споре меньше троих' });
+    const mine = Object.assign({}, EV, { items: [Object.assign({}, items[0], { captain: true, cap: false, hits: 4, points: 130 })] });
+    assert.equal(S.eveningVerdict(mine).captain.name, 'ты');
+    const tie = Object.assign({}, EV, { items: [Object.assign({}, items[1]), Object.assign({}, items[2], { captain: true }), Object.assign({}, items[0], { captain: true, cap: false })] });
+    assert.deepEqual(S.eveningVerdict(tie).captain, { label: 'Капитаны', name: 'ты, Андрей и Мария', sub: 'Выдаёт тот, кто успеет первым' });
+    const few = Object.assign({}, EV, { items: [Object.assign({}, items[1], { captain: false })], cap: { decided: true, in_play: false, min_players: 3 } });
+    assert.equal(S.eveningVerdict(few).captain, null);
+    assert.deepEqual(S.eveningVerdict(few).cap, { label: 'Кепка дня', name: 'не разыграна', sub: 'В споре меньше троих — и капитана нет' });
     assert.equal(S.eveningVerdict(Object.assign({}, ev, { complete: false })), null);
     const zero = Object.assign({}, EV, { items: [{ display_name: 'А', moves: 2, points: 0 }], cap: { decided: true, in_play: true } });
     assert.equal(S.eveningVerdict(zero), null);
