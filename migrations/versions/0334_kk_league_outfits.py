@@ -9,6 +9,9 @@ Create Date: 2026-11-19
 строка перезаписывается. Действительна ли она (капитан всё ещё капитан, получатель ещё в лиге, вечер — последний
 сыгранный), решается при чтении. Лига или игрок ушли из базы — выдачи уходят каскадом.
 
+Получателю — сообщение бота (вид ``outfit``): очередь прямо в строке выдачи (``notice_*``); новый получатель —
+новое сообщение. ``hockey_player_prefs.notify_outfit`` (``NULL`` = включено) — «Не присылать такое».
+
 Откат удаляет таблицу: экипировка — шутка вечера, не результат игры.
 """
 
@@ -42,13 +45,18 @@ def upgrade() -> None:
         sa.Column("item", sa.String(24), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("notice_claimed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("notice_sent_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("notice_failed", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
+    op.execute("ALTER TABLE hockey_player_prefs ADD COLUMN IF NOT EXISTS notify_outfit boolean")
     # Ключ (league_id, day) обслуживает чтение; индексы ниже — для каскадного удаления игрока.
     op.create_index("ix_hockey_league_outfits_to", "hockey_league_outfits", ["to_key"])
     op.create_index("ix_hockey_league_outfits_captain", "hockey_league_outfits", ["captain_key"])
 
 
 def downgrade() -> None:
+    op.execute("ALTER TABLE hockey_player_prefs DROP COLUMN IF EXISTS notify_outfit")
     op.drop_index("ix_hockey_league_outfits_captain", table_name="hockey_league_outfits")
     op.drop_index("ix_hockey_league_outfits_to", table_name="hockey_league_outfits")
     op.drop_table("hockey_league_outfits")

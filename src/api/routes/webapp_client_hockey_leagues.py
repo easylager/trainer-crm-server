@@ -439,7 +439,7 @@ async def get_client_hockey_league(
     marks = await period_marks(session, league, since=since, until=until, now=now)  # type: ignore[arg-type]
     # Голова и нашивка «C» — по последнему сыгранному вечеру лиги (TASK-432), в любой вкладке таблицы.
     state = await current_state(session, league, now=now)
-    heads_on = captain_enabled() and state is not None and state.current
+    heads_on = captain_enabled(league.id) and state is not None and state.current
     return {
         "id": summary.id,
         "name": summary.name,
@@ -530,7 +530,7 @@ async def put_client_hockey_league_outfit(
         league = await member_league(session, league_id=league_id, player_key=player_key)
     except (LookupError, PermissionError) as exc:
         _raise_league(exc)
-    if not captain_enabled():
+    if not captain_enabled(league.id):
         raise HTTPException(status_code=404, detail="Экипировки в лиге пока нет")
     try:
         await set_outfit(

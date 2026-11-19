@@ -20,6 +20,13 @@ from src.application.hockey_league_evening import game_day
 from src.application.hockey_leagues import member_league
 from tests.application.test_hockey_league_evening import ANYA, LATE, ME, NOW, SASHA, _evening, _league, _match, _pick
 
+
+@pytest.fixture(autouse=True)
+def _captain_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Право капитана включено во всех лигах (KK_CAPTAIN_LEAGUES=*); тесты выключения ставят своё."""
+    monkeypatch.setenv("KK_CAPTAIN_LEAGUES", "*")
+
+
 D1 = NOW - timedelta(days=2)
 
 
@@ -54,7 +61,9 @@ async def test_captain_gives_anyone_even_self_and_can_change(db_session) -> None
     day = await _played_day(db, league_id, D1, BASIC)
 
     ev = await _evening(db, league_id, day=day)
-    assert ev["captain_on"] and ev["captain"] == {"right": True, "award": None}
+    assert ev["captain_on"] and ev["captain"]["right"] is True and ev["captain"]["award"] is None
+    # Подсказка: тот, кто в кепке, и вещь по его вечеру (0 угаданных — плакат).
+    assert ev["captain"]["suggest"] == {"to": await _pid(db, SASHA), "item": "wanted", "revenge": None}
     by = {r["display_name"]: r for r in ev["items"]}
     assert by["Макс"]["captain"] and by["Саша"]["head"] == {"item": "cap"} and by["Аня"]["head"] is None
 
@@ -112,7 +121,7 @@ async def test_corrected_result_moves_the_right_to_the_new_captain(db_session) -
     # Итог поправили: у Ани стало больше всех — выдача Макса снимается, право у Ани.
     await db.execute(text("UPDATE hockey_picks SET points = 50 WHERE player_key = :k"), {"k": ANYA})
     ev = await _evening(db, league_id, day=day, me=ANYA)
-    assert ev["captain"] == {"right": True, "award": None}
+    assert ev["captain"]["right"] is True and ev["captain"]["award"] is None
     assert next(r for r in ev["items"] if r["display_name"] == "Саша")["head"] == {"item": "cap"}
     await _give(db, league_id, ANYA, SASHA, "sieve", day)
     assert (await _evening(db, league_id, day=day))["captain"]["award"]["from"] == "Аня"
@@ -175,10 +184,10 @@ async def test_switched_off_hides_outfits_but_keeps_cap_and_captain(db_session, 
     league_id = await _league(db, scope="extraliga")
     day = await _played_day(db, league_id, D1, BASIC)
     await _give(db, league_id, ME, ANYA, "hardhat", day)
-    monkeypatch.setenv("KK_CAPTAIN_ENABLED", "0")
+    monkeypatch.setenv("KK_CAPTAIN_LEAGUES", "")
     ev = await _evening(db, league_id, day=day)
     by = {r["display_name"]: r for r in ev["items"]}
-    assert ev["captain"] == {"right": False, "award": None} and by["Макс"]["captain"]
+    assert ev["captain"]["right"] is False and ev["captain"]["award"] is None and by["Макс"]["captain"]
     assert by["Аня"]["head"] is None and by["Саша"]["head"] == {"item": "cap"}
     assert await outside_outfits(db, [ANYA], now=NOW) == {}
 
@@ -213,3 +222,112 @@ async def test_digest_invites_only_captains_whose_right_is_open(db_session) -> N
     await _give(db, league_id, ANYA, SASHA, "bag", day)
     assert await _open_captains(db, league, day, cap, NOW) == {ANYA}  # выдала Аня — Максу звать нечего
     assert await _open_captains(db, league, day, cap, league.ends_at + timedelta(hours=1)) == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_revenge_suggests_returning_the_same_item(db_session) -> None:
+    db = db_session
+    league_id = await _league(db, scope="extraliga")
+    d1 = await _played_day(db, league_id, D1, {ANYA: (50, 50), SASHA: (20, 20), ME: (0, 0)})
+    await _give(db, league_id, ANYA, ME, "bucket", d1)
+    today = await _played_day(db, league_id, NOW - timedelta(hours=4), {ME: (50, 50), ANYA: (20, 0), SASHA: (0, 0)})
+    ev = await _evening(db, league_id, day=today)
+    assert ev["captain"]["right"] is True
+    assert ev["captain"]["suggest"] == {"to": await _pid(db, ANYA), "item": "bucket", "revenge": "bucket"}
+
+
+def test_suggested_item_follows_the_evening() -> None:
+    from src.application.hockey_league_captain import suggest_item
+    from src.application.hockey_league_evening import DayMatch, DayRow, Member
+
+    ms = [DayMatch(1, "А", "Б", NOW, "final", 2, 1), DayMatch(2, "В", "Г", NOW, "final", 0, 3)]
+    member = Member(1, "Олег", "p1", NOW)
+
+    def row(*points):
+        picks = {m.id: {"points": p, "doubled": False, "final": True} for m, p in zip(ms, points) if p is not None}
+        return DayRow(member=member, picks=picks)
+
+    assert suggest_item(row(None, None), ms) == "snorkel"
+    assert suggest_item(row(0, 0), ms) == "wanted"
+    assert suggest_item(row(20, 0), ms) == "scorehat"
+    assert suggest_item(row(20, 50), ms) == "bucket"
+
+
+def test_captain_line_offers_one_tap_without_declining_names() -> None:
+    from src.application.hockey_notices import captain_line, offer_button
+
+    offer = {"pid": "p1", "name": "Олег", "me": False, "item": "wanted", "hits": 0, "matches": 4, "revenge": False}
+    assert captain_line(league_name="Работа", offer=offer) == (
+        "<b>Ты капитан</b> в лиге «Работа». Олег — 0 из 4: выдать плакат? Или выбери сам в «Вечере»."
+    )
+    revenge = {**offer, "item": "bucket", "revenge": True}
+    assert captain_line(league_name="Работа", offer=revenge) == (
+        "<b>Ты капитан</b> в лиге «Работа». Олег — автор твоего ведра. Самое время вернуть — или выбери сам в «Вечере»."
+    )
+    assert offer_button(7, date(2026, 11, 16), revenge) == {
+        "text": "Вернуть ведро",
+        "callback_data": "kk:o:7:261116:p1:bucket",
+    }
+    assert (
+        len(offer_button(123456, date(2026, 11, 16), {**offer, "pid": "x" * 12, "item": "scorehat"})["callback_data"])
+        <= 64
+    )
+
+
+@pytest.mark.asyncio
+async def test_given_from_chat_and_the_recipient_gets_one_message(db_session) -> None:
+    from contextlib import asynccontextmanager
+
+    from src.application import hockey_notices
+    from src.application.hockey_league_captain import chat_give
+
+    hockey_notices._RETRIES.clear()
+    db = db_session
+
+    @asynccontextmanager
+    async def factory():
+        yield db
+
+    sent: list[tuple[int, str, list]] = []
+
+    async def send(chat_id: int, body: str, buttons) -> str:
+        sent.append((chat_id, body, buttons))
+        return hockey_notices.SENT
+
+    league_id = await _league(db, scope="extraliga")
+    day = await _played_day(db, league_id, D1, BASIC)
+    got = await chat_give(
+        db, league_id=league_id, captain_key=ME, day=day, to_pid=await _pid(db, SASHA), item="wanted", now=NOW
+    )
+    assert got == ("Саша", False)
+    await hockey_notices.deliver_outfit_notices(factory, now=NOW, send=send)
+    assert [(k, b.split("</b>")[0]) for k, b, _ in sent] == [(SASHA, "<b>Макс выдаёт тебе экипировку")]
+    assert "плакат «Разыскивается» — до следующего вечера" in sent[0][1]
+    assert [b["callback_data"] for row in sent[0][2] for b in row if "callback_data" in b] == ["kk:off:of"]
+
+    await _give(db, league_id, ME, SASHA, "bag", day)  # тому же — другая вещь: второе сообщение не шлём
+    await hockey_notices.deliver_outfit_notices(factory, now=NOW, send=send)
+    assert len(sent) == 1
+    await _give(db, league_id, ME, ANYA, "bag", day)  # новый получатель — новое сообщение
+    await hockey_notices.deliver_outfit_notices(factory, now=NOW, send=send)
+    assert [k for k, _, _ in sent] == [SASHA, ANYA]
+    await _give(db, league_id, ME, ME, "foil", day)  # себе — без сообщения
+    await hockey_notices.deliver_outfit_notices(factory, now=NOW, send=send)
+    assert len(sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_only_listed_leagues_have_the_right(db_session, monkeypatch) -> None:
+    db = db_session
+    league_id = await _league(db, scope="extraliga")
+    day = await _played_day(db, league_id, D1, BASIC)
+    monkeypatch.setenv("KK_CAPTAIN_LEAGUES", f"{league_id + 1000}, 5")
+    assert (await _evening(db, league_id, day=day))["captain_on"] is False
+    with pytest.raises(RightClosed):
+        from src.application.hockey_league_captain import chat_give
+
+        await chat_give(
+            db, league_id=league_id, captain_key=ME, day=day, to_pid=await _pid(db, SASHA), item="bag", now=NOW
+        )
+    monkeypatch.setenv("KK_CAPTAIN_LEAGUES", f"5,{league_id}")
+    assert (await _evening(db, league_id, day=day))["captain_on"] is True

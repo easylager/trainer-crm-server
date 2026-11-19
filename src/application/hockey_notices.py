@@ -80,14 +80,22 @@ KIND_MFINAL = "mfinal"
 KIND_MOVED = "moved"
 KIND_MOVED_FREE = "mvfree"
 KIND_RESCORE = "rescore"  # итог поправили после рассылки: «Мы ошиблись с итогом…»
+KIND_OUTFIT = "outfit"  # получателю: капитан выдаёт ему экипировку (TASK-432)
 KIND_BEFORE = "before"  # прежнее «за час»: больше не шлём, записи остались в таблице
 # Приоритет внутри дневного бюджета (меньше — важнее).
 PRIORITY = {KIND_MFINAL: 0, KIND_OVERTOOK: 1, KIND_NOMOVE: 2}
 # Короткие коды типов в callback_data (лимит Telegram — 64 байта).
-TYPE_CODES = {"nm": KIND_NOMOVE, "rs": KIND_RESULT, "ot": KIND_OVERTOOK, "mf": KIND_MFINAL, "li": "lginvite"}
+TYPE_CODES = {
+    "nm": KIND_NOMOVE,
+    "rs": KIND_RESULT,
+    "ot": KIND_OVERTOOK,
+    "mf": KIND_MFINAL,
+    "li": "lginvite",
+    "of": KIND_OUTFIT,
+}
 CODE_OF = {v: k for k, v in TYPE_CODES.items()}
 # Типы со своей колонкой, которых нет в настройках Mini App (``TYPE_COLUMN``): письма лиги и приглашение собрать лигу.
-EXTRA_TYPE_COLUMN = {"league": "notify_league", "lginvite": "notify_lginvite"}
+EXTRA_TYPE_COLUMN = {"league": "notify_league", "lginvite": "notify_lginvite", KIND_OUTFIT: "notify_outfit"}
 TYPE_COLUMN = {
     KIND_NOMOVE: "notify_nomove",
     KIND_RESULT: "notify_result",
@@ -100,6 +108,7 @@ TYPE_TITLES = {
     KIND_OVERTOOK: "«тебя обошли»",
     KIND_MFINAL: "«последний матч месяца»",
     "lginvite": "приглашения собрать лигу",
+    KIND_OUTFIT: "экипировка от капитана",
 }
 
 NOMOVE_AHEAD = timedelta(hours=3)
@@ -129,6 +138,7 @@ CB_PICK = "kk:p"  # kk:p:<матч>:<h|a>
 CB_NEXT = "kk:n"
 CB_OFF = "kk:off"  # kk:off:<тип>
 CB_LEAVE = "kk:lv"  # kk:lv:<лига>
+CB_OUTFIT = "kk:o"  # kk:o:<лига>:<ггммдд>:<pid получателя>:<вещь> — выдача капитана в один тап (TASK-432)
 
 SENT = "ok"
 BLOCKED = "blocked"
@@ -575,9 +585,31 @@ def cap_line(*, league_name: str, holders: tuple[str, ...] | list[str], mine: bo
     return f"<b>Кепка дня</b> в лиге «{league}» — {joined}: хуже всех угадывали в этот день."
 
 
-def captain_line(*, league_name: str) -> str:
-    """Строка сводки капитану вечера (TASK-432): у него право выдать экипировку до следующего вечера лиги."""
-    return f"<b>Ты капитан</b> в лиге «{html.escape(league_name)}» — выдай экипировку кому хочешь, хоть себе."
+def captain_line(*, league_name: str, offer: dict | None = None) -> str:
+    """Строка сводки капитану вечера (TASK-432) и готовое предложение для выдачи в один тап (кнопка — ``offer_button``).
+    Имена не склоняем: «Олег — 0 из 4», «Олег — автор твоего ведра»."""
+    from src.application.hockey_league_captain import OUTFIT_WORDS
+
+    head = f"<b>Ты капитан</b> в лиге «{html.escape(league_name)}»"
+    if not offer or offer["item"] not in OUTFIT_WORDS:
+        return head + " — выдай экипировку кому хочешь, хоть себе."
+    _, what, of_what = OUTFIT_WORDS[offer["item"]]
+    name = html.escape(offer["name"])
+    if offer["revenge"]:
+        return f"{head}. {name} — автор твоего {of_what}. Самое время вернуть — или выбери сам в «Вечере»."
+    if offer["me"]:
+        return f"{head}. Выдать себе {what}? Или выбери кому в «Вечере»."
+    return f"{head}. {name} — {offer['hits']} из {offer['matches']}: выдать {what}? Или выбери сам в «Вечере»."
+
+
+def offer_button(league_id: int, day, offer: dict) -> dict:
+    from src.application.hockey_league_captain import OUTFIT_WORDS
+
+    verb = "Вернуть" if offer["revenge"] else "Выдать"
+    return {
+        "text": f"{verb} {OUTFIT_WORDS[offer['item']][1]}",
+        "callback_data": f"{CB_OUTFIT}:{league_id}:{day:%y%m%d}:{offer['pid']}:{offer['item']}",
+    }
 
 
 def evening_button(league_id: int, day) -> dict | None:
@@ -855,16 +887,20 @@ async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) 
         news = await _cap_news(session, player_key, rows, now=now, cache=cache.setdefault("cap_news", {}))
         from src.application.hockey_league_captain import captain_enabled
 
-        captains_on = captain_enabled() if news else False
+        offer = None
         for item in news:
-            body += "\n" + cap_line(league_name=item.league_name, holders=item.holders, mine=item.mine)
-            if item.captain and captains_on:
-                body += "\n" + captain_line(league_name=item.league_name)
+            if item.holders:
+                body += "\n" + cap_line(league_name=item.league_name, holders=item.holders, mine=item.mine)
+            if item.captain and captain_enabled(item.league_id):
+                body += "\n" + captain_line(league_name=item.league_name, offer=item.offer)
+                if offer is None and item.offer:
+                    offer = offer_button(item.league_id, item.day, item.offer)
         buttons = _rows(
             [
                 {"text": "Следующий ход", "callback_data": CB_NEXT},
                 url_button("Таблица", f"{START_PICK}_{rows[-1].match_id}"),
             ],
+            [offer] if offer else [],
             [evening_button(news[0].league_id, news[0].day)] if news else [],
             off_button(KIND_RESULT),
         )
@@ -1517,6 +1553,107 @@ async def deliver_league_notices(session_factory, *, now: datetime, send: Sender
     return counts
 
 
+# ---------- «капитан выдаёт тебе экипировку» (TASK-432) ----------
+
+# Очередь — в самих выдачах: свежие, не себе, лига идёт. Действительна ли выдача, проверяем перед отправкой.
+_DUE_OUTFIT_NOTICES = text("""
+    SELECT o.league_id, o.day, o.to_key, l.name AS league_name
+    FROM hockey_league_outfits AS o
+    JOIN hockey_leagues AS l ON l.id = o.league_id
+    WHERE o.notice_claimed_at IS NULL AND o.to_key <> o.captain_key AND o.updated_at >= :since AND l.ends_at > :now
+    ORDER BY o.updated_at, o.league_id
+    """)
+
+_CLAIM_OUTFIT_NOTICE = text("""
+    UPDATE hockey_league_outfits SET notice_claimed_at = :now
+    WHERE league_id = :league_id AND day = :day AND to_key = :to_key AND notice_claimed_at IS NULL
+    RETURNING to_key
+    """)
+
+_RELEASE_OUTFIT_NOTICE = text("""
+    UPDATE hockey_league_outfits SET notice_claimed_at = NULL
+    WHERE league_id = :league_id AND day = :day AND to_key = :to_key AND notice_sent_at IS NULL
+    """)
+
+_DONE_OUTFIT_NOTICE = text("""
+    UPDATE hockey_league_outfits
+    SET notice_sent_at = CASE WHEN CAST(:ok AS BOOLEAN) THEN CAST(:now AS TIMESTAMPTZ) END, notice_failed = :failed
+    WHERE league_id = :league_id AND day = :day AND to_key = :to_key
+    """)
+
+OUTFIT_NOTICE_WINDOW = timedelta(days=2)
+
+
+def outfit_text(*, captain: str, league_name: str, item: str) -> str:
+    """Получателю: кто, где и что. Настоящее время — пол не нужен."""
+    from src.application.hockey_league_captain import OUTFIT_WORDS
+
+    full = OUTFIT_WORDS[item][0]
+    return (
+        f"<b>{html.escape(captain)} выдаёт тебе экипировку</b> в лиге «{html.escape(league_name)}»: "
+        f"{full} — до следующего вечера. Видят все в «КТО КОГО».\nСтань капитаном — и выдавать будешь ты."
+    )
+
+
+async def deliver_outfit_notices(session_factory, *, now: datetime, send: Sender) -> dict[str, int]:
+    """Сообщения «капитан выдаёт тебе экипировку». Как письма лиги: ответ на действие друга — вне дневного бюджета
+    и согласия, ночью ждут утра, «Не присылать такое» и блокировка — через допуск. Выдача уже не действует (вечер
+    сменился, капитан другой, лига выключена) — сообщение не шлём, строку закрываем."""
+    from src.application.hockey_league_captain import captain_enabled, evening_state
+    from src.application.hockey_leagues import _LEAGUE_BY_ID, _league
+
+    counts = {"sent": 0, "failed": 0, "blocked": 0, "skipped": 0}
+    if in_quiet_hours(now):
+        return counts
+    async with session_factory() as session:
+        params = {"since": _utc(now) - OUTFIT_NOTICE_WINDOW, "now": _utc(now)}
+        due = list((await session.execute(_DUE_OUTFIT_NOTICES, params)).all())
+    for r in due:
+        key_params = {"league_id": r.league_id, "day": r.day, "to_key": r.to_key}
+        async with session_factory() as session:
+            await lock_player(session, r.to_key)
+            if (await session.execute(_CLAIM_OUTFIT_NOTICE, {**key_params, "now": _utc(now)})).first() is None:
+                continue
+            league = _league((await session.execute(_LEAGUE_BY_ID, {"league_id": r.league_id})).one())
+            state = await evening_state(session, league, r.day, now=now)
+            award = state.award
+            stale = not captain_enabled(league.id) or not state.current or award is None or award.to_key != r.to_key
+            admission = None if stale else await admit(session, kind=KIND_OUTFIT, player_key=r.to_key, now=now)
+            await session.commit()
+        if stale or not admission.allowed:  # type: ignore[union-attr]
+            counts["skipped"] += 1
+            if admission is not None:
+                await _journal_refusal(
+                    session_factory, Notice(KIND_OUTFIT, r.to_key, 0, "", []), admission.reason, now=now
+                )
+            continue
+        text_ = outfit_text(captain=award.captain_name, league_name=r.league_name, item=award.item)  # type: ignore[union-attr]
+        buttons = _rows([evening_button(r.league_id, r.day)], off_button(KIND_OUTFIT))
+        try:
+            outcome = _outcome(await send(r.to_key, text_, buttons))
+        except Exception:  # noqa: BLE001
+            logger.warning("kto-kogo outfit notice %s/%s failed", r.league_id, r.day, exc_info=True)
+            outcome = FAILED
+        if outcome == GONE:
+            outcome = BLOCKED
+        retry_key = (KIND_OUTFIT, r.league_id, r.day, r.to_key)
+        if outcome == RETRY and not _attempt(retry_key):
+            outcome = FAILED
+        async with session_factory() as session:
+            if outcome == RETRY:
+                await session.execute(_RELEASE_OUTFIT_NOTICE, key_params)
+            else:
+                _RETRIES.pop(retry_key, None)
+                done = {**key_params, "ok": outcome == SENT, "failed": outcome != SENT, "now": _utc(now)}
+                await session.execute(_DONE_OUTFIT_NOTICE, done)
+                if outcome == BLOCKED:
+                    await mark_blocked(session, r.to_key, now=now)
+            await session.commit()
+        name = {SENT: "sent", BLOCKED: "blocked", RETRY: "retry"}.get(outcome, "failed")
+        counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
 # Telegram режет рассылку ботом на ~30 сообщений/с; держимся с запасом.
 _THROTTLE_SEC = 1 / 25
 # Дольше этого просьбу подождать (RetryAfter) не ждём: сообщение вернётся в очередь на следующий проход.
@@ -1665,6 +1802,7 @@ __all__ = [
     "deliver",
     "cap_line",
     "deliver_league_notices",
+    "deliver_outfit_notices",
     "due_notices",
     "fan_club",
     "get_prefs",

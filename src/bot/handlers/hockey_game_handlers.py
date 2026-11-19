@@ -13,11 +13,20 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
+from src.application.hockey_league_captain import (
+    OUTFIT_WORDS,
+    AlreadyGiven,
+    NotCaptain,
+    OutfitRefused,
+    RightClosed,
+    chat_give,
+)
 from src.application.hockey_leagues import leave_league
 from src.application.hockey_notices import (
     CB_LEAVE,
     CB_NEXT,
     CB_OFF,
+    CB_OUTFIT,
     CB_PICK,
     TYPE_CODES,
     TYPE_TITLES,
@@ -173,6 +182,48 @@ async def on_consent_yes(cb: CallbackQuery) -> None:
         await session.commit()
     await cb.answer(t("kk_notify.on_done"), show_alert=True)
     await _edit_markup(cb, [[{"text": t("kk_notify.btn.no"), "callback_data": "kk:noall"}]])
+
+
+@router.callback_query(F.data.startswith(f"{CB_OUTFIT}:"))
+async def on_outfit(cb: CallbackQuery) -> None:
+    """Право капитана в один тап (TASK-432): «Выдать плакат» под вечерней сводкой. Удалось или право уже закрыто —
+    кнопка уходит; остальные кнопки сообщения остаются."""
+    try:
+        _, _, raw_league, raw_day, pid, item = (cb.data or "").split(":")
+        league_id = int(raw_league)
+        day = datetime.strptime(raw_day, "%y%m%d").date()
+    except ValueError:
+        await cb.answer()
+        return
+    drop = True
+    async with async_session_factory() as session:
+        try:
+            name, self_ = await chat_give(
+                session,
+                league_id=league_id,
+                captain_key=cb.from_user.id,
+                day=day,
+                to_pid=pid,
+                item=item,
+                now=datetime.now(timezone.utc),
+            )
+            await session.commit()
+            what = OUTFIT_WORDS[item][0]
+            toast = f"Готово: {what} — тебе" if self_ else f"Готово: {name} в экипировке — {what}"
+        except (LookupError, PermissionError):
+            toast = "Тебя уже нет в этой лиге"
+        except NotCaptain:
+            toast = "Выдаёт только капитан вечера — итог вечера поменялся"
+        except AlreadyGiven as exc:
+            toast = f"Экипировку этого вечера уже выдаёт {exc.name}"
+        except RightClosed:
+            toast = "Право капитана закрыто: был следующий вечер или лига закончилась"
+        except OutfitRefused as exc:
+            toast = str(exc)
+            drop = False
+    await cb.answer(toast, show_alert=True)
+    if drop:
+        await _edit_markup(cb, _without(_current_rows(cb), f"{CB_OUTFIT}:"))
 
 
 @router.callback_query(F.data.startswith(f"{CB_LEAVE}:"))

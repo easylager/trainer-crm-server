@@ -16,8 +16,9 @@
 * хуже всех сразу несколько — кепка у каждого; все равны — кепки нет;
 * разыгрывается, если в споре хотя бы ``CAP_MIN_CONTENDERS``.
 
-Капитан вечера (TASK-432) — зеркало кепки: лучший средний за ход среди тех же, кто в споре; несколько лучших —
-капитанов несколько; все равны — ни кепки, ни капитана. Право капитана — в ``hockey_league_captain``.
+Капитан вечера (TASK-432, владелец 2026-11-19) — больше всех очков за вечер среди тех же, кто в споре за кепку,
+кроме тех, кто в кепке: награда за то, что ходил на все матчи и угадывал. Ничья по сумме — капитанов несколько;
+у всех поровну — капитана нет. Право капитана — в ``hockey_league_captain``.
 
 Пороги — константы ниже: владелец пересмотрит их через пару недель.
 
@@ -287,7 +288,7 @@ class DayCap:
 
     holders: frozenset[int] = frozenset()
     contenders: frozenset[int] = frozenset()
-    captains: frozenset[int] = frozenset()  # капитан вечера (TASK-432): лучший средний за ход, зеркально кепке
+    captains: frozenset[int] = frozenset()  # капитан вечера (TASK-432): больше всех очков за вечер
     need_moves: int = 1
     decided: bool = False
     in_play: bool = False  # в споре хватило людей
@@ -304,16 +305,16 @@ def day_cap(stats: Mapping[int, tuple[int, int]], *, matches: int, complete: boo
     if len(contenders) < CAP_MIN_CONTENDERS:
         return DayCap(contenders=contenders, need_moves=need, decided=True)
     average = {k: Fraction(stats[k][0], stats[k][1]) for k in contenders}
-    low, high = min(average.values()), max(average.values())
-    if low == high:
-        return DayCap(contenders=contenders, need_moves=need, decided=True, in_play=True)
+    low = min(average.values())
+    holders = frozenset() if low == max(average.values()) else frozenset(k for k, v in average.items() if v == low)
+    # Капитан — по сумме: награда за то, что ходил и угадывал. В кепке капитаном не бывают; все равны — капитана нет.
+    totals = {k: stats[k][0] for k in contenders - holders}
+    captains: frozenset[int] = frozenset()
+    if holders or len(set(totals.values())) > 1:
+        best = max(totals.values())
+        captains = frozenset(k for k, v in totals.items() if v == best)
     return DayCap(
-        holders=frozenset(k for k, v in average.items() if v == low),
-        contenders=contenders,
-        captains=frozenset(k for k, v in average.items() if v == high),
-        need_moves=need,
-        decided=True,
-        in_play=True,
+        holders=holders, contenders=contenders, captains=captains, need_moves=need, decided=True, in_play=True
     )
 
 
@@ -532,6 +533,8 @@ class CapNews:
     holders: tuple[str, ...]  # имена, «я» — первым
     mine: bool
     captain: bool = False  # этот игрок — капитан вечера: строка «выдай экипировку» (TASK-432)
+    # Готовое предложение капитану (выдача в один тап): pid, имя, вещь, «4 из 4», ответка ли.
+    offer: dict | None = None
 
 
 async def cap_news(
@@ -566,7 +569,7 @@ async def cap_news(
                     )
                     members = {m.player_key: m.display_name for m in await league_members(session, league.id, now=now)}
                     cap = caps.get(day)
-                    if cap is not None and cap.holders:
+                    if cap is not None and (cap.holders or cap.captains):
                         cache[key] = (
                             closing,
                             cap.holders,
@@ -578,6 +581,9 @@ async def cap_news(
                 continue
             _, holders, members, captains = found
             names = sorted(members.get(k, "") for k in holders if k != player_key)
+            offer = None
+            if player_key in captains:
+                offer = await _captain_offer(session, league, day, player_key, members, now)
             out.append(
                 CapNews(
                     league_id=league.id,
@@ -586,9 +592,33 @@ async def cap_news(
                     holders=tuple((["ты"] if player_key in holders else []) + names),
                     mine=player_key in holders,
                     captain=player_key in captains,
+                    offer=offer,
                 )
             )
     return out
+
+
+async def _captain_offer(
+    session: AsyncSession, league, day: date, player_key: int, members: dict[int, str], now: datetime
+) -> dict | None:
+    from src.application.hockey_league_captain import captain_enabled, evening_state, suggest
+
+    if not captain_enabled(league.id):
+        return None
+    state = await evening_state(session, league, day, now=now)
+    hint = await suggest(session, league, state, player_key)
+    if hint is None:
+        return None
+    row = next(r for r in state.rows if r.member.player_key == hint.to_key)
+    return {
+        "pid": row.member.pid,
+        "name": members.get(hint.to_key, row.member.display_name),
+        "me": hint.to_key == player_key,
+        "item": hint.item,
+        "hits": row.hits,
+        "matches": len(state.matches),
+        "revenge": hint.revenge_item is not None,
+    }
 
 
 async def _open_captains(session: AsyncSession, league, day: date, cap: DayCap, now: datetime) -> frozenset[int]:
@@ -615,7 +645,7 @@ def _sort_key(row: DayRow, me: int) -> tuple:
 
 async def league_evening(session: AsyncSession, *, league, player_key: int, now: datetime, day: date | None) -> dict:
     """«Вечер» лиги за день ``day`` (``None`` — по умолчанию). Участие проверяет вызывающий."""
-    from src.application.hockey_league_captain import captain_enabled, evening_state
+    from src.application.hockey_league_captain import captain_enabled, evening_state, suggest
 
     now = _utc(now)
     today = game_day(now)
@@ -629,7 +659,7 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
             "next": None,
             "complete": False,
             "gestures_on": gestures_enabled(),
-            "captain_on": captain_enabled(),
+            "captain_on": captain_enabled(league.id),
             "captain": None,
             "cap": None,
             "matches": [],
@@ -644,10 +674,17 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
     gestures_on = gestures_enabled()
     gestures = await day_gestures(session, league.id, day) if gestures_on else []
     # Право капитана (TASK-432): голова каждого, капитаны вечера и выдача (только действительная).
-    captain_on = captain_enabled()
+    captain_on = captain_enabled(league.id)
     state = await evening_state(session, league, day, now=now, rows=rows, matches=matches)
     award = state.award if captain_on else None
     pids = {r.member.player_key: r.member.pid for r in rows}
+    right = (
+        captain_on
+        and state.current
+        and player_key in cap.captains
+        and (award is None or award.captain_key == player_key)
+    )
+    hint = await suggest(session, league, state, player_key) if right else None
     items = []
     for row in sorted(rows, key=lambda r: _sort_key(r, player_key)):
         mine = row.member.player_key == player_key
@@ -696,10 +733,11 @@ async def league_evening(session: AsyncSession, *, league, player_key: int, now:
         "captain_on": captain_on,
         # Право капитана: ``right`` — я капитан этого вечера и могу выдать или поменять; ``award`` — что выдано.
         "captain": {
-            "right": captain_on
-            and state.current
-            and player_key in cap.captains
-            and (award is None or award.captain_key == player_key),
+            "right": right,
+            # Что предложить сразу (кому и что; ``revenge`` — ответка: эту вещь получатель раньше выдавал мне).
+            "suggest": None
+            if hint is None
+            else {"to": pids[hint.to_key], "item": hint.item, "revenge": hint.revenge_item},
             "award": None
             if award is None
             else {

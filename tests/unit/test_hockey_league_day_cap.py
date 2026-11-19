@@ -67,15 +67,24 @@ def test_one_team_league_day_is_one_match() -> None:
     assert cap.need_moves == 1 and cap.holders == {1} and 4 not in cap.contenders
 
 
-def test_captain_is_the_best_average_among_the_same_contenders() -> None:
-    # Капитан (TASK-432) — зеркало кепки: лучший средний за ход; не в споре — не капитан, даже с лучшим средним.
-    stats = {1: (80, 4), 2: (50, 3), 3: (10, 3), 4: (50, 1)}
+def test_captain_is_the_most_points_among_contenders_not_in_the_cap() -> None:
+    # Капитан (TASK-432) — по сумме: 4 из 4 и +130 лучше, чем 2 хода по 40 в среднем.
+    stats = {1: (130, 4), 2: (80, 2), 3: (10, 3), 4: (200, 1)}
     cap = day_cap(stats, matches=4, complete=True)
-    assert cap.captains == {1} and cap.holders == {3}
+    assert cap.captains == {1} and cap.holders == {3}  # 4 с одним ходом не в споре
+
+
+def test_the_cap_holder_is_never_captain() -> None:
+    # Больше всех очков, но хуже всех в среднем: кепка, а капитан — следующий по сумме.
+    stats = {1: (80, 4), 2: (50, 2), 3: (50, 2)}
+    cap = day_cap(stats, matches=4, complete=True)
+    assert cap.holders == {1} and cap.captains == {2, 3}
 
 
 def test_captains_tie_and_no_captain_without_a_decided_race() -> None:
     assert day_cap({1: (40, 2), 2: (40, 2), 3: (0, 2)}, matches=2, complete=True).captains == {1, 2}
     assert day_cap({1: (20, 2), 2: (20, 2), 3: (20, 2)}, matches=2, complete=True).captains == frozenset()
+    # Средние равны (кепки нет), а суммы разные — капитан есть.
+    assert day_cap({1: (20, 2), 2: (40, 4), 3: (10, 1)}, matches=2, complete=True).captains == {2}
     assert day_cap({1: (0, 2), 2: (50, 2)}, matches=2, complete=True).captains == frozenset()  # в споре двое
     assert day_cap({1: (0, 2), 2: (50, 2), 3: (40, 2)}, matches=3, complete=False).captains == frozenset()

@@ -44,6 +44,20 @@ from src.application.hockey_league_evening import (
 OUTFITS = ("wanted", "half", "bag", "sieve", "scorehat", "snorkel", "hardhat", "curlers", "foil", "bucket")
 HEAD_CAP = "cap"  # кепка дня на голове, когда капитан ничего не выдал этому человеку
 
+# Названия для бота: полное, «выдать что» (винительный), «автор чего» (родительный). Как в kto-kogo-kit.js.
+OUTFIT_WORDS = {
+    "wanted": ("плакат «Разыскивается»", "плакат", "плаката"),
+    "half": ("полушарф", "полушарф", "полушарфа"),
+    "bag": ("пакет на голову", "пакет", "пакета"),
+    "sieve": ("маска-решето", "решето", "решета"),
+    "scorehat": ("шапка-табло", "шапку-табло", "шапки-табло"),
+    "snorkel": ("маска с трубкой", "маску с трубкой", "маски с трубкой"),
+    "hardhat": ("каска «Ремонт»", "каску", "каски"),
+    "curlers": ("бигуди", "бигуди", "бигуди"),
+    "foil": ("корона из фольги", "корону из фольги", "короны из фольги"),
+    "bucket": ("ведро вместо шлема", "ведро", "ведра"),
+}
+
 
 class OutfitRefused(ValueError):
     """Нельзя: неизвестная вещь или человек не в лиге (текст — для человека)."""
@@ -65,11 +79,20 @@ class AlreadyGiven(Exception):
         self.name = name
 
 
-def captain_enabled() -> bool:
-    """Право капитана включено настройкой ``KK_CAPTAIN_ENABLED`` (по умолчанию включено)."""
+def captain_leagues() -> frozenset[int] | None:
+    """Лиги из ``KK_CAPTAIN_LEAGUES``: ``None`` — все («*»), пустое множество — ни одной."""
     from src.shared.config import Settings
 
-    return bool(Settings().kk_captain_enabled)  # type: ignore[call-arg]
+    raw = (Settings().kk_captain_leagues or "").strip()  # type: ignore[call-arg]
+    if raw == "*":
+        return None
+    return frozenset(int(x) for x in raw.replace(" ", "").split(",") if x.isdigit())
+
+
+def captain_enabled(league_id: int, leagues: frozenset[int] | None | bool = False) -> bool:
+    """Право капитана включено в этой лиге. ``leagues`` — уже прочитанный ``captain_leagues()``."""
+    allowed = captain_leagues() if leagues is False else leagues
+    return allowed is None or league_id in allowed  # type: ignore[operator]
 
 
 @dataclass(frozen=True)
@@ -93,7 +116,13 @@ _UPSERT = text("""
     VALUES (:league_id, :day, :captain_key, :to_key, :item, clock_timestamp())
     ON CONFLICT (league_id, day) DO UPDATE
     SET captain_key = EXCLUDED.captain_key, to_key = EXCLUDED.to_key, item = EXCLUDED.item,
-        updated_at = EXCLUDED.updated_at
+        updated_at = EXCLUDED.updated_at,
+        -- Новый получатель — новое сообщение; тому же человеку поменяли вещь — второе не шлём.
+        notice_claimed_at = CASE WHEN hockey_league_outfits.to_key = EXCLUDED.to_key
+                                 THEN hockey_league_outfits.notice_claimed_at END,
+        notice_sent_at = CASE WHEN hockey_league_outfits.to_key = EXCLUDED.to_key
+                              THEN hockey_league_outfits.notice_sent_at END,
+        notice_failed = hockey_league_outfits.to_key = EXCLUDED.to_key AND hockey_league_outfits.notice_failed
     WHERE hockey_league_outfits.captain_key = EXCLUDED.captain_key
        OR NOT (hockey_league_outfits.captain_key = ANY(:captains))
     RETURNING captain_key
@@ -128,6 +157,52 @@ def outfit_numbers(row: DayRow, matches: list[DayMatch]) -> dict:
     if worst is not None and worst.home_score is not None and worst.away_score is not None:
         score = f"{worst.home_score}:{worst.away_score}"
     return {"stat": f"ЗА {row.hits} ИЗ {len(matches)}", "score": score}
+
+
+# Ответка: кто в этой лиге последним выдавал вещь этому человеку (до этого вечера).
+_LAST_GIVEN_TO = text("""
+    SELECT o.captain_key, o.item FROM hockey_league_outfits AS o
+    WHERE o.league_id = :league_id AND o.to_key = :to_key AND o.captain_key <> :to_key AND o.day < :day
+    ORDER BY o.day DESC
+    LIMIT 1
+    """)
+
+
+def suggest_item(row: DayRow, matches: list[DayMatch]) -> str:
+    """Вещь по вечеру человека: без ходов — маска с трубкой, ноль угаданных — плакат, был промах — шапка-табло со
+    счётом, иначе ведро."""
+    if not row.moves:
+        return "snorkel"
+    if not row.hits:
+        return "wanted"
+    if any(mark(row.picks.get(m.id), m) == MISS for m in matches):
+        return "scorehat"
+    return "bucket"
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    to_key: int
+    item: str
+    revenge_item: str | None = None  # «вернуть»: эту вещь получатель раньше выдавал капитану
+
+
+async def suggest(session: AsyncSession, league, state: "EveningState", captain_key: int) -> Suggestion | None:
+    """Кому и что предложить капитану: ответка тому, кто выдавал ему вещь, — иначе тому, кто в кепке, — иначе тому,
+    у кого меньше всех очков (не себе). Никого, кроме себя, — себе."""
+    rows = {r.member.player_key: r for r in state.rows}
+    params = {"league_id": league.id, "to_key": captain_key, "day": state.day}
+    last = (await session.execute(_LAST_GIVEN_TO, params)).one_or_none()
+    if last is not None and last.captain_key in rows and last.captain_key not in state.cap.captains:
+        return Suggestion(last.captain_key, last.item, revenge_item=last.item)
+    others = [r for r in state.rows if r.member.player_key not in state.cap.captains]
+    if not others:
+        return None if captain_key not in rows else Suggestion(captain_key, "foil")
+    capped = sorted(
+        (r for r in others if r.member.player_key in state.cap.holders), key=lambda r: r.member.display_name
+    )
+    target = capped[0] if capped else min(others, key=lambda r: (r.points, -r.moves, r.member.display_name))
+    return Suggestion(target.member.player_key, suggest_item(target, state.matches))
 
 
 @dataclass
@@ -219,17 +294,41 @@ async def set_outfit(
         raise AlreadyGiven(award.captain_name if award else "")
 
 
+_PLAYER_NAME = text("SELECT display_name FROM hockey_players WHERE player_key = :player_key")
+
+
+async def chat_give(
+    session: AsyncSession, *, league_id: int, captain_key: int, day: date, to_pid: str, item: str, now: datetime
+) -> tuple[str, bool]:
+    """Выдача из сообщения бота (кнопка «Выдать …»): те же проверки, что у Mini App. Вернёт имя получателя и
+    «себе ли». ``LookupError``/``PermissionError`` — капитана нет в лиге; остальные отказы — как у ``set_outfit``."""
+    from src.application.hockey_leagues import member_league
+
+    league = await member_league(session, league_id=league_id, player_key=captain_key)
+    if not captain_enabled(league.id):
+        raise RightClosed(day)
+    await set_outfit(session, league=league, captain_key=captain_key, to_pid=to_pid, item=item, day=day, now=now)
+    to_key = (await session.execute(_MEMBER_BY_PID, {"league_id": league.id, "pid": to_pid})).scalar_one()
+    name = (await session.execute(_PLAYER_NAME, {"player_key": to_key})).scalar_one()
+    return name, to_key == captain_key
+
+
 async def outside_outfits(session: AsyncSession, player_keys: list[int], *, now: datetime) -> dict[int, dict]:
     """Экипировка снаружи лиг (общая таблица): ``{игрок: {item, stat, score, items}}`` только у тех, на ком она есть.
 
     ``item`` — последняя выданная из действующих; ``items`` — все действующие (с цифрами), последние первыми,
     одинаковые вещи из разных лиг вместе (``n``). Имени лиги и капитана здесь нет: снаружи — «от капитана лиги»."""
-    if not player_keys or not captain_enabled():
+    allowed = captain_leagues()
+    if not player_keys or allowed == frozenset():
         return {}
     from src.application.hockey_leagues import _LEAGUE_COLUMNS, _league
 
     keys = set(player_keys)
-    latest = [r for r in (await session.execute(_LATEST_AWARDS, {"keys": list(keys)})).all() if r.to_key in keys]
+    latest = [
+        r
+        for r in (await session.execute(_LATEST_AWARDS, {"keys": list(keys)})).all()
+        if r.to_key in keys and captain_enabled(r.league_id, allowed)
+    ]
     if not latest:
         return {}
     leagues_sql = text(f"SELECT {_LEAGUE_COLUMNS} FROM hockey_leagues WHERE id = ANY(:ids) AND ends_at > :now")
@@ -265,14 +364,20 @@ __all__ = [
     "HEAD_CAP",
     "NotCaptain",
     "OUTFITS",
+    "OUTFIT_WORDS",
     "OutfitRefused",
     "RightClosed",
     "award_valid",
     "captain_enabled",
+    "chat_give",
+    "captain_leagues",
     "current_state",
     "day_award",
     "evening_state",
     "outfit_numbers",
     "outside_outfits",
+    "suggest",
+    "suggest_item",
+    "Suggestion",
     "set_outfit",
 ]

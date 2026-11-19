@@ -15,6 +15,12 @@ from src.api.app import app
 from src.api.miniapp_auth.deps import get_client_miniapp_principal
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 
+
+@pytest.fixture(autouse=True)
+def _captain_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Право капитана включено во всех лигах (KK_CAPTAIN_LEAGUES=*); тесты выключения ставят своё."""
+    monkeypatch.setenv("KK_CAPTAIN_LEAGUES", "*")
+
 ME, ANYA, SASHA, STRANGER = 880_431_201, 880_431_202, 880_431_203, 880_431_204
 
 
@@ -266,7 +272,7 @@ async def test_captain_gives_outfit_seen_in_league_table_and_standings(app_use_t
 
 @pytest.mark.asyncio
 async def test_outfit_off_switch(app_use_test_db, db_session, monkeypatch) -> None:
-    monkeypatch.setenv("KK_CAPTAIN_ENABLED", "0")
+    monkeypatch.setenv("KK_CAPTAIN_LEAGUES", "")
     db = db_session
     league_id = await _league(db)
     m = await _match(db, datetime.now(timezone.utc) - timedelta(days=3))

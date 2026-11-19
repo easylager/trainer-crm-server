@@ -830,6 +830,10 @@ class HockeyLeagueOutfit(Base):
     item: Mapped[str] = mapped_column(String(24), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Сообщение получателю: занято/ушло/сбой. Новый получатель — очередь заново.
+    notice_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notice_failed: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
 
 
 class HockeyCardEvent(Base):
