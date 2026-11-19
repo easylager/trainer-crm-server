@@ -147,11 +147,13 @@ async def test_friday_noon_window_and_switch(db_session, monkeypatch) -> None:
     assert await li.produce_league_invite(db_session, now=FRI) == []  # выключено по умолчанию и здесь
 
 
-def test_disabled_by_default(monkeypatch) -> None:
+def test_on_by_default_without_any_flags(monkeypatch) -> None:
+    """Владелец 2026-11-19: работает сразу после деплоя; KK_LEAGUE_INVITE_ENABLED=0 — стоп-кран."""
     from src.shared.config import Settings
 
     monkeypatch.delenv("KK_LEAGUE_INVITE_ENABLED", raising=False)
-    assert Settings(_env_file=None).kk_league_invite_enabled is False  # type: ignore[call-arg]
+    assert Settings(_env_file=None).kk_league_invite_enabled is True  # type: ignore[call-arg]
+    assert gate.KIND_POLICY["lginvite"].standalone and not gate.KIND_POLICY["invite"].standalone
 
 
 @pytest.mark.asyncio
@@ -231,21 +233,19 @@ async def test_do_not_send_button_turns_the_type_off(db_session, factory) -> Non
 
 
 @pytest.mark.asyncio
-async def test_tick_sends_once_within_budget_and_needs_the_kind_flag(db_session, factory) -> None:
+async def test_tick_sends_once_even_with_all_notify_flags_off(db_session, factory) -> None:
+    """Общие KK_NOTIFY_* выключены и сухой прогон — приглашение всё равно уходит, один раз за пятницу."""
     await player(db_session, SASHA)
     out = PhotoOutbox()
-    off = GateConfig(enabled=True, dry_run=False, texts_accepted=True, kinds=frozenset({"week"}))
-    assert (
-        await run_tick(factory, now=FRI, send=out, producers={"lginvite": li.produce_league_invite}, config=off) == {}
-    )
+    off = GateConfig()  # enabled=False, dry_run=True, тексты не приняты, видов нет
     counts = await run_tick(
-        factory, now=FRI, send=out, producers={"lginvite": li.produce_league_invite}, config=CFG, clock=lambda: FRI
+        factory, now=FRI, send=out, producers={"lginvite": li.produce_league_invite}, config=off, clock=lambda: FRI
     )
     reasons = (await db_session.execute(text("SELECT decision, reason FROM kk_notify_decisions ORDER BY id"))).all()
     assert counts == {"ok": 1} and len(out.sent) == 1, reasons
     later = FRI + timedelta(minutes=30)
     await run_tick(
-        factory, now=later, send=out, producers={"lginvite": li.produce_league_invite}, config=CFG, clock=lambda: later
+        factory, now=later, send=out, producers={"lginvite": li.produce_league_invite}, config=off, clock=lambda: later
     )
     assert len(out.sent) == 1  # в эту пятницу второго нет
 

@@ -102,6 +102,9 @@ class KindPolicy:
     # Слушается ли паузы «два приглашения без хода» (``notify_paused_until``). Приглашение собрать лигу — нет
     # (владелец 2026-11-19: прогреть давно не ходивших); отказ, отключение типа и блокировка его всё равно стопорят.
     respects_pause: bool = True
+    # Повод не держат общие выключатели KK_NOTIFY_* (включён, список видов, сухой прогон, приём текстов) — только свой
+    # (приглашение собрать лигу: KK_LEAGUE_INVITE_ENABLED). Допуск по человеку — согласие, лимиты, тишина — как у всех.
+    standalone: bool = False
     # Семья поводов: ``kk`` — игра (настройки ``hockey_player_prefs``, флаги ``KK_NOTIFY_*``), ``warm`` — прогрев
     # посетителей катков (``warm_prefs``, флаги ``WARM_*``).
     family: str = FAMILY_KK
@@ -276,6 +279,7 @@ register_kind(
         needs_consent=True,
         consent_by_default=True,
         respects_pause=False,
+        standalone=True,
         type_column="notify_lginvite",
     ),
 )
@@ -377,13 +381,14 @@ async def _admit(
         cfg = cfg or GateConfig.from_settings(family=policy.family)
         if cfg.family != policy.family:  # выключатели чужой семьи не открывают этот повод
             return Admission(False, FAMILY_MISMATCH)
-        if not cfg.enabled:
-            return Admission(False, DISABLED)
-        if kind not in cfg.kinds:
-            return Admission(False, KIND_OFF)
-        # Тексты не приняты: только белый список. Сухой прогон ничего не отправляет, поэтому его аудитория не режется.
-        if not cfg.texts_accepted and player_key not in cfg.whitelist and not cfg.dry_run:
-            return Admission(False, TEXTS_NOT_ACCEPTED)
+        if not policy.standalone:
+            if not cfg.enabled:
+                return Admission(False, DISABLED)
+            if kind not in cfg.kinds:
+                return Admission(False, KIND_OFF)
+            # Тексты не приняты: только белый список. Сухой прогон ничего не шлёт, поэтому его аудитория не режется.
+            if not cfg.texts_accepted and player_key not in cfg.whitelist and not cfg.dry_run:
+                return Admission(False, TEXTS_NOT_ACCEPTED)
 
     if policy.family == FAMILY_WARM:
         warm = (await session.execute(_WARM_PREFS, {"player_key": player_key})).one()
@@ -467,7 +472,7 @@ async def _limits(
         if stale:
             return Admission(False, f"{STALE_PREFIX}{stale}")
 
-    if policy.new and cfg is not None and cfg.dry_run:
+    if policy.new and not policy.standalone and cfg is not None and cfg.dry_run:
         return Admission(False, DRY_RUN, dry_run=True)
     return Admission(True, OK)
 

@@ -260,7 +260,15 @@ async def test_tick_setup_failures_never_raise(db_session, factory, monkeypatch)
 
     monkeypatch.setattr(kk_notify, "load_player_facts", bad_facts)
     monkeypatch.setitem(gate.KIND_POLICY, KIND, KindPolicy(budgeted=True, weekly=True, new=True))
-    assert await run_tick(factory, now=at(12), send=Outbox(), producers={KIND: producer}, config=CFG) == {"error": 1}
+    # Писать некому — факты по игрокам не грузятся вовсе (пятничное приглашение крутится в каждом проходе).
+    assert await run_tick(factory, now=at(12), send=Outbox(), producers={KIND: producer}, config=CFG) == {}
+    await seed_player(db_session, KATYA, registered=at(10, day=1))
+    proposal = await _proposal(db_session, KATYA)
+
+    async def busy(session, *, now):
+        return [proposal]
+
+    assert await run_tick(factory, now=at(12), send=Outbox(), producers={KIND: busy}, config=CFG) == {"error": 1}
 
 
 # ---------- 6. неправильный повод не убивает проход ----------
