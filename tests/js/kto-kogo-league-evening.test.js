@@ -266,3 +266,15 @@ describe('«Лига готова» (Ready.dc.html)', () => {
     assert.ok(!/placeholder/.test(input));
   });
 });
+
+describe('козырь в вечере', () => {
+  it('очки удвоил козырь — строка под именем; без козыря строки нет', () => {
+    const ev = { matches: [M('Нефтехимик', 'Динамо-Минск')] };
+    const sasha = { marks: [{ state: 'part', doubled: true, points: 20 }] };
+    assert.deepEqual(S.eveningNotes(sasha, ev).map((n) => n.text), ['Козырь удвоил очки']);
+    const two = { matches: [M('А', 'Б'), M('Нефтехимик', 'Динамо-Минск')] };
+    const r = { marks: [{ state: 'miss', points: 0 }, { state: 'hit', doubled: true, points: 40 }] };
+    assert.equal(S.eveningNotes(r, two)[0].text, 'Козырь удвоил очки за Нефтехимик — Динамо');
+    assert.deepEqual(S.eveningNotes({ marks: [{ state: 'hit', doubled: false, points: 20 }] }, ev), []);
+  });
+});

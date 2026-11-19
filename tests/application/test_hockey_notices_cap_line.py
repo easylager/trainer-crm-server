@@ -157,8 +157,7 @@ async def test_no_cap_line_when_cap_is_not_played(db_session) -> None:
         )
     await _league(db, "Двое", [OLEG, ANYA])
     await make_pick(db, player_key=OLEG, display_name="Олег", match_id=m, side="home", now=at(10))
-    await make_pick(db, player_key=ANYA, display_name="Аня", match_id=m, side="away", now=at(10))
     await _finish(db, m, 2, 3, at(21, 30))
     notices = await due_notices(db, now=at(21, 40))
-    assert notices and all("Кепка дня" not in n.text for n in notices)  # в споре двое — кепку не разыгрывали
+    assert notices and all("Кепка дня" not in n.text for n in notices)  # ходил один — спорить не с кем
     assert all("Вечер в лиге" not in [b["text"] for row in n.buttons for b in row] for n in notices)

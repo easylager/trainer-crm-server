@@ -26,6 +26,7 @@ from src.application.hockey_league_evening import (
     _MEMBER_BY_PID,
     MISS,
     NONE,
+    PART,
     DayCap,
     DayMatch,
     DayRow,
@@ -178,7 +179,7 @@ def outfit_numbers(row: DayRow, matches: list[DayMatch]) -> dict:
 
     Матч — первый промах вечера; промахов нет — первый матч без хода; иначе последний матч."""
     marks = [(mark(row.picks.get(m.id), m), m) for m in matches]
-    worst = next((m for k, m in marks if k == MISS), None) or next((m for k, m in marks if k == NONE), None)
+    worst = next((m for k, m in marks if k in (MISS, PART)), None) or next((m for k, m in marks if k == NONE), None)
     worst = worst or (matches[-1] if matches else None)
     score = ""
     if worst is not None and worst.home_score is not None and worst.away_score is not None:
@@ -202,7 +203,7 @@ def suggest_item(row: DayRow, matches: list[DayMatch]) -> str:
         return "snorkel"
     if not row.hits:
         return "wanted"
-    if any(mark(row.picks.get(m.id), m) == MISS for m in matches):
+    if any(mark(row.picks.get(m.id), m) in (MISS, PART) for m in matches):
         return "scorehat"
     return "bucket"
 
