@@ -456,7 +456,7 @@ def test_fallback_notice_is_one_short_line_and_rearms() -> None:
     assert health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru") is None
     assert health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru") is None
     text_ = health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru")
-    assert text_ == "Кто кого: календарь Динамо не отвечает. Сейчас на запасном — sportmail.ru, с ним всё в порядке."
+    assert text_ == "КТО КОГО: календарь Динамо не отвечает. Сейчас на запасном — sportmail.ru, с ним всё в порядке."
     assert health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru") is None
     health.ok("dinamo-fallback")
     assert health.take_fallback_notice(extraliga=None, dinamo="sportmail.ru") is None

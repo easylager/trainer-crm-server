@@ -85,7 +85,7 @@ def test_league_card_version_follows_content() -> None:
 def test_captions() -> None:
     assert (
         cards.result_caption(home="ХК Сочи", away="Динамо-Минск", home_score=2, away_score=3, points=50)
-        == "Кто кого: в точку! ХК Сочи — Динамо-Минск 2:3, +50"
+        == "КТО КОГО: в точку! ХК Сочи — Динамо-Минск 2:3, +50"
     )
     assert "«Двор»" in cards.league_caption("Двор")
 

@@ -814,7 +814,7 @@
     }
     return h('section', { class: 'kk-cpt', 'aria-label': 'Право капитана' }, [
       h('h3', { class: 'kk-cpt__t', text: 'Право капитана' }),
-      h('p', { class: 'kk-cpt__lead', text: 'Выбери экипировку и кому её выдать — любому в лиге, даже себе. До следующего вечера, увидят все в «Кто кого».' }),
+      h('p', { class: 'kk-cpt__lead', text: 'Выбери экипировку и кому её выдать — любому в лиге, даже себе. До следующего вечера, увидят все в «КТО КОГО».' }),
       h('span', { class: 'kk-cpt__lbl', id: 'kk-cpt-to', text: 'КОМУ' }),
       h('div', { class: 'kk-cpt__grid', role: 'group', 'aria-labelledby': 'kk-cpt-to' }, items.map(function (r) {
         return pickButton('kk-cpt-to-' + r.pid, r.pid === p.to, function () { if (r.pid !== p.to) choose({ to: r.pid }); }, [
@@ -1282,10 +1282,10 @@
     var where = res.league ? ' в «' + res.league.name + '»' : '';
     var who = (res.winners || []).join(' и ');
     var text = res.won
-      ? 'Корона «Кто кого» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
+      ? 'Корона «КТО КОГО» за ' + res.title + where + ' — моя. Новый месяц, все с нуля: попробуй забрать.'
       : who
-        ? 'Корона «Кто кого» за ' + res.title + where + ' досталась: ' + who + '. В новом месяце — реванш.'
-        : '«Кто кого» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
+        ? 'Корона «КТО КОГО» за ' + res.title + where + ' досталась: ' + who + '. В новом месяце — реванш.'
+        : '«КТО КОГО» за ' + res.title + where + ' — без короны. Новый месяц, все с нуля: играем?';
     K.shareCard({ card: 'crown', race_id: res.race_id }, league ? league.invite_url : null, text);
   }
 })();

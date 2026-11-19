@@ -38,7 +38,7 @@
   var MORE_ITEMS = [
     {
       path: 'kto-kogo',
-      label: 'Кто кого',
+      label: 'КТО КОГО',
       iconId: 'kto-kogo',
       hint: 'Угадывай матчи Динамо и Экстралиги',
     },
@@ -375,7 +375,7 @@
     if (uiFlags.bookings_tab) {
       tabs.push({ id: 'bookings', label: 'Записи', path: 'client-bookings', icon: TAB_ICONS.bookings });
     }
-    tabs.push({ id: 'kk', label: 'Кто кого', path: 'kto-kogo', icon: TAB_ICONS.kk });
+    tabs.push({ id: 'kk', label: 'КТО КОГО', path: 'kto-kogo', icon: TAB_ICONS.kk });
     tabs.push({ id: 'me', label: 'Я', path: 'client-me', icon: TAB_ICONS.me });
     return tabs;
   }

@@ -24,7 +24,7 @@ from src.shared.config import Settings
 router = APIRouter(tags=["public-kk-promo"])
 
 DEFAULT_SRC = "site"
-_TITLE = "Кто кого — угадай, кто победит в матче Динамо-Минск"
+_TITLE = "КТО КОГО — угадай, кто победит в матче Динамо-Минск"
 _DESCRIPTION = "Тапни за команду, набирай очки и соревнуйся с друзьями. Бесплатно, в Telegram."
 _LOGO = "/logos/01-icon/glide-icon-teal-square-512.png"
 # Картинка превью 1200×630 и лёгкие копии логотипов для ленты: static/landing/kk, отдаёт /landing/{path}.

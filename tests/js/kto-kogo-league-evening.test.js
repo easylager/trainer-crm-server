@@ -239,7 +239,7 @@ describe('«Лига готова» (Ready.dc.html)', () => {
   const Mdl = require('../../static/webapp/kto-kogo-model.js');
   it('переключатель «Все · Динамо · Свои команды» и строка под названием', () => {
     assert.deepEqual(S.READY_SCOPES.map((x) => x[1]), ['Все', 'Динамо', 'Свои команды']);
-    assert.equal(S.readyLine('all', []), 'Все матчи «Кто кого», до конца сезона. Название и картинку можно поменять потом.');
+    assert.equal(S.readyLine('all', []), 'Все матчи «КТО КОГО», до конца сезона. Название и картинку можно поменять потом.');
     assert.match(S.readyLine('dinamo', []), /^Матчи Динамо-Минск, до конца сезона\./);
     assert.match(S.readyLine('clubs', ['Неман', 'Шахтер']), /^Матчи: Неман, Шахтёр — до конца сезона\./);
     assert.equal(S.readyError({ scope: 'clubs', clubs: [] }), 'Выбери команду');

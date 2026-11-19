@@ -270,7 +270,7 @@ describe('AC-2: season_ui без bookings_tab — четыре вкладки, �
 
   it('порядок: Главная, Поиск, Кто кого, Я', () => {
     assert.deepEqual(t.tabIds(), ['home', 'catalog', 'kk', 'me']);
-    assert.deepEqual(t.labels(), ['Главная', 'Поиск', 'Кто кого', 'Я']);
+    assert.deepEqual(t.labels(), ['Главная', 'Поиск', 'КТО КОГО', 'Я']);
   });
 
   it('шторки «Ещё» в DOM нет вовсе', () => {
@@ -296,7 +296,7 @@ describe('AC-3: season_ui и bookings_tab — пять вкладок, «Зап�
   const t = bootShell({ flags: SEASON_BOOKINGS });
   it('порядок и подписи', () => {
     assert.deepEqual(t.tabIds(), ['home', 'catalog', 'bookings', 'kk', 'me']);
-    assert.deepEqual(t.labels(), ['Главная', 'Поиск', 'Записи', 'Кто кого', 'Я']);
+    assert.deepEqual(t.labels(), ['Главная', 'Поиск', 'Записи', 'КТО КОГО', 'Я']);
   });
   it('класс n5, шторки нет', () => {
     assert.match(t.bar().className, /\bclient-tab-bar--n5\b/);
@@ -990,7 +990,7 @@ const LEGACY_OVERLAY_HTML =
     "<span class=\"glide-more-plate\" aria-hidden=\"true\">" +
     "</span>" +
     "<span class=\"client-more-sheet__body\">" +
-    "<span class=\"client-more-sheet__label\">Кто кого</span>" +
+    "<span class=\"client-more-sheet__label\">КТО КОГО</span>" +
     "<span class=\"client-more-sheet__hint\">Угадывай матчи Динамо и Экстралиги</span>" +
     "</span>" +
     "<svg class=\"client-more-sheet__chevron\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">" +

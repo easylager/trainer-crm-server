@@ -61,7 +61,7 @@ describe('право капитана в вечере', () => {
     assert.equal(Kit.targetLine(items[0], EV), '4 из 4 · капитан');
   });
   it('после выдачи: «Олег в экипировке» / «Ты в экипировке»', () => {
-    assert.deepEqual(Kit.givenLine(items[2], 'bucket'), { title: 'Олег в экипировке', text: 'Ведро вместо шлема — до следующего вечера. Видят все в «Кто кого».' });
+    assert.deepEqual(Kit.givenLine(items[2], 'bucket'), { title: 'Олег в экипировке', text: 'Ведро вместо шлема — до следующего вечера. Видят все в «КТО КОГО».' });
     assert.equal(Kit.givenLine(items[0], 'foil').title, 'Ты в экипировке');
   });
   it('подпись под строкой: моя выдача, выдача другого капитана, прошлый вечер; мне — плашка, без строки', () => {
@@ -80,7 +80,7 @@ describe('право капитана в вечере', () => {
     const ev = { items: [{ pid: 'me', is_me: true }], captain: { award: { to: 'me', item: 'wanted', from: 'Андрей', from_me: false, current: true } } };
     assert.deepEqual(Kit.receivedBanner(ev), {
       title: 'Андрей выдаёт тебе экипировку',
-      text: 'Плакат «Разыскивается» — до следующего вечера. Видят все в «Кто кого», и в общей таблице тоже.',
+      text: 'Плакат «Разыскивается» — до следующего вечера. Видят все в «КТО КОГО», и в общей таблице тоже.',
       tail: 'Стань капитаном — и выдавать будешь ты.',
     });
     assert.equal(Kit.receivedBanner(Object.assign({}, ev, { captain: { award: Object.assign({}, ev.captain.award, { current: false }) } })), null);

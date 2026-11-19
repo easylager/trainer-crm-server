@@ -472,14 +472,14 @@
       return;
     }
     if (state.kk === 'hidden') {
-      host.replaceChildren(el('p', 'cm-note', 'Игра скрыта. Вернуть — в «Ещё › Кто кого».'));
+      host.replaceChildren(el('p', 'cm-note', 'Игра скрыта. Вернуть — в «Ещё › КТО КОГО».'));
       return;
     }
     if (state.kk === 'confirm') {
       var c = el('section', 'cm-card cm-confirm');
       c.setAttribute('role', 'alertdialog');
       c.setAttribute('aria-labelledby', 'cmConfirmTitle');
-      var h = el('p', 'cm-confirm__title', 'Скрыть «Кто кого» на матчах?');
+      var h = el('p', 'cm-confirm__title', 'Скрыть «КТО КОГО» на матчах?');
       h.id = 'cmConfirmTitle';
       c.appendChild(h);
       c.appendChild(el('p', 'cm-confirm__text', 'Строка пропадёт со всех матчей. Очки и лиги сохранятся, вернуть можно в «Ещё».'));

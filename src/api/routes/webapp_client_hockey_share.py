@@ -89,7 +89,7 @@ async def _prepare(
         result = {
             "type": "article",
             "id": result_id,
-            "title": "Кто кого",
+            "title": "КТО КОГО",
             "input_message_content": {"message_text": caption},
             "reply_markup": markup,
         }
