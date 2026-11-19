@@ -88,8 +88,8 @@ describe('строка человека', () => {
   });
   it('почему без кепки: шарф дня, мало ходов; не разыгрывали — молчим', () => {
     assert.equal(S.eveningReason({ scarf: { club: 'Юность-Минск', picked: 'Неман' } }, EV), 'Юность-Минск простит? Ход — за Неман');
-    assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, EV), 'Ход 1 из 4 — не в споре за кепку');
-    assert.equal(S.eveningReason({ moves: 0, in_cap_race: false }, EV), 'Без ходов — не в споре за кепку');
+    assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, EV), 'Ход 1 из 4 — мало для итога вечера');
+    assert.equal(S.eveningReason({ moves: 0, in_cap_race: false }, EV), 'Без ходов — вне итога вечера');
     assert.equal(S.eveningReason({ moves: 3, in_cap_race: true }, EV), '');
     const few = Object.assign({}, EV, { cap: { decided: true, in_play: false, min_players: 3 } });
     assert.equal(S.eveningReason({ moves: 1, in_cap_race: false }, few), '');
@@ -276,5 +276,15 @@ describe('козырь в вечере', () => {
     const r = { marks: [{ state: 'miss', points: 0 }, { state: 'hit', doubled: true, points: 40 }] };
     assert.equal(S.eveningNotes(r, two)[0].text, 'Козырь удвоил очки за Нефтехимик — Динамо');
     assert.deepEqual(S.eveningNotes({ marks: [{ state: 'hit', doubled: false, points: 20 }] }, ev), []);
+  });
+});
+
+describe('приглашение в лигу, где ты уже есть', () => {
+  it('своя лига узнаётся по ссылке-приглашению или id; чужая — нет', () => {
+    const mine = [{ id: 7, invite_url: 'https://t.me/bot?start=kk_AB12' }, { id: 9, invite_url: 'https://t.me/bot?start=kk_ZZ99' }];
+    assert.equal(S.joinedLeague(mine, { invite_url: 'https://t.me/bot?start=kk_AB12' }).id, 7);
+    assert.equal(S.joinedLeague(mine, { id: 9 }).id, 9);
+    assert.equal(S.joinedLeague(mine, { invite_url: 'https://t.me/bot?start=kk_NEW1' }), null);
+    assert.equal(S.joinedLeague(null, { invite_url: 'x' }), null);
   });
 });

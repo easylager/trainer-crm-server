@@ -134,7 +134,7 @@
         h('span', { class: 'kk-lbl', text: 'КЛУБЫ' }),
         shelf(m, function (e) { K.go('club', { club: e.club.name }); }),
       ]));
-      main.appendChild(h('span', { class: 'kk-sub', text: 'Цифра на наклейке: сколько раз ты был первым в этом клубе. Бледные клубы ждут твоей короны. Тап по клубу откроет его карточку.' }));
+      main.appendChild(h('span', { class: 'kk-sub', text: 'Цифра на наклейке: сколько корон этого клуба у тебя. Бледные клубы ждут твоей короны. Тап по клубу откроет его карточку.' }));
       return [main];
     },
   });
@@ -167,7 +167,7 @@
             h('span', { class: 'kk-cmp__vs', text: 'против' }),
             h('span', { class: 'kk-col' }, [h('b', { text: 'Ты' }), h('span', { class: 'kk-sub', text: S.standCountLabel(mine.total) })]),
           ]),
-          h('span', { class: 'kk-sub', text: 'По клубам. Больше у тебя: ' + vs.mine + ' · больше у него: ' + vs.theirs + ' · поровну: ' + vs.same + '. Под каждым клубом сначала его короны, потом твои.' }),
+          h('span', { class: 'kk-sub', text: 'По клубам: ты впереди в ' + vs.mine + ', ' + shortName(who) + ' — в ' + vs.theirs + ', поровну — в ' + vs.same + '. Под каждым клубом сначала ' + shortName(who) + ', потом ты.' }),
         ]));
       }
       main.appendChild(h('div', { class: 'kk-plqs' }, [
@@ -176,7 +176,7 @@
       ]));
       main.appendChild(ledge());
       main.appendChild(h('div', { class: 'kk-sec' }, [h('span', { class: 'kk-lbl', text: 'КЛУБЫ' }), shelf(m, null, mine, who)]));
-      main.appendChild(h('span', { class: 'kk-sub', text: 'Видны только награды: прогнозы игрока остаются у него.' }));
+      main.appendChild(h('span', { class: 'kk-sub', text: 'На стенде только награды — ходы игрока здесь не видны.' }));
       return [main];
     },
   });

@@ -88,13 +88,13 @@ async def _league(db, name: str, members) -> int:
 
 def test_cap_line_text() -> None:
     assert cap_line(league_name="Бригада", holders=("Олег",), mine=False) == (
-        "<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех угадывал в этот день."
+        "<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех в этот вечер."
     )
     assert cap_line(league_name="Бригада", holders=("ты",), mine=True) == (
-        "<b>Кепка дня</b> в лиге «Бригада» — у тебя: хуже всех угадывал в этот день."
+        "<b>Кепка дня</b> в лиге «Бригада» — у тебя: хуже всех в этот вечер."
     )
     assert cap_line(league_name="<b>", holders=("ты", "Олег"), mine=True) == (
-        "<b>Кепка дня</b> в лиге «&lt;b&gt;» — ты и Олег: хуже всех угадывали в этот день."
+        "<b>Кепка дня</b> в лиге «&lt;b&gt;» — ты и Олег: хуже всех в этот вечер."
     )
 
 
@@ -127,8 +127,8 @@ async def test_summary_gets_the_cap_line_only_when_its_match_closes_the_day(db_s
     assert set(notices) == {ANYA, MAX, OLEG}  # Дима не ходил — итога нет, строки тоже
     # Аня — капитан вечера (TASK-432): после строки про кепку — её право, отдельной строкой.
     assert notices[ANYA].text.endswith(
-        "<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех угадывал в этот день.\n"
-        "<b>Ты капитан</b> в лиге «Бригада». Олег — 0 из 2: выдать плакат? Или выбери сам в «Вечере»."
+        "<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех в этот вечер.\n"
+        "<b>Ты капитан</b> в лиге «Бригада». Олег — 0 из 2: выдать плакат? Или выбери другое в «Вечере»."
     )
     # Выдача в один тап: кнопка «Выдать плакат» над «Вечером в лиге» — Олегу, вечер 10 ноября.
     give = [b for row in notices[ANYA].buttons for b in row if b.get("callback_data", "").startswith("kk:o:")]
@@ -138,7 +138,7 @@ async def test_summary_gets_the_cap_line_only_when_its_match_closes_the_day(db_s
     )
     assert not any("kk:o:" in b.get("callback_data", "") for row in notices[MAX].buttons for b in row)
     assert "Ты капитан" not in notices[MAX].text and "Ты капитан" not in notices[OLEG].text
-    assert notices[OLEG].text.endswith("<b>Кепка дня</b> в лиге «Бригада» — у тебя: хуже всех угадывал в этот день.")
+    assert notices[OLEG].text.endswith("<b>Кепка дня</b> в лиге «Бригада» — у тебя: хуже всех в этот вечер.")
     urls = [b.get("url", "") for row in notices[MAX].buttons for b in row]
     labels = [b["text"] for row in notices[MAX].buttons for b in row]
     assert "Вечер в лиге" in labels

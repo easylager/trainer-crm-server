@@ -472,7 +472,7 @@
       return;
     }
     if (state.kk === 'hidden') {
-      host.replaceChildren(el('p', 'cm-note', 'Игра скрыта. Вернуть — в «Ещё › КТО КОГО».'));
+      host.replaceChildren(el('p', 'cm-note', 'Игра скрыта. Вернуть — в «Ещё › Кто кого».'));
       return;
     }
     if (state.kk === 'confirm') {

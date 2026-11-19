@@ -78,7 +78,7 @@ def parse_transform(raw: str | None) -> Matrix:
 _TOKEN = re.compile(r"[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?")
 
 
-def _arc(x1, y1, rx, ry, phi, large, sweep, x2, y2, steps=24) -> list[tuple[float, float]]:
+def _arc(x1, y1, rx, ry, phi, large, sweep, x2, y2, steps=96) -> list[tuple[float, float]]:
     """Дуга SVG (из конечных точек в центр) — ломаной."""
     if rx == 0 or ry == 0:
         return [(x2, y2)]
@@ -196,7 +196,7 @@ def parse_path(d: str) -> list[tuple[list[tuple[float, float]], bool]]:
 
 
 def _ellipse(cx: float, cy: float, rx: float, ry: float) -> list[tuple[float, float]]:
-    return [(cx + rx * math.cos(2 * math.pi * k / 48), cy + ry * math.sin(2 * math.pi * k / 48)) for k in range(48)]
+    return [(cx + rx * math.cos(2 * math.pi * k / 96), cy + ry * math.sin(2 * math.pi * k / 96)) for k in range(96)]
 
 
 def _round_rect(x: float, y: float, w: float, h: float, r: float) -> list[tuple[float, float]]:
@@ -335,7 +335,14 @@ def _paint_text(layer: Image.Image, attrs: dict, raw: str, m: Matrix, stat: str,
     value = stat if raw == "{stat}" else score if raw == "{score}" else raw
     if not value:
         return
-    font = _text(max(8, round(float(attrs.get("font-size", 12)) * _scale(m))), 900)
+    size = max(8, round(float(attrs.get("font-size", 12)) * _scale(m)))
+    font = _text(size, 900)
+    # Ширина надписи в рисунке ограничена (data-max): шрифт карточки шире браузерного — ужимаем, а не вылезаем за край.
+    limit = float(attrs.get("data-max", 0)) * _scale(m)
+    draw = ImageDraw.Draw(layer)
+    while limit and size > 8 and draw.textlength(value, font=font) > limit:
+        size -= 1
+        font = _text(size, 900)
     color = _color(attrs.get("fill", "#000000")) or (0, 0, 0)
     px, py = _apply(m, float(attrs.get("x", 0)), float(attrs.get("y", 0)))
     ImageDraw.Draw(layer).text((px + pad, py + pad), value, font=font, fill=(*color, 255), anchor="ms")
@@ -353,8 +360,12 @@ def check_outfit_card_sig(token: str, league_id: int, day: str, pid: str, item: 
     return hmac.compare_digest(outfit_card_sig(token, league_id, day, pid, item), sig or "")
 
 
+_PREP = re.compile(r"(?<![^ ])([вс]) ")
+
+
 def outfit_head(name: str, item: str) -> str:
-    return f"{name} {PHRASES[item]}"
+    """«Олег в маске с трубкой»: однобуквенный предлог держится со следующим словом — «в» не висит в конце строки."""
+    return f"{name} " + _PREP.sub("\\1\u00a0", PHRASES[item])
 
 
 def outfit_caption(*, name: str, item: str, stat: str) -> str:

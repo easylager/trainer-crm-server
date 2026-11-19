@@ -196,10 +196,30 @@ def _banner(filename: str, alt: str) -> str:
     )
 
 
+# Лента лендинга: один тихий ряд над шапкой, ~24 px/с — логотип идёт через десктоп примерно минуту.
+_LANDING_DISC, _LANDING_GAP, _LANDING_SPEED = 36, 18, 24
+
+
+def _landing_rail_html() -> str:
+    """Лента клубов над шапкой лендинга: декоративная, без скриптов; петля — набор дважды, сдвиг на половину."""
+    slugs = list(_rail_logos())
+    if not slugs:
+        return ""
+    imgs = "".join(
+        f'<img src="{html.escape(_logo_src(s))}" alt="" width="{_LANDING_DISC}" height="{_LANDING_DISC}" decoding="async">'
+        for s in slugs
+    )
+    duration = round(len(slugs) * (_LANDING_DISC + _LANDING_GAP) / _LANDING_SPEED)
+    return (
+        f'<div class="kk-rail" aria-hidden="true" style="--kk-rail-dur:{duration}s">'
+        f'<div class="kk-rail-track">{imgs}{imgs}</div></div>'
+    )
+
+
 def _landing_body(go: str, *, show_matches: bool) -> str:
     play = html.escape(go)
     matches = '<a href="/hockey">Расписание матчей</a>' if show_matches else ""
-    return f"""
+    return f"""{_landing_rail_html()}
 <header class="kk-header kk-frame">
   <a class="kk-glide" href="/">Glide</a>
   <nav class="kk-nav" aria-label="Навигация">

@@ -258,11 +258,11 @@ def test_captain_line_offers_one_tap_without_declining_names() -> None:
 
     offer = {"pid": "p1", "name": "Олег", "me": False, "item": "wanted", "hits": 0, "matches": 4, "revenge": False}
     assert captain_line(league_name="Работа", offer=offer) == (
-        "<b>Ты капитан</b> в лиге «Работа». Олег — 0 из 4: выдать плакат? Или выбери сам в «Вечере»."
+        "<b>Ты капитан</b> в лиге «Работа». Олег — 0 из 4: выдать плакат? Или выбери другое в «Вечере»."
     )
     revenge = {**offer, "item": "bucket", "revenge": True}
     assert captain_line(league_name="Работа", offer=revenge) == (
-        "<b>Ты капитан</b> в лиге «Работа». Олег — автор твоего ведра. Самое время вернуть — или выбери сам в «Вечере»."
+        "<b>Ты капитан</b> в лиге «Работа». Олег — автор твоего ведра. Самое время вернуть — или выбери другое в «Вечере»."
     )
     assert offer_button(7, date(2026, 11, 16), revenge) == {
         "text": "Вернуть ведро",
@@ -272,6 +272,20 @@ def test_captain_line_offers_one_tap_without_declining_names() -> None:
         len(offer_button(123456, date(2026, 11, 16), {**offer, "pid": "x" * 12, "item": "scorehat"})["callback_data"])
         <= 64
     )
+    assert offer_button(7, date(2026, 11, 16), {**offer, "me": True})["text"] == "Выдать себе плакат"
+
+
+def test_outfit_words_agree_in_gender_and_case() -> None:
+    """Род у вещей разный: «автор твоей каски», «твоих бигудей»; бигуди во множественном — «в бигудях»."""
+    from src.application.hockey_league_captain import OUTFIT_PHRASES, OUTFIT_WORDS
+    from src.application.hockey_notices import captain_line
+
+    offer = {"pid": "p1", "name": "Олег", "me": False, "item": "hardhat", "hits": 0, "matches": 4, "revenge": True}
+    assert "Олег — автор твоей каски." in captain_line(league_name="Работа", offer=offer)
+    assert OUTFIT_WORDS["curlers"][2] == "твоих бигудей"
+    assert OUTFIT_WORDS["snorkel"][2] == "твоей маски с трубкой"
+    assert OUTFIT_PHRASES["curlers"] == "в бигудях"
+    assert all(w[2].startswith(("твоего ", "твоей ", "твоих ")) for w in OUTFIT_WORDS.values())
 
 
 @pytest.mark.asyncio

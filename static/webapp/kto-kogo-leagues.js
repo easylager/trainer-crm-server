@@ -1175,7 +1175,6 @@
             h('div', { class: 'kk-ready__row' }, [h('span', { class: 'kk-ready__ph', 'aria-hidden': 'true' }), h('span', { class: 'kk-ready__who is-empty', text: 'Здесь будет твой друг' })]),
             h('div', { class: 'kk-ready__row' }, [h('span', { class: 'kk-ready__ph', 'aria-hidden': 'true' }), h('span', { class: 'kk-ready__who is-empty', text: 'И ещё один' })]),
           ]),
-          h('p', { class: 'kk-ready__note', text: 'Кепка дня разыгрывается, когда в лиге трое' }),
         ]),
         h('div', { class: 'kk-ready__cta' }, [
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold kk-btn--lg kk-ready__go', disabled: err || state.busy ? 'true' : null, 'aria-disabled': err ? 'true' : 'false', onclick: function () { quickCreate(a); }, text: err || (state.busy ? 'Собираем…' : 'Позвать друзей') }),
@@ -1195,6 +1194,8 @@
       K.api('GET', '/hockey/leagues/' + encodeURIComponent(a.code), undefined, true)
         .then(function (p) { state.joinPreview = p; K.render(); })
         .catch(function (e) { state.joinError = e.status === 404 ? 'gone' : e.message; K.render(); });
+      // Свои лиги — чтобы по своей же картинке не звать вступать туда, где человек уже играет.
+      K.loadLeagues(true).then(K.render, function () {});
     },
     render: function () {
       if (state.joinError === 'gone') {
@@ -1208,19 +1209,25 @@
       var p = state.joinPreview;
       var next = S.nextMatch(state.matches, { id: 0, home_team: '', away_team: '' });
       var face = p ? Id().faceOf(p) : null;
+      var mine = p ? S.joinedLeague(state.leagues, p) : null;
+      var names = (p && p.names) || [];
       return [h('main', { class: 'kk-main' }, [
         h('span', { class: 'kk-lbl', text: 'КТО КОГО?' }),
         p ? h('div', { class: 'kk-sec' }, [
           face ? h('div', { class: 'kk-joinimg', 'aria-hidden': 'true' }, [photo(face.src, 'kk-joinimg__img')]) : null,
-          h('div', { class: 'kk-faces', 'aria-hidden': 'true' }, (p.names || []).slice(0, 5).map(function (n) { return K.ava(n, 48); })),
-          h('span', { class: 'kk-tx', text: p.names && p.names[0] ? p.names[0] + ' зовёт тебя в лигу' : 'Тебя зовут в лигу' }),
+          h('div', { class: 'kk-faces kk-faces--named' }, names.slice(0, 5).map(function (n) {
+            return h('span', { class: 'kk-face' }, [K.ava(n, 48), h('span', { class: 'kk-face__nm', text: n })]);
+          }).concat(names.length > 5 ? [h('span', { class: 'kk-face kk-face--more', text: '+' + (names.length - 5) })] : [])),
+          h('span', { class: 'kk-tx', text: mine ? 'Ты уже в этой лиге' : names[0] ? names[0] + ' зовёт тебя в лигу' : 'Тебя зовут в лигу' }),
           h('h2', { class: 'kk-h2 kk-h2--xl', text: p.name }),
           stakeEl(p, 'kk-stake'),
           h('span', { class: 'kk-tx', text: p.members + ' ' + M.plural(p.members, 'человек', 'человека', 'человек') + ' уже ' + M.plural(p.members, 'угадывает', 'угадывают', 'угадывают') }),
           next ? h('div', { class: 'kk-card kk-note' }, [h('span', { class: 'kk-lbl', text: 'БЛИЖАЙШИЙ МАТЧ' }), h('b', { class: 'kk-hd', text: S.clubName(next.home.name) + ' — ' + S.clubName(next.away.name) }), h('span', { class: 'kk-sub', text: M.whenLabel(next.starts_at, new Date()) })]) : null,
           h('span', { class: 'kk-sub', text: 'Тапаешь за команду или угадываешь счёт. После матча очки приходят сами. ' + M.RULES }),
         ]) : state.joinError ? h('span', { class: 'kk-tx', text: state.joinError }) : K.loading(),
-        h('button', { type: 'button', class: 'kk-btn kk-btn--gold', disabled: !p || state.busy ? 'true' : null, onclick: joinLeague, text: 'Вступить в лигу' }),
+        mine
+          ? h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.replace('league', { id: mine.id }); }, text: 'Открыть лигу' })
+          : h('button', { type: 'button', class: 'kk-btn kk-btn--gold', disabled: !p || state.busy ? 'true' : null, onclick: joinLeague, text: 'Вступить в лигу' }),
         h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'Посмотреть матчи' }),
       ])];
     },

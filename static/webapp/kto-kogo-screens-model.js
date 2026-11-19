@@ -536,11 +536,11 @@
     var P = Base.POINTS;
     return {
       rows: [
-        { value: String(P.winner), text: 'Угадал победителя.', gold: false },
-        { value: '+' + P.diff, text: 'Угадал разницу шайб.', gold: false },
-        { value: '+' + P.goals, text: 'Угадал шайбы хозяев.', gold: false },
-        { value: '+' + P.goals, text: 'Угадал шайбы гостей.', gold: false },
-        { value: String(P.exact), text: 'Угадал точный счёт — все четыре сразу, это «в точку».', gold: true },
+        { value: String(P.winner), text: 'Угадан победитель.', gold: false },
+        { value: '+' + P.diff, text: 'Угадана разница шайб.', gold: false },
+        { value: '+' + P.goals, text: 'Угаданы шайбы хозяев.', gold: false },
+        { value: '+' + P.goals, text: 'Угаданы шайбы гостей.', gold: false },
+        { value: String(P.exact), text: 'Угадан точный счёт — все четыре сразу, это «в точку».', gold: true },
       ],
       trumpTitle: 'Козырь',
       trumpText: 'Один на неделю. Выбери матч для козыря — очки за него удвоятся. Передумаешь — перенеси его на другой матч недели, пока игра не началась.',
@@ -984,7 +984,7 @@
   var FEW_WORD = { 2: 'двоих', 3: 'троих', 4: 'четверых', 5: 'пятерых' };
 
   /**
-   * Итог сыгранного вечера: капитан и кепка дня — оба по правилу сервера (средний за ход среди тех, кто в споре).
+   * Итог сыгранного вечера по правилу сервера: кепка — худший средний за ход, капитан — больше всех очков (оба среди тех, кто в споре).
    * Имена без склонения (пол и падеж неизвестны): метка «Капитан» / «Кепка дня» и имя крупно.
    */
   function eveningVerdict(ev) {
@@ -1030,8 +1030,8 @@
     var cap = ev && ev.cap;
     if (!cap || !cap.in_play || r.in_cap_race) return '';
     var n = ((ev && ev.matches) || []).length;
-    if (!r.moves) return 'Без ходов — не в споре за кепку';
-    return Base.plural(r.moves, 'Ход', 'Хода', 'Ходов') + ' ' + r.moves + ' из ' + n + ' — не в споре за кепку';
+    if (!r.moves) return 'Без ходов — вне итога вечера';
+    return Base.plural(r.moves, 'Ход', 'Хода', 'Ходов') + ' ' + r.moves + ' из ' + n + ' — мало для итога вечера';
   }
 
   /** Козырь удвоил очки за матч вечера: иначе «+20» за один промах с шайбами непонятен. */
@@ -1113,10 +1113,10 @@
       lead: 'Кепка дня достаётся тому, кто хуже всех угадывал в этот день',
       items: [
         { k: 'Как сравниваем.', t: 'Очки за день делим на число ходов — у кого меньше в среднем за ход, тот и в кепке.' },
-        { k: 'Кто в споре.', t: 'Только те, кто сходил хотя бы на половину матчей дня. Пропустил — кепки нет, но и очков тоже.' },
-        { k: 'Когда.', t: 'Решается после последнего матча дня. Носишь до следующего игрового дня лиги.' },
+        { k: 'Кто в споре.', t: 'Только те, кто сходил хотя бы на половину матчей дня. Ходов меньше — ни кепки, ни капитана, а очки за сделанные ходы идут как обычно.' },
+        { k: 'Когда.', t: 'Решается после последнего матча дня. Носят до следующего сыгранного вечера лиги.' },
         { k: 'Ничья.', t: 'Хуже всех сразу двое — кепка у обоих. Все угадали одинаково — кепки нет.' },
-        { k: 'Сколько нужно.', t: 'Кепка и капитан разыгрываются, если в этот день сходили хотя бы двое.' },
+        { k: 'Сколько нужно.', t: 'Кепка и капитан разыгрываются, если в споре хотя бы двое.' },
       ],
       exampleTitle: 'Пример: вечер из 4 матчей',
       example: [
@@ -1171,6 +1171,14 @@
     if (stake) body.stake_text = stake;
     if (src) body.src = src;
     return body;
+  }
+
+  /** Лига из приглашения — уже моя? Сверяем по ссылке-приглашению (она одна на лигу), запасной ключ — id. */
+  function joinedLeague(leagues, preview) {
+    if (!preview) return null;
+    return (leagues || []).filter(function (l) {
+      return (preview.invite_url && l.invite_url === preview.invite_url) || (preview.id != null && l.id === preview.id);
+    })[0] || null;
   }
 
   function inviteText(name, l) {
@@ -1343,7 +1351,7 @@
     return pick.home_score != null && pick.away_score != null ? team + ' · ' + pick.home_score + ':' + pick.away_score : team;
   }
 
-  var NO_MOVE = 'ты не ходил';
+  var NO_MOVE = 'без хода';
   /** Сервер уже увидел итог или проверяет его (m.checking) — матч окончен, а не идёт дольше трёх часов. */
   var CHECKING_CAP = 'Матч окончен · сверяем счёт';
   var AFTER_RESULT = 'Очки — после итога';
@@ -1359,7 +1367,7 @@
     var total = m.my_points != null ? m.my_points : Base.totalPoints(pick);
     if (total == null) return { kind: 'note', text: 'Считаем очки' };
     var trump = !!pick.doubled;
-    if (total === 0) return { kind: 'points', tone: 'zero', text: '0 · не угадал', trump: trump };
+    if (total === 0) return { kind: 'points', tone: 'zero', text: '0 · мимо', trump: trump };
     if (pick.points === Base.POINTS.exact) return { kind: 'points', tone: 'exact', text: '+' + total + ' В ТОЧКУ', trump: trump };
     return { kind: 'points', tone: 'pos', text: '+' + total, trump: trump };
   }
@@ -1794,6 +1802,7 @@
     gestureRules: gestureRules,
     READY_SCOPES: READY_SCOPES,
     readyLine: readyLine,
+    joinedLeague: joinedLeague,
     readyError: readyError,
     readyBody: readyBody,
   };
