@@ -885,23 +885,23 @@ async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) 
             body += "\n" + place
         # Кепка дня решилась матчем из этой сводки — по строке на лигу; кнопка ведёт в «Вечер» первой (TASK-431).
         news = await _cap_news(session, player_key, rows, now=now, cache=cache.setdefault("cap_news", {}))
-        from src.application.hockey_league_captain import captain_enabled
-
-        offer = None
+        offer, evening = None, news[0] if news else None
         for item in news:
             if item.holders:
                 body += "\n" + cap_line(league_name=item.league_name, holders=item.holders, mine=item.mine)
-            if item.captain and captain_enabled(item.league_id):
-                body += "\n" + captain_line(league_name=item.league_name, offer=item.offer)
-                if offer is None and item.offer:
-                    offer = offer_button(item.league_id, item.day, item.offer)
+            if item.captain:
+                # Кнопка в один тап — одна на сообщение: предложение пишем только в той лиге, где кнопка.
+                one_tap = offer is None and item.offer is not None
+                body += "\n" + captain_line(league_name=item.league_name, offer=item.offer if one_tap else None)
+                if one_tap:
+                    offer, evening = offer_button(item.league_id, item.day, item.offer), item
         buttons = _rows(
             [
                 {"text": "Следующий ход", "callback_data": CB_NEXT},
                 url_button("Таблица", f"{START_PICK}_{rows[-1].match_id}"),
             ],
             [offer] if offer else [],
-            [evening_button(news[0].league_id, news[0].day)] if news else [],
+            [evening_button(evening.league_id, evening.day)] if evening else [],
             off_button(KIND_RESULT),
         )
         out.append(

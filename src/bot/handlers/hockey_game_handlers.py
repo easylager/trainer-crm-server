@@ -210,12 +210,12 @@ async def on_outfit(cb: CallbackQuery) -> None:
             await session.commit()
             what = OUTFIT_WORDS[item][0]
             toast = f"Готово: {what} — тебе" if self_ else f"Готово: {name} в экипировке — {what}"
+        except NotCaptain:  # подкласс PermissionError — ловим раньше «нет в лиге»
+            toast = "Выдаёт только капитан вечера — итог вечера поменялся"
         except (LookupError, PermissionError):
             toast = "Тебя уже нет в этой лиге"
-        except NotCaptain:
-            toast = "Выдаёт только капитан вечера — итог вечера поменялся"
-        except AlreadyGiven as exc:
-            toast = f"Экипировку этого вечера уже выдаёт {exc.name}"
+        except AlreadyGiven:
+            toast = "Экипировка этого вечера уже выдана — поменять можно в «Вечере»"
         except RightClosed:
             toast = "Право капитана закрыто: был следующий вечер или лига закончилась"
         except OutfitRefused as exc:

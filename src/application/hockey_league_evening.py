@@ -582,8 +582,11 @@ async def cap_news(
             _, holders, members, captains = found
             names = sorted(members.get(k, "") for k in holders if k != player_key)
             offer = None
-            if player_key in captains:
+            captain = player_key in captains and _captain_on(league.id)
+            if captain:
                 offer = await _captain_offer(session, league, day, player_key, members, now)
+            if not holders and not captain:
+                continue  # ни кепки, ни права капитана у этого игрока — строки нет, и кнопки «Вечер» тоже
             out.append(
                 CapNews(
                     league_id=league.id,
@@ -591,21 +594,27 @@ async def cap_news(
                     day=day,
                     holders=tuple((["ты"] if player_key in holders else []) + names),
                     mine=player_key in holders,
-                    captain=player_key in captains,
+                    captain=captain,
                     offer=offer,
                 )
             )
     return out
 
 
+def _captain_on(league_id: int) -> bool:
+    from src.application.hockey_league_captain import captain_enabled
+
+    return captain_enabled(league_id)
+
+
 async def _captain_offer(
     session: AsyncSession, league, day: date, player_key: int, members: dict[int, str], now: datetime
 ) -> dict | None:
-    from src.application.hockey_league_captain import captain_enabled, evening_state, suggest
+    from src.application.hockey_league_captain import evening_state, suggest
 
-    if not captain_enabled(league.id):
-        return None
     state = await evening_state(session, league, day, now=now)
+    if not state.current or state.award is not None:
+        return None  # вечер уже не последний или выдача уже есть — предлагать в один тап нечего
     hint = await suggest(session, league, state, player_key)
     if hint is None:
         return None
@@ -629,7 +638,7 @@ async def _open_captains(session: AsyncSession, league, day: date, cap: DayCap, 
         return frozenset()
     award = await day_award(session, league.id, day)
     if award is not None and award.captain_key in cap.captains:
-        return frozenset({award.captain_key})
+        return frozenset()  # уже выдано — звать некого
     return cap.captains
 
 

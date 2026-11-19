@@ -58,6 +58,33 @@ OUTFIT_WORDS = {
     "bucket": ("ведро вместо шлема", "ведро", "ведра"),
 }
 
+# Как вещь звучит в заголовке: «Олег разыскивается», «Олег в ведре вместо шлема». Пол не нужен.
+OUTFIT_PHRASES = {
+    "wanted": "разыскивается",
+    "half": "в полушарфе",
+    "bag": "с пакетом на голове",
+    "sieve": "в маске-решете",
+    "scorehat": "в шапке-табло",
+    "snorkel": "в маске с трубкой",
+    "hardhat": "в каске «Ремонт»",
+    "curlers": "в бигуди",
+    "foil": "в короне из фольги",
+    "bucket": "в ведре вместо шлема",
+}
+# Подписи вещей — те же, что в коллекции Mini App (kto-kogo-kit.js); совпадение проверяет тест.
+OUTFIT_JOKES = {
+    "wanted": "За ходы мимо. Вознаграждение — кепка. Счёт на плакате — его собственный.",
+    "half": "Половина — своя команда, половина — соперник. И нашим, и вашим.",
+    "bag": "Классика трибун: стыдно, но досмотреть надо.",
+    "sieve": "Пропускает всё. Как ходы этого вечера.",
+    "scorehat": "Счёт матча, на котором всё пошло не так. Горит над головой весь день.",
+    "snorkel": "Для тех, кто на дне таблицы. Дышать есть чем.",
+    "hardhat": "Чутьё закрыто на ремонт. Временно угадываем наугад.",
+    "curlers": "Полдня собираться к матчу — и ноль из четырёх.",
+    "foil": "Почти как настоящая. Настоящую дают в конце месяца.",
+    "bucket": "Шлем по уровню чутья. Звенит, если постучать.",
+}
+
 
 class OutfitRefused(ValueError):
     """Нельзя: неизвестная вещь или человек не в лиге (текст — для человека)."""
@@ -358,6 +385,10 @@ async def chat_give(
     league = await member_league(session, league_id=league_id, player_key=captain_key)
     if not captain_enabled(league.id):
         raise RightClosed(day)
+    # Кнопка из сводки выдаёт, но не меняет: выдача уже есть (хоть своя) — менять только в «Вечере».
+    given = await day_award(session, league.id, day)
+    if given is not None:
+        raise AlreadyGiven(given.captain_name)
     await set_outfit(session, league=league, captain_key=captain_key, to_pid=to_pid, item=item, day=day, now=now)
     to_key = (await session.execute(_MEMBER_BY_PID, {"league_id": league.id, "pid": to_pid})).scalar_one()
     name = (await session.execute(_PLAYER_NAME, {"player_key": to_key})).scalar_one()

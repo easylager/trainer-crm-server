@@ -42,3 +42,23 @@ def test_card_png_and_caption() -> None:
     sig = outfit_card_sig("t", 1, "261116", "abc", "bag")
     assert check_outfit_card_sig("t", 1, "261116", "abc", "bag", sig)
     assert not check_outfit_card_sig("t", 1, "261116", "abc", "bucket", sig)
+
+
+def test_server_texts_match_the_mini_app_collection() -> None:
+    import re
+    from pathlib import Path
+
+    from src.application.hockey_league_captain import OUTFIT_JOKES
+
+    src = Path("static/webapp/kto-kogo-kit.js").read_text(encoding="utf-8")
+    js = dict(re.findall(r"\{ id: '(\w+)', of: '[^']*', name: '[^']*', full: '[^']*', joke: '([^']*)' \}", src))
+    assert js == OUTFIT_JOKES
+    assert all(
+        OUTFIT_WORDS[k][0].lower() == full.lower()
+        for k, full in re.findall(r"id: '(\w+)', of: '[^']*', name: '[^']*', full: '([^']*)'", src)
+    )
+
+
+def test_broken_path_does_not_hang() -> None:
+    assert [closed for _, closed in parse_path("M0 0 L5 5 L5 0 Z 10 10")] == [True]
+    assert parse_path("M0 0 S1 1 2 2") == []  # неизвестная команда — путь не читаем дальше

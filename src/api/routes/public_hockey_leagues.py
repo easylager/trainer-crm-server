@@ -140,7 +140,7 @@ async def get_outfit_card_png(
 ) -> Response:
     """Экипировка от капитана (TASK-432): адрес подписан, имя и цифры вечера — из базы."""
     from src.application.hockey_kit_card import check_outfit_card_sig, render_outfit_card
-    from src.application.hockey_league_captain import card_for
+    from src.application.hockey_league_captain import OUTFIT_JOKES, card_for
 
     token = Settings().telegram_bot_token_client  # type: ignore[call-arg]
     if not check_outfit_card_sig(token, league_id, stamp, pid, item, sig):
@@ -154,24 +154,9 @@ async def get_outfit_card_png(
         raise HTTPException(status_code=404, detail="Карточка не найдена")
     png = await cached_png(
         ("outfit", league_id, stamp, pid, item, data["name"], data["stat"], data["score"]),
-        lambda: render_outfit_card(**data, joke=_OUTFIT_JOKES.get(item, "")),
+        lambda: render_outfit_card(**data, joke=OUTFIT_JOKES.get(item, "")),
     )
     return Response(content=png, media_type="image/png", headers=_IMMUTABLE)
-
-
-# Подписи вещей на карточке — те же, что в коллекции Mini App (kto-kogo-kit.js).
-_OUTFIT_JOKES = {
-    "wanted": "За ходы мимо. Вознаграждение — кепка. Счёт на плакате — его собственный.",
-    "half": "Половина — своя команда, половина — соперник. И нашим, и вашим.",
-    "bag": "Классика трибун: стыдно, но досмотреть надо.",
-    "sieve": "Пропускает всё. Как ходы этого вечера.",
-    "scorehat": "Счёт матча, на котором всё пошло не так. Горит над головой весь день.",
-    "snorkel": "Для тех, кто на дне таблицы. Дышать есть чем.",
-    "hardhat": "Чутьё закрыто на ремонт. Временно угадываем наугад.",
-    "curlers": "Полдня собираться к матчу — и ноль из четырёх.",
-    "foil": "Почти как настоящая. Настоящую дают в конце месяца.",
-    "bucket": "Шлем по уровню чутья. Звенит, если постучать.",
-}
 
 
 @card_router.get("/kk/c/{race_id}/{league_id}/{sig}.png")

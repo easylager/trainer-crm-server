@@ -17,6 +17,7 @@ from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw
 
+from src.application.hockey_league_captain import OUTFIT_PHRASES as PHRASES
 from src.application.hockey_cards import CARD_SIZE, _display, _ellipsize, _largest, _png, _text, _wrap
 
 _SHAPES_FILE = Path(__file__).with_name("kk_kit_shapes.json")
@@ -26,20 +27,6 @@ _WHITE = (255, 255, 255)
 _SOFT = (197, 210, 238)
 _YELLOW = (255, 210, 63)
 _NAVY = (13, 20, 36)
-
-# Как вещь звучит в заголовке: «Олег разыскивается», «Олег в ведре вместо шлема». Пол не нужен.
-PHRASES = {
-    "wanted": "разыскивается",
-    "half": "в полушарфе",
-    "bag": "с пакетом на голове",
-    "sieve": "в маске-решете",
-    "scorehat": "в шапке-табло",
-    "snorkel": "в маске с трубкой",
-    "hardhat": "в каске «Ремонт»",
-    "curlers": "в бигуди",
-    "foil": "в короне из фольги",
-    "bucket": "в ведре вместо шлема",
-}
 
 
 @lru_cache(maxsize=1)
@@ -88,7 +75,7 @@ def parse_transform(raw: str | None) -> Matrix:
     return m
 
 
-_TOKEN = re.compile(r"[MmLlHhVvQqCcAaZz]|-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?")
+_TOKEN = re.compile(r"[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?")
 
 
 def _arc(x1, y1, rx, ry, phi, large, sweep, x2, y2, steps=24) -> list[tuple[float, float]]:
@@ -157,6 +144,8 @@ def parse_path(d: str) -> list[tuple[list[tuple[float, float]], bool]]:
         if c == "Z":
             flush(True)
             x, y = sx, sy
+            if i < len(tokens) and not tokens[i].isalpha():
+                break  # числа после Z без команды — путь испорчен, дальше не читаем (не зациклиться)
             continue
         if c == "M":
             flush(False)

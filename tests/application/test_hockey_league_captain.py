@@ -220,7 +220,7 @@ async def test_digest_invites_only_captains_whose_right_is_open(db_session) -> N
     cap = cap_of_rows(await day_rows(db, league_id, await league_members(db, league_id, now=NOW), ms), ms)
     assert await _open_captains(db, league, day, cap, NOW) == {ME, ANYA}
     await _give(db, league_id, ANYA, SASHA, "bag", day)
-    assert await _open_captains(db, league, day, cap, NOW) == {ANYA}  # выдала Аня — Максу звать нечего
+    assert await _open_captains(db, league, day, cap, NOW) == frozenset()  # уже выдано — звать некого
     assert await _open_captains(db, league, day, cap, league.ends_at + timedelta(hours=1)) == frozenset()
 
 
@@ -331,3 +331,19 @@ async def test_only_listed_leagues_have_the_right(db_session, monkeypatch) -> No
         )
     monkeypatch.setenv("KK_CAPTAIN_LEAGUES", f"5,{league_id}")
     assert (await _evening(db, league_id, day=day))["captain_on"] is True
+
+
+@pytest.mark.asyncio
+async def test_one_tap_never_changes_an_existing_award(db_session) -> None:
+    """Кнопка из сводки выдаёт, но не меняет — даже свою выдачу: менять только в «Вечере»."""
+    from src.application.hockey_league_captain import chat_give, day_award
+
+    db = db_session
+    league_id = await _league(db, scope="extraliga")
+    day = await _played_day(db, league_id, D1, BASIC)
+    await _give(db, league_id, ME, ANYA, "bucket", day)
+    with pytest.raises(AlreadyGiven):
+        await chat_give(
+            db, league_id=league_id, captain_key=ME, day=day, to_pid=await _pid(db, SASHA), item="wanted", now=NOW
+        )
+    assert (await day_award(db, league_id, day)).item == "bucket"
