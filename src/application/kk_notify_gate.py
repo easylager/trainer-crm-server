@@ -99,6 +99,9 @@ class KindPolicy:
     # Не спрашивали о согласии (``notify_consent IS NULL``) — считать «да». Отказ («Не присылать») — всё равно нет.
     # Владелец 2026-11-19: приглашение собрать лигу — всем игрокам, кроме отказавшихся, чтобы прогреть давно не ходивших.
     consent_by_default: bool = False
+    # Слушается ли паузы «два приглашения без хода» (``notify_paused_until``). Приглашение собрать лигу — нет
+    # (владелец 2026-11-19: прогреть давно не ходивших); отказ, отключение типа и блокировка его всё равно стопорят.
+    respects_pause: bool = True
     # Семья поводов: ``kk`` — игра (настройки ``hockey_player_prefs``, флаги ``KK_NOTIFY_*``), ``warm`` — прогрев
     # посетителей катков (``warm_prefs``, флаги ``WARM_*``).
     family: str = FAMILY_KK
@@ -268,6 +271,7 @@ register_kind(
         priority=5,
         needs_consent=True,
         consent_by_default=True,
+        respects_pause=False,
         type_column="notify_lginvite",
     ),
 )
@@ -425,7 +429,8 @@ async def _admit(
             cfg = cfg or GateConfig.from_settings()
             if consent_question_active(cfg):
                 return Admission(False, NO_CONSENT)
-    if policy.new and prefs.notify_paused_until is not None and _utc(prefs.notify_paused_until) > _utc(now):
+    paused = prefs.notify_paused_until is not None and _utc(prefs.notify_paused_until) > _utc(now)
+    if policy.new and policy.respects_pause and paused:
         return Admission(False, PAUSED)
     return await _limits(session, policy, kind=kind, player_key=player_key, now=now, cfg=cfg, recheck=recheck)
 

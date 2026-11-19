@@ -298,3 +298,19 @@ async def test_goes_without_asked_consent_but_not_after_do_not_send(db_session, 
     assert [chat for chat, *_ in out.sent] == [SASHA]
     assert results[KATYA] != "ok"
     assert gate.KIND_POLICY["lginvite"].consent_by_default and not gate.KIND_POLICY["invite"].consent_by_default
+
+
+@pytest.mark.asyncio
+async def test_silence_pause_does_not_stop_the_league_invite(db_session, factory) -> None:
+    """Пауза «два приглашения без хода» глушит прочие поводы, но не приглашение собрать лигу (прогрев)."""
+    await player(db_session, SASHA)
+    paused = await db_session.execute(
+        text("UPDATE hockey_player_prefs SET notify_paused_until = :u WHERE player_key = :k"),
+        {"u": FRI + timedelta(days=10), "k": SASHA},
+    )
+    assert paused.rowcount == 1
+    out = PhotoOutbox()
+    [p] = await li.produce_league_invite(db_session, now=FRI)
+    await dispatch(factory, p, phase="active", tick_at=FRI, send=out, config=CFG, clock=lambda: FRI)
+    assert [chat for chat, *_ in out.sent] == [SASHA]
+    assert not gate.KIND_POLICY["lginvite"].respects_pause and gate.KIND_POLICY["invite"].respects_pause
