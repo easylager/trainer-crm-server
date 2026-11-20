@@ -290,8 +290,9 @@
 
   /**
    * Строка общей таблицы. Тап по строке открывает стенд игрока (TASK-430); у строки без pid (лиги, старый ответ) строка
-   * просто текст. Экипировка от капитанов лиг (TASK-432): у того, на ком она есть, — аватар с вещью и строка «что и от
-   * кого» вместо числа ходов; остальные строки как были (владелец 2026-11-19: значок у имени не читался).
+   * просто текст. Экипировка от капитанов лиг (TASK-432): у того, на ком она есть, — аватар с вещью (владелец 2026-11-19:
+   * значок у имени не читался). Под именем у всех одно и то же — ходы и «в точку»: название вещи и «от капитана» обрезались
+   * в узкой строке (владелец 2026-11-20), они остаются на стенде и для экранного диктора.
    */
   function rowEl(r) {
     var open = r.pid ? function () { if (r.is_me) K.go('stand', {}); else K.go('player', { pid: r.pid }); } : null;
@@ -301,7 +302,8 @@
       h('span', { class: 'kk-r__w' + (kit ? ' kk-r__w--kit' : ' kk-col') }, (function () {
         var col = [
           h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]),
-          kit ? h('span', { class: 'kk-r__kit', text: K.Kit.outsideNote(kit) }) : h('span', { class: 'kk-sub', text: S.rowSub(r) }),
+          h('span', { class: 'kk-sub', text: S.rowSub(r) }),
+          kit ? h('span', { class: 'kk-vh', text: K.Kit.outsideNote(kit) }) : null,
         ];
         if (!kit) return col;
         return [K.kitAva(r.display_name, 36, { head: kit, cls: r.is_me ? '' : 'kk-ava--soft', wrap: 'kk-kit--room' }), h('span', { class: 'kk-col kk-r__wt' }, col)];
