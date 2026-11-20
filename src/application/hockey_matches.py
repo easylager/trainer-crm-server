@@ -236,10 +236,20 @@ _FINAL = text("""
     WHERE id = :id
     """)
 
+# Автоматика пишет итог и «на разбор» только матчу, который ещё ждёт итога: если админ, пока шла проверка,
+# отменил матч или ввёл итог руками, решение цикла устарело и не должно их перезаписать.
+_AUTO_FINAL = text("""
+    UPDATE hockey_matches
+    SET status = 'final', home_score = :home_score, away_score = :away_score, decided_in = :decided_in,
+        result_source = :result_source, finalized_at = :now, review_reason = NULL,
+        checked_at = :now, updated_at = :now
+    WHERE id = :id AND status IN ('scheduled', 'review')
+    """)
+
 _REVIEW = text("""
     UPDATE hockey_matches
     SET status = 'review', review_reason = :reason, checked_at = :now, updated_at = :now
-    WHERE id = :id
+    WHERE id = :id AND status IN ('scheduled', 'review')
     """)
 
 _ALERTED = text("UPDATE hockey_matches SET review_alerted_at = :now WHERE id = :id")
@@ -425,7 +435,7 @@ async def apply_decision(session: AsyncSession, row: MatchRow, decision: Decisio
     now = _utc(now)
     if decision.kind == KIND_FINAL:
         await session.execute(
-            _FINAL,
+            _AUTO_FINAL,
             {
                 "id": row.id,
                 "home_score": decision.home_score,
@@ -437,8 +447,8 @@ async def apply_decision(session: AsyncSession, row: MatchRow, decision: Decisio
         )
         return False
     if decision.kind == KIND_REVIEW:
-        await session.execute(_REVIEW, {"id": row.id, "reason": decision.reason, "now": now})
-        return row.review_alerted_at is None
+        moved = await session.execute(_REVIEW, {"id": row.id, "reason": decision.reason, "now": now})
+        return moved.rowcount == 1 and row.review_alerted_at is None
     await session.execute(_TOUCH, {"id": row.id, "now": now})
     return False
 

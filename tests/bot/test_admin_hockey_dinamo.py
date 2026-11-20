@@ -351,3 +351,15 @@ async def test_unreachable_admin_bot_does_not_block_the_game(db_session, factory
     out, n2 = await _notify(f, at(21, 47))  # админ-бот вернулся: сообщение уходит на следующем тике, один раз
     assert n2 == 1 and len(out) == 1
     assert (await _notify(f, at(21, 49)))[1] == 0
+
+
+@pytest.mark.asyncio
+async def test_stale_auto_result_does_not_overwrite_a_cancel_made_meanwhile(db_session) -> None:
+    """Цикл прочитал матч до отмены, админ отменил, автомат принёс итог: отмена остаётся."""
+    m = await _dinamo(db_session, "d-stale")
+    row = await get_match(db_session, m)  # снимок цикла: ещё scheduled
+    await db_session.execute(text("UPDATE hockey_matches SET status = 'cancelled' WHERE id = :i"), {"i": m})
+    await apply_decision(
+        db_session, row, Decision(KIND_FINAL, home_score=3, away_score=2, decided_in="regulation"), now=at(20)
+    )
+    assert await _status(db_session, m) == ("cancelled", None, None)
