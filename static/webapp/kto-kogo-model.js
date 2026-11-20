@@ -478,6 +478,19 @@
   }
 
   /**
+   * Анимация смены экрана (View Transitions). nav: 'go' | 'back' | 'replace' | 'reset'.
+   * Нет API или «меньше движения» — 'none' (экран меняется мгновенно, как раньше);
+   * вперёд — 'forward', назад — 'back', замена и сброс стека — простое растворение 'fade'.
+   */
+  function transitionKind(nav, supported, reducedMotion) {
+    if (!supported || reducedMotion) return 'none';
+    if (nav === 'go') return 'forward';
+    if (nav === 'back') return 'back';
+    if (nav === 'replace' || nav === 'reset') return 'fade';
+    return 'none';
+  }
+
+  /**
    * Переход между экранами без фантомов в стеке: show(next) ставит стек и рисует экран.
    * Бросил рендер — возвращаем прежний стек и перерисовываем его; иначе «Назад» снимал бы невидимые экраны,
    * а кнопки переходов молчали бы (DOM остаётся старым, стек уже новый). true — переход состоялся.
@@ -583,6 +596,7 @@
     crowd: crowd,
     friendMove: friendMove,
     commitNav: commitNav,
+    transitionKind: transitionKind,
     backAction: backAction,
     nativeBackShown: nativeBackShown,
     retapAction: retapAction,

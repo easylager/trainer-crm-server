@@ -933,6 +933,31 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .mini-app-recoverable-err .bd-trainer-gate__hint { margin: 0 0 18px; font: 500 15px/1.45 var(--kk-text); color: var(--kk-muted); }
 .mini-app-recoverable-err .bd-btn { width: 100%; min-height: 48px; border: 0; border-radius: 14px; background: var(--kk-gold); color: var(--kk-on-gold); font: 700 16px var(--kk-text); cursor: pointer; }
 
+/* ---------- смена экрана: View Transitions (kto-kogo.js withTransition) ----------
+   Атрибут data-kk-vt на <html> стоит только на время перехода: forward | back | fade.
+   Бар оболочки во вкладке не едет вместе с экраном — у него своя группа без анимации. */
+:root[data-kk-vt]::view-transition-group(kk-tab-bar),
+:root[data-kk-vt]::view-transition-old(kk-tab-bar),
+:root[data-kk-vt]::view-transition-new(kk-tab-bar) { animation: none; }
+:root[data-kk-vt]::view-transition-group(*),
+:root[data-kk-vt]::view-transition-old(*),
+:root[data-kk-vt]::view-transition-new(*) { animation-duration: 260ms; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+:root[data-kk-vt]::view-transition-old(root),
+:root[data-kk-vt]::view-transition-new(root) { animation-duration: 240ms; }
+:root[data-kk-vt="forward"]::view-transition-old(root) { animation-name: kk-vt-out-left; }
+:root[data-kk-vt="forward"]::view-transition-new(root) { animation-name: kk-vt-in-right; }
+:root[data-kk-vt="back"]::view-transition-old(root) { animation-name: kk-vt-out-right; }
+:root[data-kk-vt="back"]::view-transition-new(root) { animation-name: kk-vt-in-left; }
+@keyframes kk-vt-in-right { from { opacity: 0; transform: translateX(24px); } }
+@keyframes kk-vt-in-left { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes kk-vt-out-left { to { opacity: 0; transform: translateX(-24px); } }
+@keyframes kk-vt-out-right { to { opacity: 0; transform: translateX(24px); } }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-kk-vt]::view-transition-group(*),
+  :root[data-kk-vt]::view-transition-old(*),
+  :root[data-kk-vt]::view-transition-new(*) { animation: none !important; }
+}
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.
@@ -947,3 +972,5 @@ body.kk-in-tab .kk-scrim { z-index: 9300; }
 body.kk-in-tab .kk-toast { z-index: 9300; bottom: calc(var(--client-shell-tab-inset) + 12px); }
 body.kk-in-tab .kk-cta { bottom: var(--client-shell-tab-inset); z-index: 9000; }
 
+/* Смена экрана (View Transitions): бар оболочки не едет вместе с экраном — своя группа без анимации. */
+body.kk-in-tab .client-tab-bar { view-transition-name: kk-tab-bar; }
