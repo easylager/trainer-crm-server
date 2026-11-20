@@ -210,6 +210,7 @@
   border-radius: 24px; border: 1px solid rgba(255, 211, 78, .28);
   background: radial-gradient(ellipse at 90% 18%, #26446b 0%, rgba(38, 68, 107, 0) 62%), #19212a;
   color: #f2f5f7 !important; text-decoration: none; -webkit-tap-highlight-color: transparent;
+  container-type: inline-size; container-name: kkb;
   transition: transform .22s cubic-bezier(.2, .8, .2, 1), box-shadow .22s ease-out;
 }
 .kkb:active { transform: scale(.985); }
@@ -228,7 +229,7 @@
   font: 400 22px/42px var(--g-font-display); transform: rotate(-3deg); transition: transform .22s cubic-bezier(.3, 1.4, .5, 1);
 }
 .kkb__row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-.kkb__title { font: 400 22px/1.12 var(--g-font-display); letter-spacing: -.02em; }
+.kkb__title { min-width: 0; font: 400 22px/1.12 var(--g-font-display); letter-spacing: -.02em; }
 .kkb__go {
   flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 50px; height: 50px;
   border-radius: 16px; background: #ffd34e; color: #0d1424; font-weight: 800; font-size: 16px;
@@ -242,8 +243,8 @@
   .kkb:hover .kkb__arrow { transform: translateX(4px); }
   .kkb:hover .kkb__tag { transform: rotate(-6deg) scale(1.04); }
 }
-@media (min-width: 720px) {
-  .kkb { padding-bottom: 22px; }
+/* В строку — только когда самому баннеру хватает ширины (колонка главной уже окна): по контейнеру, не по экрану. */
+@container kkb (min-width: 820px) {
   .kkb__body { flex-direction: row; align-items: center; gap: 18px; padding: 0 32px; }
   .kkb__row { flex: 1; align-items: center; }
   .kkb__puck { width: 42px; height: 26px; box-shadow: inset 0 -6px 0 #3a3632; }
@@ -262,7 +263,7 @@
 .kkb--sm .kkb__tag { height: 34px; padding: 0 10px; border-radius: 10px; font-size: 18px; line-height: 34px; }
 .kkb--sm .kkb__title { font-size: 18px; }
 .kkb--sm .kkb__go { min-width: 44px; height: 44px; border-radius: 14px; }
-@media (min-width: 720px) {
+@container kkb (min-width: 820px) {
   .kkb--sm .kkb__body { padding: 0 24px; }
   .kkb--sm .kkb__puck { width: 34px; height: 21px; }
   .kkb--sm .kkb__tag { height: 38px; font-size: 20px; line-height: 38px; }
