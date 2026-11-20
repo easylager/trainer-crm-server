@@ -556,7 +556,6 @@ async def matches_list(
 # срок жизни кэша страниц (/hockey: max-age 60 + stale-while-revalidate 300), чтобы устаревшая копия не дала кнопку,
 # которая приведёт к «ходы закрыты».
 PICK_BLOCK_CLOSES_BEFORE = timedelta(minutes=8)
-PICK_HOME_AHEAD = timedelta(days=3)
 
 
 def pick_open(card: dict[str, Any], *, now: datetime, settings: Settings | None = None) -> bool:
@@ -570,28 +569,11 @@ def pick_open(card: dict[str, Any], *, now: datetime, settings: Settings | None 
 
 
 def pick_card(cards: list[dict[str, Any]], *, now: datetime, settings: Settings | None = None) -> dict[str, Any] | None:
-    """Ближайший матч Динамо-Минск, на который ещё можно сходить с сайта: блок «Кто победит?» на /hockey и главной."""
+    """Ближайший матч Динамо-Минск, на который ещё можно сходить с сайта: блок «Кто победит?» на /hockey."""
     for card in sorted(cards, key=lambda c: c["starts_at"]):
         if DINAMO in (card["home"]["name"], card["away"]["name"]) and pick_open(card, now=now, settings=settings):
             return card
     return None
-
-
-# Главная рисуется на каждый заход (и на каждый ?when=): матч для блока «Хоккей» держим минуту в памяти процесса.
-_PICK_CACHE_TTL = timedelta(seconds=60)
-_pick_cache: tuple[datetime, dict[str, Any] | None] | None = None
-
-
-async def next_pick_card(session: AsyncSession, *, now: datetime, settings: Settings | None = None) -> dict[str, Any] | None:
-    """Для главной: матч Динамо в ближайшие три дня, иначе ``None`` — блока нет."""
-    global _pick_cache
-    if _pick_cache is not None and _pick_cache[0] <= now < _pick_cache[0] + _PICK_CACHE_TTL:
-        card = _pick_cache[1]
-        return card if card is None or pick_open(card, now=now, settings=settings) else None
-    pairs = await visible_rows(session, since=now, until=now + PICK_HOME_AHEAD, settings=settings)
-    card = pick_card([match_card(r, now=now, arena=a) for r, a in pairs], now=now, settings=settings)
-    _pick_cache = (now, card)
-    return card
 
 
 async def dinamo_home_schedule(session: AsyncSession, *, now: datetime) -> dict[str, Any]:
