@@ -738,8 +738,7 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
     m = data["match"]
     if game["kind"] == "game" and pick_open(m, now=datetime.now(timezone.utc)):
         block = pick_block(
-            m, base_url=base_url, src="sitematch", surface=MATCH_SURFACE, city_id=city_id,
-            note="Тапни за команду — ход сразу в игре в Telegram.",
+            m, base_url=base_url, src="sitematch", surface=MATCH_SURFACE, city_id=city_id, compact=True,
             foot_link='<a class="m-pick__link" href="/kk?from=sitematch">Об игре</a>' if hockey_event.enabled() else "",
         )
         if block:
@@ -986,8 +985,9 @@ def render_match_page(
         + gone_html
         + _club_links(data)
         + actions
-        + _game_card(data, base_url=base_url, city_id=city_id)
+        # Сначала «Перед матчем» (зачем пришли: факты о матче), потом игра — компактная, после статистики.
         + middle
+        + _game_card(data, base_url=base_url, city_id=city_id)
         + _where_card(data)
         + _others_card(data)
         + "</div>"
