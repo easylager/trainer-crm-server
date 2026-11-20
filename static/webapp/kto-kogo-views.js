@@ -155,32 +155,35 @@
   function previewBlock(m) {
     var v;
     try {
-      v = S.previewView(previews[m.id], { home: m.home.name, away: m.away.name });
+      v = S.previewView(previews[m.id], m);
     } catch (e) {
       return null;
     }
     if (!v) return null;
-    var teams = v.teams.map(function (t) {
-      return h('div', { class: 'kk-pv__team' }, [
-        h('div', { class: 'kk-pv__head' }, [
-          h('b', { class: 'kk-pv__name', text: t.name }),
-          t.place ? h('span', { class: 'kk-pv__place', text: t.place }) : null,
-        ]),
-        t.form.length
-          ? h('div', { class: 'kk-pv__form', role: 'list', 'aria-label': 'Последние матчи: ' + t.name }, t.form.map(function (f) {
-              return h('span', { class: 'kk-pv__chip ' + (f.win ? 'is-win' : 'is-lose'), role: 'listitem', title: f.label, 'aria-label': f.label, text: f.text });
-            }))
-          : null,
-      ]);
+    var rows = v.rows.map(function (r) {
+      if (r.kind === 'form') {
+        return h('div', { class: 'kk-pv__kv' }, [
+          h('span', { text: r.label }),
+          h('span', { class: 'kk-pv__form', role: 'list' }, r.chips.map(function (c) {
+            return h('i', { class: 'kk-pv__chip' + (c.win ? ' is-win' : ''), role: 'listitem', title: c.label, 'aria-label': c.label, text: c.text });
+          })),
+        ]);
+      }
+      if (r.kind === 'crowd') {
+        return h('div', { class: 'kk-pv__crowd' }, [
+          h('div', { class: 'kk-pv__kv' }, [
+            h('span', { text: r.label }),
+            h('b', { text: r.home.name + ' ' + r.home.pct + '% · ' + r.away.name + ' ' + r.away.pct + '%' }),
+          ]),
+          h('div', { class: 'kk-pv__bar', 'aria-hidden': 'true' }, [
+            h('span', { class: 'kk-pv__bar-home', style: 'flex-grow:' + r.home.pct }),
+            h('span', { class: 'kk-pv__bar-away', style: 'flex-grow:' + r.away.pct }),
+          ]),
+        ]);
+      }
+      return h('div', { class: 'kk-pv__kv' }, [h('span', { text: r.label }), h('b', { text: r.value })]);
     });
-    var meetings = v.meetings.length
-      ? h('div', { class: 'kk-pv__meet' }, [h('span', { class: 'kk-lbl', text: 'ЛИЧНЫЕ ВСТРЕЧИ' })].concat(v.meetings.map(function (g) {
-          return h('div', { class: 'kk-pv__row' }, [h('span', { class: 'kk-grow', text: g.text }), h('span', { class: 'kk-mute', text: g.date })]);
-        })))
-      : null;
-    return h('section', { class: 'kk-card kk-pv', 'aria-label': 'Перед матчем' }, [
-      h('span', { class: 'kk-lbl', text: 'ПЕРЕД МАТЧЕМ' }),
-    ].concat(teams, [meetings]));
+    return h('section', { class: 'kk-card kk-pv', 'aria-label': 'Перед матчем' }, [h('span', { class: 'kk-lbl', text: 'ПЕРЕД МАТЧЕМ' })].concat(rows));
   }
 
   function openView(m) {

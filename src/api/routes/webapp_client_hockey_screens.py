@@ -69,10 +69,10 @@ async def get_client_hockey_match_preview(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """«Перед матчем» в игре: место, последние пять, личные встречи. Чего нет — того нет в ответе."""
+    """«Перед матчем» в игре: место, последние пять, личные встречи, свои ходы на команды. Чего нет — того нет."""
     from src.application.extraliga_preview import game_preview
 
-    return await game_preview(session, match_id)
+    return await game_preview(session, match_id, player_key=client_catalog_telegram_key(principal))
 
 
 @router.get("/client/hockey/matches/{match_id}/movement")
