@@ -165,8 +165,8 @@
     var p = state.profile;
     if (!p) return h('div', { class: 'kk-skel kk-skel--card' });
     if (!p.played) {
+      // Стикер «КТО КОГО?» уже в шапке хаба: второй на карточке повторял его (владелец 2026-11-20).
       return h('section', { class: 'kk-card kk-card--fan kk-card--intro' }, [
-        K.sticker('КТО КОГО?'),
         h('b', { class: 'kk-hd', text: 'Угадай матч — один тап' }),
         h('span', { class: 'kk-tx', text: 'Тап за команду в карточке матча — и ты в игре, регистрации нет. Очки придут после матча — тогда появишься в таблице.' }),
       ]);
@@ -176,7 +176,6 @@
     var trumpText = trumpStatus(trump);
     var crowns = (p.crowns || []).length;
     return h('button', { type: 'button', class: 'kk-card kk-card--fan', style: club ? 'background:' + club.color : '', onclick: function () { K.go('profile', {}); } }, [
-      K.sticker('КТО КОГО?'),
       club ? K.logoDisc(club, 52) : K.worldDisc(52),
       h('span', { class: 'kk-col kk-grow' }, [
         h('span', { class: 'kk-fan__t' }, [(p.display_name || 'Ты'), club ? ' · ' : null, club ? h('span', { class: 'kk-nowrap', text: 'за ' + name(club) }) : null]),
