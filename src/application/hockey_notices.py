@@ -1054,6 +1054,7 @@ _DUE_MOVED = text("""
     JOIN game_matches AS m ON m.id = n.match_id
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = n.player_key
     WHERE n.kind IN ('moved', 'mvfree') AND n.sent_at IS NULL AND NOT n.failed
+      AND m.status = 'scheduled'  -- перенесли, а потом отменили или уже сыграли: «перенесли на …» устарело
       AND COALESCE(pr.remind, true) AND pr.bot_blocked_at IS NULL
     ORDER BY n.match_id, n.player_key
     """)
@@ -1269,6 +1270,9 @@ _DELETE_OLD_NOTICES = text("""
     WHERE (player_key, match_id, kind) IN (
         SELECT player_key, match_id, kind FROM hockey_notices
         WHERE COALESCE(sent_at, created_at) < :cutoff AND (sent_at IS NOT NULL OR failed)
+          -- Строки-память, а не журнал: по ним считаются серия пятничных приглашений (не больше трёх за всё время)
+          -- и «согласие уже спрашивали». Удалить их — значит через 60 дней начать серию и вопрос заново.
+          AND kind NOT IN ('lginvite', 'consent')
         LIMIT :batch
     )
     """)

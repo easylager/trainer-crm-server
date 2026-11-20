@@ -213,6 +213,8 @@ async def test_cleanup_old_notices_batches_and_keeps_queue(db_session) -> None:
         ("result", recent, False),  # свежая — останется
         ("nomove", None, True),  # упавшая, создана давно — уйдёт
         ("moved", None, False),  # в очереди — остаётся при любом возрасте
+        ("lginvite", old, False),  # память серии приглашений — не чистится, иначе серия начнётся заново
+        ("consent", old, False),  # «согласие уже спрашивали» — тоже память
     ]
     for kind, sent_at, failed in rows:
         created = old if kind != "result" else recent
@@ -225,7 +227,7 @@ async def test_cleanup_old_notices_batches_and_keeps_queue(db_session) -> None:
                 "k": A,
                 "m": match,
                 "kind": kind,
-                "sent": sent_at if kind != "before" else old,
+                "sent": sent_at if kind not in ("before",) else old,
                 "failed": failed,
                 "created": created,
             },
@@ -251,6 +253,6 @@ async def test_cleanup_old_notices_batches_and_keeps_queue(db_session) -> None:
     left = set(
         (await db_session.execute(text("SELECT kind FROM hockey_notices WHERE player_key = :k"), {"k": A})).scalars()
     )
-    assert left == {"result", "moved"}
+    assert left == {"result", "moved", "lginvite", "consent"}
     # второй вызов в пределах 6 часов ничего не делает
     assert await cleanup_old_notices(Factory(), now=now + timedelta(hours=1)) == 0
