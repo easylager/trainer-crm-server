@@ -1436,43 +1436,26 @@ def _b_all_places(view: Mapping[str, Any]) -> str:
             "Знаете место, которого здесь нет? →</a></p>"
         )
     return (
-        '<details class="b-details">'
+        '<section class="b-sec"><details class="b-details">'
         f'<summary>Все места города · {len(places)}{icon_svg("down")}</summary>'
-        f'<div class="b-details__body">{"".join(groups)}</div></details>'
+        f'<div class="b-details__body">{"".join(groups)}</div></details></section>'
     )
 
 
-def _b_more(view: Mapping[str, Any], *, share_endpoint: str | None) -> str:
-    """«Ещё в <городе>»: все места, предложить место, вход для тренера и «Поделиться подборкой» — одной секцией
-    в стиле строк «Чем займёмся?» (владелец 2026-11-20: четыре блока четырьмя стилями выглядели сумбурно)."""
-    from src.application.catalog_icons import icon_svg
-
+def _b_city_suggest(view: Mapping[str, Any]) -> str:
+    # Заметный вход в заявку под «Все места города» — не только катки (PDEC-028).
     city = dict(view.get("city") or {})
-    city_name = str(city.get("name") or "")
-    loc = city_locative(city_name) if city_name else None
-    rows: list[str] = []
-    if city.get("id"):
-        rows.append(_b_route_row(
-            href=f"/suggest?city={int(city['id'])}", icon="invite", title="Предложить место",
-            line="Каток, магазин или двор с залитым льдом — проверим и добавим",
-        ))
-    rows.append(_b_route_row(
-        href="/trainers?utm_source=glide&utm_medium=city_hub", icon="person",
-        title=f"Тренируете в {loc}?" if loc else t("coach.entry_first_title"),
-        line="Бесплатная страница тренера и ссылка для учеников",
-    ))
-    if share_endpoint:
-        rows.append(
-            f'<div class="b-row"><span class="b-row__icon">{icon_svg("external")}</span>'
-            '<span class="b-row__body"><button type="button" class="b-row__title b-row__link b-row__btn" '
-            f'id="catalogSelectionShareBtn" data-catalog-selection-share="{_esc(share_endpoint)}">Поделиться подборкой</button>'
-            '<span class="b-row__line">Ссылка на катки города для друзей</span></span>'
-            f'{icon_svg("chevron", extra_class="b-row__go")}</div>'
-        )
-    head = f"Ещё в {loc}" if loc else "Ещё"
+    city_id = city.get("id")
+    if not city_id:
+        return ""
+    name = _esc(city_locative(str(city.get("name") or "")))
     return (
-        f'<section class="b-sec b-more"><div class="b-sec__head"><h2 class="b-h2">{_esc(head)}</h2></div>'
-        f'{_b_all_places(view)}<div class="b-list">{"".join(rows)}</div></section>'
+        '<section class="b-sec b-city-suggest">'
+        f'<h2 class="b-city-suggest__title">Нет нужного места в {name}?</h2>'
+        '<p class="b-city-suggest__lead">Каток, магазин, мастерская или двор, где залили лёд, — '
+        'расскажите, мы проверим и добавим.</p>'
+        f'<a class="b-city-suggest__link" href="/suggest?city={int(city_id)}">Предложить место</a>'
+        '</section>'
     )
 
 
@@ -1723,12 +1706,11 @@ def _b_body(
     from src.application.catalog_list_share import catalog_selection_share_button, city_hub_share_endpoint
 
     share_pick = ""
-    share_endpoint = None
     if int(view.get("rink_count") or 0) > 0:
-        share_endpoint = city_hub_share_endpoint(view)
-        share_pick = catalog_selection_share_button(endpoint=share_endpoint)
-    share_tail = share_html(share, telegram_url=None, story_image_url=story_image_url, telegram_link_only=True)
-    share_block = share_pick + share_tail
+        share_pick = catalog_selection_share_button(endpoint=city_hub_share_endpoint(view))
+    share_block = share_pick + share_html(
+        share, telegram_url=None, story_image_url=story_image_url, telegram_link_only=True
+    )
     from src.application.site_matches_page import feed_section
 
     from src.application.kk_site_banner import kk_banner_html
@@ -1851,7 +1833,9 @@ def _b_body(
             rink_list,
             _b_for_you(view),
             empty,
-            _b_more(view, share_endpoint=share_endpoint),
-            share_tail,
+            _b_all_places(view),
+            _b_city_suggest(view),
+            _b_trainers(view),
+            share_block,
         ]
     )
