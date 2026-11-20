@@ -243,7 +243,7 @@
       body.appendChild(placesBlock(m, points));
       body.appendChild(duelsBlock(m));
     } else {
-      body.appendChild(K.emptyCard('ХОДЫ ЗАКРЫТЫ', 'Этот матч без твоего хода. Ближайшие матчи — на главной игры.'));
+      body.appendChild(K.emptyCard('ХОДЫ ЗАКРЫТЫ', 'Этот матч без твоего хода. Ход можно сделать на ближайшие.', h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'К ближайшим матчам' })));
     }
     body.appendChild(crowdBlock(m));
     var pageLink = matchPageLink(m);
@@ -446,7 +446,7 @@
     ]);
     var main = h('main', { class: 'kk-main' });
     if (!mine) {
-      main.appendChild(K.emptyCard('ЭТОТ МАТЧ БЕЗ ТЕБЯ', 'Хода на матч не было, очков нет. Следующий матч — на главной игры.'));
+      main.appendChild(K.emptyCard('ЭТОТ МАТЧ БЕЗ ТЕБЯ', 'Хода на матч не было, очков нет. Ход можно сделать на ближайшие.', h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'К ближайшим матчам' })));
     } else {
       var tone = winTone();
       if (exact) {
@@ -520,7 +520,7 @@
   }
 
   function notFound() {
-    return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.emptyCard('МАТЧ НЕ НАЙДЕН', 'Такого матча нет или ссылка устарела. Ближайшие матчи — на главной игры.')])];
+    return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.emptyCard('МАТЧ НЕ НАЙДЕН', 'Такого матча нет или ссылка устарела.', h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'К ближайшим матчам' }))])];
   }
 
   /**
