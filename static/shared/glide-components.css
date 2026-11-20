@@ -190,7 +190,7 @@
   border-radius: 50%; background: #fff; font-size: 12px; font-weight: 700; color: #2b4fa0;
 }
 .m-pick .m-logo img { width: 40px; height: 40px; object-fit: contain; }
-.m-pick__foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: var(--g-muted); }
+.m-pick__foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: -6px 0 -10px; font-size: 13px; color: var(--g-muted); }
 .m-pick__link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; text-decoration: none; color: var(--g-accent-ink) !important; }
 .m-pick--dark { background: var(--g-dark); border-color: var(--g-dark); color: #fff; }
 .m-pick--dark .m-pick__when, .m-pick--dark .m-pick__link { color: var(--g-on-dark-accent) !important; }

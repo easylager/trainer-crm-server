@@ -139,7 +139,8 @@ def pick_block(
     klass = "m-pick" + (" m-pick--dark" if dark else "") + (" m-pick--compact" if compact else "")
     when_html = f'<span class="m-pick__when">{_e(when)}</span>' if when else ""
     note_html = f'<p class="m-pick__note">{_e(note)}</p>' if note else ""
-    foot_text = "" if compact else ("Тап — ход в Telegram, бесплатно" if dark else "Бесплатно · очки после матча")
+    # Без «бесплатно»: рядом с двумя кнопками-исходами слово о деньгах читается как ставка. Игра — про друзей.
+    foot_text = "" if compact else "Угадывай вместе с друзьями в Telegram"
     foot = f'<div class="m-pick__foot"><span>{_e(foot_text)}</span>{foot_link}</div>'
     return (
         f'<section class="{klass}" aria-label="Кто кого"><span class="m-sticker">КТО КОГО?</span>'
@@ -422,7 +423,7 @@ def render_matches_list(
     pick_html = (
         pick_block(
             pick, base_url=base_url, src="sitehockey", surface="matches_list", city_id=city_id, dark=True,
-            when=pick_when(pick), foot_link='<a class="m-pick__link" href="/kk?from=sitematches">Как играть</a>',
+            when=pick_when(pick), foot_link='<a class="m-pick__link" href="/kk?from=sitematches">Об игре</a>',
         )
         if pick else ""
     )
@@ -438,7 +439,7 @@ def render_matches_list(
         f'<div class="m-top">{back}<h1 class="m-title">Хоккей</h1><p class="m-lead">{_e(first_line)}</p>'
         f'<nav class="m-chips" aria-label="Клуб">{"".join(chips)}</nav>'
         f'<div class="m-links">{dinamo_link_html}{game_link_html}</div></div>'
-        + pick_html
+        + (f'<div class="m-top">{pick_html}</div>' if pick_html else "")
         + (f'<p class="m-empty">{_e(text)}</p>' if text else "")
         + f'<div class="m-days">{days}</div>'
     )
@@ -737,7 +738,7 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
         block = pick_block(
             m, base_url=base_url, src="sitematch", surface=MATCH_SURFACE, city_id=city_id,
             note="Тапни за команду — ход сразу в игре в Telegram.",
-            foot_link='<a class="m-pick__link" href="/kk?from=sitematch">Как играть</a>' if hockey_event.enabled() else "",
+            foot_link='<a class="m-pick__link" href="/kk?from=sitematch">Об игре</a>' if hockey_event.enabled() else "",
         )
         if block:
             return block
@@ -781,7 +782,7 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
         else ""
     )
     rules_link = (
-        '<a class="m-text-link" href="/kk?from=sitematch">Как играть в «КТО КОГО»</a>'
+        '<a class="m-text-link" href="/kk?from=sitematch">Об игре «КТО КОГО»</a>'
         if game["kind"] != "soon" and hockey_event.enabled() else ""
     )
     return (

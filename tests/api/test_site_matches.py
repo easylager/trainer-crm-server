@@ -267,7 +267,9 @@ async def test_missed_and_cancelled_match_keep_page_noindex_but_leave_lists(app_
     p_gone = await _path(db_session, gone)
     r = await _get(p_gone)
     assert r.status_code == 200 and "noindex" in r.text and "перенесён или отменён" in r.text
-    assert "EventPostponed" in r.text and "Билеты" not in r.text and "startapp=" not in r.text
+    # Ни хода, ни колокольчика, ни карточки матча в Mini App; вход в каталог из подвала есть на каждой странице.
+    assert "EventPostponed" in r.text and "Билеты" not in r.text
+    assert not re.search(r"startapp=(?:kk|mbell_)", r.text)
     p_c = await _path(db_session, cancelled)
     assert "EventCancelled" in (await _get(p_c)).text
     assert (await _get(f"{p_gone}/calendar.ics")).status_code == 404
