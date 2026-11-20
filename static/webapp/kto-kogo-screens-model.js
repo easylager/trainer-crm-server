@@ -114,22 +114,22 @@
 
   /** Строки блока по ответу /stakes. Иконка: crown | up | duel. Места условные — «оценка по текущей таблице». */
   function stakeLines(items) {
+    // Фразой, а не «Лида · ноябрь: 2-е → около 1-го · корона» (владелец 2026-11-20: «странная оценка»).
     return (items || []).map(function (s) {
-      var label = s.kind === 'league' ? 'Лига «' + s.league_name + '»' : sliceLabel(s.club, s.period_title);
-      var move = s.rank_now == null
-        ? becomeText(s.rank_if)
-        : s.rank_now === s.rank_if
-          ? s.rank_now + '-е место'
-          : s.rank_now + '-е → около ' + s.rank_if + '-го';
-      return {
-        icon: s.crown ? 'crown' : s.kind === 'league' ? 'duel' : 'up',
-        gold: !!s.crown,
-        text: label + ': ' + move + (s.crown ? ' · корона' : ''),
-      };
+      var where = s.kind === 'league'
+        ? 'в лиге «' + s.league_name + '»'
+        : (s.club ? 'в таблице ' + clubGen(s.club) : 'в общей таблице') + ' за ' + periodShort(s.period_title);
+      var n = s.rank_if;
+      var text;
+      if (s.crown) text = 'Можешь выйти на 1-е место ' + where + ' — и взять корону';
+      else if (s.rank_now == null) text = n == null ? 'Появишься ' + where : 'Займёшь ' + n + '-е место ' + where;
+      else if (s.rank_now === n) text = 'Останешься на ' + n + '-м месте ' + where;
+      else text = 'Можешь подняться на ' + n + '-е место ' + where + ' (сейчас ' + s.rank_now + '-е)';
+      return { icon: s.crown ? 'crown' : s.kind === 'league' ? 'duel' : 'up', gold: !!s.crown, text: text };
     });
   }
 
-  var STAKES_NOTE = 'Это оценка: другие игроки ещё могут поменять ход.';
+  var STAKES_NOTE = 'Точные места — после матча, когда сходят все.';
 
   function stakesEmpty(hasPick) {
     return hasPick ? 'Здесь угаданный победитель места не меняет — очки всё равно копятся.' : 'Сделай ход — покажем, где ты поднимешься.';
@@ -765,8 +765,9 @@
   function peakTile(p, crowns) {
     var isMonth = p.period !== 'season';
     var crowned = isMonth && (crowns || []).some(function (c) { return c.kind === 'month' && c.period === p.period && (c.club || null) === (p.club || null); });
-    var note = crowned ? 'корона твоя' : p.rank === 1 ? 'лидируешь' : 'из ' + spaced(p.players);
-    return { rank: String(p.rank), name: p.club ? clubShort(p.club) : 'Все матчи', slice: periodShort(p.period_title), note: note, gold: crowned || p.rank === 1 };
+    // Читается фразой «2-е место из 5 · ноябрь»: голая «2» с «из 5» отдельно была шифром.
+    var note = crowned ? 'корона твоя' : p.rank === 1 ? 'место · лидируешь' : 'место из' + NBSP + spaced(p.players);
+    return { rank: p.rank + '-е', name: p.club ? clubShort(p.club) : 'Все матчи', slice: periodShort(p.period_title), note: note, gold: crowned || p.rank === 1 };
   }
 
   function crownCount(n) {

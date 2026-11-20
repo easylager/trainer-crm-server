@@ -1421,6 +1421,13 @@ def catalog_home_search_description(cities: list[Mapping[str, Any]]) -> str:
     return f"{head} {listed} — цены, адреса, телефоны катков."
 
 
+def _b_kk_banner() -> str:
+    """Секция «Хоккей» после городов: баннер игры, ведёт на лендинг /kk (не конкретный матч; холст «Баннер B»)."""
+    from src.application.kk_site_banner import kk_banner_section
+
+    return kk_banner_section("sitehome")
+
+
 def render_catalog_home_page(
     view: Mapping[str, Any],
     *,
@@ -1533,7 +1540,7 @@ def render_catalog_home_page(
         "__WHEN__": _b_when_nav(view),
         "__HERO_CITY__": _b_home_city_card(user_city, when_key=when_key),
         "__MAP__": map_html,
-        "__CITIES__": cities_html,
+        "__CITIES__": cities_html + _b_kk_banner(),
         "__CTA__": "",
         "__B_PRESS_SCRIPT__": b_press_script_html(),
         "__WHEN_SWAP_SCRIPT__": when_swap_script_html(),

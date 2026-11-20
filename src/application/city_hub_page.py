@@ -1303,10 +1303,6 @@ def _b_routes(view: Mapping[str, Any]) -> str:
             rows.append(_b_route_row(
                 href=DINAMO_HOME_PATH, icon="ticket", title="Домашние матчи «Динамо-Минск»", line="КХЛ · Минск-Арена",
             ))
-        if hockey_event.enabled():
-            rows.append(_b_route_row(
-                href="/kk", icon="ticket", title="Игра «КТО КОГО»", line="Угадай победителя хоккейного матча",
-            ))
     service_n = int(view.get("service_count") or 0)
     if service_n:
         service_places = [p for p in view.get("places") or [] if p.get("in_sharpening")]
@@ -1343,6 +1339,13 @@ def _b_routes(view: Mapping[str, Any]) -> str:
     if not rows:
         return ""
     return section(t("hub.what"), f'<div class="b-list">{"".join(rows)}</div>', sec_id="city-sections")
+
+
+def _b_kk_banner() -> str:
+    """Баннер игры «КТО КОГО» после разделов города: ведёт на лендинг /kk (вместо строки в списке разделов)."""
+    from src.application.kk_site_banner import kk_banner_section
+
+    return kk_banner_section("sitehub")
 
 
 def _b_trainers(view: Mapping[str, Any]) -> str:
@@ -1710,9 +1713,15 @@ def _b_body(
     )
     from src.application.site_matches_page import feed_section
 
+    from src.application.kk_site_banner import kk_banner_html
+
+    # Баннер игры — карточкой в ленте «Хоккей в <городе>», рядом с матчами; ленты нет — своя секция.
+    kk_card = kk_banner_html("sitehub", card=True)
     matches_block = feed_section(
-        view.get("matches"), city_name=str(view["city"]["name"]), base_url=base_url, city_id=city_id
+        view.get("matches"), city_name=str(view["city"]["name"]), base_url=base_url, city_id=city_id,
+        extra_card=kk_card,
     )
+    kk_banner = "" if (kk_card and kk_card[:40] in matches_block) else _b_kk_banner()
     if variant == VARIANT_ONE and rinks:
         rink = rinks[0]
         rink_name = format_public_name(str(rink.get("name") or ""))
@@ -1820,6 +1829,7 @@ def _b_body(
             render_learn_block(view.get("learn")),
             matches_block,
             routes,
+            kk_banner,
             rink_list,
             _b_for_you(view),
             empty,

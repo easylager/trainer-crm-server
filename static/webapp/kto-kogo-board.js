@@ -165,8 +165,8 @@
     var p = state.profile;
     if (!p) return h('div', { class: 'kk-skel kk-skel--card' });
     if (!p.played) {
+      // Стикер «КТО КОГО?» уже в шапке хаба: второй на карточке повторял его (владелец 2026-11-20).
       return h('section', { class: 'kk-card kk-card--fan kk-card--intro' }, [
-        K.sticker('КТО КОГО?'),
         h('b', { class: 'kk-hd', text: 'Угадай матч — один тап' }),
         h('span', { class: 'kk-tx', text: 'Тап за команду в карточке матча — и ты в игре, регистрации нет. Очки придут после матча — тогда появишься в таблице.' }),
       ]);
@@ -176,7 +176,6 @@
     var trumpText = trumpStatus(trump);
     var crowns = (p.crowns || []).length;
     return h('button', { type: 'button', class: 'kk-card kk-card--fan', style: club ? 'background:' + club.color : '', onclick: function () { K.go('profile', {}); } }, [
-      K.sticker('КТО КОГО?'),
       club ? K.logoDisc(club, 52) : K.worldDisc(52),
       h('span', { class: 'kk-col kk-grow' }, [
         h('span', { class: 'kk-fan__t' }, [(p.display_name || 'Ты'), club ? ' · ' : null, club ? h('span', { class: 'kk-nowrap', text: 'за ' + name(club) }) : null]),
@@ -198,9 +197,9 @@
         var t = S.peakTile(pk, p.crowns);
         return h('button', { type: 'button', class: 'kk-peak' + (t.gold ? ' is-gold' : ''), onclick: function () { K.go('table', { club: pk.club, period: pk.period }); } }, [
           h('span', { class: 'kk-peak__n', text: t.rank }),
+          h('span', { class: 'kk-peak__s', text: t.note }),
           h('span', { class: 'kk-peak__l', text: t.name }),
           h('span', { class: 'kk-peak__w', text: t.slice }),
-          h('span', { class: 'kk-peak__s', text: t.note }),
         ]);
       })),
     ]);
@@ -290,8 +289,9 @@
 
   /**
    * Строка общей таблицы. Тап по строке открывает стенд игрока (TASK-430); у строки без pid (лиги, старый ответ) строка
-   * просто текст. Экипировка от капитанов лиг (TASK-432): у того, на ком она есть, — аватар с вещью и строка «что и от
-   * кого» вместо числа ходов; остальные строки как были (владелец 2026-11-19: значок у имени не читался).
+   * просто текст. Экипировка от капитанов лиг (TASK-432): у того, на ком она есть, — аватар с вещью (владелец 2026-11-19:
+   * значок у имени не читался). Под именем у всех одно и то же — ходы и «в точку»: название вещи и «от капитана» обрезались
+   * в узкой строке (владелец 2026-11-20), они остаются на стенде и для экранного диктора.
    */
   function rowEl(r) {
     var open = r.pid ? function () { if (r.is_me) K.go('stand', {}); else K.go('player', { pid: r.pid }); } : null;
@@ -301,7 +301,8 @@
       h('span', { class: 'kk-r__w' + (kit ? ' kk-r__w--kit' : ' kk-col') }, (function () {
         var col = [
           h('span', { class: 'kk-r__name' }, [h('span', { class: 'kk-r__nm', text: r.display_name }), r.is_me ? h('span', { class: 'kk-me', text: 'ты' }) : null, K.crownTag(r.crowns)]),
-          kit ? h('span', { class: 'kk-r__kit', text: K.Kit.outsideNote(kit) }) : h('span', { class: 'kk-sub', text: S.rowSub(r) }),
+          h('span', { class: 'kk-sub', text: S.rowSub(r) }),
+          kit ? h('span', { class: 'kk-vh', text: K.Kit.outsideNote(kit) }) : null,
         ];
         if (!kit) return col;
         return [K.kitAva(r.display_name, 36, { head: kit, cls: r.is_me ? '' : 'kk-ava--soft', wrap: 'kk-kit--room' }), h('span', { class: 'kk-col kk-r__wt' }, col)];
@@ -370,7 +371,7 @@
       var rows = S.tableRows(view, a.full).map(function (x) {
         return x.type === 'gap' ? h('div', { class: 'kk-gap', 'aria-hidden': 'true', text: '···' }) : rowEl(x.r);
       });
-      if (rows.length) main.appendChild(h('div', { class: 'kk-tbl' }, rows));
+      if (rows.length) main.appendChild(h('div', { class: 'kk-tbl' + K.stagger(a, 'tbl:' + tableKey(a)) }, rows));
       var more = S.tableMore(view, a.full);
       if (more) main.appendChild(h('button', { type: 'button', class: 'kk-ml-more', onclick: function () { a.full = true; K.render(); }, text: more }));
       if (!view.me) {

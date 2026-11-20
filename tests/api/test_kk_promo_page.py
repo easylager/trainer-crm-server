@@ -223,3 +223,14 @@ async def test_mobile_browser_hops_and_preview_bot_does_not(monkeypatch, via_sta
         assert f'href="{go}"' in page
         assert "<script" not in page and "location.replace" not in page
         assert _rail(page)
+
+
+@pytest.mark.asyncio
+async def test_site_placement_keeps_the_landing_and_labels_the_game_link(monkeypatch) -> None:
+    """``?from=`` — место на сайте: та же индексируемая страница, но кнопка в игру несёт свою метку."""
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    async with _client() as client:
+        page = (await client.get("/kk", params={"from": "sitehub"})).text
+        junk = (await client.get("/kk", params={"from": "a b"})).text
+    assert 'class="kk-hero"' in page and "index, follow" in page
+    assert "kks_sitehub" in page and "kks_site" in junk and "kks_a" not in junk

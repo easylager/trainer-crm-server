@@ -210,6 +210,16 @@ _MOVE = text("""
     WHERE id = :id AND status = 'scheduled'
     """)
 
+# Отложенный матч: итога не было, матч ушёл на разбор, а источник дал новую дату в будущем. Это перенос, а не
+# спорный итог: матч снова ждёт игры, ходы открываются, разбор и опросы итога сбрасываются.
+_REOPEN_MOVED = text("""
+    UPDATE hockey_matches
+    SET status = 'scheduled', starts_at = :starts_at, home_team = :home_team, away_team = :away_team,
+        review_reason = NULL, review_alerted_at = NULL, result_probe = NULL,
+        live_home_score = NULL, live_away_score = NULL, live_at = NULL, updated_at = :now
+    WHERE id = :id AND status = 'review'
+    """)
+
 _TOUCH = text("UPDATE hockey_matches SET checked_at = :now WHERE id = :id")
 
 # Строки, заведённые запасным источником (``sm…``), в тот же минский день, что и матч основного.
@@ -236,10 +246,20 @@ _FINAL = text("""
     WHERE id = :id
     """)
 
+# Автоматика пишет итог и «на разбор» только матчу, который ещё ждёт итога: если админ, пока шла проверка,
+# отменил матч или ввёл итог руками, решение цикла устарело и не должно их перезаписать.
+_AUTO_FINAL = text("""
+    UPDATE hockey_matches
+    SET status = 'final', home_score = :home_score, away_score = :away_score, decided_in = :decided_in,
+        result_source = :result_source, finalized_at = :now, review_reason = NULL,
+        checked_at = :now, updated_at = :now
+    WHERE id = :id AND status IN ('scheduled', 'review')
+    """)
+
 _REVIEW = text("""
     UPDATE hockey_matches
     SET status = 'review', review_reason = :reason, checked_at = :now, updated_at = :now
-    WHERE id = :id
+    WHERE id = :id AND status IN ('scheduled', 'review')
     """)
 
 _ALERTED = text("UPDATE hockey_matches SET review_alerted_at = :now WHERE id = :id")
@@ -319,9 +339,16 @@ async def upsert_calendar_match(session: AsyncSession, page: HcdinamoMatch, *, n
         await session.execute(_INSERT, params)
         return "inserted"
     row = _row(record)
-    if row.status != STATUS_SCHEDULED:
-        return "unchanged"
-    if (_utc(row.starts_at), row.home_team, row.away_team) == (params["starts_at"], page.home, page.away):
+    same = (_utc(row.starts_at), row.home_team, row.away_team) == (params["starts_at"], page.home, page.away)
+    if row.status == STATUS_REVIEW and not same and params["starts_at"] > _utc(now):
+        reopened = await session.execute(_REOPEN_MOVED, {**params, "id": row.id})
+        if reopened.rowcount != 1:  # админ успел ввести итог или отменить: переносить нечего
+            return "unchanged"
+        from src.application.hockey_game import on_match_moved
+
+        await on_match_moved(session, match_id=row.id, starts_at=params["starts_at"])
+        return "moved"
+    if row.status != STATUS_SCHEDULED or same:
         return "unchanged"
     await session.execute(_MOVE, {**params, "id": row.id})
     from src.application.hockey_game import on_match_moved
@@ -425,7 +452,7 @@ async def apply_decision(session: AsyncSession, row: MatchRow, decision: Decisio
     now = _utc(now)
     if decision.kind == KIND_FINAL:
         await session.execute(
-            _FINAL,
+            _AUTO_FINAL,
             {
                 "id": row.id,
                 "home_score": decision.home_score,
@@ -437,8 +464,8 @@ async def apply_decision(session: AsyncSession, row: MatchRow, decision: Decisio
         )
         return False
     if decision.kind == KIND_REVIEW:
-        await session.execute(_REVIEW, {"id": row.id, "reason": decision.reason, "now": now})
-        return row.review_alerted_at is None
+        moved = await session.execute(_REVIEW, {"id": row.id, "reason": decision.reason, "now": now})
+        return moved.rowcount == 1 and row.review_alerted_at is None
     await session.execute(_TOUCH, {"id": row.id, "now": now})
     return False
 

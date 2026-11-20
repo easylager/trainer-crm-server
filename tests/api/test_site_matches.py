@@ -101,7 +101,7 @@ async def test_dinamo_home_schedule_is_canonical_and_excludes_away_matches(app_u
     assert f'<link rel="canonical" href="https://glide.example{path}"' in r.text
     assert 'content="index, follow"' in r.text
     assert f'href="{home_path}"' in r.text and "Победителей, 111" in r.text
-    assert "https://hcdinamo.by/tickets/?match=12345" in r.text and 'href="/kk"' in r.text
+    assert "https://hcdinamo.by/tickets/?match=12345" in r.text and 'href="/kk?from=sitedinamo"' in r.text
     assert f'href="/m/{away}-' not in r.text and f'href="/m/{cancelled}-' not in r.text
     assert f'href="{path}"' in (await _get("/hockey")).text
     assert f'href="{path}"' in (await _get("/c/minsk")).text
@@ -267,7 +267,9 @@ async def test_missed_and_cancelled_match_keep_page_noindex_but_leave_lists(app_
     p_gone = await _path(db_session, gone)
     r = await _get(p_gone)
     assert r.status_code == 200 and "noindex" in r.text and "перенесён или отменён" in r.text
-    assert "EventPostponed" in r.text and "Билеты" not in r.text and "startapp=" not in r.text
+    # Ни хода, ни колокольчика, ни карточки матча в Mini App; вход в каталог из подвала есть на каждой странице.
+    assert "EventPostponed" in r.text and "Билеты" not in r.text
+    assert not re.search(r"startapp=(?:kk|mbell_)", r.text)
     p_c = await _path(db_session, cancelled)
     assert "EventCancelled" in (await _get(p_c)).text
     assert (await _get(f"{p_gone}/calendar.ics")).status_code == 404
@@ -358,7 +360,7 @@ async def test_list_own_city_first_chip_filter_noindex(app_use_test_db, db_sessi
     assert (await _path(db_session, gr)) in filtered and (await _path(db_session, mn)) not in filtered and "noindex" in filtered
     plain = (await _get("/hockey")).text
     assert "index, follow" in plain and not has_forbidden_words(plain)
-    assert 'href="/kk"' in plain
+    assert 'href="/kk?from=sitematches"' in plain
 
 
 @pytest.mark.asyncio
@@ -484,8 +486,8 @@ async def test_extraliga_club_filter_labels_home_and_away_with_city(app_use_test
 
 
 @pytest.mark.asyncio
-async def test_list_with_city_has_two_sections_including_dinamo_away(app_use_test_db, db_session):
-    """Правило C: «В Минске» — то, что идёт в Минске; «По Беларуси» — остальное, с выездами Динамо."""
+async def test_list_with_city_splits_minsk_belarus_and_dinamo_away(app_use_test_db, db_session):
+    """«В Минске» — то, что идёт в Минске; «По Беларуси» — остальное в стране; выезды Динамо (Россия) — «На выезде»."""
     await _world(db_session)
     await _gomel(db_session)
     mn = await _match(db_session, "Юность", "Шахтер", starts=(NOW + timedelta(days=2)).replace(hour=16))
@@ -494,9 +496,9 @@ async def test_list_with_city_has_two_sections_including_dinamo_away(app_use_tes
     away = await _match(db_session, "Авангард", "Динамо-Минск", league="khl", city=None, arena=None,
                         starts=(NOW + timedelta(days=3)).replace(hour=14))
     data = await site_matches.matches_list(db_session, now=NOW, city="Минск")
-    assert [s["title"] for s in data["sections"]] == ["В Минске", "По Беларуси"]
+    assert [s["title"] for s in data["sections"]] == ["В Минске", "По Беларуси", "На выезде"]
     ids = [[m["id"] for d in s["days"] for m in d["items"]] for s in data["sections"]]
-    assert ids == [[mn], [gm, away]]
+    assert ids == [[mn], [gm], [away]]
     html = (await _get("/hockey?city=minsk")).text
     assert "В Минске" in html and "По Беларуси" in html and "первым" not in html
     assert html.index(await _path(db_session, mn)) < html.index("По Беларуси") < html.index(await _path(db_session, gm))
@@ -516,7 +518,10 @@ async def test_dinamo_away_match_page_is_honest_and_complete(app_use_test_db, db
     html = r.text
     assert "КАК ДОБРАТЬСЯ" not in html and "Минск-Арена" not in html and "Билеты" not in html
     assert "ВЫЕЗД" in html and "Трансляция и протокол" in html and "hcdinamo.by/matches/4242/" in html
-    assert f"startapp=mbell_{away}" in html and f"startapp=kkm_{away}" in html
+    assert f"startapp=mbell_{away}" in html
+    # До матча вместо одной кнопки «Угадать» — две кнопки-команды: ход сразу, с меткой места.
+    assert f"startapp=kkn_{away}_h_sitematch" in html and f"startapp=kkn_{away}_a_sitematch" in html
+    assert "Кто победит?" in html and f"startapp=kkm_{away}" not in html
     assert "Все матчи · Динамо-Минск" in html and "/hockey?club=dinamo-minsk" in html
     ld = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S).group(1).replace("\\u003c", "<"))
     assert "location" not in ld and "offers" not in ld
@@ -563,7 +568,7 @@ async def test_arena_page_has_match_row_and_here_block_and_honest_note(app_use_t
     assert "Матчи здесь" in html and "m-ticket" in html and "вечернего катания нет" in html
     assert (await _path(db_session, mid)) in html
     assert 'href="/hockey">Расписание хоккейных матчей</a>' in html
-    assert 'href="/kk">Игра «КТО КОГО»</a>' in html
+    assert 'href="/kk?from=siteplace">Игра «КТО КОГО»</a>' in html
     # Сеанс вечером → строка нейтральная, ничего о катании не утверждает
     await db_session.execute(
         text("""INSERT INTO ice_sessions (arena_id, kind, status, starts_at_utc, ends_at_utc, starts_at_local, ends_at_local,
@@ -858,3 +863,17 @@ async def test_bell_result_is_not_sent_to_a_player_whose_game_move_gets_its_own_
     )
     notices = await match_bells.due_notices(db_session, now=NOW)
     assert sorted(n.telegram_id for n in notices if n.kind == match_bells.KIND_RESULT) == [plain, muted]
+
+
+@pytest.mark.asyncio
+async def test_hockey_list_puts_the_next_dinamo_match_pick_on_top(app_use_test_db, db_session, monkeypatch):
+    """/hockey: ближайший матч Динамо — тёмная карточка с ходом в игру вместо текстовой ссылки."""
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    await _world(db_session)
+    home, away, _ = await _dinamo_games(db_session)
+    html = (await _get("/hockey")).text
+    first = min(home, away)
+    assert "m-pick--dark" in html and "_sitehockey" in html
+    assert re.search(r"startapp=kkn_\d+_h_sitehockey", html) and re.search(r"startapp=kkn_\d+_a_sitehockey", html)
+    assert "Угадай победителя в игре" not in html
+    assert first

@@ -209,6 +209,7 @@
     arrow: ['M5 12h14', 'M13 6l6 6-6 6'],
     chev: ['M9 6l6 6-6 6'],
     check: ['M5 12l5 5 9-10'],
+    hash: ['M4 9h16', 'M4 15h16', 'M10 3L8 21', 'M16 3l-2 18'],
     send: ['M21 4L3 11l6 2 2 6 3-4 5 4z'],
     plus: ['M12 5v14', 'M5 12h14'],
     bell: ['M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.9 1.9 0 0 0 3.4 0'],
@@ -299,6 +300,16 @@
   /** Загрузка не удалась: объясняем и даём повторить, а не оставляем вечную заглушку. */
   function retryCard(text, onRetry) {
     return emptyCard('НЕ ЗАГРУЗИЛОСЬ', text || 'Проверь интернет и попробуй ещё раз.', h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: onRetry, text: 'Повторить' }));
+  }
+
+  /**
+   * Каскад строк (таблицы, вечер лиги): класс kk-stagger только на первом кадре нового среза — опрос и перерисовки
+   * того же среза его не повторяют. a — аргументы экрана (живут, пока экран в стеке), key — что сейчас показано.
+   */
+  function stagger(a, key) {
+    if (!a || a.staggerKey === key) return '';
+    a.staggerKey = key;
+    return ' kk-stagger';
   }
 
   function emptyCard(head, text, cta) {
@@ -419,20 +430,131 @@
     if (top.restoreTries > 6) top.restoreScroll = false;
   }
 
+  // ---------- плавная смена экрана (View Transitions) ----------
+  // Только смена экрана: go/replace/reset/back. Обычный render (тапы, опрос, тосты, шторки) идёт без перехода.
+  // Логика не зависит от промисов перехода: apply выполняется ровно один раз — колбэком API, при ошибке сразу
+  // или по страховочному таймеру, если WebView так и не позвал колбэк.
+
+  var lastTap = null; // { el, t } — последний клик: из какой карточки открыли матч
+  if (document.addEventListener) document.addEventListener('click', function (e) { lastTap = { el: e.target, t: Date.now() }; }, true);
+  var vtNamed = [];
+  var vtSeq = 0;
+  var vtPending = false;
+
+  function reducedMotion() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+  }
+
+  function vtName(el, name) {
+    if (!el || !el.style) return;
+    el.style.viewTransitionName = name;
+    vtNamed.push(el);
+  }
+
+  function vtClear() {
+    for (var i = 0; i < vtNamed.length; i++) {
+      try { vtNamed[i].style.viewTransitionName = ''; } catch (e) { /* */ }
+    }
+    vtNamed = [];
+  }
+
+  /** Карточка, по которой только что тапнули: ближайший предок с двумя логотипами. Имена — только ей. */
+  function tagMatchSource(id) {
+    if (!lastTap || Date.now() - lastTap.t > 1500 || !lastTap.el || !lastTap.el.closest) return false;
+    var el = lastTap.el;
+    while (el && el !== root && el.querySelectorAll) {
+      var discs = el.querySelectorAll('.kk-disc');
+      if (discs.length >= 2) {
+        if (discs.length > 2) return false; // не одна карточка — пары не угадать
+        vtName(discs[0], 'kk-m-' + id + '-home');
+        vtName(discs[1], 'kk-m-' + id + '-away');
+        vtName(el.querySelector('.kk-dh__t, .kk-mc__big'), 'kk-m-' + id + '-time');
+        return true;
+      }
+      el = el.parentElement;
+    }
+    return false;
+  }
+
+  /** Шапка открытого матча — те же имена, что у карточки, из которой его открыли. */
+  function tagMatchHero(id) {
+    var hero = root.querySelector('.kk-hero');
+    if (!hero) return;
+    var discs = hero.querySelectorAll('.kk-hero__team .kk-disc');
+    if (discs.length !== 2) return;
+    vtName(discs[0], 'kk-m-' + id + '-home');
+    vtName(discs[1], 'kk-m-' + id + '-away');
+    vtName(hero.querySelector('.kk-hero__mid > :first-child'), 'kk-m-' + id + '-time');
+  }
+
+  function withTransition(nav, apply, matchId) {
+    var de = document.documentElement;
+    var kind = M.transitionKind(nav, !!(document.startViewTransition && de), reducedMotion());
+    if (kind === 'none') return apply();
+    // Смена экрана уже ждёт кадра перехода: второй тап по той же карточке положил бы в стек второй экран
+    // («Назад» пришлось бы жать дважды). Пока предыдущая не применена, новые переходы не начинаем.
+    if (vtPending) return;
+    vtPending = true;
+    vtClear();
+    var seq = ++vtSeq;
+    var done = false;
+    var shared = matchId != null && tagMatchSource(matchId);
+    function run() {
+      if (done) return;
+      done = true;
+      vtPending = false;
+      // Старые имена уходят вместе со старым DOM; на всякий случай снимаем их до новых.
+      vtClear();
+      apply();
+      if (shared) {
+        try { tagMatchHero(matchId); } catch (e) { /* */ }
+      }
+    }
+    function cleanup() {
+      if (seq !== vtSeq) return; // уже идёт следующий переход — его атрибут и имена не трогаем
+      de.removeAttribute('data-kk-vt');
+      vtClear();
+    }
+    try {
+      de.setAttribute('data-kk-vt', kind);
+      var vt = document.startViewTransition(run);
+      var settle = function () { cleanup(); };
+      if (vt) {
+        if (vt.ready && vt.ready.catch) vt.ready.catch(function () {});
+        if (vt.updateCallbackDone && vt.updateCallbackDone.catch) vt.updateCallbackDone.catch(function () {});
+        if (vt.finished && vt.finished.then) vt.finished.then(settle, settle);
+      }
+    } catch (e) {
+      cleanup();
+      run();
+      return;
+    }
+    // Колбэк не пришёл (сбой WebView) — состояние применяем сами; finished мог не наступить — чистим.
+    setTimeout(function () { run(); }, 400);
+    setTimeout(cleanup, 1200);
+  }
+
   function go(name, args) {
     state.sheet = null;
     parkScroll();
-    if (enter(state.stack.concat([{ name: name, args: args || {} }]))) window.scrollTo(0, 0);
+    var a = args || {};
+    withTransition('go', function () {
+      if (enter(state.stack.concat([{ name: name, args: a }]))) window.scrollTo(0, 0);
+    }, name === 'match' && a.id != null ? String(a.id).replace(/[^A-Za-z0-9_-]/g, '') || null : null);
   }
 
   function replace(name, args) {
     state.sheet = null;
-    if (enter(state.stack.slice(0, -1).concat([{ name: name, args: args || {} }]))) window.scrollTo(0, 0);
+    withTransition('replace', function () {
+      if (enter(state.stack.slice(0, -1).concat([{ name: name, args: args || {} }]))) window.scrollTo(0, 0);
+    });
   }
 
   function reset(name, args) {
     state.sheet = null;
-    if (enter([{ name: name, args: args || {} }])) window.scrollTo(0, 0);
+    withTransition('reset', function () {
+      if (enter([{ name: name, args: args || {} }])) window.scrollTo(0, 0);
+    });
   }
 
   /** TASK-374: игра во вкладке таб-бара (флаг season_ui из оболочки). Оболочки на странице нет — вкладки нет. */
@@ -475,10 +597,13 @@
     var act = M.backAction(state.stack.length, !!state.sheet, inTab());
     if (act === 'sheet') return closeSheet();
     if (act === 'pop') {
-      var next = state.stack.slice(0, -1);
-      var frame = next[next.length - 1];
-      if (frame && frame.scroll) frame.restoreScroll = true;
-      return enter(next);
+      return withTransition('back', function () {
+        if (state.stack.length < 2) return; // второй «назад», пока шёл первый переход, корень не снимает
+        var next = state.stack.slice(0, -1);
+        var frame = next[next.length - 1];
+        if (frame && frame.scroll) frame.restoreScroll = true;
+        enter(next);
+      });
     }
     if (act === 'stay') return;
     location.href = '/webapp/client-home' + (initData && !(tg && tg.initData) ? '?init_data=' + encodeURIComponent(initData) : '');
@@ -616,8 +741,22 @@
   var trumpPending = 0;
   var picksSaved = 0; // ходы, которые сервер принял за эту сессию
 
+  // Сервер закрывает ходы за минуту до начала (PICK_CLOSES_BEFORE): экран, открытый давно, не рисует ход, который тут же откатится.
+  var PICK_CLOSES_BEFORE_MS = 60 * 1000;
+
+  function pickClosed(match) {
+    var start = Date.parse(match.starts_at);
+    return !isNaN(start) && Date.now() >= start - PICK_CLOSES_BEFORE_MS;
+  }
+
   function sendPick(match, body, optimistic) {
     match = findMatch(match.id) || match;
+    if (pickClosed(match)) {
+      match.open = false;
+      render();
+      toast('Ходы на этот матч уже закрыты');
+      return Promise.resolve();
+    }
     // Рекламная метка: только с первым ходом человека; сервер всё равно пишет её лишь новому игроку.
     var src = M.firstPickSrc(state.src, state.matches);
     if (src) body = Object.assign({ src: src }, body);
@@ -931,8 +1070,10 @@
           var target = pickId && findMatch(pickId);
           // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
           if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
-            pickSide(target, pickSideParam);
-            toast('Ход принят: за ' + S.clubName(target[pickSideParam].name));
+            // «Ход принят» — только после ответа сервера: при закрытом матче или сбое сети придёт одно сообщение, а не два.
+            pickSide(target, pickSideParam).then(function () {
+              if (target.my_pick && target.my_pick.side === pickSideParam) toast('Ход принят: за ' + S.clubName(target[pickSideParam].name));
+            });
           }
           // Хаб сам грузит матчи при входе; свежий список с загрузки страницы второй раз не запрашиваем.
           state.matchesFresh = !loadError;
@@ -967,7 +1108,7 @@
 
   window.KK = {
     M: M, S: S, tg: tg, params: params, state: state, h: h, icon: icon, I: I, CROWN: CROWN, crownIcon: crownIcon, crownTag: crownTag,
-    ava: ava, puck: puck, introElapsed: introElapsed, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard, retryCard: retryCard,
+    ava: ava, puck: puck, introElapsed: introElapsed, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, stagger: stagger, emptyCard: emptyCard, retryCard: retryCard,
     sheet: sheet, closeSheet: closeSheet, api: api, toast: toast, fail: fail, haptic: haptic, render: render, register: register,
     go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
     loadMatches: loadMatches, loadClubMatches: loadClubMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,

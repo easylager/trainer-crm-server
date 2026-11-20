@@ -237,7 +237,11 @@
     if (hero) shown.push(hero.match.id);
     var d = S.dayMatches(state.matches, new Date(), shown);
     if (!d && !hero && !state.matches.length && state.matchesFailed) return K.retryCard('Матчи не загрузились.', function () { K.reset('hub', {}); });
-    if (!d) return hero ? null : K.emptyCard('МАТЧИ ДНЯ', 'Ближайших матчей пока нет — календарь обновится, как только клубы их назначат.');
+    if (!d) return hero ? null : K.emptyCard('МАТЧИ ДНЯ', 'Ближайших матчей пока нет — календарь обновится, как только клубы их назначат.',
+    h('div', { class: 'kk-two' }, [
+      h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('leagueNew', {}); }, text: 'Создать лигу' }),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('stand', {}); }, text: 'Мой стенд' }),
+    ]));
     return h('div', { class: 'kk-sec' }, [
       h('div', { class: 'kk-sec__head' }, [
         h('h2', { class: 'kk-lbl kk-lbl--h', text: d.heading }),

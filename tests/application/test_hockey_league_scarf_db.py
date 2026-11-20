@@ -68,8 +68,8 @@ async def test_scarf_uses_each_players_own_team(db_session) -> None:
     ).scalar_one()
     for key in (YOUTH_FAN, DINAMO_FAN, NO_TEAM, HABIT_FAN):
         await db.execute(
-            text("INSERT INTO hockey_league_members (league_id, player_key) VALUES (:l, :k)"),
-            {"l": league_id, "k": key},
+            text("INSERT INTO hockey_league_members (league_id, player_key, joined_at) VALUES (:l, :k, :j)"),
+            {"l": league_id, "k": key, "j": NOW - timedelta(days=17)},
         )
 
     # Ближайший матч дня — без Динамо: раньше ход за хозяев здесь считался ходом «против Динамо».
@@ -88,3 +88,32 @@ async def test_scarf_uses_each_players_own_team(db_session) -> None:
     titles = await league_titles(db, league_id=league_id, now=NOW)
 
     assert {k: v["id"] for k, v in titles.items()} == {YOUTH_FAN: "scarf", HABIT_FAN: "scarf"}
+
+
+@pytest.mark.asyncio
+async def test_titles_count_only_picks_after_joining_like_the_table(db_session) -> None:
+    """Звания — из тех же ходов, что очки таблицы: до вступления лига их не видела, «Ванги» за них нет."""
+    from src.application.hockey_game import POINTS_EXACT
+
+    db = db_session
+    late, early = 880_431_011, 880_431_012
+    for key in (late, early):
+        await db.execute(text("INSERT INTO hockey_players (player_key, display_name) VALUES (:k, 'И')"), {"k": key})
+    league_id = (
+        await db.execute(
+            text("""INSERT INTO hockey_leagues (name, invite_code, owner_key, scope, term_kind, starts_at, ends_at)
+                    VALUES ('Л', 'KK431JND', :o, 'all', 'month', :s, :e) RETURNING id"""),
+            {"o": early, "s": NOW - timedelta(days=17), "e": NOW + timedelta(days=12)},
+        )
+    ).scalar_one()
+    await db.execute(
+        text("""INSERT INTO hockey_league_members (league_id, player_key, joined_at)
+                VALUES (:l, :e, :start), (:l, :late, :joined)"""),
+        {"l": league_id, "e": early, "late": late, "start": NOW - timedelta(days=17), "joined": NOW - timedelta(days=2)},
+    )
+    for days in (10, 8):  # оба точных счёта — до вступления late
+        m = await _match(db, "Динамо-Минск", "Барыс", NOW - timedelta(days=days), status="final")
+        await _pick(db, late, m, "home", points=POINTS_EXACT)
+    await db.flush()
+
+    assert await league_titles(db, league_id=league_id, now=NOW) == {}

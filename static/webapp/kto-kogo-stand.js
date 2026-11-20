@@ -141,15 +141,23 @@
 
   // ---------- Стенд другого игрока ----------
 
+  /** Стенд игрока: 404 — «нет такого», сбой сети — карточка «Повторить». */
+  function loadStand(a, entering) {
+    a.failed = false;
+    if (entering !== true) K.render();
+    var load = K.api('GET', '/client/hockey/players/' + encodeURIComponent(a.pid) + '/stand').then(function (d) { a.data = d; });
+    Promise.all([load, K.loadProfile(), K.loadClubs().catch(function () {})])
+      .then(K.render, function (e) { a.failed = e && e.status === 404 ? 'gone' : 'net'; K.render(); });
+  }
+
   K.register('player', {
-    enter: function (a) {
-      a.failed = false;
-      var load = K.api('GET', '/client/hockey/players/' + encodeURIComponent(a.pid) + '/stand').then(function (d) { a.data = d; });
-      Promise.all([load, K.loadProfile(), K.loadClubs().catch(function () {})]).then(K.render, function (e) { a.failed = true; K.render(); K.fail(e); });
-    },
+    enter: function (a) { loadStand(a, true); },
     render: function (a) {
       if (!a.data) {
-        return [h('main', { class: 'kk-main' }, [K.topbar('Стенд', null), a.failed ? K.emptyCard('Стенд', 'Игрок не найден или стенд сейчас не открывается.') : K.loading()])];
+        var body = a.failed === 'gone'
+          ? K.emptyCard('СТЕНД', 'Такого игрока нет или ссылка устарела.')
+          : a.failed ? K.retryCard('Стенд не открылся. Проверь интернет и попробуй ещё раз.', function () { loadStand(a); }) : K.loading();
+        return [h('main', { class: 'kk-main' }, [K.topbar('Стенд', null), body])];
       }
       var m = S.standModel(a.data.crowns, state.clubs || []);
       var mine = COMPARE_ENABLED && a.compare && state.profile ? model() : null;

@@ -202,6 +202,7 @@ def test_zovi_exit_link_follows_the_flag(bot_env) -> None:
         ("company_9", "client-home"),
         ("kkm_5_k3x9abcd", "client-home"),
         ("kkn_42_h", "client-home"),
+        ("kkn_42_a_sitehome", "client-home"),
         ("kkmo_7", "client-home"),
         ("kkoff", "client-home"),
         ("kks_insta", "kto-kogo"),

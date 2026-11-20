@@ -481,12 +481,16 @@ async def set_double(session: AsyncSession, *, player_key: int, match_id: int, o
     if _trump_started(match.status, match.starts_at, now):
         raise PicksClosed(match_id)
     week = week_start(match.starts_at)
-    current = [
-        r
-        for r in (await session.execute(_WEEK_TRUMPS, {"player_key": player_key, "week": week})).all()
-        # Козырь на отменённом матче уже свободен (цикл мог ещё не снять флаг).
-        if r.status != "cancelled"
-    ]
+    rows = (await session.execute(_WEEK_TRUMPS, {"player_key": player_key, "week": week})).all()
+    # Козырь на отменённом матче уже свободен, но цикл мог ещё не снять флаг: пока он держит неделю в
+    # уникальном индексе (игрок, неделя), новый козырь упал бы с «уже сыграл». Снимаем его здесь же.
+    current = [r for r in rows if r.status != "cancelled"]
+    if on:
+        for r in rows:
+            if r.status == "cancelled":
+                await session.execute(
+                    _SET_TRUMP, {"player_key": player_key, "match_id": r.match_id, "on": False, "week": None}
+                )
     if not on:
         if any(r.match_id == match_id for r in current):
             await session.execute(

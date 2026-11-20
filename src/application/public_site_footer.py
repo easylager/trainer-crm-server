@@ -19,9 +19,16 @@ def _esc(value: object) -> str:
 
 
 def public_telegram_href() -> str | None:
-    """Публичная ссылка на клиентского бота (расписание в Telegram)."""
-    u = normalize_client_bot_username(Settings().client_bot_username)
-    return f"https://t.me/{u}" if u else None
+    """Вход в Telegram из подвала сайта: через /start с параметром ``catalog`` (каталог льда в Mini App).
+
+    Голый ``t.me/<бот>`` открывал чат без параметра — человек получал общее приветствие вместо экрана, а вход не
+    считался. Тот же путь, что у остальных кнопок сайта (``public_entry_via_start``)."""
+    settings = Settings()  # type: ignore[call-arg]
+    if not normalize_client_bot_username(settings.client_bot_username):
+        return None
+    from src.application.place_links import public_telegram_entry_link
+
+    return public_telegram_entry_link(settings, start_param="catalog")
 
 
 def schedule_error_mailto() -> str:

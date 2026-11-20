@@ -473,6 +473,19 @@ async def test_temporary_error_on_preclaimed_moved_notice_keeps_it_due(db_sessio
 
 
 @pytest.mark.asyncio
+async def test_moved_notice_is_dropped_once_the_match_is_cancelled(db_session, factory) -> None:
+    """Перенесли, письмо ждало (тихие часы), а матч отменили: «перенесли на …» с кнопками хода не уходит."""
+    await _fan(db_session, SASHA)
+    m = await _match(db_session, "r4", at(19))
+    await db_session.execute(
+        text("INSERT INTO hockey_notices (player_key, match_id, kind) VALUES (:p, :m, 'moved')"), {"p": SASHA, "m": m}
+    )
+    await db_session.execute(text("UPDATE hockey_matches SET status = 'cancelled' WHERE id = :m"), {"m": m})
+    out = Script(SENT)
+    assert (await deliver(factory, now=at(12, 5), send=out)).get("sent", 0) == 0 and out.calls == 0
+
+
+@pytest.mark.asyncio
 async def test_temporary_error_returns_league_notice_to_queue(db_session, factory) -> None:
     league = await create_league(
         db_session,

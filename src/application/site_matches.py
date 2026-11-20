@@ -530,7 +530,9 @@ async def matches_list(
         where = city_locative(city)
         sections = [
             {"key": "city", "title": f"В {where}" if where else city, "days": by_days([x for x in cards if x[1]])},
-            {"key": "country", "title": "По Беларуси", "days": by_days([x for x in cards if not x[1]])},
+            # Выезды Динамо — в России, не «по Беларуси» (владелец 2026-11-20): своя группа без названия страны.
+            {"key": "country", "title": "По Беларуси", "days": by_days([x for x in cards if not x[1] and not x[0]["away_trip"]])},
+            {"key": "away", "title": "На выезде", "days": by_days([x for x in cards if not x[1] and x[0]["away_trip"]])},
         ]
         sections = [sec for sec in sections if sec["days"]]
     first = cards[0][0] if cards else None
@@ -543,10 +545,35 @@ async def matches_list(
         "total": len(cards),
         "today": today,
         "dinamo_enabled": scope.dinamo,
+        "pick": pick_card([c for c, _mine in cards], now=now, settings=settings),
         # Недели без матчей (пауза лиги): страница не пуста, а честно говорит, когда они снова будут.
         "first_day": first["day"] if first else None,
         "pause": bool(first and (first["day"] - today).days > 7),
     }
+
+
+# Ход с сайта закрывается тогда же, когда в игре (``hockey_game.PICK_CLOSES_BEFORE``, минута); блок гаснет раньше на
+# срок жизни кэша страниц (/hockey: max-age 60 + stale-while-revalidate 300), чтобы устаревшая копия не дала кнопку,
+# которая приведёт к «ходы закрыты».
+PICK_BLOCK_CLOSES_BEFORE = timedelta(minutes=8)
+
+
+def pick_open(card: dict[str, Any], *, now: datetime, settings: Settings | None = None) -> bool:
+    """Можно ли сделать ход на матч прямо с сайта: игра включена для его лиги и до закрытия ходов есть время."""
+    starts_at = card.get("starts_at")
+    if card.get("phase") != PHASE_BEFORE or starts_at is None or starts_at - PICK_BLOCK_CLOSES_BEFORE <= now:
+        return False
+    if card.get("league") == LEAGUE_EXTRALIGA:
+        return bool((settings or Settings()).site_matches_game_extraliga)  # type: ignore[call-arg]
+    return True
+
+
+def pick_card(cards: list[dict[str, Any]], *, now: datetime, settings: Settings | None = None) -> dict[str, Any] | None:
+    """Ближайший матч Динамо-Минск, на который ещё можно сходить с сайта: блок «Кто победит?» на /hockey."""
+    for card in sorted(cards, key=lambda c: c["starts_at"]):
+        if DINAMO in (card["home"]["name"], card["away"]["name"]) and pick_open(card, now=now, settings=settings):
+            return card
+    return None
 
 
 async def dinamo_home_schedule(session: AsyncSession, *, now: datetime) -> dict[str, Any]:

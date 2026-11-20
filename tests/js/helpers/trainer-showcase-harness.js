@@ -117,6 +117,17 @@ function trackAppButtons(el, doc) {
 /** sessionStore — содержимое sessionStorage при открытии (форма K кладёт туда тренера, к которому привязала). */
 /** navigation — window.navigation (Navigation API), например { canGoBack: false }; не задан — API нет. */
 /** referrer — document.referrer на момент открытия (same-origin = пришли из приложения, если API нет). */
+// Слоты фикстур (trainer-card-states.js) зашиты на 20–26 ноября 2026, а снимки сняты 19.11: подписи «Завтра» /
+// «Сб, 21 ноября» зависят от «сейчас». Без своих часов тест ломался сам с наступлением 20 ноября — витрина живёт
+// в фиксированном 19.11.2026 12:00 по Минску; Date(...) с аргументами работает как обычно.
+// Тест, который сам включил t.mock.timers (подменил глобальный Date), получает свои часы, а не эти.
+const RealDate = Date;
+const FIXED_NOW = Date.parse('2026-11-19T09:00:00Z');
+class FixedDate extends Date {
+  constructor(...args) { if (args.length) super(...args); else super(FIXED_NOW); }
+  static now() { return FIXED_NOW; }
+}
+
 function boot({ search = '', routes = [], profiles = { items: [], default_profile_id: null }, session = {}, showcase = { items: [] }, switcher = null, tg = null, historyLength = 1, initData = 'x', miniAppBack = null, unified = false, sessionStore = {}, navigation = null, referrer = '' } = {}) {
   const calls = [];
   const app = makeEl('app');
@@ -126,7 +137,7 @@ function boot({ search = '', routes = [], profiles = { items: [], default_profil
   const sheet = makeSheet(doc);
   const store = {};
   const ctx = {
-    console, setTimeout, clearTimeout, Promise, URL, URLSearchParams, Intl, Date, JSON, Math, Number, String, Object, Array, Error, TypeError, isFinite,
+    console, setTimeout, clearTimeout, Promise, URL, URLSearchParams, Intl, Date: globalThis.Date !== RealDate ? globalThis.Date : FixedDate, JSON, Math, Number, String, Object, Array, Error, TypeError, isFinite,
     location: { search, href: 'https://x/static/webapp/trainers' + search, pathname: '/static/webapp/trainers' },
     // Записи витрины (pushState) — стек; back() снимает свою запись и шлёт popstate, а из корня — уход со
     // страницы (left: сколько раз ушли туда, откуда пришли).

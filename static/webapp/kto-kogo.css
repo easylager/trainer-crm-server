@@ -107,7 +107,25 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .kk-two--flex { grid-template-columns: minmax(0, 1fr) auto; }
 .kk-two--cta { margin-top: 4px; }
-.kk-side { height: 56px; border-radius: 16px; border: 0; font: 700 17px var(--kk-text); background: var(--kk-chip); color: var(--kk-ink); padding: 0 6px; overflow-wrap: anywhere; }
+.kk-side { position: relative; min-height: 132px; border-radius: 18px; border: 2px solid var(--kk-line); background: var(--kk-bg); color: var(--kk-ink); padding: 12px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font: 800 15px/1.2 var(--kk-text); text-align: center; overflow-wrap: anywhere; transition: transform 0.16s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.16s ease-out, border-color 0.16s ease-out; }
+body.kk-dark .kk .kk-side { background: #1b2430; border-color: var(--kk-chip); }
+.kk .kk-side.is-on, body.kk-dark .kk .kk-side.is-on { border-color: var(--kk-gold); box-shadow: 0 6px 18px rgba(13, 20, 36, 0.28); }
+.kk-side.is-other { opacity: 0.6; }
+.kk-side:active { transform: scale(0.97); }
+.kk-side.is-pop { animation: kk-side-pop 0.16s cubic-bezier(0.3, 1.4, 0.5, 1); }
+@keyframes kk-side-pop { from { transform: scale(0.94); } to { transform: scale(1); } }
+.kk-side .kk-disc { box-shadow: 0 1px 3px rgba(13, 20, 36, 0.15); }
+.kk-side__ok { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; background: var(--kk-gold); color: var(--kk-on-gold); display: flex; align-items: center; justify-content: center; }
+.kk-side__ok svg { stroke-width: 3.2; }
+@media (prefers-reduced-motion: reduce) { .kk-side { transition: none; } .kk-side:active { transform: none; } .kk-side.is-pop { animation: none; } }
+.kk .kk-mini--line { min-height: 46px; height: auto; background: none; border: 1.5px solid var(--kk-line); font-weight: 700; padding: 6px 8px; }
+body.kk-dark .kk .kk-mini--line { border-color: var(--kk-chip); }
+.kk .kk-mini--line.is-gold { background: var(--kk-gold); border-color: var(--kk-gold); color: var(--kk-on-gold); }
+.kk-extras .kk-mini.is-wait { opacity: 0.45; }
+.kk-sub--c { text-align: center; }
+.kk-faces { display: inline-flex; flex: none; }
+.kk-faces .kk-ava { border: 2px solid var(--kk-card); box-sizing: border-box; }
+.kk-faces .kk-ava + .kk-ava { margin-left: -8px; background: var(--kk-chip); color: var(--kk-ink); }
 .kk-side.is-on, .kk-pk.is-on { color: #fff; }
 .kk-mini { height: 44px; border-radius: 14px; border: 0; background: var(--kk-chip); color: var(--kk-ink); font: 600 14px var(--kk-text); display: flex; align-items: center; justify-content: center; gap: 6px; }
 .kk-mini.is-gold { background: var(--kk-gold); color: var(--kk-on-gold); }
@@ -191,7 +209,7 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-peak.is-gold .kk-peak__n { color: var(--kk-gold-ink); }
 .kk-peak__l { font: 700 14px/1.2 var(--kk-text); overflow-wrap: normal; hyphens: manual; }
 .kk-peak__w { font: 500 13px/1.2 var(--kk-text); color: var(--kk-soft); overflow-wrap: normal; hyphens: manual; }
-.kk-peak__s { font: 500 12px var(--kk-text); color: var(--kk-muted); }
+.kk-peak__s { margin-bottom: 6px; font: 600 13px/1.2 var(--kk-text); color: var(--kk-soft); }
 .kk-day { display: flex; flex-direction: column; gap: 6px; }
 .kk-moved { font: 600 12px/1.3 var(--kk-text); color: var(--kk-muted); }
 .kk-mini--link { width: 100%; background: none; color: var(--kk-muted); height: 44px; font-weight: 500; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
@@ -199,6 +217,11 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-cnt { font: 600 13px var(--kk-text); color: var(--kk-gold-ink); }
 .kk-cnt.is-done { color: var(--kk-soft); }
 .kk-linkbtn { min-height: 44px; border: 0; background: none; font: 600 14px var(--kk-text); color: var(--kk-gold-ink); padding: 0 4px; }
+.kk-linkbtn--muted { color: var(--kk-soft); }
+/* «Лига готова»: колонка кнопок одной ширины, выход — тихой ссылкой под ними. */
+.kk-created-cta { display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; max-width: 340px; margin-top: 6px; }
+.kk-created-cta .kk-linkbtn { align-self: center; }
+.kk-created-sub { max-width: 34ch; }
 .kk-lg { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border-radius: 16px; border: 0; background: var(--kk-card); color: var(--kk-ink); text-align: left; }
 .kk-lg.is-ended { opacity: 0.7; }
 .kk-lg__r { display: flex; align-items: center; gap: 4px; font: 400 17px var(--kk-display); }
@@ -797,7 +820,8 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-ev__m + .kk-ev__m { border-top: 1px solid var(--kk-chip); }
 .kk-ev__n { width: 22px; height: 22px; border-radius: 50%; background: var(--kk-chip); color: var(--kk-soft); display: flex; align-items: center; justify-content: center; font: 700 12px var(--kk-text); }
 .kk-ev__mt { min-width: 0; overflow-wrap: anywhere; }
-.kk-ev__sc { font: 400 16px var(--kk-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Время и счёт вечера — пропорциональные цифры: табличная «1» у Dela Gothic шире соседей, «11:19» читалось как «1 1:19». */
+.kk-ev__sc { font: 400 16px var(--kk-display); font-variant-numeric: proportional-nums; white-space: nowrap; }
 .kk-ev__foot { margin: -4px 4px 0; font: 500 13px/1.4 var(--kk-text); color: var(--kk-muted); text-align: center; }
 .kk-ev__link { display: inline-flex; align-items: center; min-height: 44px; margin: -12px 0; padding: 0 4px; border: 0; background: none; color: var(--kk-link); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
@@ -893,7 +917,6 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-r--kit { grid-template-columns: 32px auto minmax(0, 1fr) auto; }
 .kk-r__w--kit { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .kk-r__wt { min-width: 0; }
-.kk-r__kit { font: 500 13px/1.3 var(--kk-text); color: var(--kk-crownink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kk-ev__p.has-kit { padding-top: 22px; padding-bottom: 22px; }
 .kk-kitlist { display: flex; flex-direction: column; gap: 12px; }
 .kk-kitlist__r { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
@@ -915,6 +938,47 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .mini-app-recoverable-err .bd-trainer-gate__hint { margin: 0 0 18px; font: 500 15px/1.45 var(--kk-text); color: var(--kk-muted); }
 .mini-app-recoverable-err .bd-btn { width: 100%; min-height: 48px; border: 0; border-radius: 14px; background: var(--kk-gold); color: var(--kk-on-gold); font: 700 16px var(--kk-text); cursor: pointer; }
 
+/* ---------- смена экрана: View Transitions (kto-kogo.js withTransition) ----------
+   Атрибут data-kk-vt на <html> стоит только на время перехода: forward | back | fade.
+   Бар оболочки во вкладке не едет вместе с экраном — у него своя группа без анимации. */
+:root[data-kk-vt]::view-transition-group(kk-tab-bar),
+:root[data-kk-vt]::view-transition-old(kk-tab-bar),
+:root[data-kk-vt]::view-transition-new(kk-tab-bar) { animation: none; }
+:root[data-kk-vt]::view-transition-group(*),
+:root[data-kk-vt]::view-transition-old(*),
+:root[data-kk-vt]::view-transition-new(*) { animation-duration: 260ms; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+:root[data-kk-vt]::view-transition-old(root),
+:root[data-kk-vt]::view-transition-new(root) { animation-duration: 240ms; }
+:root[data-kk-vt="forward"]::view-transition-old(root) { animation-name: kk-vt-out-left; }
+:root[data-kk-vt="forward"]::view-transition-new(root) { animation-name: kk-vt-in-right; }
+:root[data-kk-vt="back"]::view-transition-old(root) { animation-name: kk-vt-out-right; }
+:root[data-kk-vt="back"]::view-transition-new(root) { animation-name: kk-vt-in-left; }
+@keyframes kk-vt-in-right { from { opacity: 0; transform: translateX(24px); } }
+@keyframes kk-vt-in-left { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes kk-vt-out-left { to { opacity: 0; transform: translateX(-24px); } }
+@keyframes kk-vt-out-right { to { opacity: 0; transform: translateX(24px); } }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-kk-vt]::view-transition-group(*),
+  :root[data-kk-vt]::view-transition-old(*),
+  :root[data-kk-vt]::view-transition-new(*) { animation: none !important; }
+}
+
+/* Каскад строк при открытии таблицы и смене среза (K.stagger): только opacity и transform — дёшево для GPU.
+   Первые 10 строк с шагом 18 мс, остальные вместе с десятой; без отскока, ease-out. */
+@keyframes kk-row-in { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
+.kk-stagger > * { animation: kk-row-in .22s cubic-bezier(.2, .8, .2, 1) both; }
+.kk-stagger > :nth-child(2) { animation-delay: 18ms; }
+.kk-stagger > :nth-child(3) { animation-delay: 36ms; }
+.kk-stagger > :nth-child(4) { animation-delay: 54ms; }
+.kk-stagger > :nth-child(5) { animation-delay: 72ms; }
+.kk-stagger > :nth-child(6) { animation-delay: 90ms; }
+.kk-stagger > :nth-child(7) { animation-delay: 108ms; }
+.kk-stagger > :nth-child(8) { animation-delay: 126ms; }
+.kk-stagger > :nth-child(9) { animation-delay: 144ms; }
+.kk-stagger > :nth-child(10) { animation-delay: 162ms; }
+.kk-stagger > :nth-child(n+11) { animation-delay: 162ms; }
+@media (prefers-reduced-motion: reduce) { .kk-stagger > * { animation: none; } }
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.
@@ -928,4 +992,7 @@ body.kk-in-tab.kk-dark.client-shell-body { --app-canvas-bg: #17212b; }
 body.kk-in-tab .kk-scrim { z-index: 9300; }
 body.kk-in-tab .kk-toast { z-index: 9300; bottom: calc(var(--client-shell-tab-inset) + 12px); }
 body.kk-in-tab .kk-cta { bottom: var(--client-shell-tab-inset); z-index: 9000; }
+
+/* Смена экрана (View Transitions): бар оболочки не едет вместе с экраном — своя группа без анимации. */
+body.kk-in-tab .client-tab-bar { view-transition-name: kk-tab-bar; }
 

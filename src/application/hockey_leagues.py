@@ -818,14 +818,15 @@ STREAK_MIN = 3
 OPTIMIST_MARGIN = 2
 OPTIMIST_MIN_PICKS = 2
 
-# Матчи — те же, что считает таблица лиги (её набор команд), а не только Динамо.
+# Матчи — те же, что считает таблица лиги: её набор команд, её срок и только после вступления игрока
+# (как очки в таблице) — иначе новичок приходит в лигу с «Вангой» за ходы, которых лига не видела.
 _TITLE_PICKS = text(f"""
     SELECT p.player_key, m.id AS match_id, m.starts_at, m.status, m.home_team, m.away_team, p.side, p.points,
            p.home_score AS pick_home, p.away_score AS pick_away
     FROM hockey_picks AS p
     JOIN game_matches AS m ON m.id = p.match_id
-    WHERE p.player_key IN (SELECT player_key FROM hockey_league_members WHERE league_id = :league_id)
-      AND m.starts_at >= :since
+    JOIN hockey_league_members AS mb ON mb.league_id = :league_id AND mb.player_key = p.player_key
+    WHERE m.starts_at >= :since AND m.starts_at < :until AND m.starts_at >= mb.joined_at
       {SCOPE_SQL}
     ORDER BY m.starts_at, m.id
     """)
@@ -913,7 +914,7 @@ async def league_titles(session: AsyncSession, *, league_id: int, now: datetime)
     """Звания под именем в таблице лиги. Кепку дня не даём: она на голове (TASK-432), текстом её не повторяем."""
     now = _utc(now)
     league = _league((await session.execute(_LEAGUE_BY_ID, {"league_id": league_id})).one())
-    params = {"league_id": league_id, "since": league.starts_at, **league.match_scope.params}
+    params = {"league_id": league_id, "since": league.starts_at, "until": league.ends_at, **league.match_scope.params}
     picks = [dict(r._mapping) for r in (await session.execute(_TITLE_PICKS, params)).all()]
     if not picks:
         return {}

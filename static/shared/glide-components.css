@@ -161,3 +161,128 @@
 /* Время крупным шрифтом (Dela Gothic One) — пропорциональные цифры: моноширинная «1»
    у этой гарнитуры шире соседей, и «11:00» читалось как «1 1:00». */
 .b-badge--time { font-variant-numeric: proportional-nums; }
+
+/* «Кто победит?» — ход в «КТО КОГО» с сайта (страница матча, /hockey, главная; холст ULKL8uBbgyZBEznFLqgah2).
+   Самодостаточен: на главной нет matches.css, поэтому стикер и логотипы описаны здесь же. */
+.m-pick {
+  position: relative; display: flex; flex-direction: column; gap: 14px; margin-top: 6px; padding: 18px 16px 16px;
+  border-radius: var(--g-r-card); background: var(--g-surface); border: 1px solid var(--g-line); color: var(--g-ink);
+}
+.m-pick .m-sticker {
+  position: absolute; right: 14px; top: -11px; height: 24px; padding: 0 8px; border-radius: 7px;
+  background: #ffd23f; color: #0d1424; font-family: var(--g-font-display); font-size: 11px; line-height: 24px; transform: rotate(-3deg);
+}
+.m-pick__head { display: flex; flex-direction: column; gap: 4px; }
+.m-pick__when { font-size: 11px; font-weight: 800; letter-spacing: .06em; color: var(--g-accent-ink); }
+.m-pick__title { margin: 0; font-family: var(--g-font-display); font-weight: 400; font-size: 22px; line-height: 1.15; }
+.m-pick__note { margin: 0; font-size: 14px; line-height: 1.4; color: var(--g-ink-2); }
+.m-pick__teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.m-pick__team {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 104px; padding: 8px;
+  border: 1.5px solid var(--g-line-strong); border-radius: var(--g-r-btn); background: var(--g-surface);
+  color: var(--g-ink) !important; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; text-decoration: none;
+  transition: border-color .15s ease-out, background-color .15s ease-out;
+}
+.m-pick__team:active { transform: translateY(1px); }
+@media (hover: hover) { .m-pick__team:hover { border-color: var(--g-accent); } }
+.m-pick .m-logo {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px;
+  border-radius: 50%; background: #fff; font-size: 12px; font-weight: 700; color: #2b4fa0;
+}
+.m-pick .m-logo img { width: 40px; height: 40px; object-fit: contain; }
+.m-pick__foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: -6px 0 -10px; font-size: 13px; color: var(--g-muted); }
+.m-pick__link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; text-decoration: none; color: var(--g-accent-ink) !important; }
+.m-pick--dark { background: var(--g-dark); border-color: var(--g-dark); color: #fff; }
+.m-pick--dark .m-pick__when, .m-pick--dark .m-pick__link { color: var(--g-on-dark-accent) !important; }
+.m-pick--dark .m-pick__note, .m-pick--dark .m-pick__foot { color: var(--g-on-dark-muted); }
+.m-pick--dark .m-pick__team { background: var(--g-dark-2); border-color: var(--g-dark-line); color: #fff !important; }
+.m-pick--compact { gap: 12px; padding: 16px; }
+.m-pick--compact .m-pick__title { font-family: var(--g-font); font-weight: 800; font-size: 17px; }
+.m-pick--compact .m-pick__team { flex-direction: row; min-height: 52px; font-size: 14px; }
+.m-pick--compact .m-logo { width: 30px; height: 30px; }
+.m-pick--compact .m-logo img { width: 24px; height: 24px; }
+@media (prefers-reduced-motion: reduce) { .m-pick__team { transition: none; } .m-pick__team:active { transform: none; } }
+
+/* Баннер «КТО КОГО» на главной и в городах (kk_site_banner.py; холст ULKL8uBbgyZBEznFLqgah2, «Баннер B»).
+   Палитра лендинга /kk: тёмная панель, синее свечение в углу, золото. Весь баннер — ссылка на лендинг. */
+.kkb {
+  position: relative; display: flex; flex-direction: column; gap: 16px; overflow: hidden; padding: 0 0 20px;
+  border-radius: 24px; border: 1px solid rgba(255, 211, 78, .28);
+  background: radial-gradient(ellipse at 90% 18%, #26446b 0%, rgba(38, 68, 107, 0) 62%), #19212a;
+  color: #f2f5f7 !important; text-decoration: none; -webkit-tap-highlight-color: transparent;
+  container-type: inline-size; container-name: kkb;
+  transition: transform .22s cubic-bezier(.2, .8, .2, 1), box-shadow .22s ease-out;
+}
+.kkb:active { transform: scale(.985); }
+.kkb:focus-visible { outline: 3px solid #ffd34e; outline-offset: 3px; }
+.kkb__rail { position: relative; overflow: hidden; padding-top: 16px; opacity: .55; }
+.kkb__rail::before, .kkb__rail::after { content: ''; position: absolute; top: 0; bottom: 0; z-index: 1; width: 60px; pointer-events: none; }
+.kkb__rail::before { left: 0; background: linear-gradient(90deg, #19212a, rgba(25, 33, 42, 0)); }
+.kkb__rail::after { right: 0; width: 90px; background: linear-gradient(270deg, #19212a, rgba(25, 33, 42, 0)); }
+.kkb__track { display: flex; width: max-content; animation: kkb-crawl 60s linear infinite; will-change: transform; }
+.kkb__track img { flex: none; width: 34px; height: 34px; margin-right: 12px; padding: 5px; box-sizing: border-box; border-radius: 50%; background: #fff; object-fit: contain; }
+.kkb__body { display: flex; flex-direction: column; gap: 16px; padding: 0 18px; }
+.kkb__brand { flex: none; display: flex; align-items: center; gap: 8px; }
+.kkb__puck { width: 38px; height: 24px; border-radius: 50%; background: #0d0c0b; box-shadow: inset 0 -5px 0 #3a3632; }
+.kkb__tag {
+  flex: none; white-space: nowrap; height: 42px; padding: 0 12px; border-radius: 12px; background: #ffd34e; color: #0d1424;
+  font: 400 22px/42px var(--g-font-display); transform: rotate(-3deg); transition: transform .22s cubic-bezier(.3, 1.4, .5, 1);
+}
+.kkb__row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.kkb__title { min-width: 0; font: 400 22px/1.12 var(--g-font-display); letter-spacing: -.02em; }
+.kkb__go {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 50px; height: 50px;
+  border-radius: 16px; background: #ffd34e; color: #0d1424; font-weight: 800; font-size: 16px;
+}
+.kkb__go-t { display: none; }
+.kkb__arrow { display: inline-block; font-size: 20px; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.kkb.is-in .kkb__puck { animation: kkb-fly .5s cubic-bezier(.3, .1, .5, 1) .1s both; }
+.kkb.is-in .kkb__tag { animation: kkb-wob .32s ease-out .55s backwards; }
+@media (hover: hover) {
+  .kkb:hover { transform: translateY(-3px); box-shadow: 0 16px 36px rgba(13, 20, 36, .28); }
+  .kkb:hover .kkb__arrow { transform: translateX(4px); }
+  .kkb:hover .kkb__tag { transform: rotate(-6deg) scale(1.04); }
+}
+/* В строку — только когда самому баннеру хватает ширины (колонка главной уже окна): по контейнеру, не по экрану. */
+@container kkb (min-width: 820px) {
+  .kkb__body { flex-direction: row; align-items: center; gap: 18px; padding: 0 32px; }
+  .kkb__row { flex: 1; align-items: center; }
+  .kkb__puck { width: 42px; height: 26px; box-shadow: inset 0 -6px 0 #3a3632; }
+  .kkb__tag { height: 48px; padding: 0 14px; font-size: 26px; line-height: 48px; }
+  .kkb__title { font-size: 26px; line-height: 1.1; }
+  .kkb__go { padding: 0 22px; }
+  .kkb__go-t { display: inline; }
+}
+/* Внутри блока «Хоккей в городе»: тот же баннер, меньше и ниже. */
+.kkb--sm { gap: 12px; margin-top: 14px; padding-bottom: 16px; border-radius: 20px; }
+.kkb--sm .kkb__rail { padding-top: 12px; }
+.kkb--sm .kkb__track img { width: 28px; height: 28px; margin-right: 10px; padding: 4px; }
+.kkb--sm .kkb__body { gap: 12px; padding: 0 16px; }
+.kkb--sm .kkb__puck { width: 30px; height: 19px; box-shadow: inset 0 -4px 0 #3a3632; }
+.kkb--sm .kkb__tag { height: 34px; padding: 0 10px; border-radius: 10px; font-size: 18px; line-height: 34px; }
+.kkb--sm .kkb__title { font-size: 18px; }
+.kkb--sm .kkb__go { min-width: 44px; height: 44px; border-radius: 14px; }
+@container kkb (min-width: 820px) {
+  .kkb--sm .kkb__body { padding: 0 24px; }
+  .kkb--sm .kkb__puck { width: 34px; height: 21px; }
+  .kkb--sm .kkb__tag { height: 38px; font-size: 20px; line-height: 38px; }
+  .kkb--sm .kkb__title { font-size: 20px; }
+  .kkb--sm .kkb__go { padding: 0 18px; }
+}
+/* Карточкой в ленте «Хоккей в <городе>»: рядом с матчами, той же высоты; на десктопе шире карточки матча. */
+.kkb--card { flex: 1 0 276px; max-width: 520px; gap: 12px; padding-bottom: 16px; border-radius: var(--g-r-card, 18px); scroll-snap-align: start; }
+.kkb--card .kkb__body { flex: 1; justify-content: space-between; padding: 0 16px; }
+.kkb--card .kkb__track img { width: 28px; height: 28px; margin-right: 10px; padding: 4px; }
+.kkb--card .kkb__rail { padding-top: 12px; }
+.kkb--card .kkb__tag { height: 36px; padding: 0 10px; border-radius: 10px; font-size: 19px; line-height: 36px; }
+.kkb--card .kkb__puck { width: 32px; height: 20px; box-shadow: inset 0 -4px 0 #3a3632; }
+.kkb--card .kkb__title { font-size: 19px; }
+.kkb--card .kkb__go { min-width: 44px; height: 44px; border-radius: 14px; }
+.kkb--card:hover { transform: translateY(-2px); }
+@keyframes kkb-crawl { to { transform: translate3d(-50%, 0, 0); } }
+@keyframes kkb-fly { 0% { transform: translateX(-140px) rotate(-200deg) scaleX(.7); opacity: 0; } 20% { opacity: 1; } 80% { transform: translateX(3px); } 100% { transform: none; } }
+@keyframes kkb-wob { 0% { transform: rotate(-3deg); } 30% { transform: rotate(-8deg) scale(1.06); } 65% { transform: rotate(1deg); } 100% { transform: rotate(-3deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .kkb, .kkb__tag, .kkb__arrow { transition: none; }
+  .kkb__track, .kkb.is-in .kkb__puck, .kkb.is-in .kkb__tag { animation: none; }
+}

@@ -372,3 +372,26 @@ async def test_decision_path_is_logged_with_every_source(db_session, monkeypatch
     assert f"match={mid}" in line and "kind=wait" in line
     assert "hcdinamo=3:2 looks_final=True" in line and "hockey.by=3:2 completed=False" in line
     assert "sportmail.table=(3, 2, 'regulation')" in line and "(3, 2, False, True)" in line
+
+
+@pytest.mark.asyncio
+async def test_postponed_match_on_review_reopens_with_the_new_date(db_session) -> None:
+    """Матч отложили, итога нет — он ушёл на разбор; календарь дал новую дату: матч снова ждёт игры, ходы открыты."""
+    m = await _sochi_row(db_session)
+    await db_session.execute(
+        text("UPDATE hockey_matches SET status = 'review', review_reason = 'нет итога' WHERE id = :i"), {"i": m}
+    )
+    base = parse_hcdinamo_match(_fx("hcdinamo-match-upcoming.html"), source_match_id="1218887")
+    later = START + timedelta(days=3)
+    page = replace(base, starts_at=later, home="ХК Сочи", away="Динамо-Минск")
+    assert await upsert_calendar_match(db_session, page, now=START + timedelta(hours=6)) == "moved"
+    row = (
+        await db_session.execute(
+            text("SELECT status, starts_at, review_reason FROM hockey_matches WHERE id = :i"), {"i": m}
+        )
+    ).one()
+    assert (row.status, row.starts_at, row.review_reason) == ("scheduled", later, None)
+    # Прошедшая дата на разборе — не перенос: спорный итог остаётся у админа.
+    await db_session.execute(text("UPDATE hockey_matches SET status = 'review' WHERE id = :i"), {"i": m})
+    past = replace(base, starts_at=START - timedelta(days=1), home="ХК Сочи", away="Динамо-Минск")
+    assert await upsert_calendar_match(db_session, past, now=START + timedelta(days=4)) == "unchanged"
