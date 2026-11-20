@@ -1189,19 +1189,15 @@
   K.register('join', {
     enter: function (a) {
       state.joinCode = a.code;
-      state.joinPreview = null;
-      state.joinError = '';
-      K.api('GET', '/hockey/leagues/' + encodeURIComponent(a.code), undefined, true)
-        .then(function (p) { state.joinPreview = p; K.render(); })
-        .catch(function (e) { state.joinError = e.status === 404 ? 'gone' : e.message; K.render(); });
+      loadJoinPreview(true);
       // Свои лиги — чтобы по своей же картинке не звать вступать туда, где человек уже играет.
       K.loadLeagues(true).then(K.render, function () {});
     },
     render: function () {
       if (state.joinError === 'gone') {
         return [h('main', { class: 'kk-main kk-center' }, [
-          h('h2', { class: 'kk-h2 kk-h2--xl', text: 'Этой лиги больше нет' }),
-          h('span', { class: 'kk-sub', text: 'Все из неё вышли. Можно собрать свою или играть без лиги.' }),
+          h('h2', { class: 'kk-h2 kk-h2--xl', text: 'Лига не нашлась' }),
+          h('span', { class: 'kk-sub', text: 'Ссылка могла скопироваться не целиком, или из лиги все вышли. Попроси у друга ссылку ещё раз — или собери свою.' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.replace('leagueNew', {}); }, text: 'Создать свою лигу' }),
           h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'Играть без лиги' }),
         ])];
@@ -1224,7 +1220,7 @@
           h('span', { class: 'kk-tx', text: p.members + ' ' + M.plural(p.members, 'человек', 'человека', 'человек') + ' уже ' + M.plural(p.members, 'угадывает', 'угадывают', 'угадывают') }),
           next ? h('div', { class: 'kk-card kk-note' }, [h('span', { class: 'kk-lbl', text: 'БЛИЖАЙШИЙ МАТЧ' }), h('b', { class: 'kk-hd', text: S.clubName(next.home.name) + ' — ' + S.clubName(next.away.name) }), h('span', { class: 'kk-sub', text: M.whenLabel(next.starts_at, new Date()) })]) : null,
           h('span', { class: 'kk-sub', text: 'Тапаешь за команду или угадываешь счёт. После матча очки приходят сами. ' + M.RULES }),
-        ]) : state.joinError ? h('span', { class: 'kk-tx', text: state.joinError }) : K.loading(),
+        ]) : state.joinError ? K.retryCard('Лига не открылась. Проверь интернет и попробуй ещё раз.', loadJoinPreview) : K.loading(),
         mine
           ? h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.replace('league', { id: mine.id }); }, text: 'Открыть лигу' })
           : h('button', { type: 'button', class: 'kk-btn kk-btn--gold', disabled: !p || state.busy ? 'true' : null, onclick: joinLeague, text: 'Вступить в лигу' }),
@@ -1232,6 +1228,17 @@
       ])];
     },
   });
+
+  /** Превью лиги по коду из ссылки: 404 — «не нашлась», сбой сети — карточка «Повторить». */
+  function loadJoinPreview(entering) {
+    var code = state.joinCode;
+    state.joinPreview = null;
+    state.joinError = '';
+    if (entering !== true) K.render();
+    K.api('GET', '/hockey/leagues/' + encodeURIComponent(code), undefined, true)
+      .then(function (p) { if (state.joinCode === code) { state.joinPreview = p; K.render(); } })
+      .catch(function (e) { if (state.joinCode === code) { state.joinError = e.status === 404 ? 'gone' : 'net'; K.render(); } });
+  }
 
   function joinLeague() {
     state.busy = true;
