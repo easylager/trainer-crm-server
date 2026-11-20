@@ -559,9 +559,10 @@ PICK_HOME_AHEAD = timedelta(days=3)
 
 def pick_open(card: dict[str, Any], *, now: datetime, settings: Settings | None = None) -> bool:
     """Можно ли сделать ход на матч прямо с сайта: игра включена для его лиги и до закрытия ходов есть время."""
-    if card["phase"] != PHASE_BEFORE or card["starts_at"] - PICK_BLOCK_CLOSES_BEFORE <= now:
+    starts_at = card.get("starts_at")
+    if card.get("phase") != PHASE_BEFORE or starts_at is None or starts_at - PICK_BLOCK_CLOSES_BEFORE <= now:
         return False
-    if card["league"] == LEAGUE_EXTRALIGA:
+    if card.get("league") == LEAGUE_EXTRALIGA:
         return bool((settings or Settings()).site_matches_game_extraliga)  # type: ignore[call-arg]
     return True
 
