@@ -241,3 +241,15 @@ async def test_trump_closes_with_the_picks_a_minute_before_start(db_session) -> 
     # За 61 с перенос ещё работает, а снять козырь можно.
     assert await set_double(db_session, player_key=SASHA, match_id=second, on=True, now=open_at) == second
     assert await set_double(db_session, player_key=SASHA, match_id=second, on=False, now=open_at) is None
+
+
+@pytest.mark.asyncio
+async def test_trump_is_free_right_after_cancel_before_the_scoring_loop(db_session) -> None:
+    """Матч с козырем отменили, цикл очков ещё не прошёл: новый козырь на неделю ставится, а не «уже сыграл»."""
+    m = await _match(db_session, "c3", datetime(2026, 11, 20, 19, 0, tzinfo=MINSK_TZ))
+    other = await _match(db_session, "c4", datetime(2026, 11, 21, 19, 0, tzinfo=MINSK_TZ))
+    for x in (m, other):
+        await _pick(db_session, x, SASHA, side="home")
+    await set_double(db_session, player_key=SASHA, match_id=m, on=True, now=NOV)
+    await db_session.execute(text("UPDATE hockey_matches SET status = 'cancelled' WHERE id = :m"), {"m": m})
+    assert await set_double(db_session, player_key=SASHA, match_id=other, on=True, now=NOV) == other
