@@ -162,10 +162,9 @@ async def test_city_page_block_numbers_match_catalog_and_old_list_is_gone(app_us
     assert "Фигурное" not in block
     # Блок ведёт только в каталог — не в Telegram.
     assert "t.me" not in block and "startapp" not in block and "tg-out" not in block
-    # Старый нижний список «Тренеры» и строка «Тренеры · N» ушли; вход для тренера теперь строкой в «Ещё в городе».
+    # Старый нижний список «Тренеры» и строка «Тренеры · N» ушли; вход для тренера остался.
     assert 'id="trainers"' not in html and "b-row--coach" not in html and "Все тренеры" not in html
-    coach_href = '/trainers?utm_source=glide&amp;utm_medium=city_hub'
-    assert f'href="{coach_href}"' in html and "Тренируете в" in html
+    assert 'class="b-coach' in html and "/trainers?utm_source=glide&amp;utm_medium=city_hub" in html
     assert html.count('id="learn"') == 1
 
 
@@ -175,8 +174,7 @@ async def test_city_page_block_goes_right_after_upcoming_ice(app_use_test_db, db
         c = await _city(db_session, client)
         await _add_future_session(db_session, c["arena_id"], days_ahead=1, starts_at_local="19:30")
         html = (await client.get(f"/c/{c['slug']}")).text
-    # Тренерский блок следует за ближайшим льдом; тренерский CTA теперь расположен ниже, в секции «Ещё в городе».
-    assert html.index('class="b-sec--flush"') < html.index('id="learn"') < html.index('class="b-more"')
+    assert html.index('id="learn"') < html.index('class="b-coach')
     if "Чем займёмся?" in html:
         routes = html[html.index("Чем займёмся?") :]
         assert html.index('id="learn"') < html.index("Чем займёмся?")
@@ -196,9 +194,7 @@ async def test_city_without_trainers_has_no_block_or_menu_row_only_coach_entry(a
         ohm = (await client.get(f"/c/{slug}?kind=ohm")).text
     for page in (city, rink, skate, ohm):
         assert 'id="learn"' not in page and "Учиться с тренером" not in page and "Выбрать тренера" not in page
-    # CTA для тренера остаётся в едином блоке «Ещё», даже если в городе пока нет тренеров.
-    assert 'href="/trainers?utm_source=glide&amp;utm_medium=city_hub"' in city and "Тренируете в" in city
-    assert "/trenery" not in city
+    assert 'class="b-coach' in city and "/trenery" not in city
     assert "Станьте первым тренером на странице этого катка" in rink
 
 
