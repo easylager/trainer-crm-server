@@ -210,6 +210,15 @@ _MOVE = text("""
     WHERE id = :id AND status = 'scheduled'
     """)
 
+# Отложенный матч: итога не было, матч ушёл на разбор, а источник дал новую дату в будущем. Это перенос, а не
+# спорный итог: матч снова ждёт игры, ходы открываются, разбор и опросы итога сбрасываются.
+_REOPEN_MOVED = text("""
+    UPDATE hockey_matches
+    SET status = 'scheduled', starts_at = :starts_at, home_team = :home_team, away_team = :away_team,
+        review_reason = NULL, review_alerted_at = NULL, result_probe = NULL, updated_at = :now
+    WHERE id = :id AND status = 'review'
+    """)
+
 _TOUCH = text("UPDATE hockey_matches SET checked_at = :now WHERE id = :id")
 
 # Строки, заведённые запасным источником (``sm…``), в тот же минский день, что и матч основного.
@@ -329,9 +338,14 @@ async def upsert_calendar_match(session: AsyncSession, page: HcdinamoMatch, *, n
         await session.execute(_INSERT, params)
         return "inserted"
     row = _row(record)
-    if row.status != STATUS_SCHEDULED:
-        return "unchanged"
-    if (_utc(row.starts_at), row.home_team, row.away_team) == (params["starts_at"], page.home, page.away):
+    same = (_utc(row.starts_at), row.home_team, row.away_team) == (params["starts_at"], page.home, page.away)
+    if row.status == STATUS_REVIEW and not same and params["starts_at"] > _utc(now):
+        await session.execute(_REOPEN_MOVED, {**params, "id": row.id})
+        from src.application.hockey_game import on_match_moved
+
+        await on_match_moved(session, match_id=row.id, starts_at=params["starts_at"])
+        return "moved"
+    if row.status != STATUS_SCHEDULED or same:
         return "unchanged"
     await session.execute(_MOVE, {**params, "id": row.id})
     from src.application.hockey_game import on_match_moved
