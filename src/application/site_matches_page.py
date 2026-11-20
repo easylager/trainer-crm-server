@@ -262,7 +262,9 @@ def list_href(city_name: str | None = None, club: str | None = None) -> str:
     return SITE_PATH + (f"?{urlencode(params)}" if params else "")
 
 
-def feed_section(feed: Mapping[str, Any] | None, *, city_name: str, base_url: str, city_id: int | None) -> str:
+def feed_section(
+    feed: Mapping[str, Any] | None, *, city_name: str, base_url: str, city_id: int | None, extra_card: str = ""
+) -> str:
     """«Хоккей в Минске» под «Лёд сегодня»: матчи, которые идут в этом городе. Нет матчей на неделе —
     честная строка и ближайший матч; в городе матчей нет совсем — нет блока."""
     if not feed:
@@ -288,7 +290,7 @@ def feed_section(feed: Mapping[str, Any] | None, *, city_name: str, base_url: st
     count = f'<p class="m-feed-empty">{n} {plural_ru(n, "матч", "матча", "матчей")} на неделе</p>'
     return section(
         feed_title(feed, city_name),
-        f'{count}<div class="b-scroll">{cards}</div>',
+        f'{count}<div class="b-scroll">{cards}{extra_card}</div>',
         aside_html=more,
         klass="b-sec--flush",
         sec_id="hockey",

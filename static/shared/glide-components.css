@@ -254,7 +254,6 @@
   .kkb__go-t { display: inline; }
 }
 /* Внутри блока «Хоккей в городе»: тот же баннер, меньше и ниже. */
-.kkb-wrap { padding: 0 16px; }
 .kkb--sm { gap: 12px; margin-top: 14px; padding-bottom: 16px; border-radius: 20px; }
 .kkb--sm .kkb__rail { padding-top: 12px; }
 .kkb--sm .kkb__track img { width: 28px; height: 28px; margin-right: 10px; padding: 4px; }
@@ -270,6 +269,16 @@
   .kkb--sm .kkb__title { font-size: 20px; }
   .kkb--sm .kkb__go { padding: 0 18px; }
 }
+/* Карточкой в ленте «Хоккей в <городе>»: рядом с матчами, той же высоты; на десктопе шире карточки матча. */
+.kkb--card { flex: 1 0 276px; max-width: 520px; gap: 12px; padding-bottom: 16px; border-radius: var(--g-r-card, 18px); scroll-snap-align: start; }
+.kkb--card .kkb__body { flex: 1; justify-content: space-between; padding: 0 16px; }
+.kkb--card .kkb__track img { width: 28px; height: 28px; margin-right: 10px; padding: 4px; }
+.kkb--card .kkb__rail { padding-top: 12px; }
+.kkb--card .kkb__tag { height: 36px; padding: 0 10px; border-radius: 10px; font-size: 19px; line-height: 36px; }
+.kkb--card .kkb__puck { width: 32px; height: 20px; box-shadow: inset 0 -4px 0 #3a3632; }
+.kkb--card .kkb__title { font-size: 19px; }
+.kkb--card .kkb__go { min-width: 44px; height: 44px; border-radius: 14px; }
+.kkb--card:hover { transform: translateY(-2px); }
 @keyframes kkb-crawl { to { transform: translate3d(-50%, 0, 0); } }
 @keyframes kkb-fly { 0% { transform: translateX(-140px) rotate(-200deg) scaleX(.7); opacity: 0; } 20% { opacity: 1; } 80% { transform: translateX(3px); } 100% { transform: none; } }
 @keyframes kkb-wob { 0% { transform: rotate(-3deg); } 30% { transform: rotate(-8deg) scale(1.06); } 65% { transform: rotate(1deg); } 100% { transform: rotate(-3deg); } }
