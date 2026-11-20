@@ -359,7 +359,9 @@ window.MiniAppBack = (function () {
   }
 
   function onClick() {
-    if (current) current();
+    if (current) return current();
+    // Стрелка видна, а экран «назад» не просил (осталась от прошлого экрана в Telegram iOS): не молчим — прячем.
+    try { tg.BackButton.hide(); } catch (e) { /* старый клиент */ }
   }
 
   function set(handler) {
@@ -378,10 +380,21 @@ window.MiniAppBack = (function () {
   function clear() {
     current = null;
     if (!isNative()) return;
-    try { tg.BackButton.hide(); } catch (e) { /* старый клиент */ }
+    try {
+      // Нажатие на стрелку, оставшуюся от прошлого экрана, тоже приходит сюда — см. onClick.
+      if (!wired) {
+        tg.BackButton.onClick(onClick);
+        wired = true;
+      }
+      tg.BackButton.hide();
+    } catch (e) { /* старый клиент */ }
   }
 
-  return { set: set, clear: clear, isNative: isNative };
+  function isSet() {
+    return !!current;
+  }
+
+  return { set: set, clear: clear, isNative: isNative, isSet: isSet };
 })();
 
 /**
@@ -424,6 +437,12 @@ if (window.MiniAppBack) window.MiniAppBack.bridgeLegacy = bridgeLegacyBackButton
   if (window.MiniAppBack) window.MiniAppBack.clear();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bridgeLegacyBackButton);
   else bridgeLegacyBackButton();
+  /* Telegram iOS иногда оставляет стрелку прошлого экрана, хотя hide() при старте ушёл. После load сверяем ещё раз:
+     экран, который так и не попросил «назад», остаётся без стрелки. */
+  window.addEventListener('load', function () {
+    var Back = window.MiniAppBack;
+    if (Back && !Back.isSet()) Back.clear();
+  });
 })();
 
 /**

@@ -70,6 +70,16 @@ describe('MiniAppBack', () => {
     assert.equal(f.calls[f.calls.length - 1], 'hide');
   });
 
+  it('a leftover arrow on a root screen hides itself when tapped', () => {
+    const f = fakeTg();
+    const Back = load(f.tg);
+    Back.clear(); // корневой экран: «назад» не просил
+    assert.equal(Back.isSet(), false);
+    f.calls.length = 0;
+    f.click(); // Telegram iOS всё же показал стрелку прошлого экрана
+    assert.deepEqual(f.calls, ['hide']);
+  });
+
   it('is not native outside Telegram or in a client without BackButton', () => {
     for (const tg of [null, { initData: '' , BackButton: {} }, { initData: 'x', isVersionAtLeast: () => false, BackButton: {} }]) {
       const Back = load(tg);

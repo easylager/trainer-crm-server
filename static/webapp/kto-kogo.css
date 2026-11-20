@@ -979,6 +979,15 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-stagger > :nth-child(n+11) { animation-delay: 162ms; }
 @media (prefers-reduced-motion: reduce) { .kk-stagger > * { animation: none; } }
 
+/* Кадр обложки лиги: 2:1, как шапка. Поверх бара вкладок (9000) и шторок. */
+.kk-crop { position: fixed; inset: 0; z-index: 9600; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 16px; background: rgba(8, 12, 20, 0.92); color: #fff; }
+.kk-crop__t { margin: 0; font: 400 22px var(--kk-display); }
+.kk-crop__s { margin: -6px 0 4px; font: 500 14px/1.4 var(--kk-text); color: #c9d4dc; }
+.kk-crop__frame { position: relative; width: 100%; max-width: 560px; aspect-ratio: 2 / 1; overflow: hidden; border-radius: 16px; background: #1b2430; touch-action: none; cursor: grab; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85); }
+.kk-crop__img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+.kk-crop__zoom { width: 100%; max-width: 560px; accent-color: var(--kk-gold); }
+.kk-crop__a { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 560px; }
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.
@@ -995,12 +1004,3 @@ body.kk-in-tab .kk-cta { bottom: var(--client-shell-tab-inset); z-index: 9000; }
 
 /* Смена экрана (View Transitions): бар оболочки не едет вместе с экраном — своя группа без анимации. */
 body.kk-in-tab .client-tab-bar { view-transition-name: kk-tab-bar; }
-
-/* Кадр обложки лиги: 2:1, как шапка. */
-.kk-crop { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 16px; background: rgba(8, 12, 20, 0.92); color: #fff; }
-.kk-crop__t { margin: 0; font: 400 22px var(--kk-display); }
-.kk-crop__s { margin: -6px 0 4px; font: 500 14px/1.4 var(--kk-text); color: #c9d4dc; }
-.kk-crop__frame { position: relative; width: 100%; max-width: 560px; aspect-ratio: 2 / 1; overflow: hidden; border-radius: 16px; background: #1b2430; touch-action: none; cursor: grab; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85); }
-.kk-crop__img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; pointer-events: none; }
-.kk-crop__zoom { width: 100%; max-width: 560px; accent-color: var(--kk-gold); }
-.kk-crop__a { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 560px; }
