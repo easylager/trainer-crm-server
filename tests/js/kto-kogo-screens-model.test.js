@@ -749,3 +749,40 @@ describe('стенд наград (TASK-430)', () => {
     assert.deepEqual(S.standCompare(mk([3, 0, 0, 0]), mk([1, 0, 0, 0])), { mine: 0, theirs: 1, same: 0 });
   });
 });
+
+describe('previewView: «Перед матчем» — только то, что есть', () => {
+  const teams = { home: 'Юность', away: 'Неман' };
+  const g = (o) => ({ home_team: 'Юность', away_team: 'Неман', home_score: 3, away_score: 2, decided_in: 'regulation', starts_at: '2026-10-27T16:00:00+00:00', ...o });
+
+  it('нет данных, пустой ответ или мусор — блока нет', () => {
+    assert.equal(S.previewView(null, teams), null);
+    assert.equal(S.previewView({}, teams), null);
+    assert.equal(S.previewView({ home: {}, meetings: [] }, teams), null);
+  });
+
+  it('всё есть: место, форма со стороны команды, встречи', () => {
+    const v = S.previewView({
+      home: { place: 3, form: [{ ...g({ decided_in: 'ot' }), win: true, home: true, opponent: 'Неман' }] },
+      away: { place: 7, form: [{ ...g({ decided_in: 'ot' }), win: false, home: false, opponent: 'Юность' }] },
+      meetings: [g({}), g({}), g({}), g({})],
+    }, teams);
+    assert.equal(v.teams.length, 2);
+    assert.equal(v.teams[0].place, '3-е место');
+    assert.deepEqual(v.teams[0].form.map((f) => [f.win, f.text]), [[true, `3:2${NBSP}ОТ`]]);
+    assert.deepEqual(v.teams[1].form.map((f) => [f.win, f.text]), [[false, `2:3${NBSP}ОТ`]]);
+    assert.match(v.teams[1].form[0].label, /^Поражение 2:3 от .+, 27\.10$/);
+    assert.equal(v.meetings.length, 3);
+    assert.equal(v.meetings[0].date, '27.10');
+  });
+
+  it('частично: только место у одной команды — рисуем только его', () => {
+    const v = S.previewView({ away: { place: 1 } }, teams);
+    assert.deepEqual(v.teams.map((t) => [t.side, t.place, t.form.length]), [['away', '1-е место', 0]]);
+    assert.deepEqual(v.meetings, []);
+  });
+
+  it('без слов из ставок', () => {
+    const v = S.previewView({ home: { place: 2, form: [{ ...g({}), win: true, home: true, opponent: 'Неман' }] }, meetings: [g({})] }, teams);
+    assert.doesNotMatch(JSON.stringify(v), /ставк|коэф|выигрыш|банк/i);
+  });
+});
