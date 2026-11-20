@@ -616,8 +616,22 @@
   var trumpPending = 0;
   var picksSaved = 0; // ходы, которые сервер принял за эту сессию
 
+  // Сервер закрывает ходы за минуту до начала (PICK_CLOSES_BEFORE): экран, открытый давно, не рисует ход, который тут же откатится.
+  var PICK_CLOSES_BEFORE_MS = 60 * 1000;
+
+  function pickClosed(match) {
+    var start = Date.parse(match.starts_at);
+    return !isNaN(start) && Date.now() >= start - PICK_CLOSES_BEFORE_MS;
+  }
+
   function sendPick(match, body, optimistic) {
     match = findMatch(match.id) || match;
+    if (pickClosed(match)) {
+      match.open = false;
+      render();
+      toast('Ходы на этот матч уже закрыты');
+      return Promise.resolve();
+    }
     // Рекламная метка: только с первым ходом человека; сервер всё равно пишет её лишь новому игроку.
     var src = M.firstPickSrc(state.src, state.matches);
     if (src) body = Object.assign({ src: src }, body);
@@ -931,8 +945,10 @@
           var target = pickId && findMatch(pickId);
           // Кнопка «За команду» из напоминания в боте: ход сразу, если его ещё нет и матч не начался.
           if (target && target.open && !target.my_pick && (pickSideParam === 'home' || pickSideParam === 'away')) {
-            pickSide(target, pickSideParam);
-            toast('Ход принят: за ' + S.clubName(target[pickSideParam].name));
+            // «Ход принят» — только после ответа сервера: при закрытом матче или сбое сети придёт одно сообщение, а не два.
+            pickSide(target, pickSideParam).then(function () {
+              if (target.my_pick && target.my_pick.side === pickSideParam) toast('Ход принят: за ' + S.clubName(target[pickSideParam].name));
+            });
           }
           // Хаб сам грузит матчи при входе; свежий список с загрузки страницы второй раз не запрашиваем.
           state.matchesFresh = !loadError;
