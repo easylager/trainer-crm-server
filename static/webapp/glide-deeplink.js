@@ -165,7 +165,8 @@
         var pickPath = 'kto-kogo?pick=' + kkPick[1] + '&side=' + (kkPick[2] === 'h' ? 'home' : 'away');
         return { key: 'kto-kogo', path: pickPath + (kkPick[3] ? '&src=' + kkPick[3].toLowerCase() : '') };
       }
-      return { key: 'kto-kogo', path: 'kto-kogo' };
+      // «Сыграть» / «Открыть матч» из чата: сразу экран матча (счёт и козырь — там), без номера — главная игры.
+      return { key: 'kto-kogo', path: kkPick[1] ? 'kto-kogo?match=' + kkPick[1] : 'kto-kogo' };
     }
     // «Собрать лигу» из еженедельного приглашения (TASK-431): kkg_<метка> — экран «Лига готова» и метка входа.
     var kkReady = /^kkg_([A-Za-z0-9]{2,16})$/.exec(sp);
@@ -176,6 +177,9 @@
     var kkMonth = /^kkmo_([1-9][0-9]*)$/.exec(sp);
     if (kkMonth) return { key: 'kto-kogo', path: 'kto-kogo?month=' + kkMonth[1] };
     if (sp === 'kkoff') return { key: 'kto-kogo', path: 'kto-kogo?remind=off' };
+    // Кнопки под итогом в чате: kkml — «Следующие матчи» (ход со счётом и козырем — в приложении), kktb — «Таблица».
+    if (sp === 'kkml') return { key: 'kto-kogo', path: 'kto-kogo?tab=matches' };
+    if (sp === 'kktb') return { key: 'kto-kogo', path: 'kto-kogo?tab=table' };
     // Домашний матч — ивент (TASK-304): kkm_<матч>[_<код компании>] — «Подробнее» и «Позвать» из чата.
     var matchEvent = /^kkm_([1-9][0-9]*)(?:_([A-Za-z0-9]{4,16}))?$/.exec(sp);
     if (matchEvent) {

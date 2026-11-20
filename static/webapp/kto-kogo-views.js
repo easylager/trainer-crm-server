@@ -14,6 +14,7 @@
   var state = K.state;
   var icon = K.icon;
   var missing = {};
+  var previews = {}; // id матча → данные «Перед матчем» (null — нечего показать или запрос упал)
 
   function phase(m) {
     if (m.status === 'cancelled') return 'cancelled';
@@ -143,6 +144,48 @@
     return h('div', { class: 'kk-block' }, shown);
   }
 
+  /** «Перед матчем»: один запрос на матч. Упал — блока нет, экран и ход живут как жили. */
+  function loadPreview(m) {
+    if (m.id in previews) return Promise.resolve();
+    previews[m.id] = null;
+    return K.api('GET', '/client/hockey/matches/' + m.id + '/preview')
+      .then(function (d) { previews[m.id] = d; }, function () { delete previews[m.id]; });
+  }
+
+  function previewBlock(m) {
+    var v;
+    try {
+      v = S.previewView(previews[m.id], m);
+    } catch (e) {
+      return null;
+    }
+    if (!v) return null;
+    var rows = v.rows.map(function (r) {
+      if (r.kind === 'form') {
+        return h('div', { class: 'kk-pv__kv' }, [
+          h('span', { text: r.label }),
+          h('span', { class: 'kk-pv__form', role: 'list' }, r.chips.map(function (c) {
+            return h('i', { class: 'kk-pv__chip' + (c.win ? ' is-win' : ''), role: 'listitem', title: c.label, 'aria-label': c.label, text: c.text });
+          })),
+        ]);
+      }
+      if (r.kind === 'crowd') {
+        return h('div', { class: 'kk-pv__crowd' }, [
+          h('div', { class: 'kk-pv__kv' }, [
+            h('span', { text: r.label }),
+            h('b', { text: r.home.name + ' ' + r.home.pct + '% · ' + r.away.name + ' ' + r.away.pct + '%' }),
+          ]),
+          h('div', { class: 'kk-pv__bar', 'aria-hidden': 'true' }, [
+            h('span', { class: 'kk-pv__bar-home', style: 'flex-grow:' + r.home.pct }),
+            h('span', { class: 'kk-pv__bar-away', style: 'flex-grow:' + r.away.pct }),
+          ]),
+        ]);
+      }
+      return h('div', { class: 'kk-pv__kv' }, [h('span', { text: r.label }), h('b', { text: r.value })]);
+    });
+    return h('section', { class: 'kk-card kk-pv', 'aria-label': 'Перед матчем' }, [h('span', { class: 'kk-lbl', text: 'ПЕРЕД МАТЧЕМ' })].concat(rows));
+  }
+
   function openView(m) {
     var mine = m.my_pick;
     var colors = M.pairColors(m.home, m.away);
@@ -186,6 +229,7 @@
           stakesBlock(m),
           friendsBlock(m),
         ]),
+        previewBlock(m),
         m.race_final ? h('span', { class: 'kk-sub', text: 'Последний матч этого месяца: корона решится после него.' }) : null,
         matchPageLink(m),
       ]),
@@ -598,6 +642,7 @@
             });
           });
         }
+        if (ph === 'open') loadPreview(m).then(K.render, function () {});
         if (ph === 'open' && !state.matches.length) K.loadMatches().then(K.render, function () {});
         if (ph === 'open') {
           // Ходы закрываются за минуту до старта: экран, открытый заранее, сам переходит в «матч идёт».

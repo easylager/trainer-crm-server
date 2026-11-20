@@ -3549,6 +3549,7 @@ async def run_hockey_matches_loop() -> None:
                         delay = HOCKEY_RESULT_WINDOW_INTERVAL_SEC
                 # Сообщения бота «Кто кого» (TASK-334 S6) — после коммита: гонка уже закрыта, если был финал.
                 from src.application.hockey_notices import (
+                    CLIENT_EVENING_IO,
                     close_client_bot,
                     deliver,
                     deliver_league_notices,
@@ -3557,7 +3558,9 @@ async def run_hockey_matches_loop() -> None:
                 )
 
                 try:
-                    counts["notices"] = await deliver(async_session_factory, now=now, send=send_via_client_bot_gone)
+                    counts["notices"] = await deliver(
+                        async_session_factory, now=now, send=send_via_client_bot_gone, evening_io=CLIENT_EVENING_IO
+                    )
                     counts["league_notices"] = await deliver_league_notices(
                         async_session_factory, now=now, send=send_via_client_bot_gone
                     )

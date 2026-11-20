@@ -125,11 +125,13 @@ async def test_summary_gets_the_cap_line_only_when_its_match_closes_the_day(db_s
     await _finish(db, last, 2, 3, at(21, 30))
     notices = {n.player_key: n for n in await due_notices(db, now=at(21, 40))}
     assert set(notices) == {ANYA, MAX, OLEG}  # Дима не ходил — итога нет, строки тоже
-    # Аня — капитан вечера (TASK-432): после строки про кепку — её право, отдельной строкой.
-    assert notices[ANYA].text.endswith(
+    # Аня — капитан вечера (TASK-432): после строки про кепку — её право, отдельной строкой; блок — в «Итоге вечера»
+    # (PDEC-038), за ним ещё может идти фраза вечера.
+    cap_block = (
         "<b>Кепка дня</b> в лиге «Бригада» — Олег: хуже всех в этот вечер.\n"
         "<b>Ты капитан</b> в лиге «Бригада». Олег — 0 из 2: выдать плакат? Или выбери другое в «Вечере»."
     )
+    assert notices[ANYA].text.count(cap_block) == 1
     # Выдача в один тап: кнопка «Выдать плакат» над «Вечером в лиге» — Олегу, вечер 10 ноября.
     give = [b for row in notices[ANYA].buttons for b in row if b.get("callback_data", "").startswith("kk:o:")]
     assert [b["text"] for b in give] == ["Выдать плакат"]
@@ -138,7 +140,7 @@ async def test_summary_gets_the_cap_line_only_when_its_match_closes_the_day(db_s
     )
     assert not any("kk:o:" in b.get("callback_data", "") for row in notices[MAX].buttons for b in row)
     assert "Ты капитан" not in notices[MAX].text and "Ты капитан" not in notices[OLEG].text
-    assert notices[OLEG].text.endswith("<b>Кепка дня</b> в лиге «Бригада» — у тебя: хуже всех в этот вечер.")
+    assert notices[OLEG].text.count("<b>Кепка дня</b> в лиге «Бригада» — у тебя: хуже всех в этот вечер.") == 1
     urls = [b.get("url", "") for row in notices[MAX].buttons for b in row]
     labels = [b["text"] for row in notices[MAX].buttons for b in row]
     assert "Вечер в лиге" in labels

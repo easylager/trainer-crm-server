@@ -248,7 +248,7 @@
         h('span', { class: 'kk-cnt' + (d.total && d.made === d.total ? ' is-done' : ''), text: S.dayCount(d.made, d.total) }),
       ]),
       h('div', { class: 'kk-day' }, d.items.map(function (m) { return dayRow(m, d.mixed); })),
-      h('span', { class: 'kk-sub', text: 'Ход можно изменить до минуты перед стартом матча.' }),
+      h('span', { class: 'kk-sub', text: 'Ход можно изменить не позже чем за минуту до начала матча.' }),
     ]);
   }
 

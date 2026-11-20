@@ -557,7 +557,7 @@ describe('шторка «Как считаются очки»', () => {
     assert.equal(r.trumpTitle, 'Козырь');
     assert.match(r.trumpText, /удвоятся/);
     assert.equal(M.PICK_CLOSES_BEFORE_SEC, 60);
-    assert.match(r.foot, /до минуты перед стартом матча/);
+    assert.match(r.foot, /не позже чем за минуту до начала матча/);
   });
   it('«Таблицы и короны»: четыре пункта макета, пороги три и два, два дня на сверку', () => {
     const r = S.pointsRules();
@@ -747,5 +747,56 @@ describe('стенд наград (TASK-430)', () => {
     assert.deepEqual(S.standCompare(theirs, mine), { mine: 2, theirs: 0, same: 1 });
     assert.deepEqual(S.standCompare(mk([0, 0, 0, 0]), mk([0, 0, 0, 0])), { mine: 0, theirs: 0, same: 0 });
     assert.deepEqual(S.standCompare(mk([3, 0, 0, 0]), mk([1, 0, 0, 0])), { mine: 0, theirs: 1, same: 0 });
+  });
+});
+
+describe('previewView: «Перед матчем» — только то, что есть', () => {
+  const m = { home: { name: 'Юность' }, away: { name: 'Неман' }, sides: { home: 0, away: 0 } };
+  const g = (o) => ({ home_team: 'Юность', away_team: 'Неман', home_score: 4, away_score: 3, decided_in: 'regulation', starts_at: '2026-10-27T16:00:00+00:00', ...o });
+  const labels = (v) => v.rows.map((r) => r.label);
+
+  it('нет данных, пустой ответ или мусор — блока нет', () => {
+    assert.equal(S.previewView(null, m), null);
+    assert.equal(S.previewView({}, m), null);
+    assert.equal(S.previewView({ home: {}, meetings: [] }, m), null);
+    assert.equal(S.previewView({ home: { form: [] } }, null), null);
+  });
+
+  it('всё есть: порядок как на сайте, потом игровое', () => {
+    const v = S.previewView({
+      home: { place: 13, points: 11, form: [{ ...g({ decided_in: 'so' }), win: true, home: true, opponent: 'Неман' }, { ...g({}), win: false, home: false, opponent: 'Неман' }], mine: { total: 4, winner: 3, exact: 1 } },
+      away: { place: 1, points: 21, mine: { total: 2, winner: 0, exact: 0 } },
+      meetings: [g({ decided_in: 'so' }), g({}), g({}), g({})],
+    }, { ...m, sides: { home: 16, away: 9 } });
+    assert.deepEqual(labels(v), [
+      'Юность в таблице', 'Неман в таблице', 'Форма: Юность', 'Прошлая встреча', 'Встреча 27.10', 'Встреча 27.10',
+      'За кого пошли игроки', 'Ты и Юность', 'Ты и Неман',
+    ]);
+    assert.equal(v.rows[0].value, `13-е · 11${NBSP}очков`);
+    assert.equal(v.rows[1].value, `1-е · 21${NBSP}очко`);
+    assert.deepEqual(v.rows[2].chips.map((c) => [c.text, c.win]), [['В·Б', true], ['П', false]]);
+    assert.match(v.rows[2].chips[1].label, /^Поражение 3:4 от .+, 27\.10$/);
+    assert.equal(v.rows[3].value, `Юность — Неман 4:3${NBSP}Б`);
+    assert.deepEqual([v.rows[6].home.pct, v.rows[6].away.pct], [64, 36]);
+    assert.equal(v.rows[7].value, 'победитель — 3 из 4, точный счёт — 1');
+    assert.equal(v.rows[8].value, 'победитель — 0 из 2');
+  });
+
+  it('частично: место без очков, мало ходов — без трибуны и без своей истории', () => {
+    const v = S.previewView({ away: { place: 2, mine: { total: 1, winner: 1, exact: 1 } } }, { ...m, sides: { home: 5, away: 2 } });
+    assert.deepEqual(v.rows.map((r) => [r.label, r.value]), [['Неман в таблице', '2-е']]);
+  });
+
+  it('только трибуна — тоже блок; доли без количеств', () => {
+    const v = S.previewView({}, { ...m, sides: { home: 4, away: 4 } });
+    assert.deepEqual(labels(v), ['За кого пошли игроки']);
+    assert.doesNotMatch(JSON.stringify(v), /"4"|: ?4[,}]/);
+  });
+
+  it('без слов из ставок и без рода', () => {
+    const v = S.previewView({ home: { place: 2, points: 3, mine: { total: 3, winner: 2, exact: 1 } }, meetings: [g({})] }, { ...m, sides: { home: 9, away: 1 } });
+    const t = JSON.stringify(v);
+    assert.doesNotMatch(t, /ставк|коэф|выигрыш|банк|поставил/i);
+    assert.doesNotMatch(t, /угадал[^и]|выбрал/);
   });
 });

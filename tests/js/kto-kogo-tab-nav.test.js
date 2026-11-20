@@ -105,6 +105,9 @@ describe('входы по ссылкам кладут экран поверх hu
   it('?from=result и ?src= → остаются на hub', () => {
     assert.deepEqual(landing('', null, null), [hub]);
   });
+  it('?tab=matches из кнопки «Следующие матчи» → матчи поверх hub', () => {
+    assert.deepEqual(landing('', null, 'matches'), [hub, { name: 'matches', args: {} }]);
+  });
   it('приглашение важнее матча', () => {
     assert.equal(M.entryScreen('ABC', 5, 'table').name, 'join');
   });

@@ -983,6 +983,9 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 /* Стопка наклеек лиг в шапке игры: веер обложек, плашка лучшего места; тап — прыжок к «Лигам». */
 .kk-stack { position: relative; flex: none; display: inline-flex; align-items: center; height: 48px; padding: 0 8px 0 4px; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .kk-stack__fan { display: flex; }
+/* Наклонённый логотип «КТО КОГО?» выходит за свою рамку справа: веер держим на расстоянии, на узком экране — две наклейки. */
+.kk-top .kk-stack { margin-left: 10px; }
+@media (max-width: 400px) { .kk-stack__fan .kk-sticker:nth-child(n+3) { display: none; } }
 .kk-sticker { position: relative; width: 40px; height: 40px; border-radius: 11px; overflow: hidden; background: #2a3542; color: #fff; box-shadow: 0 0 0 2px var(--kk-bg, #fff), 0 2px 6px rgba(13, 20, 36, 0.18); transform: rotate(var(--kk-tilt, 0deg)); transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); display: inline-flex; align-items: center; justify-content: center; }
 .kk-sticker + .kk-sticker { margin-left: -14px; }
 .kk-sticker + .kk-sticker .kk-sticker__t { margin-left: 12px; }
@@ -1019,6 +1022,20 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-crop__zoom { width: 100%; max-width: 560px; accent-color: var(--kk-gold); }
 .kk-crop__a { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 560px; }
 
+/* «Перед матчем» на экране хода — строки как на странице матча сайта (.m-kv, .m-form): подпись слева, значение справа.
+   Победа — заливка цветом текста, поражение — серая: красный и зелёный результатам не даём (см. dark-contrast тест). */
+.kk-pv { gap: 10px; }
+.kk-pv__kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; font: 500 15px/1.3 var(--kk-text); color: var(--kk-ink); }
+.kk-pv__kv > span:first-child { color: var(--kk-soft); }
+.kk-pv__kv b { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.kk-pv__form { display: flex; gap: 3px; }
+.kk-pv__chip { min-width: 24px; height: 24px; padding: 0 6px; border-radius: 7px; white-space: nowrap; font: 700 12px/24px var(--kk-text); font-style: normal; text-align: center; background: var(--kk-chip); color: var(--kk-muted); }
+.kk-pv__chip.is-win { background: var(--kk-ink); color: var(--kk-card); }
+.kk-pv__crowd { display: flex; flex-direction: column; gap: 6px; }
+.kk-pv__bar { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; }
+.kk-pv__bar-home { background: var(--kk-ink); }
+.kk-pv__bar-away { background: var(--kk-line); }
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.
@@ -1035,3 +1052,4 @@ body.kk-in-tab .kk-cta { bottom: var(--client-shell-tab-inset); z-index: 9000; }
 
 /* Смена экрана (View Transitions): бар оболочки не едет вместе с экраном — своя группа без анимации. */
 body.kk-in-tab .client-tab-bar { view-transition-name: kk-tab-bar; }
+

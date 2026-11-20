@@ -474,6 +474,7 @@
     if (code) return { name: 'join', args: { code: code } };
     if (openId) return { name: 'match', args: { id: openId } };
     if (tab === 'table') return { name: 'table', args: {} };
+    if (tab === 'matches') return { name: 'matches', args: {} };
     return null;
   }
 

@@ -836,6 +836,23 @@ class HockeyLeagueOutfit(Base):
     notice_failed: Mapped[bool] = mapped_column(Boolean(), nullable=False, server_default=text("false"))
 
 
+class HockeyEveningBoard(Base):
+    """Табло вечера (PDEC-038): сообщение итогов игрока за игровой день; следующие итоги правят его."""
+
+    __tablename__ = "hockey_evening_boards"
+
+    player_key: Mapped[int] = mapped_column(
+        BigInteger(), ForeignKey("hockey_players.player_key", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date(), primary_key=True)
+    # Номер сообщения-табло в чате бота; NULL — табло не отправлялось (вечер ушёл сразу итогом).
+    message_id: Mapped[int | None] = mapped_column(BigInteger(), nullable=True)
+    # «Итог вечера» отправлен: табло больше не правим.
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class HockeyCardEvent(Base):
     """Карточка «Кто кого» в чате: отправили, открыли, вступили — без ключа игрока (TASK-300)."""
 
