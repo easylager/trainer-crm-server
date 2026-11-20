@@ -372,7 +372,7 @@
       var rows = S.tableRows(view, a.full).map(function (x) {
         return x.type === 'gap' ? h('div', { class: 'kk-gap', 'aria-hidden': 'true', text: '···' }) : rowEl(x.r);
       });
-      if (rows.length) main.appendChild(h('div', { class: 'kk-tbl' }, rows));
+      if (rows.length) main.appendChild(h('div', { class: 'kk-tbl' + K.stagger(a, 'tbl:' + tableKey(a)) }, rows));
       var more = S.tableMore(view, a.full);
       if (more) main.appendChild(h('button', { type: 'button', class: 'kk-ml-more', onclick: function () { a.full = true; K.render(); }, text: more }));
       if (!view.me) {

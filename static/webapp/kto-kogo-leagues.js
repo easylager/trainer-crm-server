@@ -910,7 +910,7 @@
       receivedBlock(a, ev),
       eveningVerdict(ev),
       captainPanel(a, ev),
-      h('div', { class: 'kk-ev__people' }, (ev.items || []).map(function (r) { return eveningPerson(a, ev, r); })),
+      h('div', { class: 'kk-ev__people' + K.stagger(a, 'ev:' + ev.day) }, (ev.items || []).map(function (r) { return eveningPerson(a, ev, r); })),
       h('div', { class: 'kk-ev__matches' }, (ev.matches || []).map(function (m, i) {
         return h('div', { class: 'kk-ev__m' }, [
           h('span', { class: 'kk-ev__n', text: String(i + 1) }),
@@ -945,7 +945,7 @@
     return [
       h('div', { class: 'kk-crownbar' + (S.leagueCrownMuted(l) ? ' kk-crownbar--muted' : '') }, [K.crownIcon(18), h('span', { text: S.leagueCrownLine(l, a.tab, me, items[0] ? items[0].points : 0) })]),
       S.podiumOrder(items) ? leaguePodium(items) : null,
-      items.length > 1 ? h('div', { class: 'kk-tbl' }, (S.podiumOrder(items) ? items.slice(3) : items).map(leagueRow)) : h('span', { class: 'kk-sub', text: 'Пока в лиге только ты. Позови своих — таблица оживёт после первого матча.' }),
+      items.length > 1 ? h('div', { class: 'kk-tbl' + K.stagger(a, 'lg:' + l.id + ':' + a.tab) }, (S.podiumOrder(items) ? items.slice(3) : items).map(leagueRow)) : h('span', { class: 'kk-sub', text: 'Пока в лиге только ты. Позови своих — таблица оживёт после первого матча.' }),
       S.titlesNote(items) ? h('span', { class: 'kk-sub', text: S.titlesNote(items) }) : null,
       a.tab === 'all' ? crownWall(l.wall) : null,
     ];

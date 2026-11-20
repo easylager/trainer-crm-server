@@ -958,6 +958,22 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
   :root[data-kk-vt]::view-transition-new(*) { animation: none !important; }
 }
 
+/* Каскад строк при открытии таблицы и смене среза (K.stagger): только opacity и transform — дёшево для GPU.
+   Первые 10 строк с шагом 18 мс, остальные вместе с десятой; без отскока, ease-out. */
+@keyframes kk-row-in { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
+.kk-stagger > * { animation: kk-row-in .22s cubic-bezier(.2, .8, .2, 1) both; }
+.kk-stagger > :nth-child(2) { animation-delay: 18ms; }
+.kk-stagger > :nth-child(3) { animation-delay: 36ms; }
+.kk-stagger > :nth-child(4) { animation-delay: 54ms; }
+.kk-stagger > :nth-child(5) { animation-delay: 72ms; }
+.kk-stagger > :nth-child(6) { animation-delay: 90ms; }
+.kk-stagger > :nth-child(7) { animation-delay: 108ms; }
+.kk-stagger > :nth-child(8) { animation-delay: 126ms; }
+.kk-stagger > :nth-child(9) { animation-delay: 144ms; }
+.kk-stagger > :nth-child(10) { animation-delay: 162ms; }
+.kk-stagger > :nth-child(n+11) { animation-delay: 162ms; }
+@media (prefers-reduced-motion: reduce) { .kk-stagger > * { animation: none; } }
+
 /* ─── TASK-374: игра во вкладке таб-бара (season_ui) ─────────────────────────
  * Всё за классом body.kk-in-tab (ставит kto-kogo.js только при флаге): без флага правил нет.
  * Бар оболочки (z 9000) и его затухание (body::after, z 8999) — из mini-app-client-shell.css.
@@ -974,3 +990,4 @@ body.kk-in-tab .kk-cta { bottom: var(--client-shell-tab-inset); z-index: 9000; }
 
 /* Смена экрана (View Transitions): бар оболочки не едет вместе с экраном — своя группа без анимации. */
 body.kk-in-tab .client-tab-bar { view-transition-name: kk-tab-bar; }
+

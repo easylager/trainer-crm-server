@@ -302,6 +302,16 @@
     return emptyCard('НЕ ЗАГРУЗИЛОСЬ', text || 'Проверь интернет и попробуй ещё раз.', h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: onRetry, text: 'Повторить' }));
   }
 
+  /**
+   * Каскад строк (таблицы, вечер лиги): класс kk-stagger только на первом кадре нового среза — опрос и перерисовки
+   * того же среза его не повторяют. a — аргументы экрана (живут, пока экран в стеке), key — что сейчас показано.
+   */
+  function stagger(a, key) {
+    if (!a || a.staggerKey === key) return '';
+    a.staggerKey = key;
+    return ' kk-stagger';
+  }
+
   function emptyCard(head, text, cta) {
     return h('section', { class: 'kk-card kk-note' }, [
       h('span', { class: 'kk-lbl', text: head }),
@@ -1098,7 +1108,7 @@
 
   window.KK = {
     M: M, S: S, tg: tg, params: params, state: state, h: h, icon: icon, I: I, CROWN: CROWN, crownIcon: crownIcon, crownTag: crownTag,
-    ava: ava, puck: puck, introElapsed: introElapsed, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, emptyCard: emptyCard, retryCard: retryCard,
+    ava: ava, puck: puck, introElapsed: introElapsed, logoDisc: logoDisc, worldDisc: worldDisc, sticker: sticker, topbar: topbar, loading: loading, stagger: stagger, emptyCard: emptyCard, retryCard: retryCard,
     sheet: sheet, closeSheet: closeSheet, api: api, toast: toast, fail: fail, haptic: haptic, render: render, register: register,
     go: go, replace: replace, reset: reset, back: back, current: current, poll: poll, stopPoll: stopPoll,
     loadMatches: loadMatches, loadClubMatches: loadClubMatches, findMatch: findMatch, fetchMatch: fetchMatch, loadStakes: loadStakes, loadPeaks: loadPeaks,

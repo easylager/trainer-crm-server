@@ -114,8 +114,9 @@
               h('span', { text: l.text }),
             ]);
           }).concat([h('span', { class: 'kk-st kk-st--note', text: S.STAKES_NOTE })])
-        : [h('span', { class: 'kk-st kk-st--mute', text: S.stakesEmpty(true) })];
+        : null; // ход есть, а места от него не сдвинутся — блок ничего не сообщает, не показываем (владелец 2026-11-20)
     }
+    if (!rows) return null;
     return h('div', { class: 'kk-block' }, [h('span', { class: 'kk-lbl kk-lbl--gold', text: 'ЕСЛИ УГАДАЕШЬ' })].concat(rows));
   }
 
