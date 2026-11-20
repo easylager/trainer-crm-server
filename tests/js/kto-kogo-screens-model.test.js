@@ -557,7 +557,7 @@ describe('шторка «Как считаются очки»', () => {
     assert.equal(r.trumpTitle, 'Козырь');
     assert.match(r.trumpText, /удвоятся/);
     assert.equal(M.PICK_CLOSES_BEFORE_SEC, 60);
-    assert.match(r.foot, /до минуты перед стартом матча/);
+    assert.match(r.foot, /не позже чем за минуту до начала матча/);
   });
   it('«Таблицы и короны»: четыре пункта макета, пороги три и два, два дня на сверку', () => {
     const r = S.pointsRules();

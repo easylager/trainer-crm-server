@@ -164,23 +164,13 @@ async def _place(session, cache, player_key: int, club: str | None, period) -> t
     return mine.rank, len(rows)
 
 
-def _buttons(match: dict | None) -> list[list[dict]]:
-    rows: list = []
-    if match is not None:
-        rows.append(list(hn.pick_buttons(match["match_id"], match["home"], match["away"])))
-    start = f"{hn.START_PICK}_{match['match_id']}" if match is not None else hn.START_PICK
-    rows.append([hn.url_button(t("kk_notify.btn.table"), start)])
-    rows.append(off_all_button())
-    return hn._rows(*rows)
-
-
 def _buttons_play(match: dict | None) -> list[list[dict]]:
-    """Приглашающие пуши (TASK-429): вместо двух кнопок хода одна «Сыграть» в игру; счёт выбирают там."""
+    """Вместо двух кнопок хода одна «Сыграть» на матч (TASK-429): счёт и козырь выбирают в приложении.
+    «Таблица» — общая таблица игры."""
     rows: list = []
-    start = f"{hn.START_PICK}_{match['match_id']}" if match is not None else hn.START_PICK
     if match is not None:
-        rows.append([hn.url_button(t("kk_notify.btn.play"), start)])
-    rows.append([hn.url_button(t("kk_notify.btn.table"), start)])
+        rows.append([hn.url_button(t("kk_notify.btn.play"), f"{hn.START_PICK}_{match['match_id']}")])
+    rows.append([hn.url_button(t("kk_notify.btn.table"), hn.START_TABLE)])
     rows.append(off_all_button())
     return hn._rows(*rows)
 
@@ -402,7 +392,7 @@ async def produce_week(session: AsyncSession, *, now: datetime) -> list[Proposal
             recheck = _all_of(recheck, match_still_open(line_match["match_id"], min_left=MATCH_MIN_LEFT))
         out.append(
             Proposal(
-                hn.Notice(KIND_WEEK, f.player_key, s.anchor, render(now), _buttons(line_match)),
+                hn.Notice(KIND_WEEK, f.player_key, s.anchor, render(now), _buttons_play(line_match)),
                 recheck,
                 render,
             )
@@ -524,7 +514,7 @@ async def produce_month(session: AsyncSession, *, now: datetime) -> list[Proposa
         match_check = match_still_open(m["match_id"], min_left=MATCH_MIN_LEFT) if m else None
         out.append(
             Proposal(
-                hn.Notice(KIND_MONTH, f.player_key, anchor, render(now), _buttons(m)),
+                hn.Notice(KIND_MONTH, f.player_key, anchor, render(now), _buttons_play(m)),
                 _all_of(_month_window_check, _month_recheck(club, period, match_check)),
                 render,
             )

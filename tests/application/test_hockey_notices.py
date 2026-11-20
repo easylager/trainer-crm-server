@@ -14,6 +14,7 @@ from src.application.hockey_matches import set_manual_result
 from src.application import hockey_notices
 from src.application.hockey_notices import (
     BLOCKED,
+    EveningIO,
     FAILED,
     RETRY,
     SENT,
@@ -61,6 +62,27 @@ def factory(db_session):
         yield db_session
 
     return make
+
+
+class BoardIO:
+    """Подмена отправки табло: новые сообщения (с номером) и правки."""
+
+    def __init__(self, edit_answer=SENT) -> None:
+        self.sent: list[tuple[int, str, list, int]] = []
+        self.edits: list[tuple[int, int, str, list]] = []
+        self.edit_answer = edit_answer
+        self._next = 100
+
+        async def send(chat_id, body, buttons):
+            self._next += 1
+            self.sent.append((chat_id, body, buttons, self._next))
+            return SENT, self._next
+
+        async def edit(chat_id, message_id, body, buttons):
+            self.edits.append((chat_id, message_id, body, buttons))
+            return self.edit_answer
+
+        self.io = EveningIO(send, edit)
 
 
 class Outbox:
@@ -198,13 +220,17 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     by_player = {n.player_key: n for n in await due_notices(db_session, now=ready)}
     sasha = by_player[SASHA]
     assert sasha.kind == "result"
-    assert sasha.text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход 3:2. В точку! +50.\nТвоё место в «")
-    assert sasha.text.endswith("»: 1-е из 4.")
-    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход — Юность. Победитель угадан: +20.")
-    assert by_player[VOVA].text.startswith("<b>Юность — Шахтёр 3:2.</b> Твой ход — Шахтёр. Мимо. Бывает.")
+    # Один матч за вечер — сразу «Итог вечера» (PDEC-038): матч, твой ход, очки; ниже — место «было → стало».
+    assert sasha.text.startswith("<b>Юность — Шахтёр 3:2</b> · твой 3:2 · в точку! <b>+50</b>\n\nОбщая таблица: <b>1-е</b> из 4")
+    assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2</b> · твой Юность · <b>+20</b>")
+    assert by_player[VOVA].text.startswith("<b>Юность — Шахтёр 3:2</b> · твой Шахтёр · 0")
+    # Срез своей команды повторяет общую таблицу — второй строкой не пишем.
+    assert "Таблица «" not in sasha.text
+    # Фраза вечера — из коллекции, курсивом; у одного матча без «{n}».
+    assert "<i>" in sasha.text and "{n}" not in sasha.text
     labels = [b["text"] for row in sasha.buttons for b in row]
-    assert "Следующий ход" in labels and "Таблица" in labels
-    assert sasha.buttons[0][0]["callback_data"] == "kk:n"
+    assert "Таблица" in labels and "Отключить такие сообщения" in labels
+    assert sasha.buttons[0][-1]["url"].endswith("startapp=kktb")
 
     out = Outbox()
     assert (await deliver(factory, now=ready, send=out))["sent"] == 4
@@ -225,16 +251,16 @@ async def test_two_results_at_once_go_as_one_summary_and_are_not_counted_in_budg
     notices = await due_notices(db_session, now=at(17, 40))
     assert len(notices) == 1
     text = notices[0].text
-    assert text.startswith("<b>Итоги твоих ходов</b>\n")
-    assert "Юность — Шахтёр 2:1.</b> Твой ход — Юность. Победитель угадан: +20." in text
-    assert "Неман — Юность 0:1.</b> Твой ход — Неман. Мимо. Бывает." in text
-    assert text.count("Твоё место") <= 1
-    if "Твоё место" in text:
-        assert text.rstrip().endswith(text[text.rfind("Твоё место") :])
+    # Весь вечер готов разом — табло не создаём, сразу «Итог вечера» со строками матчей (PDEC-038).
+    assert notices[0].evening.step.action == "final"
+    assert text.startswith("<b>Вечер закрыт: +20</b> · 1 из 2\n\n")
+    assert "🎯 <b>Юность — Шахтёр 2:1</b> · твой Юность · <b>+20</b>" in text
+    assert "❌ <b>Неман — Юность 0:1</b> · твой Неман · 0" in text
+    assert text.count("Общая таблица") == 1
     out = Outbox()
     await deliver(factory, now=at(17, 40), send=out)
     assert len(out.sent) == 1
-    # Оба матча заняты: ни один из них не вернётся отдельным итогом.
+    # Оба матча и «Итог вечера» заняты: ни итог, ни вечер второй раз не уйдут.
     assert await due_notices(db_session, now=at(17, 50)) == []
 
 
@@ -286,13 +312,30 @@ async def test_a_day_with_three_matches_sends_at_most_reminder_plus_summary(db_s
     await deliver(factory, now=at(13, 10), send=out)
     await deliver(factory, now=at(17, 10), send=out)
     assert [text for _, text, _ in out.sent] == ["<b>Юность — Шахтёр</b> сегодня в 12:00. КТО КОГО? 🏒"]
-    # Он сделал ходы и дождался итогов всех трёх.
+    # Ходы на все три; итоги приходят по одному — табло вечера (PDEC-038).
     for m in ms:
         await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(9, 30))
-        await _finish(db_session, m, 2, 1, at(22, 0))
-    await deliver(factory, now=at(22, 10), send=out)
-    assert len(out.sent) == 2
-    assert out.sent[1][1].startswith("<b>Итоги твоих ходов</b>")
+    io = BoardIO()
+    await _finish(db_session, ms[0], 2, 1, at(14, 30))
+    await deliver(factory, now=at(14, 40), send=out, evening_io=io.io)
+    # Первый итог — новое сообщение-табло (со звуком): 1 из 3, остальные ждут.
+    assert len(io.sent) == 1 and not io.edits
+    assert "· 1 из 3 твоих матчей" in io.sent[0][1] and "⏳ Юность — Гомель" in io.sent[0][1]
+    await _finish(db_session, ms[1], 2, 1, at(18, 30))
+    await deliver(factory, now=at(18, 40), send=out, evening_io=io.io)
+    # Второй — правка того же табло, без нового сообщения.
+    assert len(io.sent) == 1 and len(io.edits) == 1
+    assert io.edits[0][1] == io.sent[0][3] and "· 2 из 3 твоих матчей" in io.edits[0][2]
+    await _finish(db_session, ms[2], 2, 1, at(22, 30))
+    await deliver(factory, now=at(22, 40), send=out, evening_io=io.io)
+    # Последний — финальная правка табло и одно новое «Итог вечера».
+    assert len(io.edits) == 2 and "За вечер: <b>+60</b>" in io.edits[1][2]
+    assert len(io.sent) == 2 and io.sent[1][1].startswith("<b>Вечер закрыт: +60</b> · 3 из 3")
+    # Повторный проход ничего не шлёт и не правит.
+    await deliver(factory, now=at(22, 50), send=out, evening_io=io.io)
+    assert len(io.sent) == 2 and len(io.edits) == 2
+    # В обычный канал за день — только утреннее напоминание.
+    assert len(out.sent) == 1
 
 
 @pytest.mark.asyncio
@@ -805,7 +848,109 @@ async def test_result_message_has_tribune_line_from_twenty_moves(db_session) -> 
     await _finish(db_session, m, 2, 3, done)
     notices = await due_notices(db_session, now=done + hockey_notices.RESULT_SEND_DELAY)
     sasha = next(n for n in notices if n.player_key == SASHA)
+    # Вечер из одного матча: «Трибуна» — сразу под строкой матча в «Итоге вечера».
     assert sasha.text.startswith(
-        "<b>Юность — Шахтёр 2:3.</b> Твой ход — Шахтёр. Победитель угадан: +20.\n"
+        "<b>Юность — Шахтёр 2:3</b> · твой Шахтёр · <b>+20</b>\n"
         "Победителя угадали 10% игроков — и ты в их числе."
     )
+
+
+# ---------- табло вечера: крайние случаи (PDEC-038, TASK-434) ----------
+
+
+@pytest.mark.asyncio
+async def test_stuck_match_closes_the_evening_after_four_hours_and_its_result_comes_later(db_session, factory) -> None:
+    await _fan(db_session, SASHA, name="Саша")
+    a = await _match(db_session, "st1", at(15))
+    b = await _match(db_session, "st2", at(16), home="Неман", away="Гомель")
+    for m in (a, b):
+        await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(10))
+    io = BoardIO()
+    await _finish(db_session, a, 2, 1, at(17, 30))
+    await deliver(factory, now=at(17, 40), send=Outbox(), evening_io=io.io)
+    assert len(io.sent) == 1  # табло: 1 из 2
+    # Итога второго нет и через 4 часа после начала — вечер закрываем без него.
+    await deliver(factory, now=at(20, 1), send=Outbox(), evening_io=io.io)
+    assert len(io.sent) == 2 and io.sent[1][1].startswith("<b>Вечер закрыт: +20</b>")
+    assert "итог позже" in io.edits[-1][2]
+    # Итог появился — короткое отдельное сообщение, вечер второй раз не закрывается.
+    await _finish(db_session, b, 0, 3, at(21, 30))
+    await deliver(factory, now=at(21, 40), send=Outbox(), evening_io=io.io)
+    assert len(io.sent) == 3 and io.sent[2][1].startswith("Итог позже, чем вечер: ❌ <b>Неман — Гомель 0:3</b>")
+    await deliver(factory, now=at(21, 50), send=Outbox(), evening_io=io.io)
+    assert len(io.sent) == 3
+
+
+@pytest.mark.asyncio
+async def test_deleted_board_is_sent_anew_and_its_number_is_kept(db_session, factory) -> None:
+    from src.application.hockey_notices import GONE
+    from src.application.kk_evening import load_board
+
+    await _fan(db_session, SASHA, name="Саша")
+    ms = [await _match(db_session, f"gn{i}", at(14 + 2 * i)) for i in range(3)]
+    for m in ms:
+        await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(10))
+    io = BoardIO(edit_answer=GONE)  # человек удалил табло: править нечего
+    await _finish(db_session, ms[0], 2, 1, at(16, 30))
+    await deliver(factory, now=at(16, 40), send=Outbox(), evening_io=io.io)
+    await _finish(db_session, ms[1], 2, 1, at(18, 30))
+    await deliver(factory, now=at(18, 40), send=Outbox(), evening_io=io.io)
+    assert len(io.edits) == 1 and len(io.sent) == 2  # правка не вышла — новое табло
+    board = await load_board(db_session, player_key=SASHA, day=at(12).date())
+    assert board is not None and board.message_id == io.sent[1][3]
+
+
+@pytest.mark.asyncio
+async def test_temporary_failure_releases_the_evening_and_the_next_pass_sends_it_once(db_session, factory) -> None:
+    await _fan(db_session, SASHA, name="Саша")
+    m = await _match(db_session, "tf1", at(19))
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(10))
+    await _finish(db_session, m, 2, 1, at(21, 30))
+    calls: list[str] = []
+
+    async def flaky(chat_id, body, buttons):
+        calls.append(body)
+        return (RETRY, None) if len(calls) == 1 else (SENT, 7)
+
+    async def no_edit(*_a):
+        return SENT
+
+    io = EveningIO(flaky, no_edit)
+    assert (await deliver(factory, now=at(21, 40), send=Outbox(), evening_io=io))["retry"] == 1
+    assert (await deliver(factory, now=at(21, 45), send=Outbox(), evening_io=io))["sent"] == 1
+    assert (await deliver(factory, now=at(21, 50), send=Outbox(), evening_io=io))["sent"] == 0
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_overtaken_notice_is_not_sent_right_after_the_evening_summary(db_session, factory) -> None:
+    from src.application.hockey_notices import Overtake
+
+    await _fan(db_session, SASHA, name="Саша")
+    m = await _match(db_session, "ov1", at(19))
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(10))
+    await _finish(db_session, m, 2, 1, at(21, 30))
+    await deliver(factory, now=at(21, 40), send=Outbox(), evening_io=BoardIO().io)
+    league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="Офис")
+    over = Overtake(league.id, "Офис", SASHA, "Катя", 2, m, scope=("all", ()), starts_at=at(0, day=1), ends_at=at(0, day=30))
+    assert [n.kind for n in await due_notices(db_session, now=at(22, 0), overtakes=[over])] == []
+    # Через 6 часов после «Итога вечера» — снова можно (утро, вне тихих часов).
+    later = [n.kind for n in await due_notices(db_session, now=at(10, 0, day=11), overtakes=[over])]
+    assert later == ["overtook"]
+
+
+def test_quips_have_no_betting_words_and_cover_every_situation() -> None:
+    from src.application.kk_evening import pick_quip, quips
+
+    banned = ("ставк", "постав", "отыгра", "выигрыш", "коэф", "кэф", "банк")
+    pool = quips()
+    for kind in ("exact", "hit", "perfect", "zero", "mixed", "climbed", "dropped", "league_top"):
+        assert pool[kind], kind
+        for q in pool[kind]:
+            assert not any(w in q.lower() for w in banned), q
+    # Один матч — без «{n}»; два вечера подряд одна и та же фраза не выпадает.
+    assert "{n}" not in (pick_quip("zero", player_key=1, day=DAY.date(), n=1) or "")
+    for player in range(50):
+        today = pick_quip("mixed", player_key=player, day=DAY.date(), n=3)
+        yesterday = pick_quip("mixed", player_key=player, day=DAY.date() - timedelta(days=1), n=3)
+        assert today != yesterday

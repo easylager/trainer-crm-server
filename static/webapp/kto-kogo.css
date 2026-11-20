@@ -983,6 +983,9 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 /* Стопка наклеек лиг в шапке игры: веер обложек, плашка лучшего места; тап — прыжок к «Лигам». */
 .kk-stack { position: relative; flex: none; display: inline-flex; align-items: center; height: 48px; padding: 0 8px 0 4px; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .kk-stack__fan { display: flex; }
+/* Наклонённый логотип «КТО КОГО?» выходит за свою рамку справа: веер держим на расстоянии, на узком экране — две наклейки. */
+.kk-top .kk-stack { margin-left: 10px; }
+@media (max-width: 400px) { .kk-stack__fan .kk-sticker:nth-child(n+3) { display: none; } }
 .kk-sticker { position: relative; width: 40px; height: 40px; border-radius: 11px; overflow: hidden; background: #2a3542; color: #fff; box-shadow: 0 0 0 2px var(--kk-bg, #fff), 0 2px 6px rgba(13, 20, 36, 0.18); transform: rotate(var(--kk-tilt, 0deg)); transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); display: inline-flex; align-items: center; justify-content: center; }
 .kk-sticker + .kk-sticker { margin-left: -14px; }
 .kk-sticker + .kk-sticker .kk-sticker__t { margin-left: 12px; }

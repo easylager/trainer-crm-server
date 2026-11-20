@@ -133,6 +133,8 @@ START_MONTH = "kkmo"
 START_OFF = "kkoff"
 START_LEAGUE = "kkl"
 START_EVENING = "kkv"  # kkv_<лига>_<ГГГГММДД> — «Вечер» лиги за игровой день (TASK-431)
+START_MATCHES = "kkml"  # «Следующие матчи» под итогом: список матчей игры, где есть счёт и козырь
+START_TABLE = "kktb"  # «Таблица» под итогом: общая таблица игры
 
 # callback_data кнопок в чате.
 CB_PICK = "kk:p"  # kk:p:<матч>:<h|a>
@@ -178,6 +180,8 @@ class Notice:
     preclaimed: bool = False
     # Фото к сообщению (путь к файлу): текст уходит подписью (sendPhoto). Только у новых поводов (TASK-431).
     photo: str | None = None
+    # Табло вечера (PDEC-038): шаг вечера и тексты; доставка — ``_deliver_evening``.
+    evening: "EveningSend | None" = None
 
     @property
     def match_ids(self) -> tuple[int, ...]:
@@ -200,6 +204,39 @@ class Overtake:
 
 
 Sender = Callable[[int, str, list[list[dict]]], Awaitable["bool | str"]]
+
+
+@dataclass(frozen=True)
+class EveningSend:
+    """Тексты шага вечера. ``board_*`` — табло (новое или правка); ``final_*`` — «Итог вечера» или поздний итог."""
+
+    step: Any
+    board_text: str | None = None
+    board_buttons: list[list[dict]] = field(default_factory=list)
+    final_text: str | None = None
+    final_buttons: list[list[dict]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class EveningIO:
+    """Отправка с номером сообщения и правка: ``send`` → (исход, message_id), ``edit`` → исход.
+
+    Правка: «не изменилось» — ``ok``; «нет такого сообщения» / «нельзя править» — ``gone`` (шлём новое)."""
+
+    send: Callable[[int, str, list[list[dict]]], Awaitable[tuple[str, int | None]]]
+    edit: Callable[[int, int, str, list[list[dict]]], Awaitable[str]]
+
+
+def evening_io_from(send: Sender) -> EveningIO:
+    """Запасной путь для отправителя без номеров (тесты, ручные прогоны): табло не правится — уходит новым."""
+
+    async def _send(chat_id: int, body: str, buttons: list[list[dict]]) -> tuple[str, int | None]:
+        return _outcome(await send(chat_id, body, buttons)), None
+
+    async def _edit(chat_id: int, message_id: int, body: str, buttons: list[list[dict]]) -> str:
+        return GONE
+
+    return EveningIO(_send, _edit)
 
 
 def _utc(value: datetime) -> datetime:
@@ -829,86 +866,159 @@ async def _invite_code(session: AsyncSession, league_id: int) -> str:
 # ---------- сборка ----------
 
 
-async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) -> list[Notice]:
+_OPEN_TODAY = text("""
+    SELECT m.id AS match_id, m.home_team, m.away_team, m.starts_at
+    FROM game_matches AS m
+    WHERE m.status = 'scheduled' AND m.starts_at > :closes_after AND m.starts_at >= :since AND m.starts_at < :until
+      AND NOT EXISTS (SELECT 1 FROM hockey_picks AS p WHERE p.match_id = m.id AND p.player_key = :player_key)
+    ORDER BY m.starts_at, m.id
+    """)
+
+
+async def _open_today(session: AsyncSession, *, player_key: int, day, now: datetime) -> list:
+    """Матчи вечера без хода игрока, где ход ещё открыт — для строки «Ещё сегодня без твоего хода»."""
+    from src.application.hockey_league_evening import day_bounds as evening_bounds
+    from src.application.kk_evening import OpenMatch
+
+    since, until = evening_bounds(day)
+    params = {"player_key": player_key, "since": since, "until": until, "closes_after": _utc(now) + PICK_CLOSES_BEFORE}
+    return [OpenMatch(**r._mapping) for r in (await session.execute(_OPEN_TODAY, params)).all()]
+
+
+async def _evening_days(session: AsyncSession, *, now: datetime) -> list[tuple[int, Any]]:
+    """Вечера, по которым есть что делать: новые готовые итоги и открытые табло (закрыть по зависшему матчу)."""
+    from src.application.hockey_league_evening import game_day
+    from src.application.kk_evening import open_board_days
+
     fresh = now - (RESULT_FRESH if _local(now).hour >= 15 else RESULT_FRESH_AFTER_NIGHT)
-    by_player: dict[int, list] = {}
+    seen: dict[tuple[int, Any], None] = {}
     for r in (
         await session.execute(
             _DUE_RESULT, {"fresh": _utc(fresh), "ready": _utc(now) - RESULT_SEND_DELAY, "ready_now": _utc(now)}
         )
     ).all():
-        by_player.setdefault(r.player_key, []).append(r)
+        seen.setdefault((r.player_key, game_day(r.starts_at)), None)
+    for key in await open_board_days(session, now=now):
+        seen.setdefault(key, None)
+    return list(seen)
+
+
+async def _result_notices(session: AsyncSession, *, now: datetime, cache: dict) -> list[Notice]:
+    """Табло вечера (PDEC-038): по вечеру игрока — новое табло, правка, «Итог вечера» или поздний итог."""
+    from src.application import kk_evening as ev
+
     out: list[Notice] = []
-    for player_key, rows in by_player.items():
-        texts: list[str] = []
-        places: list[tuple[tuple, str]] = []
-        for r in rows:
-            found = await best_place(
-                session, player_key=player_key, home=r.home_team, away=r.away_team, starts_at=r.starts_at, cache=cache
-            )
-            if found is not None:
-                places.append(found)
-            texts.append(
-                result_text(
-                    home=r.home_team,
-                    away=r.away_team,
-                    final_home=r.final_home,
-                    final_away=r.final_away,
-                    points=r.points,
-                    doubled=bool(r.doubled),
-                    side=r.side,
-                    pick_home=r.home_score,
-                    pick_away=r.away_score,
-                )
-            )
-        # В пачке место одно: лучший срез среди этих матчей, уже после всех ходов.
-        place = min(places)[1] if places else None
-        if len(rows) == 1:
-            r = rows[0]
-            body = texts[0]
-            # В сводке нескольких итогов «Трибуну» не пишем: строк и так много.
-            tribune = tribune_line(
-                home=r.home_team,
-                away=r.away_team,
-                final_home=r.final_home,
-                final_away=r.final_away,
-                side=r.side,
-                points=r.points,
-                home_picks=r.home_picks,
-                away_picks=r.away_picks,
-                same_exact=r.same_exact,
-            )
-            if tribune:
-                body += "\n" + tribune
-        else:
-            body = summary_text(texts)
-        if place:
-            body += "\n" + place
-        # Кепка дня решилась матчем из этой сводки — по строке на лигу; кнопка ведёт в «Вечер» первой (TASK-431).
-        news = await _cap_news(session, player_key, rows, now=now, cache=cache.setdefault("cap_news", {}))
-        offer, evening = None, news[0] if news else None
-        for item in news:
-            if item.holders:
-                body += "\n" + cap_line(league_name=item.league_name, holders=item.holders, mine=item.mine)
-            if item.captain:
-                # Кнопка в один тап — одна на сообщение: предложение пишем только в той лиге, где кнопка.
-                one_tap = offer is None and item.offer is not None
-                body += "\n" + captain_line(league_name=item.league_name, offer=item.offer if one_tap else None)
-                if one_tap:
-                    offer, evening = offer_button(item.league_id, item.day, item.offer), item
-        buttons = _rows(
-            [
-                {"text": "Следующий ход", "callback_data": CB_NEXT},
-                url_button("Таблица", f"{START_PICK}_{rows[-1].match_id}"),
-            ],
-            [offer] if offer else [],
-            [evening_button(evening.league_id, evening.day)] if evening else [],
-            off_button(KIND_RESULT),
-        )
+    for player_key, day in await _evening_days(session, now=now):
+        picks = await ev.evening_picks(session, player_key=player_key, day=day, now=now)
+        board = await ev.load_board(session, player_key=player_key, day=day)
+        step = ev.decide(player_key=player_key, day=day, picks=picks, board=board, now=now)
+        if step is None:
+            continue
+        send = await _evening_send(session, step, picks=picks, now=now, cache=cache)
+        anchor = step.claim[0] if step.claim else step.anchor_match_id
         out.append(
-            Notice(KIND_RESULT, player_key, rows[0].match_id, body, buttons, also=tuple(r.match_id for r in rows[1:]))
+            Notice(
+                KIND_RESULT,
+                player_key,
+                anchor,
+                send.final_text or send.board_text or "",
+                send.final_buttons or send.board_buttons,
+                also=tuple(step.claim[1:]),
+                evening=send,
+            )
         )
     return out
+
+
+async def _evening_send(session: AsyncSession, step, *, picks: list, now: datetime, cache: dict) -> EveningSend:
+    from src.application import kk_evening as ev
+
+    table = url_button("Таблица", START_TABLE)
+    if step.action == ev.ACTION_LATE:
+        late = [p for p in picks if p.match_id in step.claim]
+        body = "\n".join(ev.late_text(p) for p in late)
+        return EveningSend(step, final_text=body, final_buttons=_rows([table], off_button(KIND_RESULT)))
+    club = await fan_club(session, step.player_key, now=now)
+    if step.action == ev.ACTION_BOARD:
+        open_matches = await _open_today(session, player_key=step.player_key, day=step.day, now=now)
+        fan = next((m for m in open_matches if club in (m.home_team, m.away_team)), None) if club else None
+        body = ev.board_text(day=step.day, picks=picks, now=now, open_matches=open_matches, fan=fan)
+        play = url_button("Сыграть", START_MATCHES) if open_matches else None
+        return EveningSend(step, board_text=body, board_buttons=_rows([play, table], off_button(KIND_RESULT)))
+    # Итог вечера: финальная правка табло (если оно было) и новое сообщение.
+    had_board = step.board is not None and step.board.message_id is not None
+    final_board = (
+        ev.board_text(day=step.day, picks=picks, now=now, open_matches=[], fan=None) if had_board else None
+    )
+    parts = [ev.final_header(picks, with_lines=not had_board and len(picks) > 1, now=now)]
+    if len(picks) == 1 and picks[0].ready:
+        p = picks[0]
+        tribune = tribune_line(
+            home=p.home_team,
+            away=p.away_team,
+            final_home=p.final_home,
+            final_away=p.final_away,
+            side=p.side,
+            points=p.points,
+            home_picks=p.home_picks,
+            away_picks=p.away_picks,
+            same_exact=p.same_exact,
+        )
+        if tribune:
+            parts[0] += "\n" + tribune  # «Трибуна» — с какой долей игроков совпал ход
+    changes, _leagues = await ev.place_changes(session, player_key=step.player_key, day=step.day, fan=club, now=now)
+    if changes:
+        parts.append("\n".join(ev.place_line(c) for c in changes))
+    ready = [p for p in picks if p.ready]
+    news = await _cap_news(session, step.player_key, [_Row(p.as_match()) for p in ready], now=now, cache=cache.setdefault("cap_news", {}))
+    offer, evening = None, news[0] if news else None
+    cap_lines = []
+    for item in news:
+        if item.holders:
+            cap_lines.append(cap_line(league_name=item.league_name, holders=item.holders, mine=item.mine))
+        if item.captain:
+            one_tap = offer is None and item.offer is not None
+            cap_lines.append(captain_line(league_name=item.league_name, offer=item.offer if one_tap else None))
+            if one_tap:
+                offer, evening = offer_button(item.league_id, item.day, item.offer), item
+    if cap_lines:
+        parts.append("\n".join(cap_lines))
+    other = await ev.other_match_line(session, player_key=step.player_key, day=step.day)
+    if other:
+        parts.append(other)
+    quip = ev.pick_quip(ev.quip_kind(picks, changes), player_key=step.player_key, day=step.day, n=len(ready))
+    if quip:
+        parts.append(f"<i>{html.escape(quip)}</i>")
+    nxt = await _next_for(session, step.player_key, now=now, club=club) or (
+        await _next_for(session, step.player_key, now=now, club=None) if club else None
+    )
+    play = None
+    if nxt:
+        parts.append(
+            f"Дальше: {html.escape(club_name(nxt['home_team']))} — {html.escape(club_name(nxt['away_team']))}, "
+            f"{_day_word(nxt['starts_at'], now)} в {_hhmm(nxt['starts_at'])}"
+        )
+        play = url_button("Сыграть", f"{START_PICK}_{nxt['match_id']}")
+    buttons = _rows(
+        [play, table],
+        [offer] if offer else [],
+        [evening_button(evening.league_id, evening.day)] if evening else [],
+        off_button(KIND_RESULT),
+    )
+    return EveningSend(
+        step,
+        board_text=final_board,
+        board_buttons=_rows([table]) if final_board else [],
+        final_text="\n\n".join(parts),
+        final_buttons=buttons,
+    )
+
+
+class _Row:
+    """Строка матча для ``cap_news``: он читает ``r._mapping`` так же, как у строк SQL."""
+
+    def __init__(self, mapping: dict) -> None:
+        self._mapping = mapping
 
 
 async def _cap_news(session: AsyncSession, player_key: int, rows: list, *, now: datetime, cache: dict) -> list:
@@ -1001,6 +1111,13 @@ async def _mfinal_candidates(session: AsyncSession, *, now: datetime, cache: dic
     return out
 
 
+EVENING_COVERS_OVERTOOK = timedelta(hours=6)
+_EVENING_SENT_SINCE = text("""
+    SELECT DISTINCT player_key FROM hockey_notices
+    WHERE kind = 'evening' AND player_key = ANY(:keys) AND sent_at >= :since
+    """)
+
+
 async def due_notices(session: AsyncSession, *, now: datetime, overtakes: Iterable[Overtake] = ()) -> list[Notice]:
     """Что пора отправить с учётом тишины и дневного бюджета. Ничего не пишет.
 
@@ -1029,8 +1146,19 @@ async def due_notices(session: AsyncSession, *, now: datetime, overtakes: Iterab
         allowed = set(
             (await session.execute(_PREFS_OF, {"keys": list({o.player_key for o in overtakes})})).scalars().all()
         )
+        # «Итог вечера» уже сказал про лиги (PDEC-038, решение 2): «тебя обошли» в те же 6 часов не дублируем.
+        evened = set(
+            (
+                await session.execute(
+                    _EVENING_SENT_SINCE,
+                    {"keys": list({o.player_key for o in overtakes}), "since": now - EVENING_COVERS_OVERTOOK},
+                )
+            )
+            .scalars()
+            .all()
+        )
         for o in overtakes:
-            if o.player_key in allowed:
+            if o.player_key in allowed and o.player_key not in evened:
                 candidates.setdefault(o.player_key, []).append(await _overtook_notice(session, o, now=now))
     for player_key, notices in candidates.items():
         if player_key in spent:
@@ -1087,10 +1215,8 @@ async def _moved_notices(session: AsyncSession, *, now: datetime) -> list[Notice
                 f"{html.escape(club_name(r.home_team))} — {html.escape(club_name(r.away_team))} перенесли на другую неделю, "
                 f"и там твой козырь уже стоит на другом матче, поэтому с этого он снят. Матч теперь {when}."
             )
-        buttons = _rows(
-            list(pick_buttons(r.match_id, r.home_team, r.away_team)),
-            [url_button("Открыть матч", f"{START_PICK}_{r.match_id}")],
-        )
+        # Ход заново — в приложении (там счёт и козырь): одна кнопка на матч, без хода в чате.
+        buttons = _rows([url_button("Сыграть", f"{START_PICK}_{r.match_id}")])
         out.append(Notice(r.kind, r.player_key, r.match_id, body, buttons, preclaimed=True))
     return out
 
@@ -1334,9 +1460,15 @@ async def _journal_refusal(session_factory, notice: Notice, reason: str, *, now:
     )
 
 
-async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, int]:
-    """Сверить места в лигах, занять — закоммитить — отправить — отметить. Каждое сообщение — своя транзакция."""
+async def deliver(
+    session_factory, *, now: datetime, send: Sender, evening_io: EveningIO | None = None
+) -> dict[str, int]:
+    """Сверить места в лигах, занять — закоммитить — отправить — отметить. Каждое сообщение — своя транзакция.
+
+    ``evening_io`` — отправка с номером сообщения и правка для табло вечера; без него табло уходит новыми."""
     counts = {"sent": 0, "failed": 0, "blocked": 0}
+    io = evening_io or evening_io_from(send)
+    evenings: list[Notice] = []  # занятые шаги вечера: шлём после обычных сообщений
     async with session_factory() as session:
         overtakes = await scan_league_ranks(session, now=now)
         await session.commit()
@@ -1349,7 +1481,10 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
             await lock_player(session, notice.player_key)
             admission = await admit(session, kind=notice.kind, player_key=notice.player_key, now=now)
             claimed = True
-            if admission.allowed and not notice.preclaimed:
+            if admission.allowed and notice.evening is not None:
+                claimed = await _claim_evening(session, notice)
+                await session.commit()
+            elif admission.allowed and not notice.preclaimed:
                 claimed = await claim(session, notice)
                 await session.commit()
         if not admission.allowed:
@@ -1358,6 +1493,9 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
             await _journal_refusal(session_factory, notice, admission.reason, now=now)
             continue
         if not claimed:
+            continue
+        if notice.evening is not None:
+            evenings.append(notice)  # табло вечера шлёт ``_deliver_evening`` ниже: там отправка и правка
             continue
         try:
             outcome = _outcome(await send(notice.player_key, notice.text, notice.buttons))
@@ -1380,7 +1518,99 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
             await session.commit()
         name = {SENT: "sent", BLOCKED: "blocked", RETRY: "retry"}.get(outcome, "failed")
         counts[name] = counts.get(name, 0) + 1  # ``retry`` появляется в ответе только когда был
+    for notice in evenings:
+        outcome = await _deliver_evening(session_factory, notice, now=now, io=io)
+        name = {SENT: "sent", BLOCKED: "blocked", RETRY: "retry"}.get(outcome, "failed")
+        counts[name] = counts.get(name, 0) + 1
     return counts
+
+
+KIND_EVENING = "evening"  # «Итог вечера»: строка на игрока и якорный матч вечера — уходит ровно один раз
+
+
+def _evening_claims(notice: Notice) -> list[tuple[int, str]]:
+    from src.application.kk_evening import ACTION_FINAL
+
+    step = notice.evening.step  # type: ignore[union-attr]
+    rows = [(m, KIND_RESULT) for m in step.claim]
+    if step.action == ACTION_FINAL:
+        rows.append((step.anchor_match_id, KIND_EVENING))
+    return rows
+
+
+async def _claim_evening(session: AsyncSession, notice: Notice) -> bool:
+    """Занять итоги матчей шага (и «Итог вечера» у финала). Финал идёт, только если занят сам «Итог вечера»:
+    второй проход его не повторит. Табло и поздний итог — если занят хоть один новый итог."""
+    from src.application.kk_evening import ACTION_FINAL
+
+    step = notice.evening.step  # type: ignore[union-attr]
+    taken: set[tuple[int, str]] = set()
+    for match_id, kind in _evening_claims(notice):
+        params = {"player_key": notice.player_key, "match_id": match_id, "kind": kind}
+        if (await session.execute(_CLAIM, params)).first() is not None:
+            taken.add((match_id, kind))
+    ok = (step.anchor_match_id, KIND_EVENING) in taken if step.action == ACTION_FINAL else bool(taken)
+    if not ok:
+        # Ничего своего не заняли — освобождать нечего, но занятые этим вызовом строки вернём.
+        for match_id, kind in taken:
+            params = {"player_key": notice.player_key, "match_id": match_id, "kind": kind}
+            await session.execute(_RELEASE, params)
+    return ok
+
+
+async def _finish_evening(session_factory, notice: Notice, outcome: str, *, now: datetime) -> None:
+    async with session_factory() as session:
+        for match_id, kind in _evening_claims(notice):
+            params = {"player_key": notice.player_key, "match_id": match_id, "kind": kind}
+            if outcome == RETRY:
+                await session.execute(_RELEASE, params)
+            else:
+                await session.execute(_DONE, {**params, "ok": outcome == SENT, "now": _utc(now)})
+        if outcome == BLOCKED:
+            await mark_blocked(session, notice.player_key, now=now)
+        await session.commit()
+
+
+async def _deliver_evening(session_factory, notice: Notice, *, now: datetime, io: EveningIO) -> str:
+    """Табло: правка, а если не вышло — новое; финал: последняя правка табло и новое «Итог вечера»; поздний итог —
+    новым. Номер нового табло записываем сразу после отправки отдельной транзакцией."""
+    from src.application import kk_evening as ev
+
+    send = notice.evening  # type: ignore[assignment]
+    step = send.step
+    chat = notice.player_key
+    board_id = step.board.message_id if step.board is not None else None
+    try:
+        if step.action == ev.ACTION_BOARD:
+            outcome = GONE
+            if board_id is not None:
+                outcome = await io.edit(chat, board_id, send.board_text or "", send.board_buttons)
+            if outcome in (GONE, FAILED):
+                outcome, message_id = await io.send(chat, send.board_text or "", send.board_buttons)
+                if outcome == SENT:
+                    async with session_factory() as session:
+                        await ev.save_board(session, player_key=chat, day=step.day, message_id=message_id)
+                        await session.commit()
+        else:
+            if step.action == ev.ACTION_FINAL and board_id is not None and send.board_text:
+                await io.edit(chat, board_id, send.board_text, send.board_buttons)  # не вышло — не беда: итог ниже
+            outcome, _ = await io.send(chat, send.final_text or "", send.final_buttons)
+            if outcome == SENT and step.action == ev.ACTION_FINAL:
+                async with session_factory() as session:
+                    await ev.close_board(session, player_key=chat, day=step.day, now=now)
+                    await session.commit()
+    except Exception:  # noqa: BLE001 — сбой одного вечера не роняет остальные
+        logger.warning("kto-kogo evening %s/%s failed", chat, step.day, exc_info=True)
+        outcome = FAILED
+    if outcome == GONE:
+        outcome = BLOCKED
+    key = ("evening", chat, step.day, step.action)
+    if outcome == RETRY and not _attempt(key):
+        outcome = FAILED
+    if outcome != RETRY:
+        _RETRIES.pop(key, None)
+    await _finish_evening(session_factory, notice, outcome, now=now)
+    return outcome
 
 
 # ---------- ход и «Следующий ход» из чата ----------
@@ -1801,7 +2031,90 @@ async def send_via_client_bot(
     return RETRY
 
 
+# Правка табло: Telegram отвечает так, когда сообщение не изменилось или его уже нельзя править.
+_NOT_MODIFIED = "message is not modified"
+_CANT_EDIT = ("message to edit not found", "message can't be edited", "message_id_invalid")
+
+
+def _markup(buttons: list[list[dict]]):
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    return (
+        InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(**b) for b in row] for row in buttons])
+        if buttons
+        else None
+    )
+
+
+async def _bot_call(chat_id: int, call: Callable[[Any], Awaitable[Any]], *, edit: bool = False) -> tuple[str, Any]:
+    """Вызов клиентского бота с той же разметкой исходов, что ``send_via_client_bot``. Для правки «не изменилось» —
+    ``ok``, «нет сообщения / нельзя править» — ``gone`` (шлём новое табло)."""
+    from aiogram.exceptions import (
+        TelegramBadRequest,
+        TelegramForbiddenError,
+        TelegramNetworkError,
+        TelegramRetryAfter,
+        TelegramServerError,
+    )
+
+    bot = await _client_bot()
+    if bot is None:
+        return FAILED, None
+    for attempt in (1, 2):
+        await _throttle()
+        try:
+            return SENT, await call(bot)
+        except TelegramForbiddenError:
+            return BLOCKED, None
+        except TelegramRetryAfter as exc:
+            if attempt == 2 or exc.retry_after > _RETRY_AFTER_CAP_SEC:
+                return RETRY, None
+            await asyncio.sleep(exc.retry_after)
+        except (TimeoutError, TelegramNetworkError, TelegramServerError):
+            logger.info("kto-kogo evening to %s: temporary error", chat_id, exc_info=True)
+            return RETRY, None
+        except TelegramBadRequest as exc:
+            msg = str(exc).lower()
+            if edit and _NOT_MODIFIED in msg:
+                return SENT, None
+            if edit and any(p in msg for p in _CANT_EDIT):
+                return GONE, None
+            if any(p in msg for p in _GONE_PHRASES):
+                return BLOCKED, None
+            logger.info("kto-kogo evening to %s not delivered", chat_id, exc_info=True)
+            return FAILED, None
+        except Exception:  # noqa: BLE001 — прочее постоянное: не повторяем
+            logger.info("kto-kogo evening to %s not delivered", chat_id, exc_info=True)
+            return FAILED, None
+    return RETRY, None
+
+
+async def _send_board_via_client_bot(chat_id: int, body: str, buttons: list[list[dict]]) -> tuple[str, int | None]:
+    outcome, message = await _bot_call(
+        chat_id, lambda bot: bot.send_message(chat_id=int(chat_id), text=body, reply_markup=_markup(buttons))
+    )
+    return outcome, getattr(message, "message_id", None)
+
+
+async def _edit_board_via_client_bot(chat_id: int, message_id: int, body: str, buttons: list[list[dict]]) -> str:
+    outcome, _ = await _bot_call(
+        chat_id,
+        lambda bot: bot.edit_message_text(
+            chat_id=int(chat_id), message_id=int(message_id), text=body, reply_markup=_markup(buttons)
+        ),
+        edit=True,
+    )
+    return outcome
+
+
+CLIENT_EVENING_IO = EveningIO(_send_board_via_client_bot, _edit_board_via_client_bot)
+
+
 __all__ = [
+    "CLIENT_EVENING_IO",
+    "EveningIO",
+    "EveningSend",
+    "KIND_EVENING",
     "BLOCKED",
     "GONE",
     "CB_LEAVE",
