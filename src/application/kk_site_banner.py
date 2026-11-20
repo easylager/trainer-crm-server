@@ -32,13 +32,13 @@ def _rail() -> str:
     return f'<div class="kkb__rail" aria-hidden="true"><div class="kkb__track">{imgs}{imgs}</div></div>'
 
 
-def kk_banner_html(src: str) -> str:
-    """Баннер со ссылкой на ``/kk?from=<src>``; игра выключена — пусто."""
+def kk_banner_html(src: str, *, compact: bool = False) -> str:
+    """Баннер со ссылкой на ``/kk?from=<src>``; игра выключена — пусто. ``compact`` — внутри блока «Хоккей в городе»."""
     if not hockey_event.enabled():
         return ""
     href = f"/kk?from={html.escape(src)}"
     return (
-        f'<a class="kkb" href="{href}" data-kkb-intro aria-label="Игра «КТО КОГО»: угадывай матчи и обыгрывай друзей">'
+        f'<a class="kkb{" kkb--sm" if compact else ""}" href="{href}" data-kkb-intro aria-label="Игра «КТО КОГО»: угадывай матчи и обыгрывай друзей">'
         f"{_rail()}"
         '<span class="kkb__body">'
         '<span class="kkb__brand" aria-hidden="true"><span class="kkb__puck"></span><span class="kkb__tag">КТО КОГО?</span></span>'

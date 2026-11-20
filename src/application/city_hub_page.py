@@ -1716,6 +1716,18 @@ def _b_body(
     matches_block = feed_section(
         view.get("matches"), city_name=str(view["city"]["name"]), base_url=base_url, city_id=city_id
     )
+    # Баннер игры — внутрь «Хоккея в <городе>», компактный и без своего заголовка; нет хоккейного блока — своя секция.
+    kk_banner = ""
+    if "</section>" in matches_block:
+        from src.application.kk_site_banner import kk_banner_html
+
+        inner = kk_banner_html("sitehub", compact=True)
+        if inner:
+            # Секция «Хоккей» без боковых полей (лента карточек во всю ширину): баннеру — свои 16 px.
+            cut = matches_block.rfind("</section>")
+            matches_block = matches_block[:cut] + f'<div class="kkb-wrap">{inner}</div>' + matches_block[cut:]
+    else:
+        kk_banner = _b_kk_banner()
     if variant == VARIANT_ONE and rinks:
         rink = rinks[0]
         rink_name = format_public_name(str(rink.get("name") or ""))
@@ -1823,7 +1835,7 @@ def _b_body(
             render_learn_block(view.get("learn")),
             matches_block,
             routes,
-            _b_kk_banner(),
+            kk_banner,
             rink_list,
             _b_for_you(view),
             empty,
