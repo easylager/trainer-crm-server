@@ -32,6 +32,7 @@ from src.application.hockey_leagues import (
     TooManyLeagues,
     build_terms,
     create_league,
+    delete_league,
     extend_league,
     join_league,
     league_image_key,
@@ -658,6 +659,25 @@ async def delete_client_hockey_league_membership(
         _raise_league(exc)
     await session.commit()
     if result == "deleted":  # лигу удалили вместе с последним участником: картинка больше никому не нужна
+        await release_image(session, image_key)
+    return {"result": result}
+
+
+@router.delete("/client/hockey/leagues/{league_id}")
+async def delete_client_hockey_league(
+    league_id: int,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Удалить лигу для всех — только владелец. С коронами лига уходит в архив без участников."""
+    player_key = client_catalog_telegram_key(principal)
+    image_key = await league_image_key(session, league_id)
+    try:
+        result = await delete_league(session, league_id=league_id, player_key=player_key)
+    except (LookupError, PermissionError) as exc:
+        _raise_league(exc)
+    await session.commit()
+    if result == "deleted":
         await release_image(session, image_key)
     return {"result": result}
 

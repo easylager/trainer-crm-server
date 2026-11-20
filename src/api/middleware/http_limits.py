@@ -197,6 +197,8 @@ def max_body_bytes_for_path(path: str) -> int:
         or normalized.endswith("/trainer/photos")
         or ("/admin/arenas/" in path and normalized.endswith("/photos"))
         or (path.startswith("/api/public/place-suggestions/") and normalized.endswith("/photos"))
+        # KK league cover: client allows ≤5 MB; default 1 MiB was rejecting phone photos (413 / hung proxy).
+        or ("/client/hockey/leagues/" in path and normalized.endswith("/image"))
     ):
         return s.api_max_body_bytes_upload
     return s.api_max_body_bytes_default

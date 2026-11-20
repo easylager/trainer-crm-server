@@ -170,6 +170,31 @@ async def test_stranger_cannot_read_and_owner_leave_moves_then_deletes(app_use_t
 
 
 @pytest.mark.asyncio
+async def test_only_owner_deletes_league_for_everyone(app_use_test_db) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch_client_principal(ME):
+            created = await client.post(
+                "/api/webapp/client/hockey/leagues", json={"name": "Двор", "display_name": "Саша"}
+            )
+            league_id = created.json()["id"]
+            code = _code(created.json()["invite_url"])
+
+        with patch_client_principal(OTHER):
+            await client.post("/api/webapp/client/hockey/leagues/join", json={"code": code, "display_name": "Катя"})
+            denied = await client.delete(f"/api/webapp/client/hockey/leagues/{league_id}")
+            assert denied.status_code == 403
+
+        with patch_client_principal(ME):
+            deleted = await client.delete(f"/api/webapp/client/hockey/leagues/{league_id}")
+            assert deleted.status_code == 200, deleted.text
+            assert deleted.json() == {"result": "deleted"}
+
+        with patch_client_principal(OTHER):
+            missing = await client.get(f"/api/webapp/client/hockey/leagues/{league_id}")
+            assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_league_errors_and_limits(app_use_test_db, monkeypatch: pytest.MonkeyPatch) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with patch_client_principal(ME):

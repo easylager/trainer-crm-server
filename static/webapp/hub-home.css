@@ -381,5 +381,7 @@ body.tg-dark .hw__row:has(a:active) { background: rgba(255, 255, 255, .06); }
 .hn__more { flex: 0 0 auto; min-width: 150px; background: var(--g-dark); color: #fff; }
 .hn__cell--more { flex: 0 0 auto; }
 .hn__more .hn__sub { color: var(--g-on-dark-muted); }
-.hn__more-n { font: 400 30px/1 var(--g-font-display); }
-.hn__more-go { margin-top: 6px; font-size: 14px; font-weight: 700; color: #ffd23f; }
+/* Ячейки ленты тянутся по самой высокой — «ещё» не выше карточки матча: число и подпись в одну строку. */
+.hn__more .hn__what { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: baseline; }
+.hn__more-n { font: 400 24px/1 var(--g-font-display); }
+.hn__more-go { grid-column: 1 / -1; margin-top: 2px; font-size: 14px; font-weight: 700; color: #ffd23f; }
