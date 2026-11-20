@@ -215,7 +215,8 @@ _MOVE = text("""
 _REOPEN_MOVED = text("""
     UPDATE hockey_matches
     SET status = 'scheduled', starts_at = :starts_at, home_team = :home_team, away_team = :away_team,
-        review_reason = NULL, review_alerted_at = NULL, result_probe = NULL, updated_at = :now
+        review_reason = NULL, review_alerted_at = NULL, result_probe = NULL,
+        live_home_score = NULL, live_away_score = NULL, live_at = NULL, updated_at = :now
     WHERE id = :id AND status = 'review'
     """)
 
@@ -340,7 +341,9 @@ async def upsert_calendar_match(session: AsyncSession, page: HcdinamoMatch, *, n
     row = _row(record)
     same = (_utc(row.starts_at), row.home_team, row.away_team) == (params["starts_at"], page.home, page.away)
     if row.status == STATUS_REVIEW and not same and params["starts_at"] > _utc(now):
-        await session.execute(_REOPEN_MOVED, {**params, "id": row.id})
+        reopened = await session.execute(_REOPEN_MOVED, {**params, "id": row.id})
+        if reopened.rowcount != 1:  # админ успел ввести итог или отменить: переносить нечего
+            return "unchanged"
         from src.application.hockey_game import on_match_moved
 
         await on_match_moved(session, match_id=row.id, starts_at=params["starts_at"])
