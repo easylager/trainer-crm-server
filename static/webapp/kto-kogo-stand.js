@@ -105,7 +105,7 @@
       h('div', { class: 'kk-kitlist' }, list.map(function (x) {
         return h('div', { class: 'kk-kitlist__r' }, [
           h('span', { class: 'kk-kitlist__ava' }, [K.kitAva(name, 44, { head: { item: x.id, stat: x.stat, score: x.score }, cls: mine ? '' : 'kk-ava--soft' })]),
-          h('span', { class: 'kk-col' }, [h('span', { class: 'kk-kitlist__t', text: x.full }), h('span', { class: 'kk-kitlist__s', text: x.from + ' · до следующего вечера' })]),
+          h('span', { class: 'kk-col' }, [h('span', { class: 'kk-kitlist__t', text: x.full }), x.joke ? h('span', { class: 'kk-kitlist__j', text: x.joke }) : null, h('span', { class: 'kk-kitlist__s', text: x.from + ' · до следующего вечера' })]),
         ]);
       })),
     ]);

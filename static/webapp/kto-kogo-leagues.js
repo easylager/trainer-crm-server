@@ -33,6 +33,7 @@
     return face ? h('span', { class: 'kk-lface', 'aria-hidden': 'true' }, [photo(face.thumb, 'kk-lface__img')]) : null;
   }
   K.leagueThumb = leagueThumb;
+  K.leagueFace = function (l) { return Id().faceOf(l); };
 
   /** «На что играем: …» — подпись приглушена, текст пользователя только через textContent. */
   function stakeEl(l, cls) {

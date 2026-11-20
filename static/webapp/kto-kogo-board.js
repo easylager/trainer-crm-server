@@ -205,9 +205,58 @@
     ]);
   }
 
+  /**
+   * «Стопка наклеек» в шапке игры: до трёх лиц лиг веером, как наклейки на клюшке, и жёлтая плашка лучшего места.
+   * Тап — прыжок к «Лигам» внизу, список подпрыгивает; лига одна — сразу в неё. Лиг нет — пустое место под наклейку («своя лига»). Пока грузится — ничего.
+   */
+  var STICKER_TILT = [-8, 5, -3];
+  function leagueStack() {
+    var list = state.leagues;
+    if (!list) return null;
+    // Лиг нет — пустое место под наклейку: пунктир, жёлтый «+», подпись. Тап — новая лига.
+    if (!list.length) {
+      return h('button', { type: 'button', class: 'kk-stack kk-stack--new', 'aria-label': 'Создать свою лигу', onclick: function () { K.go('leagueNew', {}); } }, [
+        h('span', { class: 'kk-slot', 'aria-hidden': 'true' }, [h('span', { class: 'kk-slot__plus', text: '+' })]),
+        h('span', { class: 'kk-slot__t', 'aria-hidden': 'true', text: 'своя лига' }),
+      ]);
+    }
+    var only = list.length === 1 ? list[0] : null;
+    var live = list.filter(function (l) { return l.active; });
+    var ranks = (live.length ? live : list).map(function (l) { return l.my_rank; }).filter(Boolean);
+    var best = ranks.length ? Math.min.apply(null, ranks) : null;
+    var face = K.leagueFace || function () { return null; };
+    return h('button', {
+      type: 'button',
+      class: 'kk-stack',
+      'aria-label': (only ? 'Лига «' + (only.name || '') + '»' : 'Мои лиги: ' + list.length) + (best ? ', лучшее место ' + best : ''),
+      // Одна лига — сразу в неё; несколько — прыжок к списку.
+      onclick: only ? function () { K.go('league', { id: only.id }); } : jumpToLeagues,
+    }, [
+      h('span', { class: 'kk-stack__fan', 'aria-hidden': 'true' }, list.slice(0, 3).map(function (l, i) {
+        var f = face(l);
+        return h('span', { class: 'kk-sticker', style: '--kk-tilt:' + STICKER_TILT[i] + 'deg;z-index:' + (3 - i) }, [
+          f ? h('img', { class: 'kk-stk__img', src: f.thumb, alt: '', decoding: 'async', onerror: function (e) { e.target.remove(); } })
+            : h('span', { class: 'kk-stk__t', text: String(l.name || '?').trim().charAt(0).toUpperCase() }),
+        ]);
+      })),
+      best ? h('span', { class: 'kk-stack__rank' + (best === 1 ? ' is-gold' : ''), 'aria-hidden': 'true' }, [best === 1 ? K.crownIcon(12) : null, String(best)]) : null,
+    ]);
+  }
+
+  function jumpToLeagues() {
+    var sec = document.getElementById('kk-leagues');
+    if (!sec) return;
+    K.haptic && K.haptic('light');
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    sec.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    sec.classList.remove('is-bump');
+    void sec.offsetWidth; // перезапуск анимации при повторном тапе
+    sec.classList.add('is-bump');
+  }
+
   function leaguesSection() {
     var list = state.leagues;
-    return h('div', { class: 'kk-sec' }, [
+    return h('div', { class: 'kk-sec kk-leagues', id: 'kk-leagues' }, [
       h('div', { class: 'kk-sec__head' }, [
         h('span', { class: 'kk-lbl', text: 'ЛИГИ' }),
         h('button', { type: 'button', class: 'kk-linkbtn', onclick: function () { K.go('leagueNew', {}); } }, ['+ Создать']),
@@ -243,6 +292,7 @@
         h('main', { class: 'kk-main' }, [
           h('div', { class: 'kk-top' }, [
             brand(),
+            leagueStack(),
             h('button', { type: 'button', class: 'kk-btn kk-btn--alt kk-btn--sm', onclick: function () { K.go('table', {}); }, text: 'Таблица' }),
           ]),
           fanCard(),
@@ -250,9 +300,9 @@
           K.hubCards.pending(),
           K.hubCards.day(),
           state.hubReady && K.matchRows ? K.matchRows.link() : null,
-          K.hubCards.pointsLink(),
           peaksBlock(),
           leaguesSection(),
+          K.hubCards.pointsLink(),
           remindRow(),
           state.kkHidden ? h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: showOnMatches, text: 'Вернуть строку игры на главную' }) : null,
         ]),

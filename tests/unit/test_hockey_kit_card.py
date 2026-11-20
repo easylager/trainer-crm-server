@@ -48,15 +48,15 @@ def test_server_texts_match_the_mini_app_collection() -> None:
     import re
     from pathlib import Path
 
-    from src.application.hockey_league_captain import OUTFIT_JOKES
+    from src.application.hockey_league_captain import OUTFIT_JOKES, OUTFIT_PHRASES
 
     src = Path("static/webapp/kto-kogo-kit.js").read_text(encoding="utf-8")
-    js = dict(re.findall(r"\{ id: '(\w+)', of: '[^']*', name: '[^']*', full: '[^']*', joke: '([^']*)' \}", src))
-    assert js == OUTFIT_JOKES
-    assert all(
-        OUTFIT_WORDS[k][0].lower() == full.lower()
-        for k, full in re.findall(r"id: '(\w+)', of: '[^']*', name: '[^']*', full: '([^']*)'", src)
-    )
+    head = r"\{ id: '(\w+)', as: '([^']*)', (?:asMe: '[^']*', )?of: '[^']*', name: '[^']*', full: '([^']*)', joke: '([^']*)' \}"
+    rows = re.findall(head, src)
+    assert {k: joke for k, _, _, joke in rows} == OUTFIT_JOKES
+    # Заголовок «Саша в маске с трубкой» в Mini App — та же форма, что на картинке для чата.
+    assert {k: phrase for k, phrase, _, _ in rows} == OUTFIT_PHRASES
+    assert all(OUTFIT_WORDS[k][0].lower() == full.lower() for k, _, full, _ in rows)
 
 
 def test_broken_path_does_not_hang() -> None:
