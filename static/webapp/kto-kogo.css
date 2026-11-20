@@ -191,7 +191,7 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-peak.is-gold .kk-peak__n { color: var(--kk-gold-ink); }
 .kk-peak__l { font: 700 14px/1.2 var(--kk-text); overflow-wrap: normal; hyphens: manual; }
 .kk-peak__w { font: 500 13px/1.2 var(--kk-text); color: var(--kk-soft); overflow-wrap: normal; hyphens: manual; }
-.kk-peak__s { font: 500 12px var(--kk-text); color: var(--kk-muted); }
+.kk-peak__s { margin-bottom: 6px; font: 600 13px/1.2 var(--kk-text); color: var(--kk-soft); }
 .kk-day { display: flex; flex-direction: column; gap: 6px; }
 .kk-moved { font: 600 12px/1.3 var(--kk-text); color: var(--kk-muted); }
 .kk-mini--link { width: 100%; background: none; color: var(--kk-muted); height: 44px; font-weight: 500; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
@@ -797,7 +797,8 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-ev__m + .kk-ev__m { border-top: 1px solid var(--kk-chip); }
 .kk-ev__n { width: 22px; height: 22px; border-radius: 50%; background: var(--kk-chip); color: var(--kk-soft); display: flex; align-items: center; justify-content: center; font: 700 12px var(--kk-text); }
 .kk-ev__mt { min-width: 0; overflow-wrap: anywhere; }
-.kk-ev__sc { font: 400 16px var(--kk-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Время и счёт вечера — пропорциональные цифры: табличная «1» у Dela Gothic шире соседей, «11:19» читалось как «1 1:19». */
+.kk-ev__sc { font: 400 16px var(--kk-display); font-variant-numeric: proportional-nums; white-space: nowrap; }
 .kk-ev__foot { margin: -4px 4px 0; font: 500 13px/1.4 var(--kk-text); color: var(--kk-muted); text-align: center; }
 .kk-ev__link { display: inline-flex; align-items: center; min-height: 44px; margin: -12px 0; padding: 0 4px; border: 0; background: none; color: var(--kk-link); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
 

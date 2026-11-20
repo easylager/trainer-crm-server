@@ -765,8 +765,9 @@
   function peakTile(p, crowns) {
     var isMonth = p.period !== 'season';
     var crowned = isMonth && (crowns || []).some(function (c) { return c.kind === 'month' && c.period === p.period && (c.club || null) === (p.club || null); });
-    var note = crowned ? 'корона твоя' : p.rank === 1 ? 'лидируешь' : 'из ' + spaced(p.players);
-    return { rank: String(p.rank), name: p.club ? clubShort(p.club) : 'Все матчи', slice: periodShort(p.period_title), note: note, gold: crowned || p.rank === 1 };
+    // Читается фразой «2-е место из 5 · ноябрь»: голая «2» с «из 5» отдельно была шифром.
+    var note = crowned ? 'корона твоя' : p.rank === 1 ? 'место · лидируешь' : 'место из' + NBSP + spaced(p.players);
+    return { rank: p.rank + '-е', name: p.club ? clubShort(p.club) : 'Все матчи', slice: periodShort(p.period_title), note: note, gold: crowned || p.rank === 1 };
   }
 
   function crownCount(n) {
