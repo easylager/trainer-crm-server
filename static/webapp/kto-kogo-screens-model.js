@@ -1661,50 +1661,89 @@
 
 
   // ---------- «Перед матчем» ----------
+  // Строки «подпись слева — значение справа» в порядке страницы матча на сайте (site_matches_page._before_card):
+  // таблица, форма, прошлая встреча; дальше — игровое: за кого пошли игроки и свои ходы на команды.
 
   var DECIDED = { ot: 'ОТ', so: 'Б' };
+  var DECIDED_LONG = { ot: ' в овертайме', so: ' по буллитам' };
 
   function shortDate(iso) {
     var d = new Date(iso);
     return pad(d.getDate()) + '.' + pad(d.getMonth() + 1);
   }
 
-  /** Чип формы: счёт со стороны команды, цвет — победа или поражение, «ОТ»/«Б» — как решён. */
+  /** Чип формы, как на сайте: «В», «П», «В·ОТ», «П·Б»; победа — заливка. */
   function formChip(f) {
     var mine = f.home ? f.home_score : f.away_score;
     var theirs = f.home ? f.away_score : f.home_score;
-    var how = DECIDED[f.decided_in] || '';
+    var how = DECIDED[f.decided_in];
     return {
       win: !!f.win,
-      text: mine + ':' + theirs + (how ? NBSP + how : ''),
-      label: (f.win ? 'Победа' : 'Поражение') + ' ' + mine + ':' + theirs + (f.win ? ' над ' : ' от ') + clubName(f.opponent) + ', ' + shortDate(f.starts_at),
+      text: (f.win ? 'В' : 'П') + (how ? '·' + how : ''),
+      label: (f.win ? 'Победа ' : 'Поражение ') + mine + ':' + theirs + (DECIDED_LONG[f.decided_in] || '') +
+        (f.win ? ' над ' : ' от ') + clubName(f.opponent) + ', ' + shortDate(f.starts_at),
     };
   }
 
+  function meetingText(g) {
+    var how = DECIDED[g.decided_in];
+    return clubName(g.home_team) + ' — ' + clubName(g.away_team) + ' ' + g.home_score + ':' + g.away_score + (how ? NBSP + how : '');
+  }
+
+  /** «победитель — 3 из 4 · в точку — 1»: те же слова, что в итоге хода (verdict: +50 — «в точку»). */
+  function mineText(x) {
+    var out = 'победитель — ' + x.winner + ' из ' + x.total;
+    if (x.exact > 0) out += ' · в' + NBSP + 'точку — ' + x.exact;
+    return out;
+  }
+
+  /** За кого пошли игроки — только доли; меньше TRIBUNE_MIN ходов — проценты ничего не значат. */
+  function crowdSplit(sides) {
+    var hn = sides && Number(sides.home);
+    var an = sides && Number(sides.away);
+    if (!(hn >= 0) || !(an >= 0) || hn + an < TRIBUNE_MIN) return null;
+    var home = Math.round((100 * hn) / (hn + an));
+    return { home: home, away: 100 - home };
+  }
+
   /**
-   * Ответ /preview → то, что можно нарисовать. Каждая часть необязательна: нет места, формы или встреч —
-   * части просто нет. Нечего показать — null, и блока на экране нет.
+   * Ответ /preview и матч → строки блока. Каждая строка необязательна: чего нет — той строки нет.
+   * Нечего показать — null, и блока на экране нет. ``m`` — матч экрана (имена, ``sides``).
    */
-  function previewView(data, teams) {
-    if (!data || typeof data !== 'object') return null;
+  function previewView(data, m) {
+    data = data && typeof data === 'object' ? data : {};
+    var names = { home: (m && m.home && m.home.name) || '', away: (m && m.away && m.away.name) || '' };
     var rows = [];
     ['home', 'away'].forEach(function (side) {
       var t = data[side];
-      if (!t) return;
-      var place = typeof t.place === 'number' && t.place > 0 ? t.place + '-е место' : null;
-      var form = Array.isArray(t.form) ? t.form.map(formChip) : [];
-      if (!place && !form.length) return;
-      rows.push({ side: side, name: clubName((teams && teams[side]) || ''), place: place, form: form });
+      if (!t || !(typeof t.place === 'number' && t.place > 0)) return;
+      var value = t.place + '-е';
+      if (typeof t.points === 'number') value += ' · ' + t.points + NBSP + Base.plural(t.points, 'очко', 'очка', 'очков');
+      rows.push({ kind: 'kv', label: clubName(names[side]) + ' в таблице', value: value });
     });
-    var meetings = (Array.isArray(data.meetings) ? data.meetings : []).slice(0, 3).map(function (g) {
-      var how = DECIDED[g.decided_in] || '';
-      return {
-        date: shortDate(g.starts_at),
-        text: clubName(g.home_team) + ' ' + g.home_score + ':' + g.away_score + (how ? NBSP + how : '') + ' ' + clubName(g.away_team),
-      };
+    ['home', 'away'].forEach(function (side) {
+      var t = data[side];
+      if (!t || !Array.isArray(t.form) || !t.form.length) return;
+      rows.push({ kind: 'form', label: 'Форма: ' + clubName(names[side]), chips: t.form.map(formChip) });
     });
-    if (!rows.length && !meetings.length) return null;
-    return { teams: rows, meetings: meetings };
+    (Array.isArray(data.meetings) ? data.meetings : []).slice(0, 3).forEach(function (g, i) {
+      rows.push({ kind: 'kv', label: i ? 'Встреча ' + shortDate(g.starts_at) : 'Прошлая встреча', value: meetingText(g) });
+    });
+    var crowd = crowdSplit(m && m.sides);
+    if (crowd) {
+      rows.push({
+        kind: 'crowd',
+        label: 'За кого пошли игроки',
+        home: { name: clubName(names.home), pct: crowd.home },
+        away: { name: clubName(names.away), pct: crowd.away },
+      });
+    }
+    ['home', 'away'].forEach(function (side) {
+      var x = data[side] && data[side].mine;
+      if (!x || !(x.total >= 2)) return;
+      rows.push({ kind: 'kv', label: 'Твои ходы на матчи ' + clubGen(names[side]), value: mineText(x) });
+    });
+    return rows.length ? { rows: rows } : null;
   }
 
   var api = {
