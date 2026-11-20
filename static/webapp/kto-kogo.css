@@ -107,7 +107,25 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--kk-focus); 
 .kk-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .kk-two--flex { grid-template-columns: minmax(0, 1fr) auto; }
 .kk-two--cta { margin-top: 4px; }
-.kk-side { height: 56px; border-radius: 16px; border: 0; font: 700 17px var(--kk-text); background: var(--kk-chip); color: var(--kk-ink); padding: 0 6px; overflow-wrap: anywhere; }
+.kk-side { position: relative; min-height: 132px; border-radius: 18px; border: 2px solid var(--kk-line); background: var(--kk-bg); color: var(--kk-ink); padding: 12px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; font: 800 15px/1.2 var(--kk-text); text-align: center; overflow-wrap: anywhere; transition: transform 0.16s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.16s ease-out, border-color 0.16s ease-out; }
+body.kk-dark .kk .kk-side { background: #1b2430; border-color: var(--kk-chip); }
+.kk .kk-side.is-on, body.kk-dark .kk .kk-side.is-on { border-color: var(--kk-gold); box-shadow: 0 6px 18px rgba(13, 20, 36, 0.28); }
+.kk-side.is-other { opacity: 0.6; }
+.kk-side:active { transform: scale(0.97); }
+.kk-side.is-pop { animation: kk-side-pop 0.16s cubic-bezier(0.3, 1.4, 0.5, 1); }
+@keyframes kk-side-pop { from { transform: scale(0.94); } to { transform: scale(1); } }
+.kk-side .kk-disc { box-shadow: 0 1px 3px rgba(13, 20, 36, 0.15); }
+.kk-side__ok { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; background: var(--kk-gold); color: var(--kk-on-gold); display: flex; align-items: center; justify-content: center; }
+.kk-side__ok svg { stroke-width: 3.2; }
+@media (prefers-reduced-motion: reduce) { .kk-side { transition: none; } .kk-side:active { transform: none; } .kk-side.is-pop { animation: none; } }
+.kk .kk-mini--line { min-height: 46px; height: auto; background: none; border: 1.5px solid var(--kk-line); font-weight: 700; padding: 6px 8px; }
+body.kk-dark .kk .kk-mini--line { border-color: var(--kk-chip); }
+.kk .kk-mini--line.is-gold { background: var(--kk-gold); border-color: var(--kk-gold); color: var(--kk-on-gold); }
+.kk-extras.is-wait .kk-mini { opacity: 0.45; }
+.kk-sub--c { text-align: center; }
+.kk-faces { display: inline-flex; flex: none; }
+.kk-faces .kk-ava { border: 2px solid var(--kk-card); box-sizing: border-box; }
+.kk-faces .kk-ava + .kk-ava { margin-left: -8px; background: var(--kk-chip); color: var(--kk-ink); }
 .kk-side.is-on, .kk-pk.is-on { color: #fff; }
 .kk-mini { height: 44px; border-radius: 14px; border: 0; background: var(--kk-chip); color: var(--kk-ink); font: 600 14px var(--kk-text); display: flex; align-items: center; justify-content: center; gap: 6px; }
 .kk-mini.is-gold { background: var(--kk-gold); color: var(--kk-on-gold); }
