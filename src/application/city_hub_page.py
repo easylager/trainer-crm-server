@@ -1305,7 +1305,7 @@ def _b_routes(view: Mapping[str, Any]) -> str:
             ))
         if hockey_event.enabled():
             rows.append(_b_route_row(
-                href="/kk", icon="ticket", title="Игра «КТО КОГО»", line="Угадай победителя хоккейного матча",
+                href="/kk?from=sitehub", icon="ticket", title="Игра «КТО КОГО»", line="Угадай победителя хоккейного матча",
             ))
     service_n = int(view.get("service_count") or 0)
     if service_n:

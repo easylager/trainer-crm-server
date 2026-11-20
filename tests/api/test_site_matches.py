@@ -101,7 +101,7 @@ async def test_dinamo_home_schedule_is_canonical_and_excludes_away_matches(app_u
     assert f'<link rel="canonical" href="https://glide.example{path}"' in r.text
     assert 'content="index, follow"' in r.text
     assert f'href="{home_path}"' in r.text and "Победителей, 111" in r.text
-    assert "https://hcdinamo.by/tickets/?match=12345" in r.text and 'href="/kk"' in r.text
+    assert "https://hcdinamo.by/tickets/?match=12345" in r.text and 'href="/kk?from=sitedinamo"' in r.text
     assert f'href="/m/{away}-' not in r.text and f'href="/m/{cancelled}-' not in r.text
     assert f'href="{path}"' in (await _get("/hockey")).text
     assert f'href="{path}"' in (await _get("/c/minsk")).text
@@ -358,7 +358,7 @@ async def test_list_own_city_first_chip_filter_noindex(app_use_test_db, db_sessi
     assert (await _path(db_session, gr)) in filtered and (await _path(db_session, mn)) not in filtered and "noindex" in filtered
     plain = (await _get("/hockey")).text
     assert "index, follow" in plain and not has_forbidden_words(plain)
-    assert 'href="/kk"' in plain
+    assert 'href="/kk?from=sitematches"' in plain
 
 
 @pytest.mark.asyncio
@@ -563,7 +563,7 @@ async def test_arena_page_has_match_row_and_here_block_and_honest_note(app_use_t
     assert "Матчи здесь" in html and "m-ticket" in html and "вечернего катания нет" in html
     assert (await _path(db_session, mid)) in html
     assert 'href="/hockey">Расписание хоккейных матчей</a>' in html
-    assert 'href="/kk">Игра «КТО КОГО»</a>' in html
+    assert 'href="/kk?from=siteplace">Игра «КТО КОГО»</a>' in html
     # Сеанс вечером → строка нейтральная, ничего о катании не утверждает
     await db_session.execute(
         text("""INSERT INTO ice_sessions (arena_id, kind, status, starts_at_utc, ends_at_utc, starts_at_local, ends_at_local,

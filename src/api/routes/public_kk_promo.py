@@ -285,8 +285,13 @@ def _landing_body(go: str, *, show_matches: bool) -> str:
 
 
 @router.get("/kk", include_in_schema=False)
-async def get_kk_promo_page(request: Request, s: str | None = Query(None, max_length=64)) -> HTMLResponse:
-    src = clean_src(s) or DEFAULT_SRC
+async def get_kk_promo_page(
+    request: Request,
+    s: str | None = Query(None, max_length=64),
+    from_: str | None = Query(None, alias="from", max_length=16),
+) -> HTMLResponse:
+    # ``?s=`` — рекламная ссылка (сразу в игру); ``?from=`` — место на самом сайте: лендинг тот же, метка своя.
+    src = clean_src(s) or clean_src(from_) or DEFAULT_SRC
     cfg = Settings()  # type: ignore[call-arg]
     base = (cfg.webapp_base_url or "").strip().rstrip("/")
     go = public_telegram_entry_link(cfg, start_param=f"kks_{src}") or f"{base}/webapp/kto-kogo?src={src}"
