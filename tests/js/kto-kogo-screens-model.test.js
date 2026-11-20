@@ -50,13 +50,13 @@ describe('«Если угадаешь»', () => {
     ]);
     assert.deepEqual(lines.map((l) => l.icon), ['crown', 'up', 'duel']);
     assert.equal(lines[0].gold, true);
-    assert.equal(lines[0].text, 'Юность · ноябрь: 3-е → около 1-го · корона');
-    assert.equal(lines[1].text, 'Все · сезон: 214-е → около 190-го');
-    assert.equal(lines[2].text, 'Лига «Офис»: 3-е → около 2-го');
+    assert.equal(lines[0].text, 'Можешь выйти на 1-е место в таблице Юности за ноябрь — и взять корону');
+    assert.equal(lines[1].text, 'Можешь подняться на 190-е место в общей таблице за сезон (сейчас 214-е)');
+    assert.equal(lines[2].text, 'Можешь подняться на 2-е место в лиге «Офис» (сейчас 3-е)');
   });
   it('новичок без места: будущее место', () => {
     const [l] = S.stakeLines([{ kind: 'slice', club: 'Лида', period_title: 'ноябрь', rank_now: null, rank_if: 2, crown: false }]);
-    assert.equal(l.text, 'Лида · ноябрь: будешь на 2-м месте');
+    assert.equal(l.text, 'Займёшь 2-е место в таблице Лиды за ноябрь');
   });
 });
 
