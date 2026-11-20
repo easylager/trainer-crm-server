@@ -217,6 +217,11 @@ body.kk-dark .kk .kk-btn[aria-disabled='true'], body.kk-dark .kk .kk-btn:disable
 .kk-cnt { font: 600 13px var(--kk-text); color: var(--kk-gold-ink); }
 .kk-cnt.is-done { color: var(--kk-soft); }
 .kk-linkbtn { min-height: 44px; border: 0; background: none; font: 600 14px var(--kk-text); color: var(--kk-gold-ink); padding: 0 4px; }
+.kk-linkbtn--muted { color: var(--kk-soft); }
+/* «Лига готова»: колонка кнопок одной ширины, выход — тихой ссылкой под ними. */
+.kk-created-cta { display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; max-width: 340px; margin-top: 6px; }
+.kk-created-cta .kk-linkbtn { align-self: center; }
+.kk-created-sub { max-width: 34ch; }
 .kk-lg { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 14px; border-radius: 16px; border: 0; background: var(--kk-card); color: var(--kk-ink); text-align: left; }
 .kk-lg.is-ended { opacity: 0.7; }
 .kk-lg__r { display: flex; align-items: center; gap: 4px; font: 400 17px var(--kk-display); }

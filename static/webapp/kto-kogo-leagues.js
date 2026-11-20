@@ -340,12 +340,15 @@
             : h('span', { class: 'kk-badge-big', 'aria-hidden': 'true', text: M.firstChars(l.name, 2).toUpperCase() }),
           h('h2', { class: 'kk-h2 kk-h2--xl', text: 'Лига «' + l.name + '» готова' }),
           stakeEl(l, 'kk-stake kk-stake--c'),
-          h('span', { class: 'kk-sub', text: S.leagueSub(l) + '. Пока в лиге только ты — позови своих, очки за матчи пойдут и сюда, и в общую таблицу.' }),
+          h('span', { class: 'kk-sub kk-created-sub', text: S.leagueSub(l) + '. Пока в лиге только ты — позови своих.' }),
           state.createdNote ? h('span', { class: 'kk-tx kk-tx--warn', role: 'status', text: state.createdNote }) : null,
           l.few_matches ? h('span', { class: 'kk-tx kk-tx--warn', text: 'Матчей до конца лиги мало — таблица будет почти пустой.' }) : null,
-          h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l)); }, text: 'Позвать в Telegram' }),
-          h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.copy(l.invite_url); }, text: 'Скопировать ссылку' }),
-          h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.reset('hub', {}); }, text: 'К игре' }),
+          // Две кнопки одной ширины и тихий выход: раньше три кнопки разной ширины стояли рваным столбиком.
+          h('div', { class: 'kk-created-cta' }, [
+            h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.shareCard({ card: 'league', league_id: l.id }, l.invite_url, S.inviteText(l.name, l)); }, text: 'Позвать друзей' }),
+            h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.copy(l.invite_url); }, text: 'Скопировать ссылку' }),
+            h('button', { type: 'button', class: 'kk-linkbtn kk-linkbtn--muted', onclick: function () { K.reset('hub', {}); }, text: 'К игре' }),
+          ]),
         ]),
       ];
     },
