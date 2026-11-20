@@ -121,7 +121,7 @@ body.kk-dark .kk .kk-side { background: #1b2430; border-color: var(--kk-chip); }
 .kk .kk-mini--line { min-height: 46px; height: auto; background: none; border: 1.5px solid var(--kk-line); font-weight: 700; padding: 6px 8px; }
 body.kk-dark .kk .kk-mini--line { border-color: var(--kk-chip); }
 .kk .kk-mini--line.is-gold { background: var(--kk-gold); border-color: var(--kk-gold); color: var(--kk-on-gold); }
-.kk-extras.is-wait .kk-mini { opacity: 0.45; }
+.kk-extras .kk-mini.is-wait { opacity: 0.45; }
 .kk-sub--c { text-align: center; }
 .kk-faces { display: inline-flex; flex: none; }
 .kk-faces .kk-ava { border: 2px solid var(--kk-card); box-sizing: border-box; }

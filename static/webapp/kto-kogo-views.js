@@ -170,16 +170,17 @@
           ]),
           h('div', { class: 'kk-two' }, [sideButton(m, 'home', colors, mine), sideButton(m, 'away', colors, mine)]),
           K.coin ? K.coin.panel(m) : null,
-          h('div', { class: 'kk-two kk-extras' + (mine ? '' : ' is-wait') }, [
+          // Счёт можно угадать и без выбора стороны (сторону задаёт сам счёт); ждёт хода только козырь.
+          h('div', { class: 'kk-two kk-extras' }, [
             h('button', { type: 'button', class: 'kk-mini kk-mini--line', onclick: function () { openScore(m); } }, [icon(I.hash, 16), mine && mine.home_score != null ? 'Счёт ' + mine.home_score + ':' + mine.away_score : 'Точный счёт']),
             h('button', {
               type: 'button',
-              class: 'kk-mini kk-mini--line' + (trump.on ? ' is-gold' : '') + (trump.usable ? '' : ' is-off'),
+              class: 'kk-mini kk-mini--line' + (trump.on ? ' is-gold' : '') + (trump.usable ? '' : ' is-off') + (mine ? '' : ' is-wait'),
               'aria-pressed': trump.on ? 'true' : 'false',
               onclick: function () { K.toggleTrump(m); },
-            }, [icon(I.bolt, 16), 'Козырь']),
+            }, [icon(I.bolt, 16), trump.label]),
           ]),
-          mine ? null : h('span', { class: 'kk-sub kk-sub--tight kk-sub--c', text: 'Счёт и козырь — после выбора команды' }),
+          mine ? null : h('span', { class: 'kk-sub kk-sub--tight kk-sub--c', text: 'Козырь — после выбора команды' }),
           mine && trumpHint ? h('span', { class: 'kk-sub kk-sub--tight', text: trumpHint }) : null,
           stakesBlock(m),
           friendsBlock(m),
