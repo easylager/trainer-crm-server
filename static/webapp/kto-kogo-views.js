@@ -354,7 +354,11 @@
   function nextCard(m) {
     var nm = S.nextMatch(state.matches, m);
     if (!nm) {
-      return K.emptyCard('СЛЕДУЮЩИЙ ХОД', 'Новые матчи появятся, как только их поставят в календарь.');
+      return K.emptyCard('СЛЕДУЮЩИЙ ХОД', 'Новые матчи появятся, как только их поставят в календарь.',
+    h('div', { class: 'kk-two' }, [
+      h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('leagueNew', {}); }, text: 'Создать лигу' }),
+      h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('stand', {}); }, text: 'Мой стенд' }),
+    ]));
     }
     var colors = M.pairColors(nm.home, nm.away);
     var mine = nm.my_pick;
