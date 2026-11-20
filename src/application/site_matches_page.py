@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import html as html_lib
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from itertools import groupby
 from pathlib import Path
 from typing import Any, Mapping
@@ -19,10 +19,12 @@ from src.application.catalog_icons import icon_svg
 from src.application.ice_city_day import city_slug, plural_ru
 from src.application.place_links import (
     match_start_param,
+    pick_start_param,
     public_telegram_cta_url,
     telegram_bot_start_link,
 )
 from src.application.site_matches import (
+    pick_open,
     DINAMO_ARENA,
     DINAMO_HOME_PATH,
     LEAGUE_EXTRALIGA,
@@ -88,6 +90,62 @@ def game_link(base_url: str, match_id: int, *, city_id: int | None = None) -> st
 
 def ics_path(card: Mapping[str, Any]) -> str:
     return f"{card['path']}/calendar.ics"
+
+
+def pick_link(base_url: str, card: Mapping[str, Any], side: str, *, src: str, surface: str, city_id: int | None = None) -> str | None:
+    """Кнопка команды: клик пишется как ``public_telegram_cta``, бот открывает игру и сразу делает ход."""
+    param = pick_start_param(int(card["id"]), side, src)
+    proxied = public_telegram_cta_url(base_url, start_param=param, surface=surface, city_id=city_id)
+    if proxied:
+        return proxied
+    return telegram_bot_start_link(client_bot_username=Settings().client_bot_username, start_param=param)  # type: ignore[call-arg]
+
+
+def pick_when(card: Mapping[str, Any], *, now: datetime | None = None) -> str:
+    """«СЕГОДНЯ · 19:00 · МИНСК-АРЕНА» над вопросом."""
+    today = local(now or datetime.now(timezone.utc)).date()
+    day = card["day"]
+    label = "Сегодня" if day == today else "Завтра" if (day - today).days == 1 else f"{day.day} {_months(day.month)}"
+    return " · ".join(bit for bit in (label, card["time"], card.get("arena") or "") if bit).upper()
+
+
+def pick_block(
+    card: Mapping[str, Any],
+    *,
+    base_url: str,
+    src: str,
+    surface: str,
+    city_id: int | None = None,
+    dark: bool = False,
+    compact: bool = False,
+    when: str = "",
+    title: str = "Кто победит?",
+    note: str = "",
+    foot_link: str = "",
+) -> str:
+    """«Кто победит?» с двумя кнопками-командами (холст ULKL8uBbgyZBEznFLqgah2): ход в игру с сайта в один тап."""
+    buttons = []
+    for side in ("home", "away"):
+        team = card[side]
+        href = pick_link(base_url, card, side, src=src, surface=surface, city_id=city_id)
+        if not href:
+            return ""
+        # В узкой кнопке главной «Динамо-Минск» не влезает в строку: там просто «Динамо», как на холсте.
+        name = team["name"].split("-")[0] if compact else team["name"]
+        buttons.append(
+            f'<a class="m-pick__team" href="{_e(href)}" rel="nofollow">'
+            f'{logo(team, "pick")}<span>{_e(name)}</span></a>'
+        )
+    klass = "m-pick" + (" m-pick--dark" if dark else "") + (" m-pick--compact" if compact else "")
+    when_html = f'<span class="m-pick__when">{_e(when)}</span>' if when else ""
+    note_html = f'<p class="m-pick__note">{_e(note)}</p>' if note else ""
+    foot_text = "" if compact else ("Тап — ход в Telegram, бесплатно" if dark else "Бесплатно · очки после матча")
+    foot = f'<div class="m-pick__foot"><span>{_e(foot_text)}</span>{foot_link}</div>'
+    return (
+        f'<section class="{klass}" aria-label="Кто кого"><span class="m-sticker">КТО КОГО?</span>'
+        f'<div class="m-pick__head">{when_html}<h2 class="m-pick__title">{_e(title)}</h2>{note_html}</div>'
+        f'<div class="m-pick__teams">{"".join(buttons)}</div>{foot}</section>'
+    )
 
 
 # ── Кирпичики ────────────────────────────────────────────────────────
@@ -360,9 +418,17 @@ def render_matches_list(
     first_line = "Экстралига и Динамо-Минск"
     if data["club"]:
         first_line = "Все матчи клуба — дома и на выезде"
+    pick = data.get("pick") if hockey_event.enabled() else None
+    pick_html = (
+        pick_block(
+            pick, base_url=base_url, src="sitehockey", surface="matches_list", city_id=city_id, dark=True,
+            when=pick_when(pick), foot_link='<a class="m-pick__link" href="/kk?from=sitematches">Как играть</a>',
+        )
+        if pick else ""
+    )
     game_link_html = (
         '<a class="m-text-link" href="/kk?from=sitematches">Угадай победителя в игре «КТО КОГО»</a>'
-        if hockey_event.enabled() else ""
+        if hockey_event.enabled() and not pick_html else ""
     )
     dinamo_link_html = (
         f'<a class="m-text-link" href="{DINAMO_HOME_PATH}">Домашние матчи «Динамо-Минск»</a>'
@@ -372,6 +438,7 @@ def render_matches_list(
         f'<div class="m-top">{back}<h1 class="m-title">Хоккей</h1><p class="m-lead">{_e(first_line)}</p>'
         f'<nav class="m-chips" aria-label="Клуб">{"".join(chips)}</nav>'
         f'<div class="m-links">{dinamo_link_html}{game_link_html}</div></div>'
+        + pick_html
         + (f'<p class="m-empty">{_e(text)}</p>' if text else "")
         + f'<div class="m-days">{days}</div>'
     )
@@ -666,6 +733,14 @@ def _game_card(data: Mapping[str, Any], *, base_url: str, city_id: int | None) -
     if not game:
         return ""
     m = data["match"]
+    if game["kind"] == "game" and pick_open(m, now=datetime.now(timezone.utc)):
+        block = pick_block(
+            m, base_url=base_url, src="sitematch", surface=MATCH_SURFACE, city_id=city_id,
+            note="Тапни за команду — ход сразу в игре в Telegram.",
+            foot_link='<a class="m-pick__link" href="/kk?from=sitematch">Как играть</a>' if hockey_event.enabled() else "",
+        )
+        if block:
+            return block
     link = game_link(base_url, m["id"], city_id=city_id)
     if game["kind"] == "soon":
         head, sub, cta = "Игра в Экстралиге скоро появится на сайте", "Как откроем, напишем в Telegram.", "Напомнить в Telegram"

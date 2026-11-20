@@ -1056,7 +1056,23 @@ async def load_catalog_home_view(
         },
         "trainers": trainers,
         "shop_count": shop_count,
+        "kk_pick": await _kk_pick(session, now=now),
     }
+
+
+async def _kk_pick(session: AsyncSession, *, now: datetime) -> dict[str, Any] | None:
+    """Ближайший матч Динамо для блока «Хоккей» (ход в «КТО КОГО» с главной); сбой не ломает главную."""
+    from src.application import hockey_event
+    from src.application.site_matches import next_pick_card
+
+    if not hockey_event.enabled():
+        return None
+    try:
+        async with session.begin_nested():
+            return await next_pick_card(session, now=now)
+    except Exception:  # noqa: BLE001
+        _log.warning("home: kk pick card failed", exc_info=True)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1421,6 +1437,26 @@ def catalog_home_search_description(cities: list[Mapping[str, Any]]) -> str:
     return f"{head} {listed} — цены, адреса, телефоны катков."
 
 
+def _b_kk_pick(card: Mapping[str, Any] | None, *, canonical_url: str) -> str:
+    """Секция «Хоккей» после городов: матч Динамо в ближайшие три дня и две кнопки хода (холст ULKL8uBbgyZBEznFLqgah2)."""
+    if not card:
+        return ""
+    from urllib.parse import urlsplit
+
+    from src.application.site_matches_page import pick_block, pick_when
+
+    parts = urlsplit(canonical_url)
+    base_url = f"{parts.scheme}://{parts.netloc}" if parts.netloc else ""
+    title = f"{card['home']['name']} — {card['away']['name']}. Кто победит?"
+    block = pick_block(
+        card, base_url=base_url, src="sitehome", surface="catalog_home", dark=True, compact=True,
+        when=pick_when(card), title=title, foot_link='<a class="m-pick__link" href="/hockey">Все матчи и билеты ›</a>',
+    )
+    if not block:
+        return ""
+    return f'<section class="b-sec" id="hockey"><div class="b-sec__head"><h2 class="b-h2">Хоккей</h2></div>{block}</section>'
+
+
 def render_catalog_home_page(
     view: Mapping[str, Any],
     *,
@@ -1533,7 +1569,7 @@ def render_catalog_home_page(
         "__WHEN__": _b_when_nav(view),
         "__HERO_CITY__": _b_home_city_card(user_city, when_key=when_key),
         "__MAP__": map_html,
-        "__CITIES__": cities_html,
+        "__CITIES__": cities_html + _b_kk_pick(view.get("kk_pick"), canonical_url=canonical_url),
         "__CTA__": "",
         "__B_PRESS_SCRIPT__": b_press_script_html(),
         "__WHEN_SWAP_SCRIPT__": when_swap_script_html(),

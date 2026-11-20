@@ -229,6 +229,15 @@ def place_start_param(arena_id: int, session_id: int | None = None) -> str:
     return param
 
 
+#: ``kkn_<матч>_<h|a>_<метка>`` — ход за сторону с сайта: тот же ход, что из кнопки напоминания, плюс метка места.
+PICK_START_PREFIX = "kkn_"
+
+
+def pick_start_param(match_id: int, side: str, src: str) -> str:
+    """``kkn_394_h_sitematch``: Mini App сразу делает ход и считает заход по метке ``src``."""
+    return f"{PICK_START_PREFIX}{int(match_id)}_{'h' if side == 'home' else 'a'}_{src}"
+
+
 def match_start_param(match_id: int, company_code: str | None = None) -> str:
     """``kkm_12`` или ``kkm_12_k3x9abcd`` — страница домашнего матча, из приглашения — с кодом компании."""
     param = f"{MATCH_START_PREFIX}{int(match_id)}"

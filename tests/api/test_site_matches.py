@@ -516,7 +516,10 @@ async def test_dinamo_away_match_page_is_honest_and_complete(app_use_test_db, db
     html = r.text
     assert "КАК ДОБРАТЬСЯ" not in html and "Минск-Арена" not in html and "Билеты" not in html
     assert "ВЫЕЗД" in html and "Трансляция и протокол" in html and "hcdinamo.by/matches/4242/" in html
-    assert f"startapp=mbell_{away}" in html and f"startapp=kkm_{away}" in html
+    assert f"startapp=mbell_{away}" in html
+    # До матча вместо одной кнопки «Угадать» — две кнопки-команды: ход сразу, с меткой места.
+    assert f"startapp=kkn_{away}_h_sitematch" in html and f"startapp=kkn_{away}_a_sitematch" in html
+    assert "Кто победит?" in html and f"startapp=kkm_{away}" not in html
     assert "Все матчи · Динамо-Минск" in html and "/hockey?club=dinamo-minsk" in html
     ld = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.S).group(1).replace("\\u003c", "<"))
     assert "location" not in ld and "offers" not in ld
@@ -858,3 +861,17 @@ async def test_bell_result_is_not_sent_to_a_player_whose_game_move_gets_its_own_
     )
     notices = await match_bells.due_notices(db_session, now=NOW)
     assert sorted(n.telegram_id for n in notices if n.kind == match_bells.KIND_RESULT) == [plain, muted]
+
+
+@pytest.mark.asyncio
+async def test_hockey_list_puts_the_next_dinamo_match_pick_on_top(app_use_test_db, db_session, monkeypatch):
+    """/hockey: ближайший матч Динамо — тёмная карточка с ходом в игру вместо текстовой ссылки."""
+    monkeypatch.setenv("HOCKEY_MATCHES_ENABLED", "1")
+    await _world(db_session)
+    home, away, _ = await _dinamo_games(db_session)
+    html = (await _get("/hockey")).text
+    first = min(home, away)
+    assert "m-pick--dark" in html and "_sitehockey" in html
+    assert re.search(r"startapp=kkn_\d+_h_sitehockey", html) and re.search(r"startapp=kkn_\d+_a_sitehockey", html)
+    assert "Угадай победителя в игре" not in html
+    assert first

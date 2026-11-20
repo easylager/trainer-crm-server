@@ -331,6 +331,9 @@ describe('«Кто кого» из сообщений бота (TASK-335)', () =
     assert.deepEqual(G.deepLinkTarget('kkn_42_h'), { key: 'kto-kogo', path: 'kto-kogo?pick=42&side=home' });
     assert.deepEqual(G.deepLinkTarget('kkn_42_a'), { key: 'kto-kogo', path: 'kto-kogo?pick=42&side=away' });
     assert.deepEqual(G.deepLinkTarget('kkn_42'), { key: 'kto-kogo', path: 'kto-kogo' });
+    // Ход с сайта: метка места уходит в заход игры.
+    assert.deepEqual(G.deepLinkTarget('kkn_42_h_sitematch'), { key: 'kto-kogo', path: 'kto-kogo?pick=42&side=home&src=sitematch' });
+    assert.equal(G.deepLinkTarget('kkn_42_h_x'), null);
     assert.deepEqual(G.deepLinkTarget('kkmo_7'), { key: 'kto-kogo', path: 'kto-kogo?month=7' });
     // «Вечер в лиге» (TASK-431): kkv_<лига>_<ГГГГММДД>.
     assert.deepEqual(G.deepLinkTarget('kkv_12_20261118'), { key: 'kto-kogo', path: 'kto-kogo?league=12&day=2026-11-18' });

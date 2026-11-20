@@ -158,9 +158,13 @@
     }
     // Сообщения бота «Кто кого» (TASK-335): kkn[_<матч>[_h|_a]] — к матчу или сразу ход за сторону,
     // kkmo_<гонка> — итоги месяца, kkoff — выключить напоминания.
-    var kkPick = /^kkn(?:_([1-9][0-9]*)(?:_([ha]))?)?$/.exec(sp);
+    // kkn_<матч>_<h|a>_<метка> — тот же ход с сайта: метка места уходит в заход и первый ход.
+    var kkPick = /^kkn(?:_([1-9][0-9]*)(?:_([ha])(?:_([A-Za-z0-9]{2,16}))?)?)?$/.exec(sp);
     if (kkPick) {
-      if (kkPick[2]) return { key: 'kto-kogo', path: 'kto-kogo?pick=' + kkPick[1] + '&side=' + (kkPick[2] === 'h' ? 'home' : 'away') };
+      if (kkPick[2]) {
+        var pickPath = 'kto-kogo?pick=' + kkPick[1] + '&side=' + (kkPick[2] === 'h' ? 'home' : 'away');
+        return { key: 'kto-kogo', path: pickPath + (kkPick[3] ? '&src=' + kkPick[3].toLowerCase() : '') };
+      }
       return { key: 'kto-kogo', path: 'kto-kogo' };
     }
     // «Собрать лигу» из еженедельного приглашения (TASK-431): kkg_<метка> — экран «Лига готова» и метка входа.

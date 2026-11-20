@@ -543,10 +543,40 @@ async def matches_list(
         "total": len(cards),
         "today": today,
         "dinamo_enabled": scope.dinamo,
+        "pick": pick_card([c for c, _mine in cards], now=now, settings=settings),
         # Недели без матчей (пауза лиги): страница не пуста, а честно говорит, когда они снова будут.
         "first_day": first["day"] if first else None,
         "pause": bool(first and (first["day"] - today).days > 7),
     }
+
+
+# Ход с сайта закрывается тогда же, когда в игре (``hockey_game.PICK_CLOSES_BEFORE``); блок гаснет на пять минут раньше,
+# чтобы кэш страницы не отдал кнопку, которая приведёт к «ходы закрыты».
+PICK_BLOCK_CLOSES_BEFORE = timedelta(minutes=6)
+PICK_HOME_AHEAD = timedelta(days=3)
+
+
+def pick_open(card: dict[str, Any], *, now: datetime, settings: Settings | None = None) -> bool:
+    """Можно ли сделать ход на матч прямо с сайта: игра включена для его лиги и до закрытия ходов есть время."""
+    if card["phase"] != PHASE_BEFORE or card["starts_at"] - PICK_BLOCK_CLOSES_BEFORE <= now:
+        return False
+    if card["league"] == LEAGUE_EXTRALIGA:
+        return bool((settings or Settings()).site_matches_game_extraliga)  # type: ignore[call-arg]
+    return True
+
+
+def pick_card(cards: list[dict[str, Any]], *, now: datetime, settings: Settings | None = None) -> dict[str, Any] | None:
+    """Ближайший матч Динамо-Минск, на который ещё можно сходить с сайта: блок «Кто победит?» на /hockey и главной."""
+    for card in sorted(cards, key=lambda c: c["starts_at"]):
+        if DINAMO in (card["home"]["name"], card["away"]["name"]) and pick_open(card, now=now, settings=settings):
+            return card
+    return None
+
+
+async def next_pick_card(session: AsyncSession, *, now: datetime, settings: Settings | None = None) -> dict[str, Any] | None:
+    """Для главной: матч Динамо в ближайшие три дня, иначе ``None`` — блока нет."""
+    pairs = await visible_rows(session, since=now, until=now + PICK_HOME_AHEAD, settings=settings)
+    return pick_card([match_card(r, now=now, arena=a) for r, a in pairs], now=now, settings=settings)
 
 
 async def dinamo_home_schedule(session: AsyncSession, *, now: datetime) -> dict[str, Any]:

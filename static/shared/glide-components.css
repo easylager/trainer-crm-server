@@ -161,3 +161,44 @@
 /* Время крупным шрифтом (Dela Gothic One) — пропорциональные цифры: моноширинная «1»
    у этой гарнитуры шире соседей, и «11:00» читалось как «1 1:00». */
 .b-badge--time { font-variant-numeric: proportional-nums; }
+
+/* «Кто победит?» — ход в «КТО КОГО» с сайта (страница матча, /hockey, главная; холст ULKL8uBbgyZBEznFLqgah2).
+   Самодостаточен: на главной нет matches.css, поэтому стикер и логотипы описаны здесь же. */
+.m-pick {
+  position: relative; display: flex; flex-direction: column; gap: 14px; margin-top: 6px; padding: 18px 16px 16px;
+  border-radius: var(--g-r-card); background: var(--g-surface); border: 1px solid var(--g-line); color: var(--g-ink);
+}
+.m-pick .m-sticker {
+  position: absolute; right: 14px; top: -11px; height: 24px; padding: 0 8px; border-radius: 7px;
+  background: #ffd23f; color: #0d1424; font-family: var(--g-font-display); font-size: 11px; line-height: 24px; transform: rotate(-3deg);
+}
+.m-pick__head { display: flex; flex-direction: column; gap: 4px; }
+.m-pick__when { font-size: 11px; font-weight: 800; letter-spacing: .06em; color: var(--g-accent-ink); }
+.m-pick__title { margin: 0; font-family: var(--g-font-display); font-weight: 400; font-size: 22px; line-height: 1.15; }
+.m-pick__note { margin: 0; font-size: 14px; line-height: 1.4; color: var(--g-ink-2); }
+.m-pick__teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.m-pick__team {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 104px; padding: 8px;
+  border: 1.5px solid var(--g-line-strong); border-radius: var(--g-r-btn); background: var(--g-surface);
+  color: var(--g-ink) !important; font-size: 15px; font-weight: 700; line-height: 1.2; text-align: center; text-decoration: none;
+  transition: border-color .15s ease-out, background-color .15s ease-out;
+}
+.m-pick__team:active { transform: translateY(1px); }
+@media (hover: hover) { .m-pick__team:hover { border-color: var(--g-accent); } }
+.m-pick .m-logo {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px;
+  border-radius: 50%; background: #fff; font-size: 12px; font-weight: 700; color: #2b4fa0;
+}
+.m-pick .m-logo img { width: 40px; height: 40px; object-fit: contain; }
+.m-pick__foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: var(--g-muted); }
+.m-pick__link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; text-decoration: none; color: var(--g-accent-ink) !important; }
+.m-pick--dark { background: var(--g-dark); border-color: var(--g-dark); color: #fff; }
+.m-pick--dark .m-pick__when, .m-pick--dark .m-pick__link { color: var(--g-on-dark-accent) !important; }
+.m-pick--dark .m-pick__note, .m-pick--dark .m-pick__foot { color: var(--g-on-dark-muted); }
+.m-pick--dark .m-pick__team { background: var(--g-dark-2); border-color: var(--g-dark-line); color: #fff !important; }
+.m-pick--compact { gap: 12px; padding: 16px; }
+.m-pick--compact .m-pick__title { font-family: var(--g-font); font-weight: 800; font-size: 17px; }
+.m-pick--compact .m-pick__team { flex-direction: row; min-height: 52px; font-size: 14px; }
+.m-pick--compact .m-logo { width: 30px; height: 30px; }
+.m-pick--compact .m-logo img { width: 24px; height: 24px; }
+@media (prefers-reduced-motion: reduce) { .m-pick__team { transition: none; } .m-pick__team:active { transform: none; } }
