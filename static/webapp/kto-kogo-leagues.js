@@ -48,6 +48,127 @@
   }
 
   /**
+   * Кадр обложки: картинка в шапке лиги — широкая (2:1), в списке и значке — квадрат из её середины.
+   * Двигаешь пальцем, щипком или ползунком приближаешь; «Готово» — JPEG 1200×600. Отмена — `null`.
+   */
+  var COVER_W = 1200;
+  var COVER_H = 600;
+  function cropCover(file) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onerror = function () { URL.revokeObjectURL(url); K.toast('Не получилось открыть фото'); resolve(null); };
+      img.onload = function () { open(); };
+      img.src = url;
+
+      var root, frame, pic, zoom, fw, fh, base, scale = 1, x = 0, y = 0;
+      var pts = {};
+      var pinch = null;
+
+      function clamp() {
+        var w = img.naturalWidth * base * scale;
+        var hh = img.naturalHeight * base * scale;
+        x = Math.min(0, Math.max(fw - w, x));
+        y = Math.min(0, Math.max(fh - hh, y));
+      }
+      function paint() {
+        clamp();
+        pic.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + base * scale + ')';
+      }
+      function zoomTo(next, cx, cy) {
+        next = Math.min(4, Math.max(1, next));
+        var k = next / scale;
+        x = cx - (cx - x) * k;
+        y = cy - (cy - y) * k;
+        scale = next;
+        zoom.value = String(scale);
+        paint();
+      }
+      function local(e) {
+        var r = frame.getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+      }
+      function onDown(e) {
+        frame.setPointerCapture(e.pointerId);
+        pts[e.pointerId] = local(e);
+        var ids = Object.keys(pts);
+        if (ids.length === 2) {
+          var a = pts[ids[0]], b = pts[ids[1]];
+          pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: scale };
+        }
+      }
+      function onMove(e) {
+        if (!pts[e.pointerId]) return;
+        var p = local(e);
+        var ids = Object.keys(pts);
+        if (ids.length === 1) {
+          x += p.x - pts[e.pointerId].x;
+          y += p.y - pts[e.pointerId].y;
+          pts[e.pointerId] = p;
+          paint();
+          return;
+        }
+        pts[e.pointerId] = p;
+        var a = pts[ids[0]], b = pts[ids[1]];
+        if (pinch && pinch.d > 0) zoomTo(pinch.s * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      }
+      function onUp(e) {
+        delete pts[e.pointerId];
+        if (Object.keys(pts).length < 2) pinch = null;
+      }
+      function close(result) {
+        document.removeEventListener('keydown', onKey);
+        root.remove();
+        URL.revokeObjectURL(url);
+        resolve(result);
+      }
+      function onKey(e) { if (e.key === 'Escape') close(null); }
+      function done() {
+        var k = base * scale;
+        var c = document.createElement('canvas');
+        c.width = COVER_W;
+        c.height = COVER_H;
+        var ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, COVER_W, COVER_H); // прозрачный PNG — на белом, как сделал бы сервер
+        ctx.drawImage(img, -x / k, -y / k, fw / k, fh / k, 0, 0, COVER_W, COVER_H);
+        c.toBlob(function (blob) {
+          if (!blob) { K.toast('Не получилось подготовить фото'); return close(null); }
+          close(new File([blob], 'cover.jpg', { type: 'image/jpeg' }));
+        }, 'image/jpeg', 0.88);
+      }
+      function open() {
+        pic = h('img', { class: 'kk-crop__img', src: url, alt: '', draggable: 'false' });
+        frame = h('div', { class: 'kk-crop__frame', role: 'img', 'aria-label': 'Кадр обложки: двигай фото пальцем' }, [pic]);
+        zoom = h('input', { class: 'kk-crop__zoom', type: 'range', min: '1', max: '4', step: '0.01', value: '1', 'aria-label': 'Масштаб' });
+        root = h('div', { class: 'kk-crop', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Обложка лиги' }, [
+          h('p', { class: 'kk-crop__t', text: 'Обложка лиги' }),
+          h('p', { class: 'kk-crop__s', text: 'Так будет в шапке. В списке — середина кадра.' }),
+          frame,
+          zoom,
+          h('div', { class: 'kk-crop__a' }, [
+            h('button', { type: 'button', class: 'kk-btn kk-btn--alt', text: 'Отмена', onclick: function () { close(null); } }),
+            h('button', { type: 'button', class: 'kk-btn kk-btn--gold', text: 'Готово', onclick: done }),
+          ]),
+        ]);
+        document.body.appendChild(root);
+        fw = frame.clientWidth;
+        fh = frame.clientHeight;
+        base = Math.max(fw / img.naturalWidth, fh / img.naturalHeight);
+        x = (fw - img.naturalWidth * base) / 2;
+        y = (fh - img.naturalHeight * base) / 2;
+        paint();
+        frame.addEventListener('pointerdown', onDown);
+        frame.addEventListener('pointermove', onMove);
+        frame.addEventListener('pointerup', onUp);
+        frame.addEventListener('pointercancel', onUp);
+        zoom.addEventListener('input', function () { zoomTo(parseFloat(zoom.value), fw / 2, fh / 2); });
+        document.addEventListener('keydown', onKey);
+      }
+    });
+  }
+
+  /**
    * Поле «Картинка»: настоящий label + input[type=file] (камера и галерея), превью и «Убрать».
    * o: id, src (что показать), alt, error, onFile(file), onRemove (null — убирать нечего).
    */
@@ -67,7 +188,10 @@
               onchange: function (e) {
                 var file = e.target.files && e.target.files[0];
                 e.target.value = '';
-                if (file) o.onFile(file);
+                if (!file) return;
+                // Не тот тип — сразу в поле, пусть покажет ошибку; иначе — кадр под шапку лиги.
+                if (Id().imageError(file) && !/^image\/(jpeg|png|webp)$/i.test(file.type || '')) return o.onFile(file);
+                cropCover(file).then(function (cropped) { if (cropped) o.onFile(cropped); });
               },
             }),
             has ? 'Заменить фото' : 'Выбрать фото',
@@ -1010,6 +1134,7 @@
           h('button', { type: 'button', class: 'kk-pr', onclick: function () { state.sheet = null; K.render(); K.copy(l.invite_url); } }, [h('span', { text: 'Скопировать ссылку' })]),
           !l.is_owner ? h('button', { type: 'button', class: 'kk-pr', onclick: function () { state.sheet = { kind: 'report', error: '', busy: false }; K.render(); } }, [h('span', { text: 'Пожаловаться на лигу' })]) : null,
           h('button', { type: 'button', class: 'kk-pr kk-pr--danger', onclick: function () { state.sheet = { kind: 'leave' }; K.render(); } }, [h('span', { text: 'Выйти из лиги' })]),
+          l.is_owner ? h('button', { type: 'button', class: 'kk-pr kk-pr--danger', onclick: function () { state.sheet = { kind: 'delete', busy: false }; K.render(); } }, [h('span', { text: 'Удалить лигу' })]) : null,
         ]);
       }
       if (s.kind === 'edit') return editSheet(s, a, l);
@@ -1054,6 +1179,32 @@
                 K.reset('hub', {});
               })
               .catch(K.fail);
+          } }),
+        ]);
+      }
+      if (s.kind === 'delete') {
+        var many = (l.items || []).some(function (r) { return !r.is_me; });
+        return K.sheet('Удалить «' + (l.name || '') + '»?', null, [
+          h('span', { class: 'kk-tx', text: (many ? 'Лига исчезнет у всех участников. ' : 'Лига исчезнет. ') + 'Очки останутся в общей таблице, короны — в истории.' }),
+          h('button', { type: 'button', class: 'kk-btn kk-btn--alt', text: 'Не удалять', onclick: K.closeSheet }),
+          h('button', { type: 'button', class: 'kk-btn kk-btn--danger', disabled: s.busy ? 'true' : null, text: s.busy ? 'Удаляем…' : 'Удалить', onclick: function () {
+            var owner = K.current();
+            s.busy = true;
+            K.render();
+            K.api('DELETE', '/client/hockey/leagues/' + a.id)
+              .then(function () {
+                state.leagueTables = {};
+                state.leagues = null;
+                K.haptic('success');
+                if (K.current() !== owner) return;
+                state.sheet = null;
+                K.reset('hub', {});
+                K.toast('Лига удалена');
+              }, function (e) {
+                s.busy = false;
+                K.render();
+                K.toast(e.message);
+              });
           } }),
         ]);
       }

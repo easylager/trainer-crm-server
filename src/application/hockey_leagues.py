@@ -738,6 +738,22 @@ async def leave_league(session: AsyncSession, *, league_id: int, player_key: int
     return "left"
 
 
+_REMOVE_ALL_MEMBERS = text("DELETE FROM hockey_league_members WHERE league_id = :league_id")
+
+
+async def delete_league(session: AsyncSession, *, league_id: int, player_key: int) -> str:
+    """Удалить лигу для всех — только владелец. Без корон лиги нет (``deleted``); с коронами она, как при
+    выходе последнего, уходит в архив без участников (``archived``)."""
+    league = await _member_league(session, league_id, player_key)
+    if league.owner_key != player_key:
+        raise PermissionError(league_id)
+    if (await session.execute(_HAS_CROWNS, {"league_id": league_id})).scalar_one():
+        await session.execute(_REMOVE_ALL_MEMBERS, {"league_id": league_id})
+        return "archived"
+    await session.execute(_DELETE_LEAGUE, {"league_id": league_id})
+    return "deleted"
+
+
 _UNSET: object = object()
 
 

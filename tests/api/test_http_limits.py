@@ -86,6 +86,13 @@ def test_max_body_bytes_for_path():
     assert max_body_bytes_for_path("/api/webapp/admin/arenas/9/photos") >= max_body_bytes_for_path(
         "/api/webapp/admin/arenas/9"
     )
+    # KK league cover upload (JPEG/PNG/WEBP ≤5 MB) must use the upload budget, not the 1 MiB default.
+    assert max_body_bytes_for_path("/api/webapp/client/hockey/leagues/12/image") >= max_body_bytes_for_path(
+        "/api/webapp/client/hockey/leagues/12"
+    )
+    assert max_body_bytes_for_path("/api/webapp/client/hockey/leagues/12/image/") == max_body_bytes_for_path(
+        "/api/webapp/client/hockey/leagues/12/image"
+    )
 
 
 @pytest.mark.asyncio

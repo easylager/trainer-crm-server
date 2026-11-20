@@ -19,6 +19,7 @@ from src.application.hockey_leagues import (
     join_by_code,
     league_preview,
     league_table,
+    delete_league,
     leave_league,
     normalize_code,
     player_leagues,
@@ -264,3 +265,27 @@ async def test_archived_league_is_skipped_by_closing_and_notices(db_session) -> 
     await close_due_races(db_session, now=later)
     assert await scan_league_ranks(db_session, now=league.starts_at + timedelta(hours=1)) == []
     assert (await db_session.execute(text("SELECT COUNT(*) FROM hockey_crowns WHERE league_id = :l"), {"l": league.id})).scalar_one() == 1
+
+
+@pytest.mark.asyncio
+async def test_owner_deletes_league_for_everyone(db_session) -> None:
+    league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
+    await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
+    with pytest.raises(PermissionError):  # участник, но не владелец
+        await delete_league(db_session, league_id=league.id, player_key=KATYA)
+    assert await delete_league(db_session, league_id=league.id, player_key=SASHA) == "deleted"
+    assert await league_preview(db_session, league.invite_code) is None
+    assert await player_leagues(db_session, player_key=KATYA, now=NOW) == []
+    with pytest.raises(LookupError):
+        await delete_league(db_session, league_id=league.id, player_key=SASHA)
+
+
+@pytest.mark.asyncio
+async def test_owner_deletes_league_with_crowns_archives_it(db_session) -> None:
+    league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="ОХМ")
+    await join_by_code(db_session, player_key=KATYA, display_name="Катя", code=league.invite_code)
+    await _crown(db_session, league.id, KATYA)
+    assert await delete_league(db_session, league_id=league.id, player_key=SASHA) == "archived"
+    assert await player_leagues(db_session, player_key=KATYA, now=NOW) == []
+    assert (await db_session.execute(text("SELECT COUNT(*) FROM hockey_crowns WHERE league_id = :l"), {"l": league.id})).scalar_one() == 1
+    assert (await db_session.execute(text("SELECT COUNT(*) FROM hockey_league_members WHERE league_id = :l"), {"l": league.id})).scalar_one() == 0
