@@ -73,7 +73,8 @@
     var sel = cs ? cs.on : mine && mine.side === side;
     var other = !sel && !cs && mine && mine.side !== side;
     var pop = sel && popPick === m.id + ':' + side;
-    if (pop) popPick = null;
+    // Ход не прошёл (матч закрыт, сеть) — карточка не выбрана: пружину гасим, чтобы она не сыграла при следующем выборе.
+    if (popPick === m.id + ':' + side && (pop || !(K.coin && K.coin.busy(m)) && !(m.pickPending > 0))) popPick = null;
     return h('button', {
       type: 'button',
       class: 'kk-side' + (sel ? ' is-on' : '') + (other ? ' is-other' : '') + (pop ? ' is-pop' : '') + (cs ? cs.cls : ''),

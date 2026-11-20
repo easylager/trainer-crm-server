@@ -429,6 +429,7 @@
   if (document.addEventListener) document.addEventListener('click', function (e) { lastTap = { el: e.target, t: Date.now() }; }, true);
   var vtNamed = [];
   var vtSeq = 0;
+  var vtPending = false;
 
   function reducedMotion() {
     try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
@@ -480,6 +481,10 @@
     var de = document.documentElement;
     var kind = M.transitionKind(nav, !!(document.startViewTransition && de), reducedMotion());
     if (kind === 'none') return apply();
+    // Смена экрана уже ждёт кадра перехода: второй тап по той же карточке положил бы в стек второй экран
+    // («Назад» пришлось бы жать дважды). Пока предыдущая не применена, новые переходы не начинаем.
+    if (vtPending) return;
+    vtPending = true;
     vtClear();
     var seq = ++vtSeq;
     var done = false;
@@ -487,6 +492,7 @@
     function run() {
       if (done) return;
       done = true;
+      vtPending = false;
       // Старые имена уходят вместе со старым DOM; на всякий случай снимаем их до новых.
       vtClear();
       apply();
