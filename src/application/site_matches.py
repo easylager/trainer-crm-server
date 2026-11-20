@@ -530,7 +530,9 @@ async def matches_list(
         where = city_locative(city)
         sections = [
             {"key": "city", "title": f"В {where}" if where else city, "days": by_days([x for x in cards if x[1]])},
-            {"key": "country", "title": "По Беларуси", "days": by_days([x for x in cards if not x[1]])},
+            # Выезды Динамо — в России, не «по Беларуси» (владелец 2026-11-20): своя группа без названия страны.
+            {"key": "country", "title": "По Беларуси", "days": by_days([x for x in cards if not x[1] and not x[0]["away_trip"]])},
+            {"key": "away", "title": "На выезде", "days": by_days([x for x in cards if not x[1] and x[0]["away_trip"]])},
         ]
         sections = [sec for sec in sections if sec["days"]]
     first = cards[0][0] if cards else None

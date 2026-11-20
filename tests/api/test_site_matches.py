@@ -484,8 +484,8 @@ async def test_extraliga_club_filter_labels_home_and_away_with_city(app_use_test
 
 
 @pytest.mark.asyncio
-async def test_list_with_city_has_two_sections_including_dinamo_away(app_use_test_db, db_session):
-    """Правило C: «В Минске» — то, что идёт в Минске; «По Беларуси» — остальное, с выездами Динамо."""
+async def test_list_with_city_splits_minsk_belarus_and_dinamo_away(app_use_test_db, db_session):
+    """«В Минске» — то, что идёт в Минске; «По Беларуси» — остальное в стране; выезды Динамо (Россия) — «На выезде»."""
     await _world(db_session)
     await _gomel(db_session)
     mn = await _match(db_session, "Юность", "Шахтер", starts=(NOW + timedelta(days=2)).replace(hour=16))
@@ -494,9 +494,9 @@ async def test_list_with_city_has_two_sections_including_dinamo_away(app_use_tes
     away = await _match(db_session, "Авангард", "Динамо-Минск", league="khl", city=None, arena=None,
                         starts=(NOW + timedelta(days=3)).replace(hour=14))
     data = await site_matches.matches_list(db_session, now=NOW, city="Минск")
-    assert [s["title"] for s in data["sections"]] == ["В Минске", "По Беларуси"]
+    assert [s["title"] for s in data["sections"]] == ["В Минске", "По Беларуси", "На выезде"]
     ids = [[m["id"] for d in s["days"] for m in d["items"]] for s in data["sections"]]
-    assert ids == [[mn], [gm, away]]
+    assert ids == [[mn], [gm], [away]]
     html = (await _get("/hockey?city=minsk")).text
     assert "В Минске" in html and "По Беларуси" in html and "первым" not in html
     assert html.index(await _path(db_session, mn)) < html.index("По Беларуси") < html.index(await _path(db_session, gm))
