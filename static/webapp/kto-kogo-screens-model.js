@@ -1659,6 +1659,54 @@
     });
   }
 
+
+  // ---------- «Перед матчем» ----------
+
+  var DECIDED = { ot: 'ОТ', so: 'Б' };
+
+  function shortDate(iso) {
+    var d = new Date(iso);
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1);
+  }
+
+  /** Чип формы: счёт со стороны команды, цвет — победа или поражение, «ОТ»/«Б» — как решён. */
+  function formChip(f) {
+    var mine = f.home ? f.home_score : f.away_score;
+    var theirs = f.home ? f.away_score : f.home_score;
+    var how = DECIDED[f.decided_in] || '';
+    return {
+      win: !!f.win,
+      text: mine + ':' + theirs + (how ? NBSP + how : ''),
+      label: (f.win ? 'Победа' : 'Поражение') + ' ' + mine + ':' + theirs + (f.win ? ' над ' : ' от ') + clubName(f.opponent) + ', ' + shortDate(f.starts_at),
+    };
+  }
+
+  /**
+   * Ответ /preview → то, что можно нарисовать. Каждая часть необязательна: нет места, формы или встреч —
+   * части просто нет. Нечего показать — null, и блока на экране нет.
+   */
+  function previewView(data, teams) {
+    if (!data || typeof data !== 'object') return null;
+    var rows = [];
+    ['home', 'away'].forEach(function (side) {
+      var t = data[side];
+      if (!t) return;
+      var place = typeof t.place === 'number' && t.place > 0 ? t.place + '-е место' : null;
+      var form = Array.isArray(t.form) ? t.form.map(formChip) : [];
+      if (!place && !form.length) return;
+      rows.push({ side: side, name: clubName((teams && teams[side]) || ''), place: place, form: form });
+    });
+    var meetings = (Array.isArray(data.meetings) ? data.meetings : []).slice(0, 3).map(function (g) {
+      var how = DECIDED[g.decided_in] || '';
+      return {
+        date: shortDate(g.starts_at),
+        text: clubName(g.home_team) + ' ' + g.home_score + ':' + g.away_score + (how ? NBSP + how : '') + ' ' + clubName(g.away_team),
+      };
+    });
+    if (!rows.length && !meetings.length) return null;
+    return { teams: rows, meetings: meetings };
+  }
+
   var api = {
     clubName: clubName,
     clubGen: clubGen,
@@ -1806,6 +1854,7 @@
     joinedLeague: joinedLeague,
     readyError: readyError,
     readyBody: readyBody,
+    previewView: previewView,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
