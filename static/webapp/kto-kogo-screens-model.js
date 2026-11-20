@@ -1693,7 +1693,7 @@
   /** «победитель — 3 из 4 · в точку — 1»: те же слова, что в итоге хода (verdict: +50 — «в точку»). */
   function mineText(x) {
     var out = 'победитель — ' + x.winner + ' из ' + x.total;
-    if (x.exact > 0) out += ' · в' + NBSP + 'точку — ' + x.exact;
+    if (x.exact > 0) out += ', точный счёт — ' + x.exact;
     return out;
   }
 
@@ -1741,7 +1741,7 @@
     ['home', 'away'].forEach(function (side) {
       var x = data[side] && data[side].mine;
       if (!x || !(x.total >= 2)) return;
-      rows.push({ kind: 'kv', label: 'Твои ходы на матчи ' + clubGen(names[side]), value: mineText(x) });
+      rows.push({ kind: 'kv', label: 'Ты и ' + names[side], value: mineText(x) });
     });
     return rows.length ? { rows: rows } : null;
   }

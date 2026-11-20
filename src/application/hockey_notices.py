@@ -947,9 +947,7 @@ async def _evening_send(session: AsyncSession, step, *, picks: list, now: dateti
         return EveningSend(step, board_text=body, board_buttons=_rows([play, table], off_button(KIND_RESULT)))
     # Итог вечера: финальная правка табло (если оно было) и новое сообщение.
     had_board = step.board is not None and step.board.message_id is not None
-    final_board = (
-        ev.board_text(day=step.day, picks=picks, now=now, open_matches=[], fan=None) if had_board else None
-    )
+    final_board = ev.board_text(day=step.day, picks=picks, now=now, open_matches=[], fan=None) if had_board else None
     parts = [ev.final_header(picks, with_lines=not had_board and len(picks) > 1, now=now)]
     if len(picks) == 1 and picks[0].ready:
         p = picks[0]
@@ -966,11 +964,15 @@ async def _evening_send(session: AsyncSession, step, *, picks: list, now: dateti
         )
         if tribune:
             parts[0] += "\n" + tribune  # «Трибуна» — с какой долей игроков совпал ход
-    changes, _leagues = await ev.place_changes(session, player_key=step.player_key, day=step.day, fan=club, now=now)
+    changes, _leagues = await ev.place_changes(
+        session, player_key=step.player_key, day=step.day, fan=club, now=now, cache=cache
+    )
     if changes:
         parts.append("\n".join(ev.place_line(c) for c in changes))
     ready = [p for p in picks if p.ready]
-    news = await _cap_news(session, step.player_key, [_Row(p.as_match()) for p in ready], now=now, cache=cache.setdefault("cap_news", {}))
+    news = await _cap_news(
+        session, step.player_key, [_Row(p.as_match()) for p in ready], now=now, cache=cache.setdefault("cap_news", {})
+    )
     offer, evening = None, news[0] if news else None
     cap_lines = []
     for item in news:

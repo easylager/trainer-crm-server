@@ -770,7 +770,7 @@ describe('previewView: «Перед матчем» — только то, что
     }, { ...m, sides: { home: 16, away: 9 } });
     assert.deepEqual(labels(v), [
       'Юность в таблице', 'Неман в таблице', 'Форма: Юность', 'Прошлая встреча', 'Встреча 27.10', 'Встреча 27.10',
-      'За кого пошли игроки', 'Твои ходы на матчи Юности', 'Твои ходы на матчи Немана',
+      'За кого пошли игроки', 'Ты и Юность', 'Ты и Неман',
     ]);
     assert.equal(v.rows[0].value, `13-е · 11${NBSP}очков`);
     assert.equal(v.rows[1].value, `1-е · 21${NBSP}очко`);
@@ -778,7 +778,7 @@ describe('previewView: «Перед матчем» — только то, что
     assert.match(v.rows[2].chips[1].label, /^Поражение 3:4 от .+, 27\.10$/);
     assert.equal(v.rows[3].value, `Юность — Неман 4:3${NBSP}Б`);
     assert.deepEqual([v.rows[6].home.pct, v.rows[6].away.pct], [64, 36]);
-    assert.equal(v.rows[7].value, `победитель — 3 из 4 · в${NBSP}точку — 1`);
+    assert.equal(v.rows[7].value, 'победитель — 3 из 4, точный счёт — 1');
     assert.equal(v.rows[8].value, 'победитель — 0 из 2');
   });
 

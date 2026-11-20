@@ -199,6 +199,8 @@ async def test_fan_club_is_explicit_choice_else_most_picked_in_30_days(db_sessio
 
 @pytest.mark.asyncio
 async def test_result_message_points_place_and_next_move_button(db_session, factory) -> None:
+    from src.application.kk_evening import quips
+
     for player, name in ((SASHA, "Саша"), (KATYA, "Катя"), (LESHA, "Лёша"), (VOVA, "Вова")):
         await _fan(db_session, player, name=name)
     m = await _match(db_session, "r1", at(19))
@@ -221,7 +223,12 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     sasha = by_player[SASHA]
     assert sasha.kind == "result"
     # Один матч за вечер — сразу «Итог вечера» (PDEC-038): матч, твой ход, очки; ниже — место «было → стало».
-    assert sasha.text.startswith("<b>Юность — Шахтёр 3:2</b> · твой 3:2 · в точку! <b>+50</b>\n\nОбщая таблица: <b>1-е</b> из 4")
+    assert sasha.text.startswith(
+        "<b>Юность — Шахтёр 3:2</b> · твой 3:2 · в точку! <b>+50</b>\n\nОбщая таблица: <b>1-е</b> из 4"
+    )
+    # Первое появление в таблице — событие: хвост по месту и фраза первого вечера.
+    assert "<b>1-е</b> из 4 — уже на подиуме" in sasha.text
+    assert any(q in sasha.text for q in quips()["first"])
     assert by_player[KATYA].text.startswith("<b>Юность — Шахтёр 3:2</b> · твой Юность · <b>+20</b>")
     assert by_player[VOVA].text.startswith("<b>Юность — Шахтёр 3:2</b> · твой Шахтёр · 0")
     # Срез своей команды повторяет общую таблицу — второй строкой не пишем.
@@ -806,8 +813,17 @@ async def test_blocked_player_gets_no_correction_and_unchanged_points_are_not_me
 
 
 def _tribune(**kw) -> str:
-    base = dict(home="Неман", away="Шахтер", final_home=2, final_away=3, side="away", points=20,
-                home_picks=114, away_picks=34, same_exact=0)
+    base = dict(
+        home="Неман",
+        away="Шахтер",
+        final_home=2,
+        final_away=3,
+        side="away",
+        points=20,
+        home_picks=114,
+        away_picks=34,
+        same_exact=0,
+    )
     base.update(kw)
     return tribune_line(**base)
 
@@ -843,15 +859,16 @@ async def test_result_message_has_tribune_line_from_twenty_moves(db_session) -> 
     await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="away", now=at(10))
     await make_pick(db_session, player_key=KATYA, display_name="Катя", match_id=m, side="away", now=at(10))
     for i in range(18):
-        await make_pick(db_session, player_key=9361000 + i, display_name=f"Игрок {i}", match_id=m, side="home", now=at(10))
+        await make_pick(
+            db_session, player_key=9361000 + i, display_name=f"Игрок {i}", match_id=m, side="home", now=at(10)
+        )
     done = at(21, 40)
     await _finish(db_session, m, 2, 3, done)
     notices = await due_notices(db_session, now=done + hockey_notices.RESULT_SEND_DELAY)
     sasha = next(n for n in notices if n.player_key == SASHA)
     # Вечер из одного матча: «Трибуна» — сразу под строкой матча в «Итоге вечера».
     assert sasha.text.startswith(
-        "<b>Юность — Шахтёр 2:3</b> · твой Шахтёр · <b>+20</b>\n"
-        "Победителя угадали 10% игроков — и ты в их числе."
+        "<b>Юность — Шахтёр 2:3</b> · твой Шахтёр · <b>+20</b>\n" "Победителя угадали 10% игроков — и ты в их числе."
     )
 
 
@@ -932,7 +949,9 @@ async def test_overtaken_notice_is_not_sent_right_after_the_evening_summary(db_s
     await _finish(db_session, m, 2, 1, at(21, 30))
     await deliver(factory, now=at(21, 40), send=Outbox(), evening_io=BoardIO().io)
     league = await create_league(db_session, owner_key=SASHA, owner_name="Саша", name="Офис")
-    over = Overtake(league.id, "Офис", SASHA, "Катя", 2, m, scope=("all", ()), starts_at=at(0, day=1), ends_at=at(0, day=30))
+    over = Overtake(
+        league.id, "Офис", SASHA, "Катя", 2, m, scope=("all", ()), starts_at=at(0, day=1), ends_at=at(0, day=30)
+    )
     assert [n.kind for n in await due_notices(db_session, now=at(22, 0), overtakes=[over])] == []
     # Через 6 часов после «Итога вечера» — снова можно (утро, вне тихих часов).
     later = [n.kind for n in await due_notices(db_session, now=at(10, 0, day=11), overtakes=[over])]
@@ -944,7 +963,7 @@ def test_quips_have_no_betting_words_and_cover_every_situation() -> None:
 
     banned = ("ставк", "постав", "отыгра", "выигрыш", "коэф", "кэф", "банк")
     pool = quips()
-    for kind in ("exact", "hit", "perfect", "zero", "mixed", "climbed", "dropped", "league_top"):
+    for kind in ("first", "exact", "hit", "perfect", "zero", "mixed", "climbed", "dropped", "league_top"):
         assert pool[kind], kind
         for q in pool[kind]:
             assert not any(w in q.lower() for w in banned), q

@@ -222,9 +222,7 @@ def is_stuck(p: EveningPick, now: datetime) -> bool:
     return not p.ready and _utc(now) - _utc(p.starts_at) > STUCK_AFTER
 
 
-def decide(
-    *, player_key: int, day: date, picks: list[EveningPick], board: Board | None, now: datetime
-) -> Step | None:
+def decide(*, player_key: int, day: date, picks: list[EveningPick], board: Board | None, now: datetime) -> Step | None:
     """Чистое решение по вечеру: что отправить этим проходом. ``None`` — ничего.
 
     Занимаем только готовые, ещё не разосланные итоги. Закрыть вечер можно, когда у каждого хода итог готов
@@ -353,9 +351,18 @@ class PlaceChange:
     passed: tuple[str, ...] = ()  # кто был выше, а теперь ниже (только в лигах — там все свои)
 
 
+def _debut_tail(rank: int, size: int) -> str:
+    """Первое появление в таблице — событие, а не «ты в таблице»: хвост по месту."""
+    if rank <= 3:
+        return "уже на подиуме"
+    if rank <= size / 2:
+        return "сразу в верхней половине"
+    return "старт есть, дальше вверх"
+
+
 def place_line(c: PlaceChange) -> str:
     if c.before is None:
-        return f"{c.title}: <b>{c.after}-е</b> из {c.size}, ты в таблице"
+        return f"{c.title}: <b>{c.after}-е</b> из {c.size} — {_debut_tail(c.after, c.size)}"
     if c.after < c.before:
         line = f"{c.title}: <b>{c.before}-е → {c.after}-е ↑</b> из {c.size}"
         if c.passed:
@@ -392,14 +399,38 @@ def _points_of(rows: list[Row], player_key: int) -> int | None:
     return next((r.points for r in rows if r.player_key == player_key), None)
 
 
+async def _slice_cached(session: AsyncSession, cache: dict, club: str | None, period) -> list[Row]:
+    """Срез один на проход: после матча Динамо сотни игроков спрашивают одни и те же таблицы «до» и «после»."""
+    key = ("evening_slice", club, period.since, period.until)
+    if key not in cache:
+        cache[key] = await slice_rows(session, scope=club_scope(club), period=period)
+    rows: list[Row] = cache[key]
+    return rows
+
+
+async def _league_cached(session: AsyncSession, cache: dict, league, since: datetime, until: datetime) -> list[Row]:
+    key = ("evening_league", league.id, since, until)
+    if key not in cache:
+        cache[key] = await league_rows(session, league_id=league.id, scope=league.match_scope, since=since, until=until)
+    rows: list[Row] = cache[key]
+    return rows
+
+
 async def place_changes(
-    session: AsyncSession, *, player_key: int, day: date, fan: str | None, now: datetime
+    session: AsyncSession,
+    *,
+    player_key: int,
+    day: date,
+    fan: str | None,
+    now: datetime,
+    cache: dict | None = None,
 ) -> tuple[list[PlaceChange], int]:
     """Места «до вечера → после»: общая таблица сезона, срез своей команды и лиги, где очки вечера что-то
     изменили. Срез считается по матчам с началом в окне, поэтому «до» — окно, кончающееся началом вечера.
     Второе значение — число строк про лиги (они идут после общих)."""
     from src.application.hockey_leagues import _LEAGUE_COLUMNS, _league, player_leagues
 
+    cache = {} if cache is None else cache
     start, end = day_bounds(day)
     season = season_period(start)
     out: list[PlaceChange] = []
@@ -408,17 +439,22 @@ async def place_changes(
         slices.append((f"Таблица «{club_name(fan)}»", fan))
     for title, club in slices:
         before_p, after_p = replace(season, until=max(season.since, start)), replace(season, until=end)
-        before = await slice_rows(session, scope=club_scope(club), period=before_p)
-        after = await slice_rows(session, scope=club_scope(club), period=after_p)
+        before = await _slice_cached(session, cache, club, before_p)
+        after = await _slice_cached(session, cache, club, after_p)
         if club is not None and _points_of(before, player_key) == _points_of(after, player_key):
             continue  # своя команда сегодня не играла в ходах игрока
         found = _change(title, before, after, player_key, names=False)
         if found is None:
             continue
-        if club is not None and out and (out[0].before, out[0].after, out[0].size) == (
-            found.before,
-            found.after,
-            found.size,
+        if (
+            club is not None
+            and out
+            and (out[0].before, out[0].after, out[0].size)
+            == (
+                found.before,
+                found.after,
+                found.size,
+            )
         ):
             continue  # срез своей команды повторяет общую таблицу — вторая строка ничего не добавляет
         out.append(found)
@@ -432,14 +468,14 @@ async def place_changes(
             )
         ).all()
         for league in (_league(r) for r in records):
+            if league.starts_at is None or league.ends_at is None:
+                continue
             since = _utc(league.starts_at)
             if since >= end:
                 continue
             until_end = min(end, _utc(league.ends_at))
-            before = await league_rows(
-                session, league_id=league.id, scope=league.match_scope, since=since, until=max(since, start)
-            )
-            after = await league_rows(session, league_id=league.id, scope=league.match_scope, since=since, until=until_end)
+            before = await _league_cached(session, cache, league, since, max(since, start))
+            after = await _league_cached(session, cache, league, since, until_end)
             if _points_of(before, player_key) == _points_of(after, player_key):
                 continue
             found = _change(f"Лига «{league.name}»", before, after, player_key, names=True)
@@ -494,6 +530,9 @@ async def other_match_line(session: AsyncSession, *, player_key: int, day: date)
 def quip_kind(picks: list[EveningPick], changes: list[PlaceChange]) -> str:
     done = [p for p in picks if p.ready]
     hits = [p for p in done if p.points]
+    general = changes[0] if changes and changes[0].title == "Общая таблица" else None
+    if general is not None and general.before is None:
+        return "first"  # первый вечер в игре — встречаем, а не оцениваем
     if len(done) > 1 and len(hits) == len(done):
         return "perfect"
     if any(c.title.startswith("Лига") and c.after == 1 and c.before not in (None, 1) for c in changes):
@@ -504,7 +543,6 @@ def quip_kind(picks: list[EveningPick], changes: list[PlaceChange]) -> str:
         return "zero"
     if len(done) == 1:
         return "hit"  # один матч, победитель угадан: «половина в цель» тут не про то
-    general = changes[0] if changes and changes[0].title == "Общая таблица" else None
     if general and general.before is not None and general.after < general.before:
         return "climbed"
     if general and general.before is not None and general.after > general.before:
