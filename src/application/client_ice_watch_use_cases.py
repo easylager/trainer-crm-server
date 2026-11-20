@@ -27,6 +27,7 @@ from src.application.ice_watch_message import (
     CANCEL_WATCH_BUTTON,
     OPEN_SCHEDULE_BUTTON,
     compose_new_schedule_message,
+    WatchSession,
     compose_schedule_change_message,
     format_nearest,
     watch_off_callback_data,
@@ -394,7 +395,8 @@ async def _load_future_sessions(
     r = await session.execute(
         text(
             """
-            SELECT id, starts_at_utc, starts_at_local, local_date, kind
+            SELECT id, starts_at_utc, starts_at_local, local_date, kind, ends_at_local,
+                   price_adult_minor, price_child_minor, price_rental_minor, price_minor, currency_code
             FROM ice_sessions
             WHERE arena_id = :aid
               AND status = :st
@@ -406,7 +408,10 @@ async def _load_future_sessions(
         ),
         {"aid": arena_id, "st": STATUS_ACTIVE, "now": now, "limit": limit},
     )
-    keys = ("id", "starts_at_utc", "starts_at_local", "local_date", "kind")
+    keys = (
+        "id", "starts_at_utc", "starts_at_local", "local_date", "kind", "ends_at_local",
+        "price_adult_minor", "price_child_minor", "price_rental_minor", "price_minor", "currency_code",
+    )
     return [dict(zip(keys, row)) for row in r.fetchall()]
 
 
@@ -637,12 +642,20 @@ def _new_sessions_for_watch(
 
 
 async def _arena_name_and_tz(session: AsyncSession, arena_id: int) -> tuple[str, ZoneInfo]:
+    name, tz, _city, _address = await _arena_card(session, arena_id)
+    return name, tz
+
+
+async def _arena_card(session: AsyncSession, arena_id: int) -> tuple[str, ZoneInfo, str | None, str | None]:
+    """Имя, часовой пояс, город и адрес катка — шапка письма подписчику."""
     r = await session.execute(
         text(
             """
-            SELECT COALESCE(NULLIF(TRIM(a.name), ''), 'Каток'), NULLIF(TRIM(p.timezone), '')
+            SELECT COALESCE(NULLIF(TRIM(a.name), ''), 'Каток'), NULLIF(TRIM(p.timezone), ''),
+                   NULLIF(TRIM(c.name), ''), NULLIF(TRIM(a.address), '')
             FROM arenas a
             LEFT JOIN arena_profiles p ON p.arena_id = a.id
+            LEFT JOIN cities c ON c.id = a.city_id
             WHERE a.id = :aid
             """
         ),
@@ -654,7 +667,18 @@ async def _arena_name_and_tz(session: AsyncSession, arena_id: int) -> tuple[str,
         tz = ZoneInfo(str(row[1])) if row and row[1] else MINSK_TZ
     except Exception:  # noqa: BLE001 — кривая зона в профиле не должна ронять доставку
         tz = MINSK_TZ
-    return name, tz
+    city = str(row[2]) if row and row[2] else None
+    return name, tz, city, _short_address(str(row[3]) if row and row[3] else None, city)
+
+
+def _short_address(address: str | None, city: str | None) -> str | None:
+    """«Брест, ул. Московская, 151» → «ул. Московская, 151»: город уже стоит рядом."""
+    if not address:
+        return None
+    if city and address.lower().startswith(city.lower()):
+        rest = address[len(city):].lstrip(" ,")
+        return rest or None
+    return address
 
 
 def _session_snap(row: dict[str, Any]) -> dict[str, str | int]:
@@ -676,35 +700,42 @@ def _snap_is_ahead(snap: dict[str, Any], *, now: datetime, tz: ZoneInfo) -> bool
     return start > now.astimezone(tz)
 
 
-def _line_for(day: date, clock: time, *, today: date) -> str:
-    return format_nearest(day, clock, today=today).replace(" ", " ")
 
 
-def _added_lines(rows: list[dict[str, Any]], *, today: date) -> list[str]:
-    lines = []
-    for row in rows[:8]:
-        clock = row["starts_at_local"]
-        if not isinstance(clock, time):
-            hour_s, minute_s = str(clock).split(":")[:2]
-            clock = time(int(hour_s), int(minute_s))
-        day = row["local_date"] if isinstance(row["local_date"], date) else date.fromisoformat(str(row["local_date"]))
-        lines.append(_line_for(day, clock, today=today))
-    extra = len(rows) - len(lines)
-    if extra:
-        lines.append(f"и ещё {extra}")
-    return lines
+def _as_time(value: Any) -> time | None:
+    if value is None or isinstance(value, time):
+        return value
+    hour_s, minute_s = str(value).split(":")[:2]
+    return time(int(hour_s), int(minute_s))
 
 
-def _removed_lines(snaps: list[dict[str, Any]], *, today: date) -> list[str]:
-    lines = []
-    for snap in snaps[:8]:
-        day = date.fromisoformat(str(snap["local_date"]))
-        hour_s, minute_s = str(snap["starts_at_local"]).split(":")[:2]
-        lines.append(_line_for(day, time(int(hour_s), int(minute_s)), today=today))
-    extra = len(snaps) - len(lines)
-    if extra:
-        lines.append(f"и ещё {extra}")
-    return lines
+def _as_date(value: Any) -> date:
+    return value if isinstance(value, date) else date.fromisoformat(str(value))
+
+
+def _watch_added(rows: list[dict[str, Any]]) -> list[WatchSession]:
+    return [
+        WatchSession(
+            day=_as_date(r["local_date"]),
+            starts=_as_time(r["starts_at_local"]) or time(0, 0),
+            ends=_as_time(r.get("ends_at_local")),
+            kind=str(r.get("kind") or "public_skate"),
+            price_adult=r.get("price_adult_minor"),
+            price_child=r.get("price_child_minor"),
+            price_rental=r.get("price_rental_minor"),
+            price=r.get("price_minor"),
+            currency=str(r.get("currency_code") or "BYN"),
+        )
+        for r in rows
+    ]
+
+
+def _watch_removed(snaps: list[dict[str, Any]]) -> list[WatchSession]:
+    return [WatchSession(day=_as_date(x["local_date"]), starts=_as_time(x["starts_at_local"]) or time(0, 0)) for x in snaps]
+
+
+
+
 
 
 def _compose_for_new_sessions(
@@ -773,6 +804,7 @@ async def deliver_ice_watch_reminders(
     watches = await repo.list_active_by_kinds(_DELIVERY_KINDS)
     sessions_by_arena: dict[int, list[dict[str, Any]]] = {}
     arena_info: dict[int, tuple[str, ZoneInfo]] = {}
+    arena_cards: dict[int, tuple[str, ZoneInfo, str | None, str | None]] = {}
     # One-shot: только «Открыть расписание», без «Отменить» — подписка гаснет сама.
     fresh_markup = (
         schedule_fresh_markup_factory if schedule_fresh_markup_factory is not None else reply_markup_factory
@@ -792,7 +824,7 @@ async def deliver_ice_watch_reminders(
                     send_fn=send_fn,
                     reply_markup_factory=reply_markup_factory,
                     stats=stats,
-                    arena_info=arena_info,
+                    arena_cards=arena_cards,
                 )
             except _FloodLimited:
                 stats.flood_limited = True
@@ -847,16 +879,16 @@ async def _deliver_sessions_watch(
     send_fn: SendFn,
     reply_markup_factory: SessionsMarkupFactory | None,
     stats: IceWatchPassStats,
-    arena_info: dict[int, tuple[str, ZoneInfo]],
+    arena_cards: dict[int, tuple[str, ZoneInfo, str | None, str | None]],
 ) -> None:
     """Живая подписка: новое и снятое, без выключения после сообщения."""
     arena_id = int(watch["arena_id"])
     matched = [s for s in current if session_matches_filter(s, watch.get("filter_json"), now=now)]
     snapshot = [_session_snap(s) for s in matched]
     known = watch.get("known_sessions")
-    if arena_id not in arena_info:
-        arena_info[arena_id] = await _arena_name_and_tz(session, arena_id)
-    name, tz = arena_info[arena_id]
+    if arena_id not in arena_cards:
+        arena_cards[arena_id] = await _arena_card(session, arena_id)
+    name, tz, city, address = arena_cards[arena_id]
     today = now.astimezone(tz).date()
     if known is None:
         added = _new_sessions_for_watch(matched, watch, now=now)
@@ -874,8 +906,11 @@ async def _deliver_sessions_watch(
     stats.due += 1
     text_msg = compose_schedule_change_message(
         arena_name=name,
-        added=_added_lines(added, today=today),
-        removed=_removed_lines(removed, today=today),
+        added=_watch_added(added),
+        removed=_watch_removed(removed),
+        today=today,
+        city_name=city,
+        address=address,
     )
     await _deliver_one(
         session,

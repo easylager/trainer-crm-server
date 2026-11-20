@@ -123,19 +123,54 @@ def test_open_ice_in_city_button_uses_locative() -> None:
     assert open_ice_in_city_button("") == "Открыть расписание"
 
 
-def test_schedule_change_lists_added_and_removed() -> None:
+def test_schedule_change_message_reads_like_a_schedule() -> None:
+    """Город и адрес в шапке, новые сеансы по дням с началом и концом, общая цена одной строкой, отменённые отдельно."""
+    from src.application.ice_watch_message import WatchSession
+
+    today = date(2026, 11, 20)
+    s = dict(price_adult=1200, price_child=800, price_rental=500, currency="BYN")
     msg = compose_schedule_change_message(
-        arena_name="Юность",
-        added=["завтра в 17:00"],
-        removed=["сегодня в 12:00"],
+        arena_name="Ледовая арена",
+        city_name="Брест",
+        address="ул. Московская, 151",
+        today=today,
+        added=[
+            WatchSession(day=today, starts=time(14, 15), ends=time(15, 45), **s),
+            WatchSession(day=today, starts=time(21, 15), ends=time(22, 45), **s),
+            WatchSession(day=date(2026, 11, 21), starts=time(12, 0), ends=time(13, 30), **s),
+        ],
+        removed=[WatchSession(day=today, starts=time(18, 0))],
     )
-    assert msg == (
-        "<b>Юность</b>\n"
-        "Появились сеансы:\n"
-        "• завтра в 17:00\n"
-        "Сняли сеансы:\n"
-        "• сегодня в 12:00"
+    assert _plain(msg) == (
+        "<b>Ледовая арена</b>\n"
+        "Брест · ул. Московская, 151\n\n"
+        "<b>Новые сеансы массового катания</b>\n"
+        "Сегодня, 20 ноября\n14:15–15:45\n21:15–22:45\n"
+        "Завтра, 21 ноября\n12:00–13:30\n\n"
+        "Цена: взрослый 12 BYN · детский 8 BYN · прокат 5 BYN\n\n"
+        "<b>Отменили</b>\n"
+        "Сегодня, 20 ноября, 18:00"
     )
+
+
+def test_schedule_change_message_puts_different_prices_on_each_line() -> None:
+    from src.application.ice_watch_message import WatchSession
+
+    today = date(2026, 11, 20)
+    msg = _plain(
+        compose_schedule_change_message(
+            arena_name="Каток",
+            today=today,
+            added=[
+                WatchSession(day=date(2026, 11, 23), starts=time(19, 0), ends=time(20, 30), price=1050, kind="open_ice"),
+                WatchSession(day=date(2026, 11, 23), starts=time(21, 0), ends=None, price=900),
+            ],
+            removed=[],
+        )
+    )
+    assert "<b>Новые сеансы</b>" in msg and "Понедельник, 23 ноября" in msg
+    assert "19:00–20:30 · 10,50 BYN" in msg and "21:00 · 9 BYN" in msg and "Цена:" not in msg
+
 
 
 def test_place_name_is_html_escaped() -> None:

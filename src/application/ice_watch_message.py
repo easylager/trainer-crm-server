@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import html
+from dataclasses import dataclass
 from datetime import date, time
 
 from src.shared.public_display import format_public_name
@@ -39,6 +40,8 @@ _WEEKDAYS_ACC = (
     f"в{NBSP}субботу",
     f"в{NBSP}воскресенье",
 )
+
+_WEEKDAYS_NOM = ("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье")
 
 OPEN_SCHEDULE_BUTTON = "Открыть расписание"
 CANCEL_WATCH_BUTTON = "Отменить рассылку"
@@ -124,23 +127,103 @@ def compose_watch_subscribed_reply(arena_name: str) -> str:
     return f"<b>{shown}: следим</b>\nНапишем, когда расписание обновится."
 
 
+@dataclass(frozen=True)
+class WatchSession:
+    """Сеанс для письма подписчику: день, время и цены как на странице катка (цены — в копейках)."""
+
+    day: date
+    starts: time
+    ends: time | None = None
+    kind: str = "public_skate"
+    price_adult: int | None = None
+    price_child: int | None = None
+    price_rental: int | None = None
+    price: int | None = None
+    currency: str = "BYN"
+
+
+_SHOWN_PER_MESSAGE = 8
+_CURRENCY = {"BYN": "BYN", "RUB": "₽"}
+
+
+def _money(minor: int, currency: str) -> str:
+    whole, cents = divmod(int(minor), 100)
+    value = f"{whole}" if not cents else f"{whole},{cents:02d}"
+    return f"{value}{NBSP}{_CURRENCY.get(currency, currency)}"
+
+
+def _prices(s: WatchSession) -> tuple[tuple[str, int], ...]:
+    tiers = (("взрослый", s.price_adult), ("детский", s.price_child), ("прокат", s.price_rental))
+    named = tuple((label, int(v)) for label, v in tiers if v is not None)
+    if named:
+        return named
+    return (("", int(s.price)),) if s.price is not None else ()
+
+
+def _price_text(prices: tuple[tuple[str, int], ...], currency: str) -> str:
+    return " · ".join(f"{label}{NBSP}{_money(v, currency)}" if label else _money(v, currency) for label, v in prices)
+
+
+def _day_title(day: date, *, today: date) -> str:
+    """«Сегодня, 20 ноября», «Завтра, 21 ноября», «Суббота, 22 ноября»."""
+    if day == today:
+        head = "Сегодня"
+    elif (day - today).days == 1:
+        head = "Завтра"
+    else:
+        head = _WEEKDAYS_NOM[day.weekday()]
+    return f"{head}, {_day_month(day)}"
+
+
+def _interval(s: WatchSession) -> str:
+    return f"{_clock(s.starts)}–{_clock(s.ends)}" if s.ends else _clock(s.starts)
+
+
 def compose_schedule_change_message(
     *,
     arena_name: str,
-    added: list[str],
-    removed: list[str],
+    added: list[WatchSession],
+    removed: list[WatchSession],
+    today: date,
+    city_name: str | None = None,
+    address: str | None = None,
 ) -> str:
-    """Одно сообщение про изменение расписания. Строки ``added``/``removed`` уже готовые, без HTML.
+    """Письмо подписчику катка: что появилось и что отменили (HTML для Telegram).
 
-    Кнопки к сообщению: ``OPEN_SCHEDULE_BUTTON`` и ``CANCEL_WATCH_BUTTON`` (callback).
+    Шапка — место, город и адрес; новые сеансы — по дням, с временем начала и конца. Одинаковые цены — одной строкой
+    под списком, разные — в строке сеанса. Больше восьми — «и ещё N». Кнопки: ``OPEN_SCHEDULE_BUTTON`` и
+    ``CANCEL_WATCH_BUTTON`` (callback).
     """
-    parts = [f"<b>{place_name(arena_name)}</b>"]
+    where = " · ".join(
+        html.escape(bit, quote=False) for bit in (format_public_name(city_name or ""), (address or "").strip()) if bit
+    )
+    parts = [f"<b>{place_name(arena_name)}</b>"] + ([where] if where else [])
     if added:
-        parts.append("Появились сеансы:")
-        parts.extend(f"• {line}" for line in added)
+        shown = added[:_SHOWN_PER_MESSAGE]
+        kinds = {s.kind for s in shown}
+        parts += ["", "<b>Новые сеансы массового катания</b>" if kinds == {"public_skate"} else "<b>Новые сеансы</b>"]
+        price_sets = {(_prices(s), s.currency) for s in shown}
+        common = len(price_sets) == 1 and next(iter(price_sets))[0]
+        day: date | None = None
+        for s in shown:
+            if s.day != day:
+                day = s.day
+                parts.append(_day_title(s.day, today=today))
+            line = _interval(s)
+            if not common and _prices(s):
+                line += f" · {_price_text(_prices(s), s.currency)}"
+            parts.append(line)
+        if len(added) > len(shown):
+            parts.append(f"и ещё {len(added) - len(shown)}")
+        if common:
+            currency = next(iter(price_sets))[1]
+            parts += ["", f"Цена: {_price_text(next(iter(price_sets))[0], currency)}"]
     if removed:
-        parts.append("Сняли сеансы:")
-        parts.extend(f"• {line}" for line in removed)
+        shown_r = removed[:_SHOWN_PER_MESSAGE]
+        parts += ["", "<b>Отменили</b>"]
+        parts += [f"{_day_title(s.day, today=today)}, {_clock(s.starts)}" for s in shown_r]
+        if len(removed) > len(shown_r):
+            parts.append(f"и ещё {len(removed) - len(shown_r)}")
     return "\n".join(parts)
 
 

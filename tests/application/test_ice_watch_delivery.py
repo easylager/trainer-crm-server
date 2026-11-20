@@ -222,7 +222,7 @@ async def test_new_dates_past_baseline_fire_once_with_new_range(db_session) -> N
     chat_id, body, _markup = send.await_args.args
     assert chat_id == tid
     plain = body.replace(NBSP, " ")
-    assert plain.startswith("<b>Юность</b>\nПоявились сеансы:")
+    assert plain.startswith("<b>Юность</b>\n") and "<b>Новые сеансы массового катания</b>" in plain
     assert f"{first.day} " in plain and f"{last.day} " in plain
     assert "17:00" in plain
     assert "20:00" not in plain
@@ -510,8 +510,8 @@ async def test_dates_in_rink_timezone(db_session) -> None:
     send = AsyncMock()
     await _pass(db_session, send)
     body = send.await_args.args[1].replace(NBSP, " ")
-    assert body.startswith("<b>Айсбург</b>\nПоявились сеансы:")
-    assert "завтра в 23:00" in body
+    assert body.startswith("<b>Айсбург</b>\n") and "<b>Новые сеансы массового катания</b>" in body
+    assert "Завтра, " in body and "23:00" in body
     assert str(local_day.day) in body or "завтра" in body
 
 
@@ -524,7 +524,7 @@ async def test_sessions_watch_notifies_cancel_then_add_and_stays_on(db_session) 
     send = AsyncMock()
     await _pass(db_session, send)
     assert send.await_count == 1
-    assert "Появились сеансы:" in send.await_args.args[1]
+    assert "<b>Новые сеансы" in send.await_args.args[1]
     known = (await _watch_row(db_session, watch["id"]))["known_sessions"]
     assert len(known) == 1
 
@@ -535,15 +535,15 @@ async def test_sessions_watch_notifies_cancel_then_add_and_stays_on(db_session) 
     await _pass(db_session, send)
     assert send.await_count == 2
     cancel_body = send.await_args.args[1]
-    assert "Сняли сеансы:" in cancel_body
-    assert "Появились сеансы:" not in cancel_body
+    assert "<b>Отменили</b>" in cancel_body
+    assert "<b>Новые сеансы" not in cancel_body
     assert (await _watch_row(db_session, watch["id"]))["active"] is True
 
     await _session(db_session, arena_id, days=5, hour=19)
     await _pass(db_session, send)
     assert send.await_count == 3
     add_body = send.await_args.args[1]
-    assert "Появились сеансы:" in add_body
+    assert "<b>Новые сеансы" in add_body
     assert "19:00" in add_body.replace(NBSP, " ")
     row = await _watch_row(db_session, watch["id"])
     assert row["active"] is True and len(row["known_sessions"]) == 1

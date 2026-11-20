@@ -343,7 +343,7 @@ async def test_session_inserted_in_tick_is_sent_by_the_same_pass_after_commit() 
         assert seen_inside_tick == [0], "inside the tick the new session must be invisible"
         send.assert_awaited_once()
         assert send.await_args.args[0] == seed["tid"]
-        assert "Появились сеансы:" in send.await_args.args[1]
+        assert "<b>Новые сеансы" in send.await_args.args[1]
         async with factory() as s:
             row = (
                 await s.execute(
