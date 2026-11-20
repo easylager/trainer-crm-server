@@ -25,10 +25,11 @@ _ATTR = re.compile(r"""(?:src|href)=["']([^"']+)["']""", re.I)
 # re-measured with the trainer funnel (/t/ pages, TASK-356), 2026-11-08;
 # catalog.html +5.4 KB: the «Я» tab and season flags in the client shell, «Твой сезон на льду», 2026-11-12;
 # ice.html +12.6 KB: the season shell on «Поиск», tab press under the finger and tab-timing in the shell, fast-tabs, 2026-11-12;
-# catalog.html +12.1 KB: hard entryGate + write-access.js on shell pages, 2026-11-15).
+# catalog.html +12.1 KB: hard entryGate + write-access.js on shell pages, 2026-11-15;
+# ice.html +13.1 KB: KK site banner/pick styles landed in glide-components.css (shared by ice.html), 2026-11-20).
 # A page may shrink; growth past +5% fails CI.
 _BASELINE_GZIP = {
-    "ice.html": 254_228,
+    "ice.html": 267_291,
     "catalog.html": 243_235,
 }
 
