@@ -70,7 +70,7 @@ from src.shared.outage import (
 from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, get_optional_client_miniapp_principal
 from src.api.miniapp_auth.principal_keys import client_catalog_telegram_key
 from src.api.miniapp_auth.types import MiniAppPrincipal
-from src.application.client_ui_flags import fast_tabs_enabled
+from src.application.client_ui_flags import fast_tabs_enabled, search_board_enabled
 from src.shared.config import Settings, get_settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
 from src.shared.sentry_init import init_sentry
@@ -315,12 +315,41 @@ def webapp_ice_company_page():
     return _webapp_file_response(path)
 
 
-@app.get("/webapp/ice")
-@app.get("/webapp/ice.html")
-def webapp_ice_tab_page():
-    """TASK-053: Ice tab arena list Mini App. TASK-306: свои шрифты — `__FONT_V__`, как на главной."""
+# TASK-438: параметры диплинков вкладки «Лёд» — с ними открывается старая страница, не лента.
+_ICE_DEEP_LINK_PARAMS = ("intent", "seg", "focus", "arena", "ref", "svc", "trainer", "venue", "season")
+_ICE_BOARD_PATH = _WEBAPP_DIR / "ice-board.html"
+
+
+def _search_board_page(request: Request, principal: MiniAppPrincipal | None) -> HTMLResponse | None:
+    """Лента «Поиск», если флаг включён и адрес не диплинк. Нет файла — старая страница."""
     from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
 
+    if principal is None or not search_board_enabled(client_catalog_telegram_key(principal), get_settings()):
+        return None
+    if any(name in request.query_params for name in _ICE_DEEP_LINK_PARAMS):
+        return None
+    path = _ICE_BOARD_PATH
+    if not path.is_file():
+        return None
+    page = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
+    return HTMLResponse(content=page, headers=_WEBAPP_NO_CACHE_HEADERS)
+
+
+@app.get("/webapp/ice")
+@app.get("/webapp/ice.html")
+def webapp_ice_tab_page(
+    request: Request,
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
+):
+    """TASK-053: Ice tab arena list Mini App. TASK-306: свои шрифты — `__FONT_V__`, как на главной.
+
+    TASK-438: при флаге search_board и без диплинка — лента «Поиск» (ice-board.html).
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
+    board = _search_board_page(request, principal)
+    if board is not None:
+        return board
     path = _WEBAPP_DIR / "ice.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
@@ -1894,6 +1923,31 @@ def webapp_ice_tab_js(request: Request):
         media_type="application/javascript",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
+
+
+def _ice_board_asset(name: str, media_type: str, request: Request) -> FileResponse:
+    path = _WEBAPP_DIR / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path, media_type=media_type, headers=_webapp_versioned_asset_cache_headers(request))
+
+
+@app.get("/webapp/ice-board.css")
+def webapp_ice_board_css(request: Request):
+    """TASK-438: стили табло «Поиск». Use ``?v=…`` for long cache."""
+    return _ice_board_asset("ice-board.css", "text/css", request)
+
+
+@app.get("/webapp/ice-board-model.js")
+def webapp_ice_board_model_js(request: Request):
+    """TASK-438: модель табло «Поиск» (без DOM). Use ``?v=…`` for long cache."""
+    return _ice_board_asset("ice-board-model.js", "application/javascript", request)
+
+
+@app.get("/webapp/ice-board.js")
+def webapp_ice_board_js(request: Request):
+    """TASK-438: отрисовка табло «Поиск». Use ``?v=…`` for long cache."""
+    return _ice_board_asset("ice-board.js", "application/javascript", request)
 
 
 @app.get("/webapp/ice-map-model.js")

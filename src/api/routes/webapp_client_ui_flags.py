@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
-from src.application.client_ui_flags import fast_tabs_enabled, has_trainer_history, season_ui_enabled
+from src.application.client_ui_flags import (
+    fast_tabs_enabled,
+    has_trainer_history,
+    search_board_enabled,
+    season_ui_enabled,
+)
 from src.shared.config import get_settings
 
 router = APIRouter(tags=["webapp"])
@@ -24,4 +29,9 @@ async def get_client_ui_flags(
     settings = get_settings()
     season_ui = season_ui_enabled(account_key, settings)
     bookings_tab = season_ui and await has_trainer_history(session, account_key)
-    return {"season_ui": season_ui, "bookings_tab": bookings_tab, "fast_tabs": fast_tabs_enabled(account_key, settings)}
+    return {
+        "season_ui": season_ui,
+        "bookings_tab": bookings_tab,
+        "fast_tabs": fast_tabs_enabled(account_key, settings),
+        "search_board": search_board_enabled(account_key, settings),
+    }
