@@ -151,3 +151,58 @@ def test_confirm_flood_card_has_three_decisions_and_neutral_wording():
     assert "Отметили «залит»: 3" in body and "Telegram 2" in body and "Фото со льдом: 1" in body
     data = [b.callback_data for row in kb.inline_keyboard for b in row]
     assert data == ["wa:cf:7:f", "wa:cf:7:w", "wa:cf:7:a"]
+
+
+@pytest.mark.asyncio
+async def test_winter_flood_batch_sets_many_reports_rejects_and_sends_one_message(bot_env, db_session, monkeypatch):
+    """TASK-436 AC-2: пачка id → «залит» каждой, отказы с причиной, подписчику одно сообщение."""
+    from datetime import datetime, timedelta, timezone
+
+    from src.application import winter_subscriptions as wsub
+
+    monkeypatch.setenv("SEASONAL_RINKS_ENABLED", "1")
+    day = datetime(2026, 12, 10, 9, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(wab, "_now", lambda: day - timedelta(minutes=10))
+    a = await make_point(db_session, name="A", lat=53.9, lon=27.56)
+    b = await make_point(db_session, name="B", lat=53.9005, lon=27.5605)
+    await wsub.subscribe_near(db_session, 77, 53.9, 27.56)
+
+    class Msg(FakeMsg):
+        def __init__(self, text_):
+            super().__init__()
+            self.text, self.from_user = text_, SimpleNamespace(id=1)
+
+    m = Msg(f"/winter_flood {a}, {b} 999999999 abc {a}")
+    await wab.cmd_winter_flood(m)
+    reply = m.shown[-1][0]
+    assert reply.startswith("«Залит» поставлен: 2.")
+    assert "999999999 — нет в сезоне" in reply and "abc — не id" in reply
+    states = (await db_session.execute(
+        text("SELECT state FROM seasonal_rink_seasons WHERE arena_id = ANY(:ids)"), {"ids": [a, b]}
+    )).scalars().all()
+    assert sorted(states) == ["flooded", "flooded"]
+
+    class Sink:
+        def __init__(self):
+            self.sent = []
+
+        async def __call__(self, tg, text_, buttons, ids):
+            self.sent.append((tg, sorted(ids)))
+            return "ok"
+
+    assert await wsub.fan_out_events(db_session, day) == 2
+    sink = Sink()
+    await wsub.deliver_pending(db_session, day, sink)
+    assert sink.sent == [(77, sorted([a, b]))]
+
+
+@pytest.mark.asyncio
+async def test_winter_flood_without_ids_shows_format(bot_env):
+    class Msg(FakeMsg):
+        def __init__(self):
+            super().__init__()
+            self.text, self.from_user = "/winter_flood", SimpleNamespace(id=1)
+
+    m = Msg()
+    await wab.cmd_winter_flood(m)
+    assert m.shown[-1][0].startswith("Формат: /winter_flood <id точки> [id …]")
