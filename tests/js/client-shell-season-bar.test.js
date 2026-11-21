@@ -991,7 +991,7 @@ const LEGACY_OVERLAY_HTML =
     "</span>" +
     "<span class=\"client-more-sheet__body\">" +
     "<span class=\"client-more-sheet__label\">Кто кого</span>" +
-    "<span class=\"client-more-sheet__hint\">Угадывай матчи Динамо и Экстралиги</span>" +
+    "<span class=\"client-more-sheet__hint\">Хоккейная игра для своей компании</span>" +
     "</span>" +
     "<svg class=\"client-more-sheet__chevron\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">" +
     "<path d=\"M9 6l6 6-6 6\"/>" +

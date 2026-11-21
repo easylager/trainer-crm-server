@@ -40,7 +40,7 @@
       path: 'kto-kogo',
       label: 'Кто кого',
       iconId: 'kto-kogo',
-      hint: 'Угадывай матчи Динамо и Экстралиги',
+      hint: 'Хоккейная игра для своей компании',
     },
     {
       path: 'client-saved-trainers',
