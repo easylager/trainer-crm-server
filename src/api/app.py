@@ -1925,6 +1925,31 @@ def webapp_ice_tab_js(request: Request):
     )
 
 
+def _ice_board_asset(name: str, media_type: str, request: Request) -> FileResponse:
+    path = _WEBAPP_DIR / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path, media_type=media_type, headers=_webapp_versioned_asset_cache_headers(request))
+
+
+@app.get("/webapp/ice-board.css")
+def webapp_ice_board_css(request: Request):
+    """TASK-438: стили табло «Поиск». Use ``?v=…`` for long cache."""
+    return _ice_board_asset("ice-board.css", "text/css", request)
+
+
+@app.get("/webapp/ice-board-model.js")
+def webapp_ice_board_model_js(request: Request):
+    """TASK-438: модель табло «Поиск» (без DOM). Use ``?v=…`` for long cache."""
+    return _ice_board_asset("ice-board-model.js", "application/javascript", request)
+
+
+@app.get("/webapp/ice-board.js")
+def webapp_ice_board_js(request: Request):
+    """TASK-438: отрисовка табло «Поиск». Use ``?v=…`` for long cache."""
+    return _ice_board_asset("ice-board.js", "application/javascript", request)
+
+
 @app.get("/webapp/ice-map-model.js")
 def webapp_ice_map_model_js(request: Request):
     """TASK-054 Ice map view-model (pure). Use ``?v=…`` for long cache."""
