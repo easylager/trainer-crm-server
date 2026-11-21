@@ -377,6 +377,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # season_ui. CLIENT_FAST_TABS_TELEGRAM_IDS=1,2; CLIENT_FAST_TABS_PERCENT=0…100.
     client_fast_tabs_telegram_ids: EnvIntList = None
     client_fast_tabs_percent: int = Field(default=0, ge=0, le=100)
+    # TASK-438: вкладка «Поиск» — лента сеансов по времени вместо списка катков. Не зависит от
+    # season_ui. CLIENT_SEARCH_BOARD_TELEGRAM_IDS=1,2; CLIENT_SEARCH_BOARD_PERCENT=0…100.
+    client_search_board_telegram_ids: EnvIntList = None
+    client_search_board_percent: int = Field(default=0, ge=0, le=100)
 
     # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
     # Full log: every update + inner gate/menu DB phase timings.

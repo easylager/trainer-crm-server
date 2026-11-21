@@ -37,6 +37,19 @@ def fast_tabs_enabled(account_key: int, settings: Settings) -> bool:
     return fast_tabs_bucket(account_key) < settings.client_fast_tabs_percent
 
 
+def search_board_bucket(account_key: int) -> int:
+    """Своя корзина: процент search_board не повторяет выборки season_ui и fast_tabs."""
+    digest = hashlib.sha256(f"search-board:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def search_board_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-438: вкладка «Поиск» — лента сеансов по времени. От season_ui не зависит."""
+    if int(account_key) in (settings.client_search_board_telegram_ids or ()):
+        return True
+    return search_board_bucket(account_key) < settings.client_search_board_percent
+
+
 # Профили аккаунта — как у GET /client/passes и /client/bookings/history: своя строка,
 # семейный доступ (resolve_acting_client_id) и профили из client_profile_links.
 # Любой статус и любая давность: вкладка, появившись, не исчезает.
