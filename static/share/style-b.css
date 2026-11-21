@@ -1363,3 +1363,50 @@ body.tg-dark .b-when a:not([aria-current="true"]):is(:active, .b-press) { backgr
 
 /* ── Лента «Лёд» по каткам: плитка = каток (TASK-425) ─────────────────── */
 .b-tile__more { display: block; font-size: 12px; color: var(--g-muted); }
+
+/* ── TASK-435 · «Цены на массовое катание» (#ceny). Только токены glide-tokens. ── */
+.b-cost {
+  background: var(--g-surface); border-radius: 18px; overflow: hidden; box-shadow: var(--g-shadow);
+}
+.b-cost__t { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.b-cost__t thead th {
+  padding: 12px 16px 8px; font-size: 13px; font-weight: 500; line-height: 1.3;
+  color: var(--g-muted); text-align: right; white-space: nowrap;
+  border-bottom: 1px solid var(--g-line);
+}
+.b-cost__t thead th:first-child { text-align: left; }
+.b-cost__t tbody tr { position: relative; }
+.b-cost__t tbody tr + tr { border-top: 1px solid var(--g-line); }
+.b-cost__t tbody th, .b-cost__t td { padding: 12px 16px; vertical-align: baseline; }
+.b-cost__t tbody th { text-align: left; font-weight: 600; font-size: 16px; line-height: 1.35; }
+.b-cost__t td { text-align: right; font-size: 16px; white-space: nowrap; color: var(--g-ink); }
+.b-cost__t td + td { padding-left: 4px; }
+.b-cost__u { font-size: 13px; color: var(--g-muted); }
+body.b .b-cost__name { color: var(--g-ink); text-decoration: none; text-wrap: pretty; }
+/* Вся строка — ссылка на карточку арены, как .b-row__link. */
+.b-cost__name::after { content: ""; position: absolute; inset: 0; }
+.b-cost__name:focus-visible { outline: none; }
+.b-cost__t tbody tr:has(.b-cost__name:focus-visible) { box-shadow: inset 0 0 0 2px var(--g-accent-ink); }
+@media (hover: hover) {
+  .b-cost__t tbody tr:hover { background: var(--g-bg); }
+}
+
+/* Узко: строка-карточка — имя сверху, три цены колонками под ним. Без горизонтального скролла. */
+@media (max-width: 520px) {
+  .b-cost__t, .b-cost__t tbody { display: block; }
+  .b-cost__t thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .b-cost__t tbody tr {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 12px; padding: 12px 16px 14px;
+  }
+  .b-cost__t tbody th { grid-column: 1 / -1; padding: 0; }
+  .b-cost__t td, .b-cost__t td + td { padding: 0; text-align: left; font-size: 17px; font-weight: 600; }
+  .b-cost__t td::before {
+    content: attr(data-k); display: block; margin-bottom: 1px;
+    font-size: 12px; font-weight: 400; line-height: 1.25; color: var(--g-muted);
+  }
+  .b-cost__u { font-weight: 400; }
+  /* Нет цены — нет и подписи; колонка держит место, чтобы цены стояли друг под другом. */
+  .b-cost__t td:empty { visibility: hidden; }
+}

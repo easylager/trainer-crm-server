@@ -455,7 +455,7 @@ def _price_with_rental(row: Mapping[str, Any]) -> str | None:
         return None
     total = int(adult) + int(rental)
     major = total / 100.0
-    total_text = str(int(major)) if major == int(major) else f"{major:.2f}"
+    total_text = str(int(major)) if major == int(major) else f"{major:.2f}".replace(".", ",")
     currency = currency_label_ru(str(row.get("currency_code") or "BYN"))
     return t("price.with_rental", total=total_text, currency=currency)
 

@@ -2257,7 +2257,7 @@ async def _load_arena_by_ref(
 
 
 def _schedule_freshness(
-    row: Mapping[str, Any], *, sessions_observed_at: datetime | None = None
+    row: Mapping[str, Any], *, sessions_observed_at: datetime | None = None, now: datetime | None = None
 ) -> dict[str, Any]:
     """TASK-146: schedule_observed_at / schedule_auto / schedule_stale из ice_parser_jobs.
 
@@ -2275,7 +2275,7 @@ def _schedule_freshness(
         last_ok_at=row.get("ice_last_ok_at"),
         sessions_observed_at=observed,
         config=config if isinstance(config, Mapping) else None,
-        now=datetime.now(timezone.utc),
+        now=now or datetime.now(timezone.utc),
         created_at=row.get("ice_job_created_at"),
     )
 
