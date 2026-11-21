@@ -989,6 +989,8 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
   .kk-top { gap: 8px; }
   .kk-stack__fan .kk-sticker:nth-child(n+2) { display: none; }
   .kk-top .kk-btn--sm { padding: 0 12px; }
+  /* Без лиг: подпись «своя лига» выталкивала «Таблицу» за экран; слот с «+» и aria-label остаются. */
+  .kk-top .kk-slot__t { display: none; }
 }
 .kk-sticker { position: relative; width: 40px; height: 40px; border-radius: 11px; overflow: hidden; background: #2a3542; color: #fff; box-shadow: 0 0 0 2px var(--kk-bg, #fff), 0 2px 6px rgba(13, 20, 36, 0.18); transform: rotate(var(--kk-tilt, 0deg)); transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); display: inline-flex; align-items: center; justify-content: center; }
 .kk-sticker + .kk-sticker { margin-left: -14px; }
