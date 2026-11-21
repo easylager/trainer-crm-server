@@ -1357,7 +1357,8 @@ body.tg-dark .b-when a:not([aria-current="true"]):is(:active, .b-press) { backgr
 .b-city-suggest__lead { margin: 8px 0 0; font-size: 15px; line-height: 1.45; color: var(--g-muted); }
 .b-city-suggest__link {
   display: flex; align-items: center; justify-content: center; min-height: 48px; margin-top: 16px;
-  border-radius: 12px; background: var(--g-dark); color: var(--g-on-photo);
+  /* !important — как у .b-city: общее правило ссылок красило текст бирюзой на тёмном (контраст 2,9:1). */
+  border-radius: 12px; background: var(--g-dark); color: var(--g-on-photo) !important;
   font-size: 16px; font-weight: 600; text-decoration: none;
 }
 
