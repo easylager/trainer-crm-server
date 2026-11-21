@@ -80,8 +80,9 @@ def test_ice_and_catalog_page_weight_stay_within_five_percent() -> None:
 # потом, в простое или по нажатию. Замер 2026-11-12; bookings +6.7 KB — entryGate write-access.js, 2026-11-15.
 # Рост больше 5% — падение.
 _SHELL_BASELINE_GZIP = {
-    "me": 173_336,
-    "bookings": 131_225,
+    # 21.11.2026: +общий экран ошибки загрузки и пустые состояния (TASK-437) — пересчитано по факту.
+    "me": 183_775,
+    "bookings": 134_318,
 }
 
 

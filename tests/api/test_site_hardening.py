@@ -46,8 +46,9 @@ def test_permissions_policy_on_site_not_on_mini_app():
 
 def test_city_hub_frame_ancestors_allow_metrika_and_telegram():
     """Вебвизор/карта кликов Метрики встраивают HTML во фрейм — без их доменов пусто."""
-    r = TestClient(app).get("/c/minsk")
-    assert r.status_code == 200
+    # Любая HTML-страница сайта вне /webapp/; брендовая 404 есть и на пустой базе CI.
+    r = TestClient(app).get("/nonexistent-page", headers={"Accept": "text/html,application/xhtml+xml"})
+    assert r.headers["content-type"].startswith("text/html")
     csp = r.headers["content-security-policy"]
     assert csp.startswith("frame-ancestors 'self'")
     assert "https://web.telegram.org" in csp and "https://*.telegram.org" in csp
