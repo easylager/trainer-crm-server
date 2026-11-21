@@ -179,15 +179,25 @@ describe('S2: бар оболочки на странице игры', () => {
       vm.runInNewContext(src, win);
       return { writes, requests };
     }
+    /* TASK-437: по умолчанию оболочка есть; нет её только при свежем явном false или вне Telegram. */
     const off = {
-      'нет кэша': {},
       'season_ui false': { stored: JSON.stringify({ u: '42', season_ui: false, bookings_tab: false, at: Date.now() }) },
-      'битый JSON': { stored: '{season_ui:true' },
-      'чужой u': { stored: JSON.stringify({ u: '7', season_ui: true, at: Date.now() }) },
-      'season_ui не true, а строка': { stored: JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }) },
       'нет пользователя Telegram': { user: null, stored: JSON.stringify({ u: '42', season_ui: true, at: Date.now() }) },
+    };
+    const unknown = {
+      'нет кэша': {},
+      'битый JSON': { stored: '{season_ui:false' },
+      'чужой u с false': { stored: JSON.stringify({ u: '7', season_ui: false, at: Date.now() }) },
+      'season_ui строкой': { stored: JSON.stringify({ u: '42', season_ui: 'false', at: Date.now() }) },
       'storage недоступен': { storageThrows: true },
     };
+    for (const [name, opts] of Object.entries(unknown)) {
+      it(`${name} → оболочка грузится (текущий бар), запросов из гейта нет`, () => {
+        const r = run(opts);
+        assert.equal(r.writes.length, 1);
+        assert.deepEqual(r.requests, []);
+      });
+    }
     for (const [name, opts] of Object.entries(off)) {
       it(`${name} → оболочка не грузится, запросов к client/session и ui-flags нет`, () => {
         const r = run(opts);

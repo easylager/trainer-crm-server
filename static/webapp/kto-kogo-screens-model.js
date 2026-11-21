@@ -693,6 +693,7 @@
   function tableCaption(view, club) {
     var n = (view && view.players) || 0;
     var what = club ? 'только матчи ' + clubGen(club) : 'Динамо и вся Экстралига';
+    if (!n) return 'Пока никого · ' + what;
     return spaced(n) + NBSP + Base.plural(n, 'игрок', 'игрока', 'игроков') + ' · ' + what;
   }
 
@@ -739,10 +740,14 @@
     };
   }
 
-  /** Строка над кнопкой «Сделать ход», если в срезе нет моих ходов. */
-  function noMeLine(club, periodKey, nowIso) {
+  /**
+   * Строка над кнопкой «Сделать ход», если в срезе нет моих ходов. canMove === false — открытых матчей нет,
+   * кнопки не будет (TASK-437): строка не зовёт делать ход, которого сделать негде.
+   */
+  function noMeLine(club, periodKey, nowIso, canMove) {
     var closed = periodKey !== 'season' && periodKey !== monthKey(nowIso);
     if (closed) return 'В этом периоде у тебя не было ходов — загляни в другой';
+    if (canMove === false) return 'Ближайших матчей пока нет. С первым ходом появишься в этой таблице';
     return 'Сделай первый ход' + (club ? ' на матч ' + clubGen(club) : '') + ' — и появишься в этой таблице';
   }
 
@@ -1509,6 +1514,18 @@
     text: 'Выбери победителя ближайшего матча, и он появится в этом списке.',
     cta: 'К ближайшему матчу',
   };
+  /* TASK-437: открытых матчей нет — кнопки нет: «К ближайшему матчу» вела на хаб с «Ближайших матчей пока нет». */
+  var MATCHES_EMPTY_NO_MATCH = {
+    label: MATCHES_EMPTY.label,
+    head: MATCHES_EMPTY.head,
+    text: 'Ближайших матчей пока нет. Ход можно будет сделать, когда клубы назначат следующий.',
+    cta: null,
+  };
+
+  /** Пустой «Матчи и мои ходы»: с кнопкой, только если есть открытый матч (next). */
+  function matchesEmptyCopy(next) {
+    return next ? MATCHES_EMPTY : MATCHES_EMPTY_NO_MATCH;
+  }
 
   /** Новый игрок: в «Мои ходы» нет ни одного хода и подгружать нечего — вместо списка пустое состояние. */
   function matchesEmpty(items, hasMore) {
@@ -1856,6 +1873,7 @@
     MATCHES_TITLE: MATCHES_TITLE,
     ENTRY_TITLE: ENTRY_TITLE,
     MATCHES_EMPTY: MATCHES_EMPTY,
+    matchesEmptyCopy: matchesEmptyCopy,
     WRITE_ASK: WRITE_ASK,
     WRITE_ASK_KEY: WRITE_ASK_KEY,
     isFirstPick: isFirstPick,

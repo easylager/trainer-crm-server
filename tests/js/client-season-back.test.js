@@ -19,27 +19,32 @@ describe('readCachedSeasonUi / isSeasonUi: состояния кэша', () => {
   it('флаг включён у того же пользователя', () => assert.equal(B.isSeasonUi(env(on)), true));
   it('u числом тоже совпадает', () =>
     assert.equal(B.isSeasonUi(env(JSON.stringify({ u: 42, season_ui: true, at: Date.now() }))), true));
-  it('кэша нет', () => assert.equal(B.isSeasonUi(env(null)), false));
-  it('битый JSON', () => assert.equal(B.isSeasonUi(env('{oops')), false));
-  it('чужой u', () => assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '7', season_ui: true, at: Date.now() }))), false));
-  it('нет u в кэше', () => assert.equal(B.isSeasonUi(env(JSON.stringify({ season_ui: true }))), false));
+  /* TASK-437: по умолчанию включено (на проде season_ui у всех); выключает только свежий явный false. */
+  it('кэша нет → включено', () => assert.equal(B.isSeasonUi(env(null)), true));
+  it('битый JSON → включено', () => assert.equal(B.isSeasonUi(env('{oops')), true));
+  it('чужой u → включено', () => assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '7', season_ui: false, at: Date.now() }))), true));
+  it('нет u в кэше → включено', () => assert.equal(B.isSeasonUi(env(JSON.stringify({ season_ui: false }))), true));
   it('"true" строкой', () =>
-    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }))), false));
-  it('1 вместо true', () =>
-    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: 1, at: Date.now() }))), false));
-  it('season_ui false', () =>
+    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }))), true));
+  it('"false" строкой — не явный false, включено', () =>
+    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: 'false', at: Date.now() }))), true));
+  it('season_ui false свежий — выключено', () =>
     assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: false, at: Date.now() }))), false));
+  it('season_ui false старше суток или без at — включено', () => {
+    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: false, at: Date.now() - 86400000 - 60000 }))), true);
+    assert.equal(B.isSeasonUi(env(JSON.stringify({ u: '42', season_ui: false }))), true);
+  });
   it('JSON не объект', () => {
-    assert.equal(B.isSeasonUi(env('null')), false);
-    assert.equal(B.isSeasonUi(env('true')), false);
-    assert.equal(B.isSeasonUi(env('"x"')), false);
+    assert.equal(B.isSeasonUi(env('null')), true);
+    assert.equal(B.isSeasonUi(env('true')), true);
+    assert.equal(B.isSeasonUi(env('"x"')), true);
   });
   it('storage бросает', () =>
-    assert.equal(B.isSeasonUi({ localStorage: throwing, Telegram: { WebApp: tg(42) } }), false));
+    assert.equal(B.isSeasonUi({ localStorage: throwing, Telegram: { WebApp: tg(42) } }), true));
   it('доступ к localStorage бросает', () => {
     const e = { Telegram: { WebApp: tg(42) } };
     Object.defineProperty(e, 'localStorage', { get() { throw new Error('denied'); } });
-    assert.equal(B.isSeasonUi(e), false);
+    assert.equal(B.isSeasonUi(e), true);
   });
   it('нет Telegram / нет id пользователя', () => {
     assert.equal(B.isSeasonUi({ localStorage: store(on) }), false);

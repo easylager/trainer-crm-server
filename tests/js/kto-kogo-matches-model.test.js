@@ -306,6 +306,14 @@ describe('сводка и вход', () => {
     assert.equal(S.nearestOpen([mk({ id: 2, starts_at: at(5 * H) }), mk({ id: 1, starts_at: at(2 * H) }), mk({ id: 3, open: false })]).id, 1);
     assert.equal(S.nearestOpen([mk({ open: false })]), null);
   });
+
+  it('TASK-437: пустой «Мои ходы» зовёт к ближайшему матчу, только если он есть', () => {
+    assert.equal(S.matchesEmptyCopy(mk({ id: 1 })).cta, 'К ближайшему матчу');
+    const none = S.matchesEmptyCopy(null);
+    assert.equal(none.cta, null);
+    assert.match(none.text, /Ближайших матчей пока нет/);
+    assert.equal(none.head, S.MATCHES_EMPTY.head);
+  });
 });
 
 describe('слияние страниц', () => {

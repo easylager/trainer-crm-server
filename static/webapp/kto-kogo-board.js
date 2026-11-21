@@ -406,17 +406,21 @@
         state.profile ? K.standStrip('Мои награды') : null,
       ]);
       if (!view) {
-        main.appendChild(a.failed ? K.retryCard('Таблица не загрузилась.', function () { a.failed = false; K.render(); load(a); }) : K.loading());
+        main.appendChild(a.failed ? K.retryCard(function () { a.failed = false; K.render(); load(a); }) : K.loading());
         return [main];
       }
       main.appendChild(h('div', { class: 'kk-crownbar' + (S.tableCrownMuted(view, a.period) ? ' kk-crownbar--muted' : '') }, [K.crownIcon(18), h('span', { text: S.tableCrownLine(view, a.club, a.period, view.period && view.period.kind === 'season' ? view.period.title : seasonTitle) })]));
+      /* TASK-437: «Сделать ход» — только если есть открытый матч (список не загрузился — хаб покажет «Повторить»).
+         Главная (жёлтая) кнопка на экране одна: при «Сделать ход» приглашение в лигу — вторичное. */
+      var canMove = !!state.matchesFailed || !!S.nearestOpen(state.matches);
+      var moveCta = !view.me && canMove;
       var few = S.fewPlayers(view, a.club, a.period);
       if (few) {
         main.appendChild(h('section', { class: 'kk-card kk-note' }, [
           h('span', { class: 'kk-lbl', text: 'МАЛО ИГРОКОВ' }),
           h('b', { class: 'kk-hd', text: few.head }),
           h('span', { class: 'kk-tx', text: few.body }),
-          h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.go('leagueNew', { club: a.club }); }, text: few.invite }),
+          h('button', { type: 'button', class: 'kk-btn ' + (moveCta ? 'kk-btn--alt' : 'kk-btn--gold'), onclick: function () { K.go('leagueNew', { club: a.club }); }, text: few.invite }),
         ]));
       }
       var rows = S.tableRows(view, a.full).map(function (x) {
@@ -426,8 +430,8 @@
       var more = S.tableMore(view, a.full);
       if (more) main.appendChild(h('button', { type: 'button', class: 'kk-ml-more', onclick: function () { a.full = true; K.render(); }, text: more }));
       if (!view.me) {
-        main.appendChild(h('span', { class: 'kk-tx', text: S.noMeLine(a.club, a.period, nowIso()) }));
-        main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.reset('hub', {}); }, text: 'Сделать ход' }));
+        main.appendChild(h('span', { class: 'kk-tx', text: S.noMeLine(a.club, a.period, nowIso(), canMove) }));
+        if (moveCta) main.appendChild(h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.reset('hub', {}); }, text: 'Сделать ход' }));
       }
       return [main];
     },
@@ -476,7 +480,7 @@
     },
     render: function () {
       var p = state.profile;
-      if (!p) return [h('main', { class: 'kk-main' }, [K.topbar('Болельщик', null), state.profileFailed ? K.retryCard('Карточка болельщика не загрузилась.', function () { K.replace('profile', {}); }) : K.loading()])];
+      if (!p) return [h('main', { class: 'kk-main' }, [K.topbar('Болельщик', null), state.profileFailed ? K.retryCard(function () { K.replace('profile', {}); }) : K.loading()])];
       var club = p.club;
       var best = (state.peaks || [])[0];
       var main = h('main', { class: 'kk-main' }, [K.topbar('Болельщик', 'сезон ' + p.season)]);

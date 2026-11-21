@@ -297,9 +297,14 @@
     return h('div', { class: 'kk-skel', role: 'status', 'aria-label': 'Загружаем' });
   }
 
-  /** Загрузка не удалась: объясняем и даём повторить, а не оставляем вечную заглушку. */
-  function retryCard(text, onRetry) {
-    return emptyCard('НЕ ЗАГРУЗИЛОСЬ', text || 'Проверь интернет и попробуй ещё раз.', h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: onRetry, text: 'Повторить' }));
+  /**
+   * Загрузка не удалась: общий компонент приложения «Нет связи / Не загрузилось · Повторить»
+   * (MiniAppErrorUi, mini-app-telegram-chrome.js) в карточке игры. Цвета — из --kk-* (kto-kogo.css). TASK-437.
+   */
+  function retryCard(onRetry, err) {
+    var ui = window.MiniAppErrorUi;
+    var node = ui && ui.loadErrorNode ? ui.loadErrorNode({ error: err, onRetry: onRetry }) : null;
+    return h('section', { class: 'kk-card kk-note kk-retry' }, [node]);
   }
 
   /**

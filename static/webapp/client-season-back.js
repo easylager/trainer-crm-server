@@ -2,7 +2,7 @@
  * TASK-375: «назад» со страниц из «Ещё» при новой навигации (season_ui).
  * Чистая логика, без DOM. Оболочку не грузит: флаг читается из ClientShell.uiFlags(), если оболочка
  * уже на странице, иначе из кэша localStorage['cw_ui_flags_v1'] (тот же ключ и правила, что в оболочке).
- * Любая неопределённость = флаг выключен.
+ * Неопределённость = флаг включён (TASK-437: на проде season_ui у всех); выключает только явный свежий false.
  */
 (function (global) {
   'use strict';
@@ -21,16 +21,19 @@
     }
   }
 
-  /** season_ui из кэша: только если кэш этого пользователя, свежий (at моложе суток) и season_ui === true. */
+  /**
+   * season_ui из кэша (TASK-437): по умолчанию включён, как на проде. Выключает только свежий (at моложе суток)
+   * кэш этого пользователя с season_ui === false. Нет пользователя Telegram — выключено.
+   */
   function readCachedSeasonUi(storage, uid) {
+    if (!uid) return false;
     try {
-      if (!uid || !storage) return false;
-      var c = JSON.parse(storage.getItem(UI_FLAGS_KEY) || 'null');
-      if (!c || String(c.u) !== String(uid) || c.season_ui !== true) return false;
+      var c = storage ? JSON.parse(storage.getItem(UI_FLAGS_KEY) || 'null') : null;
+      if (!c || String(c.u) !== String(uid) || c.season_ui !== false) return true;
       var age = Date.now() - c.at;
-      return typeof c.at === 'number' && age >= 0 && age < UI_FLAGS_TTL_MS;
+      return !(typeof c.at === 'number' && age >= 0 && age < UI_FLAGS_TTL_MS);
     } catch (e) {
-      return false;
+      return true;
     }
   }
 
@@ -40,10 +43,11 @@
       var shell = env && env.ClientShell;
       if (shell && typeof shell.uiFlags === 'function') return shell.uiFlags().season_ui === true;
     } catch (e) { /* падаем на кэш */ }
+    var uid = telegramUserId(env && env.Telegram && env.Telegram.WebApp);
     try {
-      return readCachedSeasonUi(env && env.localStorage, telegramUserId(env && env.Telegram && env.Telegram.WebApp));
+      return readCachedSeasonUi(env && env.localStorage, uid);
     } catch (e) {
-      return false;
+      return !!uid;
     }
   }
 

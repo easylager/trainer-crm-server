@@ -1026,7 +1026,7 @@
 
   function eveningBlock(a) {
     var ev = state.evenings[ekey(a)];
-    if (!ev) return [a.eveningFailed ? K.retryCard('Вечер не загрузился.', function () { a.eveningFailed = false; openEvening(a, a.day); }) : K.loading()];
+    if (!ev) return [a.eveningFailed ? K.retryCard(function () { a.eveningFailed = false; openEvening(a, a.day); }) : K.loading()];
     if (!ev.day) return [h('span', { class: 'kk-sub', text: 'У лиги ещё не было матчей. Первый вечер появится в день матча.' })];
     function go(day) { openEvening(a, day); }
     return [
@@ -1097,7 +1097,7 @@
       a.tab = a.tab || 'evening';
       var l = state.leagueTables[lkey(headArgs(a))];
       var monthName = S.periodLabel(S.monthKey(nowIso()));
-      if (!l) return [h('main', { class: 'kk-main' }, [K.topbar('Лига', null), a.failed ? K.retryCard('Лига не загрузилась.', function () { a.failed = false; K.render(); K.replace('league', a); }) : K.loading()])];
+      if (!l) return [h('main', { class: 'kk-main' }, [K.topbar('Лига', null), a.failed ? K.retryCard(function () { a.failed = false; K.render(); K.replace('league', a); }) : K.loading()])];
       var items = l.items || [];
       var face = Id().faceOf(l);
       var main = h('main', { class: 'kk-main' }, [
@@ -1304,7 +1304,7 @@
       var f = readyForm(a);
       var back = h('div', { class: 'kk-ready__top' }, [h('button', { type: 'button', class: 'kk-round', 'aria-label': 'Назад', onclick: K.back }, [icon(I.back)])]);
       if (!a.info) {
-        return [h('main', { class: 'kk-main kk-ready' }, [back, a.failed ? K.retryCard('Не загрузилось.', function () { K.replace('ready', {}); }) : K.loading()])];
+        return [h('main', { class: 'kk-main kk-ready' }, [back, a.failed ? K.retryCard(function () { K.replace('ready', {}); }) : K.loading()])];
       }
       var err = S.readyError(f);
       return [h('main', { class: 'kk-main kk-ready' }, [
@@ -1375,7 +1375,7 @@
           h('span', { class: 'kk-tx', text: p.members + ' ' + M.plural(p.members, 'человек', 'человека', 'человек') + ' уже ' + M.plural(p.members, 'угадывает', 'угадывают', 'угадывают') }),
           next ? h('div', { class: 'kk-card kk-note' }, [h('span', { class: 'kk-lbl', text: 'БЛИЖАЙШИЙ МАТЧ' }), h('b', { class: 'kk-hd', text: S.clubName(next.home.name) + ' — ' + S.clubName(next.away.name) }), h('span', { class: 'kk-sub', text: M.whenLabel(next.starts_at, new Date()) })]) : null,
           h('span', { class: 'kk-sub', text: 'Тапаешь за команду или угадываешь счёт. После матча очки приходят сами. ' + M.RULES }),
-        ]) : state.joinError ? K.retryCard('Лига не открылась. Проверь интернет и попробуй ещё раз.', loadJoinPreview) : K.loading(),
+        ]) : state.joinError ? K.retryCard(loadJoinPreview) : K.loading(),
         mine
           ? h('button', { type: 'button', class: 'kk-btn kk-btn--gold', onclick: function () { K.replace('league', { id: mine.id }); }, text: 'Открыть лигу' })
           : h('button', { type: 'button', class: 'kk-btn kk-btn--gold', disabled: !p || state.busy ? 'true' : null, onclick: joinLeague, text: 'Вступить в лигу' }),

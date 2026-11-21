@@ -3,7 +3,9 @@
  * Общие токены не трогаем: всё своё — --kk-*. Светлая тема по умолчанию, тёмная — body.kk-dark (colorScheme Telegram).
  * Тап-цели не меньше 44 px; ширина рассчитана на 390 px.
  */
-.kk {
+/* Токены и на body (TASK-437): общие слои поверх игры — экран без сети, гейт «Сохраните Glide», «сессия истекла» —
+   живут в body, а не в .kk, и без этого брали браузерный Times и светлую тему. */
+body, .kk {
   --kk-bg: #f2f5fa; --kk-card: #ffffff; --kk-row: #ffffff; --kk-chip: #e3e9f2; --kk-line: #d3dae6;
   --kk-muted: #566578; --kk-ink: #0d1424; --kk-soft: #3a475a; --kk-gold: #ffd23f; --kk-on-gold: #0d1424;
   --kk-win: #12803f; --kk-lose: #c0262d; --kk-crownbg: #fff3cc; --kk-crownink: #5c4500; --kk-me: #e0f0dc;
@@ -14,7 +16,7 @@
   --kk-display: 'Dela Gothic One', 'Unbounded', var(--app-font-sans, system-ui), sans-serif;
   --kk-text: 'Golos Text', var(--app-font-sans, system-ui), sans-serif;
 }
-body.kk-dark .kk {
+body.kk-dark, body.kk-dark .kk {
   /* Тёмная тема тёплая, без «беттинговой» синевы (холст SpMeyNMs2GoG29akhF2o6a). Пары текста проверяет tests/js/kto-kogo-dark-contrast.test.js. */
   --kk-bg: #17212b; --kk-card: #222c38; --kk-row: #1d2733; --kk-chip: #2c3846; --kk-line: #3a4756;
   --kk-muted: #98adc0; --kk-soft: #c3d2dc; --kk-ink: #f1f5f7; --kk-win: #7ee0a1; --kk-lose: #ff8a8d;
@@ -26,8 +28,14 @@ body.kk-dark .kk {
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
-body { background: #f2f5fa; }
+body { background: #f2f5fa; color: var(--kk-ink); font-family: var(--kk-text); }
 body.kk-dark { background: #17212b; }
+/* Общий компонент «Нет связи / Не загрузилось · Повторить» (mini-app-telegram-chrome.js) — в цветах игры. */
+body {
+  --miniapp-state-bg: var(--kk-bg); --miniapp-state-ink: var(--kk-ink); --miniapp-state-muted: var(--kk-muted);
+  --miniapp-state-btn-bg: var(--kk-gold); --miniapp-state-btn-ink: var(--kk-on-gold); --miniapp-state-font: var(--kk-text);
+}
+.kk-retry .miniapp-load-error { padding: 12px 0 4px; }
 /* Быстрые повторные тапы (+/− у счёта, стороны) не должны масштабировать страницу; щипок остаётся. */
 .kk, .kk * { touch-action: manipulation; }
 .kk button, .kk [role='button'] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

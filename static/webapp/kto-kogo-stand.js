@@ -156,7 +156,7 @@
       if (!a.data) {
         var body = a.failed === 'gone'
           ? K.emptyCard('СТЕНД', 'Такого игрока нет или ссылка устарела.')
-          : a.failed ? K.retryCard('Стенд не открылся. Проверь интернет и попробуй ещё раз.', function () { loadStand(a); }) : K.loading();
+          : a.failed ? K.retryCard(function () { loadStand(a); }) : K.loading();
         return [h('main', { class: 'kk-main' }, [K.topbar('Стенд', null), body])];
       }
       var m = S.standModel(a.data.crowns, state.clubs || []);
