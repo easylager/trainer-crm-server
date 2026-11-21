@@ -82,9 +82,17 @@ def _remind_time(starts_at: datetime) -> str:
     return f"{loc:%H:%M}"
 
 
-def subscribed_text(row: Any, *, now: datetime, already: bool) -> str:
+def subscribed_text(row: Any, *, now: datetime, already: bool, via_game: bool = False) -> str:
     head = "Уже стоит" if already else "Готово"
     starts = _utc(row.starts_at)
+    if via_game:
+        # Игрок с включённым чатом: колокольчик молчит, напоминание придёт из «Кто кого» (TASK-439).
+        if now >= starts - REMIND_AHEAD:
+            return f"{head}: матч {_title(row)} скоро — {_when(starts)}. Напомним из игры, если хода ещё нет."
+        return (
+            f"{head}: матч {_title(row)} — {_when(starts)}. "
+            f"Напомним из игры «Кто кого» в {_remind_time(starts)}, за 3 часа, если хода ещё нет."
+        )
     if now >= starts - REMIND_AHEAD:
         when = f"Матч {_title(row)} скоро — {_when(starts)}. Напомним в ближайшие минуты."
         return f"{head}: {when}"
@@ -185,8 +193,9 @@ async def subscribe(
         already = False
     else:
         already = True
+    via_game = await _player_chat_on(session, int(telegram_id))
     return {
-        "text": subscribed_text(row, now=now, already=already),
+        "text": subscribed_text(row, now=now, already=already, via_game=via_game),
         "state": "already" if already else "new",
         "match_id": mid,
         "path": site_matches.match_path(row),
@@ -211,22 +220,29 @@ class Notice:
     buttons: list[list[dict]]
     starts_at: datetime
     known_starts_at: datetime | None
+    # Игрок с включённым чатом: колокольчик только помечает строку, текст не шлёт (TASK-439).
+    defer_to_game: bool = False
 
+
+_PLAYER = text("SELECT 1 FROM hockey_players WHERE player_key = :key")
 
 _DUE = text(f"""
     SELECT b.telegram_id, b.match_id, b.known_starts_at, b.remind_for,
-           EXISTS (
-               SELECT 1 FROM hockey_picks AS hp
-               LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = hp.player_key
-               WHERE hp.player_key = b.telegram_id AND hp.match_id = b.match_id AND hp.points IS NOT NULL
-                 AND COALESCE(pr.remind, true) AND pr.bot_blocked_at IS NULL AND COALESCE(pr.notify_result, true)
-           ) AS game_tells_result,
            {", ".join("m." + c.strip() for c in site_matches._COLUMNS.split(",") if c.strip() and c.strip() != "id")}
     FROM hockey_match_bells b
     JOIN hockey_matches m ON m.id = b.match_id
     WHERE b.unsubscribed_at IS NULL AND b.result_claimed_at IS NULL AND m.starts_at > :recent
     ORDER BY m.starts_at, b.telegram_id
     """)  # noqa: SLF001
+
+
+async def _player_chat_on(session: AsyncSession, telegram_id: int) -> bool:
+    """Есть в ``hockey_players`` и сообщения в чате включены (то же правило, что ``remind_on``)."""
+    if (await session.execute(_PLAYER, {"key": int(telegram_id)})).first() is None:
+        return False
+    from src.application.hockey_notices import remind_on
+
+    return await remind_on(session, int(telegram_id))
 _CLAIM_REMIND = text("""
     UPDATE hockey_match_bells SET remind_for = :starts, remind_claimed_at = :now, remind_sent_at = NULL
     WHERE telegram_id = :tg AND match_id = :mid AND unsubscribed_at IS NULL
@@ -266,33 +282,66 @@ def _buttons(row: Any, *, base_url: str, off: bool = True) -> list[list[dict]]:
 async def due_notices(
     session: AsyncSession, *, now: datetime, settings: Settings | None = None
 ) -> list[Notice]:
-    """Что пора отправить. Ничего не пишет; одно сообщение на подписку за тик."""
+    """Что пора отправить. Ничего не пишет; одно сообщение на подписку за тик.
+
+    У игрока с включённым чатом колокольчик не пишет — возвращает notice с ``defer_to_game``,
+    чтобы ``deliver`` пометил строку обработанной без отправки.
+    """
     cfg = settings or Settings()  # type: ignore[call-arg]
     scope = site_matches.scope_of(cfg)
     if scope.empty:
         return []
     base = (cfg.webapp_base_url or "").strip().rstrip("/")
     out: list[Notice] = []
+    chat_cache: dict[int, bool] = {}
     for r in (await session.execute(_DUE, {"recent": now - FRESH})).all():
         if not in_scope(r, scope):
             continue
         starts = _utc(r.starts_at)
+        tg = int(r.telegram_id)
+        if tg not in chat_cache:
+            chat_cache[tg] = await _player_chat_on(session, tg)
+        defer = chat_cache[tg]
         row = _Row(r, id=int(r.match_id))
-        common = {"telegram_id": int(r.telegram_id), "match_id": int(r.match_id), "starts_at": starts, "known_starts_at": r.known_starts_at}
+        common = {
+            "telegram_id": tg,
+            "match_id": int(r.match_id),
+            "starts_at": starts,
+            "known_starts_at": r.known_starts_at,
+            "defer_to_game": defer,
+        }
         if site_matches.hidden(r):
             out.append(Notice(KIND_CANCEL, text=cancel_text(r), buttons=[], **common))
         elif r.status == STATUS_FINAL and r.home_score is not None:
-            # Играющему итог пришлёт сама игра («Мимо. Бывает…» с его местом): второе сообщение — дубль.
-            if starts > now - FRESH and not r.game_tells_result:
-                out.append(Notice(KIND_RESULT, text=result_text(r), buttons=_buttons(row, base_url=base, off=False), **common))
+            if starts > now - FRESH:
+                out.append(
+                    Notice(
+                        KIND_RESULT,
+                        text=result_text(r),
+                        buttons=[] if defer else _buttons(row, base_url=base, off=False),
+                        **common,
+                    )
+                )
         elif now < starts:
             known = _utc(r.known_starts_at) if r.known_starts_at is not None else None
             if known is not None and known != starts:
-                out.append(Notice(KIND_MOVED, text=moved_text(r), buttons=_buttons(row, base_url=base), **common))
+                out.append(
+                    Notice(
+                        KIND_MOVED,
+                        text=moved_text(r),
+                        buttons=[] if defer else _buttons(row, base_url=base),
+                        **common,
+                    )
+                )
             elif starts - REMIND_AHEAD <= now and (r.remind_for is None or _utc(r.remind_for) != starts):
                 arena, _city = site_matches.place_of(r)
                 out.append(
-                    Notice(KIND_REMIND, text=remind_text(r, now=now, arena=arena), buttons=_buttons(row, base_url=base), **common)
+                    Notice(
+                        KIND_REMIND,
+                        text=remind_text(r, now=now, arena=arena),
+                        buttons=[] if defer else _buttons(row, base_url=base),
+                        **common,
+                    )
                 )
     return out
 
@@ -325,8 +374,11 @@ async def mark_sent(session: AsyncSession, notice: Notice, *, now: datetime) -> 
 
 
 async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, int]:
-    """Занять — закоммитить — отправить — отметить. Каждое сообщение — своя короткая транзакция."""
-    counts = {"sent": 0, "failed": 0, "blocked": 0}
+    """Занять — закоммитить — отправить — отметить. Каждое сообщение — своя короткая транзакция.
+
+    ``defer_to_game``: только claim + mark_sent, без отправки (игрок получит из «Кто кого»).
+    """
+    counts = {"sent": 0, "failed": 0, "blocked": 0, "deferred": 0}
     async with session_factory() as session:
         notices = await due_notices(session, now=now)
     for notice in notices:
@@ -334,6 +386,12 @@ async def deliver(session_factory, *, now: datetime, send: Sender) -> dict[str, 
             if not await claim(session, notice, now=now):
                 continue
             await session.commit()
+        if notice.defer_to_game:
+            async with session_factory() as session:
+                await mark_sent(session, notice, now=now)
+                await session.commit()
+            counts["deferred"] += 1
+            continue
         try:
             result = await send(notice.telegram_id, notice.text, notice.buttons)
         except Exception:  # noqa: BLE001 — сбой одного сообщения не роняет остальные

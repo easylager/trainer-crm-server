@@ -145,7 +145,8 @@ async def test_summary_gets_the_cap_line_only_when_its_match_closes_the_day(db_s
     labels = [b["text"] for row in notices[MAX].buttons for b in row]
     assert "Вечер в лиге" in labels
     assert any(f"kkv_{league_id}_20261110" in u for u in urls)
-    assert labels[-1] == "Отключить такие сообщения"  # кнопка вечера — выше «Отключить»
+    assert "Отключить такие сообщения" not in labels  # один выключатель — в Mini App (TASK-439)
+    assert "Вечер в лиге" in labels
     assert hockey_notices.KIND_RESULT == notices[MAX].kind  # новых видов нет: это тот же итог
 
 
