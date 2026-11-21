@@ -1298,12 +1298,16 @@ def _b_home_city_card(user_city: Mapping[str, Any] | None, *, when_key: str = "t
         from src.application.winter_page import winter_city_path
 
         total, flooded = int(winter["total"]), int(winter["flooded"])
-        winter_line = f"Зимой: {total}\u00a0{plural_ru(total, 'точка', 'точки', 'точек')} · " + (
+        # Вторичная карточка под «Ваш город», а не ещё одна ссылка рядом с «Другой город»:
+        # из «Зимой: N точек» не понятно, что это уличные катки.
+        winter_line = f"{total}\u00a0{plural_ru(total, 'место', 'места', 'мест')} · " + (
             f"залиты {flooded}" if flooded else "ждём заливку"
         )
         winter_html = (
-            f'<a class="b-link" href="{_esc(winter_city_path(str(user_city.get("name") or "")))}">'
-            f"{_esc(winter_line)}</a>"
+            f'<a class="b-city b-city--sub" href="{_esc(winter_city_path(str(user_city.get("name") or "")))}">'
+            '<span class="b-city__body"><span class="b-city__kicker">Зимой</span>'
+            '<span class="b-city__title">Уличные катки и коробки</span>'
+            f'<span class="b-city__line">{_esc(winter_line)}</span></span>{icon_svg("arrow")}</a>'
         )
     return (
         f'<a class="b-city" href="{_esc(href)}"><span class="b-city__body">'

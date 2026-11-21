@@ -14,7 +14,8 @@ NOW = datetime(2026, 12, 5, 12, tzinfo=timezone.utc)
 def test_card_shows_winter_entry_when_city_has_points() -> None:
     html = _b_home_city_card({**CITY, "winter": {"total": 3, "flooded": 0}})
     assert 'href="/c/minsk/zimoy"' in html
-    assert "Зимой: 3 точки · ждём заливку" in html
+    assert "Уличные катки и коробки" in html
+    assert "3\u00a0места · ждём заливку" in html
 
 
 def test_card_counts_flooded_points() -> None:
@@ -80,7 +81,7 @@ async def _home_html(db_session, monkeypatch, *, enabled: bool) -> tuple[str, st
 async def test_home_page_links_winter_when_flag_on(app_use_test_db, db_session, monkeypatch) -> None:
     html, slug = await _home_html(db_session, monkeypatch, enabled=True)
     assert f'href="/c/{slug}/zimoy"' in html
-    assert "Зимой: 2 точки · залиты 1" in html
+    assert "2\u00a0места · залиты 1" in html
 
 
 async def test_home_page_has_no_winter_when_flag_off(app_use_test_db, db_session, monkeypatch) -> None:
