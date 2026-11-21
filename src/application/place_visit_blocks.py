@@ -217,7 +217,7 @@ def _promos_html(promos: Mapping[str, Any]) -> str:
     return f'<div class="b-promos">{rows}</div>'
 
 
-def _rink_html(rink: Mapping[str, Any], *, tel_href: str) -> str:
+def _rink_html(rink: Mapping[str, Any], *, tel_href: str, beacon: str = "") -> str:
     rows = "".join(
         f'<div class="b-rinkrow"><span>{_esc(r.get("label"))}'
         + (f', {int(r["minutes"])} минут' if r.get("minutes") else "")
@@ -228,12 +228,17 @@ def _rink_html(rink: Mapping[str, Any], *, tel_href: str) -> str:
     href = tel_href
     if phone:
         href = "tel:" + "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-    call = f'<a class="b-more-call" href="{_esc(href)}">{icon_svg("phone")}Позвонить и забронировать</a>' if href else ""
+    beacon_attr = f' data-catalog-phone-beacon="{_esc(beacon)}"' if beacon else ""
+    call = (
+        f'<a class="b-more-call" href="{_esc(href)}"{beacon_attr}>{icon_svg("phone")}Позвонить и забронировать</a>'
+        if href
+        else ""
+    )
     lead = "<p class=\"b-more-lead\">Весь каток на вашу компанию: день рождения, хоккей с друзьями, корпоратив.</p>"
     return f"{lead}<div class=\"b-rinkrows\">{rows}</div>{call}"
 
 
-def more_html(vv: Mapping[str, Any], *, coach_html: str = "", tel_href: str = "") -> str:
+def more_html(vv: Mapping[str, Any], *, coach_html: str = "", tel_href: str = "", rink_beacon: str = "") -> str:
     """«Ещё на катке»: редкие сценарии строками, подробности раскрываются на месте."""
     from src.application.style_b import section
 
@@ -247,7 +252,7 @@ def more_html(vv: Mapping[str, Any], *, coach_html: str = "", tel_href: str = ""
         elif m.get("key") == "promos":
             inner = _promos_html(detail)
         else:
-            inner = _rink_html(detail, tel_href=tel_href)
+            inner = _rink_html(detail, tel_href=tel_href, beacon=rink_beacon)
         note = f'<span class="b-more-row__n">{_esc(m.get("note"))}</span>' if m.get("note") else ""
         items.append(
             f'<details class="b-more-row" id="more-{_esc(m.get("key"))}"><summary>'

@@ -1022,6 +1022,10 @@ async def load_catalog_home_view(
             "has_sharpening": bool(user_city.get("has_sharpening")),
             "has_trainers": bool(user_city.get("has_trainers")),
         }
+        # TASK-436: вход «Зимой» — тот же предикат, что у строки на хабе (флаг + показываемые точки).
+        from src.application.city_hub_page import _winter_summary
+
+        user_city_vm["winter"] = await _winter_summary(session, int(user_city["id"]), now=now)
 
     from src.application.selection_page import selection_path
 
@@ -1288,11 +1292,29 @@ def _b_home_city_card(user_city: Mapping[str, Any] | None, *, when_key: str = "t
     line = " · ".join(bits)
     href = user_city.get("href") or "/c/" + str(user_city.get("slug") or "")
     line_html = f'<span class="b-city__line">{_esc(line)}</span>' if line else ""
+    winter_html = ""
+    winter = user_city.get("winter") if isinstance(user_city.get("winter"), Mapping) else None
+    if winter:
+        from src.application.winter_page import winter_city_path
+
+        total, flooded = int(winter["total"]), int(winter["flooded"])
+        # Вторичная карточка под «Ваш город», а не ещё одна ссылка рядом с «Другой город»:
+        # из «Зимой: N точек» не понятно, что это уличные катки.
+        winter_line = f"{total}\u00a0{plural_ru(total, 'место', 'места', 'мест')} · " + (
+            f"залиты {flooded}" if flooded else "ждём заливку"
+        )
+        winter_html = (
+            f'<a class="b-city b-city--sub" href="{_esc(winter_city_path(str(user_city.get("name") or "")))}">'
+            '<span class="b-city__body"><span class="b-city__kicker">Зимой</span>'
+            '<span class="b-city__title">Уличные катки и коробки</span>'
+            f'<span class="b-city__line">{_esc(winter_line)}</span></span>{icon_svg("arrow")}</a>'
+        )
     return (
         f'<a class="b-city" href="{_esc(href)}"><span class="b-city__body">'
         f'<span class="b-city__kicker">Ваш город</span>'
         f'<span class="b-city__name">{_esc(format_public_name(str(user_city.get("name") or "")))}</span>'
         f"{line_html}</span>{icon_svg('arrow')}</a>"
+        f"{winter_html}"
         f'<a class="b-link" href="#cities">{_esc(t("home.other_city"))}</a>'
     )
 

@@ -137,7 +137,7 @@ _MINIAPP_DEDUP_GROUP = "miniapp"
 
 _missing_secret_logged = False
 
-_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src", "utm_source"})
+_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src", "utm_source", "bell"})
 
 # TASK-428: метка источника платной ссылки. Сайт — ``?utm_source=<метка>``, Mini App — ``startapp=src_<метка>``.
 # Пишется в ``payload.source`` события и разводит дедуп: органический заход в тот же день не съедает рекламный.
@@ -195,6 +195,11 @@ def _dedup_variant(body: Mapping[str, Any]) -> str | None:
         parts.append(str(body["src"]))
     if body.get("source"):
         parts.append(f"source:{body['source']}")
+    # TASK-436: «Зимой» (/c/<город>/zimoy) шлёт тот же surface и city_id, что хаб /c/<город>.
+    # Без своего варианта заход с хаба на зиму в те же сутки съедался дедупом — ни одного просмотра.
+    path = body.get("path")
+    if isinstance(path, str) and path.endswith("/zimoy"):
+        parts.append("zimoy")
     return "|".join(parts) or None
 
 
@@ -433,7 +438,11 @@ async def resolve_entry_scope(
             else:
                 from src.application.place_links import parse_follow_start_param, parse_watch_start_param
 
-                arena_id = parse_watch_start_param(sp) or parse_follow_start_param(sp)
+                from src.application.winter_links import parse_winter_start
+
+                winter = parse_winter_start(sp)
+                winter_arena = winter[1] if winter is not None and winter[0] == "bell" else None
+                arena_id = parse_watch_start_param(sp) or parse_follow_start_param(sp) or winter_arena
     if city_id is None and arena_id is None:
         target = parse_catalog_start_param(sp)
         if target is not None and target[0] is not None:
@@ -635,7 +644,9 @@ async def record_public_contact_click(
     act = (action or "").strip().lower()
     partner_actions = ("partner_open", "partner_show")
     coach_actions = ("coach_open", "coach_join")
-    if act not in ("phone", "tickets", "direction", *partner_actions, *coach_actions):
+    # rink_call — свой ключ дедупа: иначе клик «Позвонить» в шапке того же катка его съедал бы.
+    keyed_actions = (*partner_actions, *coach_actions, "rink_call")
+    if act not in ("phone", "tickets", "direction", *keyed_actions):
         return
     slug = partner.strip().lower()[:64] if isinstance(partner, str) else ""
     if act in partner_actions and not slug:
@@ -655,7 +666,7 @@ async def record_public_contact_click(
             arena_id=arena_id,
             variant=f"{act}:{slug}",
         )
-        if act in partner_actions or act in coach_actions
+        if act in keyed_actions
         else None
     )
     await record_catalog_consumer_event(
@@ -823,6 +834,10 @@ def public_page_view_attribution_payload(extra_payload: dict[str, Any] | None) -
         elif key == "i":
             if str(value).strip().lower() in ("1", "true", "yes"):
                 out["i"] = "1"
+        elif key == "bell":
+            # TASK-436: на странице был колокольчик «Подписаться» — показ кнопки для воронки зимы.
+            if str(value).strip().lower() in ("1", "true", "yes"):
+                out["bell"] = "1"
         elif key == "utm_source":
             label = clean_source_label(value)
             if label:

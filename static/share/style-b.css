@@ -200,6 +200,14 @@ main.b-page.is-swapping > :not(.b-hero, .b-sec) { opacity: 0.55; }
 .b-city__name { font-family: var(--g-font-display); font-size: 30px; line-height: 1; }
 .b-city__line { font-size: 15px; color: #d6e4ea; }
 .b-city .b-icon { color: #7fd7d8; width: 24px; height: 24px; }
+.b-city--sub {
+  margin-top: 8px; padding: 14px 18px;
+  background: var(--g-surface); color: var(--g-ink) !important; border: 1px solid var(--g-line);
+}
+.b-city--sub .b-city__kicker { color: var(--g-accent-ink); }
+.b-city__title { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.b-city--sub .b-city__line { color: var(--g-muted); }
+.b-city--sub .b-icon { color: var(--g-accent-ink); }
 
 /* ── Карта ────────────────────────────────────────────────────────────── */
 .b-map { margin: 0; padding: 12px 10px; border-radius: 20px; background: var(--g-dark); }
