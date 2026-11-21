@@ -973,3 +973,46 @@ def test_quips_have_no_betting_words_and_cover_every_situation() -> None:
         today = pick_quip("mixed", player_key=player, day=DAY.date(), n=3)
         yesterday = pick_quip("mixed", player_key=player, day=DAY.date() - timedelta(days=1), n=3)
         assert today != yesterday
+
+
+@pytest.mark.asyncio
+async def test_evening_summary_shows_team_table_moves_and_skips_solo_leagues(db_session, factory) -> None:
+    """Итог вечера: таблица команды вечера, где место сдвинулось, — строкой; лига, где игрок один, — нет."""
+    await _fan(db_session, SASHA, name="Саша")
+    early = DAY - timedelta(days=6)
+    old_katya = await _match(db_session, "t-old1", DAY - timedelta(days=5), home="Неман", away="Витебск")
+    await make_pick(db_session, player_key=KATYA, display_name="Катя", match_id=old_katya, side="home", now=early)
+    old_sasha = await _match(db_session, "t-old2", DAY - timedelta(days=4), home="Неман", away="Брест")
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=old_sasha, side="away", now=early)
+    await make_pick(db_session, player_key=LESHA, display_name="Лёша", match_id=old_sasha, side="away", now=early)
+    old_vova = await _match(db_session, "t-old3", DAY - timedelta(days=4), home="Лида", away="Гомель")
+    await make_pick(
+        db_session, player_key=VOVA, display_name="Вова", match_id=old_vova, home_score=3, away_score=2, now=early
+    )
+    await _finish(db_session, old_katya, 3, 1, DAY - timedelta(days=5) + timedelta(hours=3))
+    await _finish(db_session, old_sasha, 2, 1, DAY - timedelta(days=4) + timedelta(hours=3))
+    await _finish(db_session, old_vova, 3, 2, DAY - timedelta(days=4) + timedelta(hours=3))
+    solo = await create_league(
+        db_session,
+        owner_key=SASHA,
+        owner_name="Саша",
+        name="Пример",
+        terms=build_terms(scope="all", term="season", now=at(0, day=1)),
+        now=at(0, day=1),
+    )
+    await db_session.execute(
+        text("UPDATE hockey_league_members SET joined_at = :at WHERE league_id = :l"), {"at": at(0, day=1), "l": solo.id}
+    )
+
+    tonight = await _match(db_session, "t-now", at(19), home="Неман", away="Гомель")
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=tonight, home_score=4, away_score=1, now=at(10)
+    )
+    await _finish(db_session, tonight, 4, 1, at(21, 30))
+
+    notices = {n.player_key: n for n in await due_notices(db_session, now=at(21, 30) + hockey_notices.RESULT_SEND_DELAY)}
+    body = notices[SASHA].text
+    assert "→ 1-е ↑</b> из 3" in body and "Таблица «Неман»" in body
+    # В таблице «Гомель» один Саша — меньше порога, строки нет.
+    assert "Таблица «Гомель»" not in body
+    assert "Лига «Пример»" not in body

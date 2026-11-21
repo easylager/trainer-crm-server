@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.hockey_game import PICK_CLOSES_BEFORE, POINTS_EXACT
 from src.application.hockey_league_evening import day_bounds, game_day
-from src.application.hockey_slices import Row, club_scope, league_rows, season_period, slice_rows
+from src.application.hockey_slices import Row, club_scope, league_rows, match_clubs, season_period, slice_rows
 from src.application.hockey_teams import display_name as club_name
 from src.ingestion.hockey_sources import MINSK_TZ
 
@@ -39,6 +39,9 @@ OPEN_OTHERS_MAX = 3
 # Строка «В других матчах вечера» — только если по матчу набралось столько ходов: на паре ходов доли пустые.
 OTHERS_MIN_PICKS = 3
 LEAGUES_MAX = 3
+# Таблицы команд вечера (Экстралига, Динамо) — сколько строк максимум: только где место сдвинулось.
+TEAMS_MAX = 2
+TEAM_TABLE_MIN = 3
 
 ACTION_BOARD = "board"  # новое табло или правка существующего
 ACTION_FINAL = "final"  # «Итог вечера» (и финальная правка табло, если оно было)
@@ -424,10 +427,12 @@ async def place_changes(
     fan: str | None,
     now: datetime,
     cache: dict | None = None,
+    picks: tuple[EveningPick, ...] | list[EveningPick] = (),
 ) -> tuple[list[PlaceChange], int]:
-    """Места «до вечера → после»: общая таблица сезона, срез своей команды и лиги, где очки вечера что-то
-    изменили. Срез считается по матчам с началом в окне, поэтому «до» — окно, кончающееся началом вечера.
-    Второе значение — число строк про лиги (они идут после общих)."""
+    """Места «до вечера → после»: общая таблица сезона, срез своей команды, таблицы команд вечера (где место
+    сдвинулось, до ``TEAMS_MAX``) и лиги с соперниками, где очки вечера что-то изменили. Срез считается по матчам
+    с началом в окне, поэтому «до» — окно, кончающееся началом вечера. Второе значение — число строк про лиги
+    (они идут после общих)."""
     from src.application.hockey_leagues import _LEAGUE_COLUMNS, _league, player_leagues
 
     cache = {} if cache is None else cache
@@ -458,6 +463,30 @@ async def place_changes(
         ):
             continue  # срез своей команды повторяет общую таблицу — вторая строка ничего не добавляет
         out.append(found)
+    # Таблицы команд вечера: у каждой команды Экстралиги (и Динамо) своя таблица — итог её матча её и двигает.
+    # Строки «держишься» тут не пишем: только сдвиг или первое появление, сначала самые большие подъёмы.
+    seen = {fan} if fan else set()
+    teams: list[PlaceChange] = []
+    for p in picks:
+        if p.points is None:
+            continue
+        for club in match_clubs(p.home_team, p.away_team, p.league):
+            if club is None or club in seen:
+                continue
+            seen.add(club)
+            before_p, after_p = replace(season, until=max(season.since, start)), replace(season, until=end)
+            before = await _slice_cached(session, cache, club, before_p)
+            after = await _slice_cached(session, cache, club, after_p)
+            if _points_of(before, player_key) == _points_of(after, player_key):
+                continue
+            found = _change(f"Таблица «{club_name(club)}»", before, after, player_key, names=False)
+            if found is None or found.before == found.after or found.size < TEAM_TABLE_MIN:
+                continue  # без сдвига или в таблице на пару человек место ничего не говорит
+            if any((o.before, o.after, o.size) == (found.before, found.after, found.size) for o in out):
+                continue  # та же строка, что у общей таблицы, — ничего не добавляет
+            teams.append(found)
+    teams.sort(key=lambda c: (c.before is None, -((c.before or c.after) - c.after), c.after))
+    out.extend(teams[:TEAMS_MAX])
     general = len(out)
     summaries = await player_leagues(session, player_key=player_key, now=now, with_rank=False)
     if summaries:
@@ -478,6 +507,8 @@ async def place_changes(
             after = await _league_cached(session, cache, league, since, until_end)
             if _points_of(before, player_key) == _points_of(after, player_key):
                 continue
+            if len(after) < 2:
+                continue  # в лиге никого, кроме игрока: место в ней ничего не говорит
             found = _change(f"Лига «{league.name}»", before, after, player_key, names=True)
             if found is not None:
                 out.append(found)

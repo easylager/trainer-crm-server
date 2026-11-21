@@ -965,7 +965,13 @@ async def _evening_send(session: AsyncSession, step, *, picks: list, now: dateti
         if tribune:
             parts[0] += "\n" + tribune  # «Трибуна» — с какой долей игроков совпал ход
     changes, _leagues = await ev.place_changes(
-        session, player_key=step.player_key, day=step.day, fan=club, now=now, cache=cache
+        session,
+        player_key=step.player_key,
+        day=step.day,
+        fan=club,
+        now=now,
+        cache=cache,
+        picks=[p for p in picks if p.ready],
     )
     if changes:
         parts.append("\n".join(ev.place_line(c) for c in changes))
