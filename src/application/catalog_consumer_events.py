@@ -195,6 +195,11 @@ def _dedup_variant(body: Mapping[str, Any]) -> str | None:
         parts.append(str(body["src"]))
     if body.get("source"):
         parts.append(f"source:{body['source']}")
+    # TASK-436: «Зимой» (/c/<город>/zimoy) шлёт тот же surface и city_id, что хаб /c/<город>.
+    # Без своего варианта заход с хаба на зиму в те же сутки съедался дедупом — ни одного просмотра.
+    path = body.get("path")
+    if isinstance(path, str) and path.endswith("/zimoy"):
+        parts.append("zimoy")
     return "|".join(parts) or None
 
 
