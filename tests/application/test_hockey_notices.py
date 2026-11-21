@@ -1159,6 +1159,15 @@ async def test_match_bell_defers_to_game_and_nomove_covers_bell(db_session, monk
     mine = [n for n in bell_notices if n.telegram_id == SASHA and n.match_id == mid]
     assert mine and mine[0].defer_to_game and mine[0].kind == "remind"
 
+    # Хода на матч нет — игра итог не пришлёт, значит итог шлёт колокольчик (не defer).
+    await _finish(db_session, mid, 2, 1, at(21, 30))
+    after = [
+        n
+        for n in await bells.due_notices(db_session, now=at(22), settings=cfg)
+        if n.telegram_id == SASHA and n.match_id == mid
+    ]
+    assert after and after[0].kind == "result" and not after[0].defer_to_game
+
     # Не-игрок: колокольчик работает как раньше.
     stranger = 9360099
     mid2 = await _match(db_session, "bell2", at(20), home="Лида", away="Брест")

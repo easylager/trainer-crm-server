@@ -228,6 +228,9 @@ _PLAYER = text("SELECT 1 FROM hockey_players WHERE player_key = :key")
 
 _DUE = text(f"""
     SELECT b.telegram_id, b.match_id, b.known_starts_at, b.remind_for,
+           EXISTS (
+               SELECT 1 FROM hockey_picks AS hp WHERE hp.player_key = b.telegram_id AND hp.match_id = b.match_id
+           ) AS has_pick,
            {", ".join("m." + c.strip() for c in site_matches._COLUMNS.split(",") if c.strip() and c.strip() != "id")}
     FROM hockey_match_bells b
     JOIN hockey_matches m ON m.id = b.match_id
@@ -301,7 +304,10 @@ async def due_notices(
         tg = int(r.telegram_id)
         if tg not in chat_cache:
             chat_cache[tg] = await _player_chat_on(session, tg)
-        defer = chat_cache[tg]
+        # Напоминание игрок с чатом получает из игры всегда (nomove покрывает матчи с колокольчиком).
+        # Итог и перенос игра шлёт только по ходу: без хода их по-прежнему шлёт колокольчик.
+        chat_on = chat_cache[tg]
+        defer = chat_on and bool(r.has_pick)
         row = _Row(r, id=int(r.match_id))
         common = {
             "telegram_id": tg,
@@ -310,6 +316,7 @@ async def due_notices(
             "known_starts_at": r.known_starts_at,
             "defer_to_game": defer,
         }
+        remind_common = dict(common, defer_to_game=chat_on)
         if site_matches.hidden(r):
             out.append(Notice(KIND_CANCEL, text=cancel_text(r), buttons=[], **common))
         elif r.status == STATUS_FINAL and r.home_score is not None:
@@ -339,8 +346,8 @@ async def due_notices(
                     Notice(
                         KIND_REMIND,
                         text=remind_text(r, now=now, arena=arena),
-                        buttons=[] if defer else _buttons(row, base_url=base),
-                        **common,
+                        buttons=[] if chat_on else _buttons(row, base_url=base),
+                        **remind_common,
                     )
                 )
     return out

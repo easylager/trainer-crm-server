@@ -601,7 +601,7 @@ def compose_evening_close(*, day: date, picks: list[EveningPick], now: datetime,
     head = f"🏒 <b>ВЕЧЕР {_day_title(day)}</b> · {len(done)} из {len(picks)} {_matches_word(len(picks))}"
     lines = [match_line(p, now) for p in picks]
     mid: list[str] = []
-    if len(picks) > 1:
+    if picks:
         mid.append(final_header(picks, with_lines=False, now=now))
     mid.extend(x for x in extras if x)
     tail = "\n\n".join(mid)
