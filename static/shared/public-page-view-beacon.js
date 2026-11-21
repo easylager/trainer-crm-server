@@ -13,6 +13,8 @@
   var surface = script.getAttribute('data-surface') || '';
   var cityId = script.getAttribute('data-city-id') || '';
   var arenaId = script.getAttribute('data-arena-id') || '';
+  // TASK-436: на странице показан колокольчик «Подписаться» (зима) — показ кнопки едет с просмотром.
+  var bell = script.getAttribute('data-bell') === '1';
   var sent = false;
 
   function beaconUrl() {
@@ -20,6 +22,7 @@
     q.set('surface', surface);
     if (cityId) q.set('city_id', cityId);
     if (arenaId) q.set('arena_id', arenaId);
+    if (bell) q.set('bell', '1');
     try {
       var pathname = root.location.pathname || '';
       if (pathname) q.set('path', pathname);

@@ -137,7 +137,7 @@ _MINIAPP_DEDUP_GROUP = "miniapp"
 
 _missing_secret_logged = False
 
-_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src", "utm_source"})
+_PUBLIC_PAGE_VIEW_EXTRA_KEYS = frozenset({"s", "i", "src", "utm_source", "bell"})
 
 # TASK-428: метка источника платной ссылки. Сайт — ``?utm_source=<метка>``, Mini App — ``startapp=src_<метка>``.
 # Пишется в ``payload.source`` события и разводит дедуп: органический заход в тот же день не съедает рекламный.
@@ -438,7 +438,11 @@ async def resolve_entry_scope(
             else:
                 from src.application.place_links import parse_follow_start_param, parse_watch_start_param
 
-                arena_id = parse_watch_start_param(sp) or parse_follow_start_param(sp)
+                from src.application.winter_links import parse_winter_start
+
+                winter = parse_winter_start(sp)
+                winter_arena = winter[1] if winter is not None and winter[0] == "bell" else None
+                arena_id = parse_watch_start_param(sp) or parse_follow_start_param(sp) or winter_arena
     if city_id is None and arena_id is None:
         target = parse_catalog_start_param(sp)
         if target is not None and target[0] is not None:
@@ -830,6 +834,10 @@ def public_page_view_attribution_payload(extra_payload: dict[str, Any] | None) -
         elif key == "i":
             if str(value).strip().lower() in ("1", "true", "yes"):
                 out["i"] = "1"
+        elif key == "bell":
+            # TASK-436: на странице был колокольчик «Подписаться» — показ кнопки для воронки зимы.
+            if str(value).strip().lower() in ("1", "true", "yes"):
+                out["bell"] = "1"
         elif key == "utm_source":
             label = clean_source_label(value)
             if label:

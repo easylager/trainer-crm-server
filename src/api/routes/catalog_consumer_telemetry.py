@@ -112,8 +112,14 @@ async def open_telegram_from_public_page(
         start_param=startapp,
         payload=cta_payload,
     )
-    if parse_watch_start_param(startapp) is not None or startapp.startswith("mbell_"):
-        # TASK-330, TASK-347: колокольчик ставит бот по /start — мини-апп этот параметр не получила бы.
+    from src.application.winter_links import parse_winter_start
+
+    if (
+        parse_watch_start_param(startapp) is not None
+        or startapp.startswith("mbell_")
+        or parse_winter_start(startapp) is not None
+    ):
+        # TASK-330, TASK-347, TASK-436 (зима): колокольчик ставит бот по /start — мини-апп этот параметр не получила бы.
         link = telegram_bot_start_link(client_bot_username=settings.client_bot_username, start_param=startapp)
     else:
         # Флаг public_entry_via_start — тоже через /start, иначе как раньше (мини-апп сразу).
@@ -136,6 +142,7 @@ async def public_page_view_beacon(
     i: str | None = Query(None, description="1 — тон «Позвать с собой»"),
     # Без max_length: длинная или кривая метка просто не пишется, а просмотр учитывается (не 422).
     utm_source: str | None = Query(None, description="метка платной ссылки (TASK-428)"),
+    bell: str | None = Query(None, max_length=8, description="1 — на странице показан колокольчик (TASK-436)"),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """Просмотр /, /c/, /p/ с клиента (prefetch/bfcache-safe); GET HTML просмотр не пишет."""
@@ -166,6 +173,7 @@ async def public_page_view_beacon(
             "i": "1" if invite else None,
             "src": clean_share_src(src),
             "utm_source": (utm_source or "")[:64] or None,
+            "bell": bell,
         },
     )
     return Response(status_code=204)
