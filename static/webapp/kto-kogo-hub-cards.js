@@ -236,7 +236,7 @@
     var shown = pendingList().map(function (m) { return m.id; });
     if (hero) shown.push(hero.match.id);
     var d = S.dayMatches(state.matches, new Date(), shown);
-    if (!d && !hero && !state.matches.length && state.matchesFailed) return K.retryCard('Матчи не загрузились.', function () { K.reset('hub', {}); });
+    if (!d && !hero && !state.matches.length && state.matchesFailed) return K.retryCard(function () { K.reset('hub', {}); });
     if (!d) return hero ? null : K.emptyCard('МАТЧИ ДНЯ', 'Ближайших матчей пока нет — календарь обновится, как только клубы их назначат.',
     h('div', { class: 'kk-two' }, [
       h('button', { type: 'button', class: 'kk-btn kk-btn--alt', onclick: function () { K.go('leagueNew', {}); }, text: 'Создать лигу' }),

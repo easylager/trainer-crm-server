@@ -664,7 +664,7 @@
       });
     },
     render: function (a) {
-      if (missing[a.id] === 'error' && !K.findMatch(a.id)) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.retryCard('Матч не загрузился.', function () { K.replace('match', a); })])];
+      if (missing[a.id] === 'error' && !K.findMatch(a.id)) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.retryCard(function () { K.replace('match', a); })])];
       if (missing[a.id] === true) return notFound();
       var m = K.findMatch(a.id);
       if (!m) return [h('main', { class: 'kk-main' }, [K.topbar('Матч', null), K.loading()])];

@@ -273,22 +273,24 @@
     return groups.reduce(function (n, g) { return n + g.items.length; }, 0);
   }
 
+  /* Кнопка «К ближайшему матчу» — только когда такой матч есть (TASK-437); список матчей не загрузился — ведём на хаб,
+     там «Повторить». */
   function emptyCard() {
-    var e = S.MATCHES_EMPTY;
+    var next = S.nearestOpen((page().items || []).concat(state.matches || []));
+    var e = S.matchesEmptyCopy(next || state.matchesFailed);
     return h('section', { class: 'kk-card kk-ml-empty' }, [
       h('span', { class: 'kk-ml-empty__tag', text: e.label }),
       h('b', { class: 'kk-ml-empty__h', text: e.head }),
       h('span', { class: 'kk-tx', text: e.text }),
-      h('button', {
+      e.cta ? h('button', {
         type: 'button',
         class: 'kk-btn kk-btn--gold kk-btn--sm',
         onclick: function () {
-          var next = S.nearestOpen(page().items);
           if (next) open(next);
           else K.reset('hub', {});
         },
         text: e.cta,
-      }),
+      }) : null,
     ]);
   }
 
@@ -301,12 +303,12 @@
       'aria-busy': busy ? 'true' : null,
       'aria-live': 'polite',
       onclick: loadMore,
-      text: busy ? 'Загружаем…' : p.more === 'failed' ? 'Не загрузилось. Ещё раз' : 'Показать раньше',
+      text: busy ? 'Загружаем…' : p.more === 'failed' ? 'Не загрузилось. Повторить' : 'Показать раньше',
     });
   }
 
   function body(p) {
-    if (p.failed && !p.items) return [K.retryCard('Матчи не загрузились.', function () { p.failed = false; K.render(); refresh(); })];
+    if (p.failed && !p.items) return [K.retryCard(function () { p.failed = false; K.render(); refresh(); })];
     if (!p.items) return [K.loading()];
     if (ml.mode === 'mine' && S.matchesEmpty(p.items, p.hasMore)) return [emptyCard()];
     var now = new Date();
