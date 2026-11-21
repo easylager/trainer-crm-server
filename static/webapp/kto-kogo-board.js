@@ -239,7 +239,8 @@
             : h('span', { class: 'kk-stk__t', text: String(l.name || '?').trim().charAt(0).toUpperCase() }),
         ]);
       })),
-      best ? h('span', { class: 'kk-stack__rank' + (best === 1 ? ' is-gold' : ''), 'aria-hidden': 'true' }, [best === 1 ? K.crownIcon(12) : null, String(best)]) : null,
+      // Первое место — золотом, без короны: с ней бейдж выходил шире обложки.
+      best ? h('span', { class: 'kk-stack__rank' + (best === 1 ? ' is-gold' : ''), 'aria-hidden': 'true' }, [String(best)]) : null,
     ]);
   }
 

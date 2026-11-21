@@ -983,9 +983,13 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 /* Стопка наклеек лиг в шапке игры: веер обложек, плашка лучшего места; тап — прыжок к «Лигам». */
 .kk-stack { position: relative; flex: none; display: inline-flex; align-items: center; height: 48px; padding: 0 8px 0 4px; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .kk-stack__fan { display: flex; }
-/* Наклонённый логотип «КТО КОГО?» выходит за свою рамку справа: веер держим на расстоянии, на узком экране — две наклейки. */
-.kk-top .kk-stack { margin-left: 10px; }
-@media (max-width: 400px) { .kk-stack__fan .kk-sticker:nth-child(n+3) { display: none; } }
+/* Бренд не уже своей надписи: иначе наклонённое «КТО КОГО?» уезжает под обложки лиг. На телефоне — одна обложка. */
+.kk-top .kk-brand { min-width: max-content; }
+@media (max-width: 430px) {
+  .kk-top { gap: 8px; }
+  .kk-stack__fan .kk-sticker:nth-child(n+2) { display: none; }
+  .kk-top .kk-btn--sm { padding: 0 12px; }
+}
 .kk-sticker { position: relative; width: 40px; height: 40px; border-radius: 11px; overflow: hidden; background: #2a3542; color: #fff; box-shadow: 0 0 0 2px var(--kk-bg, #fff), 0 2px 6px rgba(13, 20, 36, 0.18); transform: rotate(var(--kk-tilt, 0deg)); transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); display: inline-flex; align-items: center; justify-content: center; }
 .kk-sticker + .kk-sticker { margin-left: -14px; }
 .kk-sticker + .kk-sticker .kk-sticker__t { margin-left: 12px; }
@@ -993,7 +997,7 @@ body.kk-dark .kk-mc, body.kk-dark .kk-ml, body.kk-dark .kk-ml-go { --kk-live: #f
 .kk-stk__t { font: 400 15px/1 var(--kk-display); }
 .kk-stack:active .kk-sticker { transform: rotate(0deg) translateY(-3px); }
 .kk-stack:active .kk-sticker + .kk-sticker { transform: rotate(calc(var(--kk-tilt) * 2)) translateY(-1px); }
-.kk-stack__rank { position: absolute; right: -10px; top: -2px; z-index: 4; min-width: 24px; height: 22px; padding: 0 6px; border-radius: 7px; background: var(--kk-ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 2px; font: 400 13px/1 var(--kk-display); transform: rotate(4deg); box-shadow: 0 0 0 2px var(--kk-bg, #fff); }
+.kk-stack__rank { position: absolute; right: -6px; top: -4px; z-index: 4; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px; background: var(--kk-ink); color: #fff; display: inline-flex; align-items: center; justify-content: center; font: 400 12px/1 var(--kk-display); transform: rotate(4deg); box-shadow: 0 0 0 2px var(--kk-bg, #fff); }
 .kk-stack__rank.is-gold { background: var(--kk-gold); color: var(--kk-on-gold); }
 .kk-stack--new { gap: 8px; padding: 0 4px; }
 .kk-slot { width: 40px; height: 40px; border-radius: 11px; border: 2px dashed var(--kk-muted); display: inline-flex; align-items: center; justify-content: center; transform: rotate(-6deg); animation: kk-slot-wiggle .9s .4s cubic-bezier(.3, 1.6, .5, 1) both; }
