@@ -2782,7 +2782,12 @@ def render_place_body_b(
     share: Mapping[str, str],
     story_image_url: str | None,
 ) -> str:
-    from src.application.public_web_cta import phone_beacon_script, place_action_links
+    from src.application.public_web_cta import (
+        CONTACT_ACTION_RINK_CALL,
+        contact_click_beacon_url,
+        phone_beacon_script,
+        place_action_links,
+    )
 
     card = view["card"]
     city_id = int(card.get("city_id") or 0) or None
@@ -2856,7 +2861,14 @@ def render_place_body_b(
         facts_html(vv, cafe_offer=str(food.get("offer") or "") if food else ""),
         services_html(vv, title=_rental_section_title(card, hours) if hours.get("rental_title") else "Прокат и услуги"),
         _b_partners(card),
-        more_html(vv, coach_html=coach_in_more, tel_href=str(links.get("tel") or "")),
+        more_html(
+            vv,
+            coach_html=coach_in_more,
+            tel_href=str(links.get("tel") or ""),
+            rink_beacon=contact_click_beacon_url(
+                action=CONTACT_ACTION_RINK_CALL, surface="place_page", city_id=city_id, arena_id=int(card["id"])
+            ),
+        ),
         _b_about(card),
         _b_contacts(card, links),
         "" if nearby_early else nearby,

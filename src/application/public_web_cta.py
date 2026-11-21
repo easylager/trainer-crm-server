@@ -23,6 +23,8 @@ CONTACT_ACTION_COACH_JOIN = "coach_join"
 COACH_ACTIONS = frozenset({CONTACT_ACTION_COACH_OPEN, CONTACT_ACTION_COACH_JOIN})
 # «Написать в Telegram» тренеру без онлайн-записи (TASK-351): в payload — trainer_id и источник.
 CONTACT_ACTION_TELEGRAM = "telegram"
+# TASK-436: «Позвонить и забронировать» в блоке аренды льда — отдельно от обычного «Позвонить».
+CONTACT_ACTION_RINK_CALL = "rink_call"
 
 _ALLOWED_CONTACT_ACTIONS = frozenset(
     {CONTACT_ACTION_PHONE, CONTACT_ACTION_TICKETS, CONTACT_ACTION_DIRECTION}

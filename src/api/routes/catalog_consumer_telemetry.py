@@ -22,6 +22,7 @@ from src.application.catalog_consumer_events import (
 from src.application.public_web_cta import (
     CONTACT_ACTION_DIRECTION,
     CONTACT_ACTION_PHONE,
+    CONTACT_ACTION_RINK_CALL,
     CONTACT_ACTION_TELEGRAM,
     CONTACT_ACTION_TICKETS,
     COACH_ACTIONS,
@@ -232,6 +233,7 @@ async def public_contact_click_beacon(
     partner_slug = partner.strip() if isinstance(partner, str) else ""
     if (
         act != CONTACT_ACTION_PHONE
+        and act != CONTACT_ACTION_RINK_CALL
         and act != CONTACT_ACTION_TELEGRAM
         and act not in PARTNER_ACTIONS
         and act not in COACH_ACTIONS

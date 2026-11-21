@@ -640,7 +640,9 @@ async def record_public_contact_click(
     act = (action or "").strip().lower()
     partner_actions = ("partner_open", "partner_show")
     coach_actions = ("coach_open", "coach_join")
-    if act not in ("phone", "tickets", "direction", *partner_actions, *coach_actions):
+    # rink_call — свой ключ дедупа: иначе клик «Позвонить» в шапке того же катка его съедал бы.
+    keyed_actions = (*partner_actions, *coach_actions, "rink_call")
+    if act not in ("phone", "tickets", "direction", *keyed_actions):
         return
     slug = partner.strip().lower()[:64] if isinstance(partner, str) else ""
     if act in partner_actions and not slug:
@@ -660,7 +662,7 @@ async def record_public_contact_click(
             arena_id=arena_id,
             variant=f"{act}:{slug}",
         )
-        if act in partner_actions or act in coach_actions
+        if act in keyed_actions
         else None
     )
     await record_catalog_consumer_event(
