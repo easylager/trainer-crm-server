@@ -837,7 +837,7 @@ async def test_live_score_shown_only_when_filled(app_use_test_db, db_session):
 
 @pytest.mark.asyncio
 async def test_bell_result_is_not_sent_to_a_player_whose_game_move_gets_its_own_result(app_use_test_db, db_session):
-    """Играющему итог пришлёт игра; колокольчик шлёт его только тем, у кого оценённого хода нет (дубля нет)."""
+    """Игрок с включённым чатом: колокольчик не шлёт (defer); не-игрок и выключивший итоги — шлёт (TASK-439)."""
     await _world(db_session)
     mid = await _match(db_session, starts=NOW + timedelta(days=1))
     player, plain, muted = 7_200_000_001, 7_200_000_002, 7_200_000_003
@@ -862,7 +862,9 @@ async def test_bell_result_is_not_sent_to_a_player_whose_game_move_gets_its_own_
         {"m": mid, "s": NOW - timedelta(hours=3)},
     )
     notices = await match_bells.due_notices(db_session, now=NOW)
-    assert sorted(n.telegram_id for n in notices if n.kind == match_bells.KIND_RESULT) == [plain, muted]
+    results = [n for n in notices if n.kind == match_bells.KIND_RESULT]
+    assert sorted(n.telegram_id for n in results if n.defer_to_game) == [player]
+    assert sorted(n.telegram_id for n in results if not n.defer_to_game) == [plain, muted]
 
 
 @pytest.mark.asyncio

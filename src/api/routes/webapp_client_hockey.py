@@ -494,13 +494,18 @@ async def put_client_hockey_remind(
     session: AsyncSession = Depends(get_session),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
 ) -> dict:
-    """Напоминать о ходе за 3 часа до матча своей команды и присылать итог (TASK-335). Включает только сам игрок."""
-    from src.application.hockey_notices import set_remind
+    """Тумблер «Сообщения в чате»: один выключатель всех пушей игры (TASK-335, TASK-439).
 
+    ``on=true`` сбрасывает согласие и все виды сообщений во включённые; ответ — фактическое
+    ``remind_on`` (учитывает согласие и виды).
+    """
+    from src.application.hockey_notices import remind_on, set_remind
+
+    key = client_catalog_telegram_key(principal)
     name = _player_name(body.display_name, x_telegram_init_data or "")
-    on = await set_remind(session, client_catalog_telegram_key(principal), body.on, display_name=name)
+    await set_remind(session, key, body.on, display_name=name)
     await session.commit()
-    return {"on": on}
+    return {"on": await remind_on(session, key)}
 
 
 class BotPrefsBody(BaseModel):

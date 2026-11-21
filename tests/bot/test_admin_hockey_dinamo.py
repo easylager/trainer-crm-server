@@ -268,7 +268,7 @@ async def test_auto_final_sends_one_admin_message_with_delivery_time(db_session,
     assert body == (
         "<b>Итог записан:</b> Динамо-Минск — Торпедо 3:2 (основное время).\n"
         "Источники: hcdinamo.by и hockey.by совпали (подтверждено двумя опросами).\n"
-        "Клиентам уйдёт не раньше 21:45."
+        "Клиентам уйдёт не раньше 21:40."
     )
     assert [(b["text"], b["callback_data"]) for b in buttons[0]] == [("Всё верно", f"hk:okd:{m}"), ("Поправить", f"hk:fix:{m}")]
     again, n2 = await _notify(f, at(21, 43))  # повторный тик не дублирует
@@ -307,27 +307,26 @@ async def test_all_correct_button_changes_nothing_and_delivery_goes_on(db_sessio
 
 @pytest.mark.asyncio
 async def test_fix_button_holds_delivery_and_the_corrected_result_goes_out_without_apology(db_session, factory) -> None:
+    """Правка до рассылки — клиенты получают уже верный счёт без «Мы ошиблись» (hold больше не блокирует, TASK-439)."""
     m = await _dinamo(db_session)
     await _picks(db_session, m)
     await _auto_final(db_session, m, at(21, 40))
     await hold_delivery(db_session, m, now=at(21, 42))
-    out = Outbox()
-    assert (await deliver(factory, now=at(21, 50), send=out))["sent"] == 0  # держим
     await fix_result(db_session, m, raw="2:3", now=at(21, 55))
-    assert (await deliver(factory, now=at(21, 58), send=out))["sent"] == 0  # буфер от новой записи
-    assert (await deliver(factory, now=at(22, 1), send=out))["sent"] == 2
+    out = Outbox()
+    assert (await deliver(factory, now=at(21, 58), send=out))["sent"] == 2
     assert all("2:3" in body and not body.startswith("Мы ошиблись") for _, body in out.sent)
-    assert [n.kind for n in await due_notices(db_session, now=at(22, 30))] == []  # исправление «ошиблись» не ставилось
+    assert [n.kind for n in await due_notices(db_session, now=at(22, 30))] == []
 
 
 @pytest.mark.asyncio
 async def test_hold_expires_by_timeout_with_one_reminder(db_session, factory, _test_db_core) -> None:
+    """Админское удержание: клиентам итог уже ушёл; напоминание админу про незавершённую правку — как раньше."""
     m = await _dinamo(db_session)
     await _picks(db_session, m)
     await _auto_final(db_session, m, at(21, 40))
     await hold_delivery(db_session, m, now=at(21, 42))
-    assert (await deliver(factory, now=at(21, 50), send=Outbox()))["sent"] == 0  # удержание до 21:52
-    assert (await deliver(factory, now=at(21, 53), send=Outbox()))["sent"] == 2  # 21:42 + 10 мин прошли
+    assert (await deliver(factory, now=at(21, 50), send=Outbox()))["sent"] == 2
     f = _test_db_core["factory"]
     out, n = await _notify(f, at(21, 53))
     assert n == 2 and any(b.startswith("<b>Правка не завершена:</b>") for b, _ in out)

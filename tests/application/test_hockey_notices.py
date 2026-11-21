@@ -215,11 +215,8 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     done = at(21, 40)
     await _finish(db_session, m, 3, 2, done)
 
-    # Свежий итог в чат не уходит (буфер RESULT_SEND_DELAY): его можно поправить до рассылки.
-    assert await due_notices(db_session, now=done) == []
-    assert await due_notices(db_session, now=done + hockey_notices.RESULT_SEND_DELAY - timedelta(seconds=1)) == []
-    ready = done + hockey_notices.RESULT_SEND_DELAY
-    by_player = {n.player_key: n for n in await due_notices(db_session, now=ready)}
+    # Итог уходит сразу после final + очков — как в Mini App (TASK-439, без RESULT_SEND_DELAY).
+    by_player = {n.player_key: n for n in await due_notices(db_session, now=done)}
     sasha = by_player[SASHA]
     assert sasha.kind == "result"
     # Один матч за вечер — сразу «Итог вечера» (PDEC-038): матч, твой ход, очки; ниже — место «было → стало».
@@ -236,11 +233,11 @@ async def test_result_message_points_place_and_next_move_button(db_session, fact
     # Фраза вечера — из коллекции, курсивом; у одного матча без «{n}».
     assert "<i>" in sasha.text and "{n}" not in sasha.text
     labels = [b["text"] for row in sasha.buttons for b in row]
-    assert "Таблица" in labels and "Отключить такие сообщения" in labels
+    assert "Таблица" in labels and "Отключить такие сообщения" not in labels
     assert sasha.buttons[0][-1]["url"].endswith("startapp=kktb")
 
     out = Outbox()
-    assert (await deliver(factory, now=ready, send=out))["sent"] == 4
+    assert (await deliver(factory, now=done, send=out))["sent"] == 4
     assert (await deliver(factory, now=done + timedelta(minutes=10), send=out))["sent"] == 0
     # Через 6 часов итог устарел — но и отправленный повторно не уходит.
     assert await due_notices(db_session, now=done + timedelta(hours=7)) == []
@@ -305,7 +302,7 @@ async def test_night_result_waits_until_morning(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_a_day_with_three_matches_sends_at_most_reminder_plus_summary(db_session, factory) -> None:
-    """B2: три матча «своей» команды за день, итоги всех — не больше двух сообщений."""
+    """B2: три матча «своей» команды за день — одно утреннее напоминание и одно табло на весь вечер."""
     await _fan(db_session, SASHA, name="Саша")
     ms = [
         await _match(db_session, "d1", at(12), home="Юность", away="Шахтер"),
@@ -319,7 +316,7 @@ async def test_a_day_with_three_matches_sends_at_most_reminder_plus_summary(db_s
     await deliver(factory, now=at(13, 10), send=out)
     await deliver(factory, now=at(17, 10), send=out)
     assert [text for _, text, _ in out.sent] == ["<b>Юность — Шахтёр</b> сегодня в 12:00. КТО КОГО? 🏒"]
-    # Ходы на все три; итоги приходят по одному — табло вечера (PDEC-038).
+    # Ходы на все три; итоги приходят по одному — табло вечера (PDEC-038 / TASK-439).
     for m in ms:
         await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(9, 30))
     io = BoardIO()
@@ -328,6 +325,7 @@ async def test_a_day_with_three_matches_sends_at_most_reminder_plus_summary(db_s
     # Первый итог — новое сообщение-табло (со звуком): 1 из 3, остальные ждут.
     assert len(io.sent) == 1 and not io.edits
     assert "· 1 из 3 твоих матчей" in io.sent[0][1] and "⏳ Юность — Гомель" in io.sent[0][1]
+    assert "Отключить такие сообщения" not in str(io.sent[0][2])
     await _finish(db_session, ms[1], 2, 1, at(18, 30))
     await deliver(factory, now=at(18, 40), send=out, evening_io=io.io)
     # Второй — правка того же табло, без нового сообщения.
@@ -335,12 +333,13 @@ async def test_a_day_with_three_matches_sends_at_most_reminder_plus_summary(db_s
     assert io.edits[0][1] == io.sent[0][3] and "· 2 из 3 твоих матчей" in io.edits[0][2]
     await _finish(db_session, ms[2], 2, 1, at(22, 30))
     await deliver(factory, now=at(22, 40), send=out, evening_io=io.io)
-    # Последний — финальная правка табло и одно новое «Итог вечера».
-    assert len(io.edits) == 2 and "За вечер: <b>+60</b>" in io.edits[1][2]
-    assert len(io.sent) == 2 and io.sent[1][1].startswith("<b>Вечер закрыт: +60</b> · 3 из 3")
+    # Последний — только правка табло с «Вечер закрыт», без второго сообщения (TASK-439).
+    assert len(io.sent) == 1 and len(io.edits) == 2
+    assert "Вечер закрыт: <b>+60</b>" in io.edits[1][2] or "<b>Вечер закрыт: +60</b>" in io.edits[1][2]
+    assert "· 3 из 3 твоих матчей" in io.edits[1][2]
     # Повторный проход ничего не шлёт и не правит.
     await deliver(factory, now=at(22, 50), send=out, evening_io=io.io)
-    assert len(io.sent) == 2 and len(io.edits) == 2
+    assert len(io.sent) == 1 and len(io.edits) == 2
     # В обычный канал за день — только утреннее напоминание.
     assert len(out.sent) == 1
 
@@ -404,7 +403,7 @@ async def test_overtaken_in_league_is_detected_once_per_change(db_session, facto
     notices = await due_notices(db_session, now=at(18, 50), overtakes=found)
     sasha = next(n for n in notices if n.player_key == SASHA and n.kind == "overtook")
     assert sasha.text.startswith("В лиге «Офис на Немиге» ") and "теперь выше тебя" in sasha.text
-    assert any(b.get("callback_data") == "kk:off:ot" for row in sasha.buttons for b in row)
+    assert not any(b.get("callback_data", "").startswith("kk:off:") for row in sasha.buttons for b in row)
 
 
 # ---------- (г) финал месяца ----------
@@ -864,7 +863,7 @@ async def test_result_message_has_tribune_line_from_twenty_moves(db_session) -> 
         )
     done = at(21, 40)
     await _finish(db_session, m, 2, 3, done)
-    notices = await due_notices(db_session, now=done + hockey_notices.RESULT_SEND_DELAY)
+    notices = await due_notices(db_session, now=done)
     sasha = next(n for n in notices if n.player_key == SASHA)
     # Вечер из одного матча: «Трибуна» — сразу под строкой матча в «Итоге вечера».
     assert sasha.text.startswith(
@@ -886,16 +885,17 @@ async def test_stuck_match_closes_the_evening_after_four_hours_and_its_result_co
     await _finish(db_session, a, 2, 1, at(17, 30))
     await deliver(factory, now=at(17, 40), send=Outbox(), evening_io=io.io)
     assert len(io.sent) == 1  # табло: 1 из 2
-    # Итога второго нет и через 4 часа после начала — вечер закрываем без него.
+    # Итога второго нет и через 4 часа после начала — вечер закрываем без него правкой табло.
     await deliver(factory, now=at(20, 1), send=Outbox(), evening_io=io.io)
-    assert len(io.sent) == 2 and io.sent[1][1].startswith("<b>Вечер закрыт: +20</b>")
+    assert len(io.sent) == 1 and len(io.edits) >= 1
+    assert "<b>Вечер закрыт: +20</b>" in io.edits[-1][2]
     assert "итог позже" in io.edits[-1][2]
     # Итог появился — короткое отдельное сообщение, вечер второй раз не закрывается.
     await _finish(db_session, b, 0, 3, at(21, 30))
     await deliver(factory, now=at(21, 40), send=Outbox(), evening_io=io.io)
-    assert len(io.sent) == 3 and io.sent[2][1].startswith("Итог позже, чем вечер: ❌ <b>Неман — Гомель 0:3</b>")
+    assert len(io.sent) == 2 and io.sent[1][1].startswith("Итог позже, чем вечер: ❌ <b>Неман — Гомель 0:3</b>")
     await deliver(factory, now=at(21, 50), send=Outbox(), evening_io=io.io)
-    assert len(io.sent) == 3
+    assert len(io.sent) == 2
 
 
 @pytest.mark.asyncio
@@ -1010,7 +1010,7 @@ async def test_evening_summary_shows_team_table_moves_and_skips_solo_leagues(db_
     )
     await _finish(db_session, tonight, 4, 1, at(21, 30))
 
-    notices = {n.player_key: n for n in await due_notices(db_session, now=at(21, 30) + hockey_notices.RESULT_SEND_DELAY)}
+    notices = {n.player_key: n for n in await due_notices(db_session, now=at(21, 30))}
     body = notices[SASHA].text
     assert "→ 1-е ↑</b> из 3" in body and "Таблица «Неман»" in body
     # В таблице «Гомель» один Саша — меньше порога, строки нет.
@@ -1031,7 +1031,7 @@ async def test_evening_next_line_prefers_own_team_soon_then_any_open_match(db_se
     await _match(db_session, "n-own-late", at(17, day=13), home="Металлург Мг", away="Юность")
     await _finish(db_session, tonight, 2, 1, at(14, 30))
 
-    ready = at(14, 30) + hockey_notices.RESULT_SEND_DELAY
+    ready = at(14, 30)
     body = {n.player_key: n for n in await due_notices(db_session, now=ready)}[SASHA].text
     assert "Дальше: Юность — Шахтёр, завтра в 15:00 · счёт ещё можно добавить" in body
 
@@ -1041,3 +1041,140 @@ async def test_evening_next_line_prefers_own_team_soon_then_any_open_match(db_se
     body = {n.player_key: n for n in await due_notices(db_session, now=ready)}[SASHA].text
     assert "Дальше: Гомель — Брест, сегодня в 19:00" in body
     assert "Металлург" not in body
+
+
+# ---------- TASK-439 ----------
+
+
+@pytest.mark.asyncio
+async def test_evening_close_edits_board_and_falls_back_to_new_message(db_session, factory) -> None:
+    """Итог вечера правит табло; без табло — новое; ошибка правки — новое (TASK-439)."""
+    from src.application.hockey_notices import GONE
+
+    await _fan(db_session, SASHA, name="Саша")
+    a = await _match(db_session, "e1", at(15))
+    b = await _match(db_session, "e2", at(18), home="Неман", away="Гомель")
+    for m in (a, b):
+        await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(10))
+    io = BoardIO()
+    await _finish(db_session, a, 2, 1, at(17))
+    await deliver(factory, now=at(17, 5), send=Outbox(), evening_io=io.io)
+    assert len(io.sent) == 1
+    await _finish(db_session, b, 1, 0, at(20))
+    await deliver(factory, now=at(20, 5), send=Outbox(), evening_io=io.io)
+    assert len(io.sent) == 1 and len(io.edits) == 1
+    assert "<b>Вечер закрыт: +40</b>" in io.edits[0][2]
+
+    # Без табло (один матч) — новое сообщение.
+    katya_io = BoardIO()
+    await _fan(db_session, KATYA, name="Катя")
+    one = await _match(db_session, "e3", at(19), home="Брест", away="Лида")
+    await make_pick(db_session, player_key=KATYA, display_name="Катя", match_id=one, side="home", now=at(10))
+    await _finish(db_session, one, 2, 1, at(21))
+    await deliver(factory, now=at(21, 5), send=Outbox(), evening_io=katya_io.io)
+    assert len(katya_io.sent) == 1 and not katya_io.edits
+    assert katya_io.sent[0][1].startswith("<b>Брест — Лида 2:1</b>")
+
+    # Правка не вышла — шлём новым.
+    lesha_io = BoardIO(edit_answer=GONE)
+    await _fan(db_session, LESHA, name="Лёша")
+    ms = [await _match(db_session, f"ef{i}", at(14 + i), home="Юность", away="Шахтер") for i in range(2)]
+    for m in ms:
+        await make_pick(db_session, player_key=LESHA, display_name="Лёша", match_id=m, side="home", now=at(10))
+    await _finish(db_session, ms[0], 2, 1, at(16))
+    await deliver(factory, now=at(16, 5), send=Outbox(), evening_io=lesha_io.io)
+    await _finish(db_session, ms[1], 2, 1, at(18))
+    await deliver(factory, now=at(18, 5), send=Outbox(), evening_io=lesha_io.io)
+    assert len(lesha_io.edits) >= 1 and len(lesha_io.sent) == 2
+    assert "<b>Вечер закрыт:" in lesha_io.sent[1][1]
+
+
+@pytest.mark.asyncio
+async def test_board_line_ready_as_soon_as_final_with_points(db_session) -> None:
+    """Строка табло получает счёт сразу после final + очков — без буфера (TASK-439)."""
+    from src.application.kk_evening import evening_picks, match_line
+
+    await _fan(db_session, SASHA, name="Саша")
+    m = await _match(db_session, "rdy", at(19))
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=m, side="home", now=at(10))
+    await _finish(db_session, m, 3, 1, at(21, 30))
+    picks = await evening_picks(db_session, player_key=SASHA, day=at(12).date(), now=at(21, 30))
+    assert len(picks) == 1 and picks[0].ready
+    assert match_line(picks[0], at(21, 30)).startswith("🎯")
+
+
+@pytest.mark.asyncio
+async def test_remind_toggle_resets_types_and_get_reflects_effective_state(db_session) -> None:
+    """PUT remind on сбрасывает согласие и виды; GET false, если выключены итоги или nomove."""
+    from src.application.hockey_notices import remind_on, set_consent, set_remind, set_type
+
+    await _fan(db_session, SASHA, name="Саша")
+    await set_type(db_session, SASHA, "result", False)
+    await set_consent(db_session, SASHA, False)
+    assert await remind_on(db_session, SASHA) is False
+    await set_remind(db_session, SASHA, True, display_name="Саша")
+    assert await remind_on(db_session, SASHA) is True
+    prefs = await get_prefs(db_session, SASHA)
+    assert prefs["on"] is True and prefs["types"]["result"] is True and prefs["types"]["nomove"] is True
+    row = (
+        await db_session.execute(
+            text("SELECT notify_consent FROM hockey_player_prefs WHERE player_key = :p"), {"p": SASHA}
+        )
+    ).one()
+    assert row.notify_consent is True
+    await set_type(db_session, SASHA, "nomove", False)
+    assert await remind_on(db_session, SASHA) is False
+    await set_remind(db_session, SASHA, False)
+    assert await remind_on(db_session, SASHA) is False
+
+
+@pytest.mark.asyncio
+async def test_match_bell_defers_to_game_and_nomove_covers_bell(db_session, monkeypatch) -> None:
+    """Колокольчик молчит у игрока с чатом; матч попадает в nomove; у не-игрока колокольчик шлёт."""
+    from src.application import match_bells as bells
+    from src.application.hockey_notices import set_remind
+    from src.shared.config import Settings
+
+    monkeypatch.setenv("SITE_MATCHES_ENABLED", "1")
+    monkeypatch.setenv("EXTRALIGA_ENABLED", "1")
+    monkeypatch.setenv("EXTRALIGA_CLUBS", "Химик,Авиатор,Лида,Брест")
+    monkeypatch.setenv("WEBAPP_BASE_URL", "https://example.com")
+    cfg = Settings()  # type: ignore[call-arg]
+
+    await _fan(db_session, SASHA, name="Саша")
+    await set_remind(db_session, SASHA, True, display_name="Саша")
+    mid = await _match(db_session, "bell1", at(19), home="Химик", away="Авиатор")
+    # Колокольчик на матч без хода и без любимой команды — всё равно nomove.
+    await db_session.execute(
+        text("INSERT INTO hockey_match_bells (telegram_id, match_id, known_starts_at) VALUES (:t, :m, :s)"),
+        {"t": SASHA, "m": mid, "s": at(19)},
+    )
+    await db_session.commit()
+    notices = await due_notices(db_session, now=at(16, 5))
+    nm = next(n for n in notices if n.kind == "nomove" and n.match_id == mid)
+    assert "Отключить такие сообщения" not in str(nm.buttons)
+
+    # Колокольчик для игрока — defer, без отправки.
+    bell_notices = await bells.due_notices(db_session, now=at(16, 5), settings=cfg)
+    mine = [n for n in bell_notices if n.telegram_id == SASHA and n.match_id == mid]
+    assert mine and mine[0].defer_to_game and mine[0].kind == "remind"
+
+    # Хода на матч нет — игра итог не пришлёт, значит итог шлёт колокольчик (не defer).
+    await _finish(db_session, mid, 2, 1, at(21, 30))
+    after = [
+        n
+        for n in await bells.due_notices(db_session, now=at(22), settings=cfg)
+        if n.telegram_id == SASHA and n.match_id == mid
+    ]
+    assert after and after[0].kind == "result" and not after[0].defer_to_game
+
+    # Не-игрок: колокольчик работает как раньше.
+    stranger = 9360099
+    mid2 = await _match(db_session, "bell2", at(20), home="Лида", away="Брест")
+    await db_session.execute(
+        text("INSERT INTO hockey_match_bells (telegram_id, match_id, known_starts_at) VALUES (:t, :m, :s)"),
+        {"t": stranger, "m": mid2, "s": at(20)},
+    )
+    await db_session.commit()
+    other = [n for n in await bells.due_notices(db_session, now=at(17, 5), settings=cfg) if n.telegram_id == stranger]
+    assert other and not other[0].defer_to_game and other[0].kind == "remind"

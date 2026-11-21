@@ -119,9 +119,8 @@ FAN_WINDOW = timedelta(days=30)
 # Итог шлём, пока он свежий; ночной итог, отложенный до 09:00, остаётся свежим и утром.
 RESULT_FRESH = timedelta(hours=6)
 RESULT_FRESH_AFTER_NIGHT = timedelta(hours=16)
-# Итог уходит в чат не раньше, чем через столько после ``finalized_at``: ошибочный итог (15.11.2026 матч ушёл
-# в итог в третьем периоде) успевают поймать и поправить до рассылки. Цикл в окне итога тикает раз в 2 минуты,
-# так что 5 минут — это пара тиков для второго взгляда, а клиент ждёт итог на пять минут дольше, чем раньше.
+# Раньше буфер перед рассылкой итога; с TASK-439 готовность = final + очки (как Mini App),
+# ошибочный итог чинит KIND_RESCORE. Константа оставлена для старых импортов/админки.
 RESULT_SEND_DELAY = timedelta(minutes=5)
 MFINAL_FROM_HOUR = 12
 # В «корону решится сегодня» зовём тех, у кого она ещё в досягаемости.
@@ -252,8 +251,8 @@ def _local(value: datetime) -> datetime:
 # ---------- настройки ----------
 
 _PREFS = text("""
-    SELECT remind, fav_club, notify_nomove, notify_result, notify_overtook, notify_mfinal, notify_league,
-           bot_blocked_at
+    SELECT remind, notify_consent, fav_club, notify_nomove, notify_result, notify_overtook, notify_mfinal,
+           notify_league, notify_lginvite, notify_outfit, bot_blocked_at
     FROM hockey_player_prefs WHERE player_key = :player_key
     """)
 
@@ -265,6 +264,22 @@ _ENSURE_PLAYER = text("""
 _SET_REMIND = text("""
     INSERT INTO hockey_player_prefs (player_key, remind) VALUES (:player_key, :on)
     ON CONFLICT (player_key) DO UPDATE SET remind = EXCLUDED.remind, updated_at = now()
+    """)
+
+# Включение тумблера «Сообщения в чате»: один рубильник сбрасывает согласие и все виды (TASK-439).
+_SET_REMIND_ON = text("""
+    INSERT INTO hockey_player_prefs (
+        player_key, remind, notify_consent,
+        notify_nomove, notify_result, notify_overtook, notify_mfinal,
+        notify_league, notify_lginvite, notify_outfit
+    ) VALUES (
+        :player_key, true, true, true, true, true, true, true, true, true
+    )
+    ON CONFLICT (player_key) DO UPDATE SET
+        remind = true, notify_consent = true,
+        notify_nomove = true, notify_result = true, notify_overtook = true, notify_mfinal = true,
+        notify_league = true, notify_lginvite = true, notify_outfit = true,
+        updated_at = now()
     """)
 
 _SET_TYPE = text("""
@@ -290,17 +305,36 @@ _CLEAR_BLOCKED = text("""
 
 
 async def remind_on(session: AsyncSession, player_key: int) -> bool:
+    """Сообщения игры реально приходят.
+
+    True только если: ``remind`` включён; ``notify_consent`` не false; ``notify_result`` и
+    ``notify_nomove`` не выключены. Нет строки prefs — по умолчанию всё включено.
+    """
     row = (await session.execute(_PREFS, {"player_key": player_key})).one_or_none()
-    return True if row is None else bool(row.remind)
+    if row is None:
+        return True
+    if not bool(row.remind):
+        return False
+    if row.notify_consent is False:
+        return False
+    if row.notify_result is False or row.notify_nomove is False:
+        return False
+    return True
 
 
 async def set_remind(session: AsyncSession, player_key: int, on: bool, *, display_name: str = "") -> bool:
-    """Главный выключатель бота. Включение — новый вход: снимает отметку «заблокировал бота»."""
+    """Главный выключатель бота (тумблер «Сообщения в чате»).
+
+    ``on=true`` — remind, согласие и все колонки ``TYPE_COLUMN`` / ``EXTRA_TYPE_COLUMN`` в true,
+    снимает отметку «заблокировал бота». ``on=false`` — только ``remind=false``.
+    """
     name = (display_name or "").strip()[:40] or DEFAULT_PLAYER_NAME
     await session.execute(_ENSURE_PLAYER, {"player_key": player_key, "name": name})
-    await session.execute(_SET_REMIND, {"player_key": player_key, "on": bool(on)})
     if on:
+        await session.execute(_SET_REMIND_ON, {"player_key": player_key})
         await clear_blocked(session, player_key)
+    else:
+        await session.execute(_SET_REMIND, {"player_key": player_key, "on": False})
     return bool(on)
 
 
@@ -392,7 +426,13 @@ _DUE_NOMOVE = text(f"""
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key
     JOIN game_matches AS m ON m.status = 'scheduled'
          AND m.starts_at > :from_ AND m.starts_at <= :until
-         AND {_FAN_CLUB} IN (m.home_team, m.away_team)
+         AND (
+             {_FAN_CLUB} IN (m.home_team, m.away_team)
+             OR EXISTS (
+                 SELECT 1 FROM hockey_match_bells AS b
+                 WHERE b.telegram_id = pl.player_key AND b.match_id = m.id AND b.unsubscribed_at IS NULL
+             )
+         )
     WHERE {_ELIGIBLE} AND COALESCE(pr.notify_nomove, true)
       AND NOT EXISTS (SELECT 1 FROM hockey_picks AS p WHERE p.match_id = m.id AND p.player_key = pl.player_key)
       AND NOT EXISTS (
@@ -415,10 +455,7 @@ _DUE_RESULT = text(f"""
     JOIN hockey_players AS pl ON pl.player_key = p.player_key
     LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = p.player_key
     JOIN game_matches AS m ON m.id = p.match_id AND m.status = 'final' AND m.finalized_at > :fresh
-                                  AND m.finalized_at <= :ready
-         -- админ нажал «Поправить» и ещё не закончил: рассылку держим до ``hold_until`` (hockey_review.HOLD_FOR)
-         AND (m.result_probe->>'hold_until' IS NULL
-              OR CAST(m.result_probe->>'hold_until' AS TIMESTAMPTZ) <= :ready_now)
+                                  AND m.finalized_at <= :now
     WHERE {_ELIGIBLE} AND COALESCE(pr.notify_result, true) AND p.points IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM hockey_notices AS n
@@ -896,7 +933,6 @@ async def _overtook_notice(session: AsyncSession, o: Overtake, *, now: datetime)
         if not (await session.execute(_HAS_PICK, {"match_id": nxt.match_id, "player_key": o.player_key})).first():
             rows.append([url_button("Сыграть", f"{START_PICK}_{nxt.match_id}")])
     rows.append([url_button("Таблица лиги", f"{START_LEAGUE}_{await _invite_code(session, o.league_id)}")])
-    rows.append(off_button(KIND_OVERTOOK))
     return Notice(KIND_OVERTOOK, o.player_key, o.anchor_match_id, body, _rows(*rows))
 
 
@@ -935,11 +971,7 @@ async def _evening_days(session: AsyncSession, *, now: datetime) -> list[tuple[i
 
     fresh = now - (RESULT_FRESH if _local(now).hour >= 15 else RESULT_FRESH_AFTER_NIGHT)
     seen: dict[tuple[int, Any], None] = {}
-    for r in (
-        await session.execute(
-            _DUE_RESULT, {"fresh": _utc(fresh), "ready": _utc(now) - RESULT_SEND_DELAY, "ready_now": _utc(now)}
-        )
-    ).all():
+    for r in (await session.execute(_DUE_RESULT, {"fresh": _utc(fresh), "now": _utc(now)})).all():
         seen.setdefault((r.player_key, game_day(r.starts_at)), None)
     for key in await open_board_days(session, now=now):
         seen.setdefault(key, None)
@@ -980,18 +1012,19 @@ async def _evening_send(session: AsyncSession, step, *, picks: list, now: dateti
     if step.action == ev.ACTION_LATE:
         late = [p for p in picks if p.match_id in step.claim]
         body = "\n".join(ev.late_text(p) for p in late)
-        return EveningSend(step, final_text=body, final_buttons=_rows([table], off_button(KIND_RESULT)))
+        return EveningSend(step, final_text=body, final_buttons=_rows([table]))
     club = await fan_club(session, step.player_key, now=now)
     if step.action == ev.ACTION_BOARD:
         open_matches = await _open_today(session, player_key=step.player_key, day=step.day, now=now)
         fan = next((m for m in open_matches if club in (m.home_team, m.away_team)), None) if club else None
         body = ev.board_text(day=step.day, picks=picks, now=now, open_matches=open_matches, fan=fan)
         play = url_button("Сыграть", START_MATCHES) if open_matches else None
-        return EveningSend(step, board_text=body, board_buttons=_rows([play, table], off_button(KIND_RESULT)))
-    # Итог вечера: финальная правка табло (если оно было) и новое сообщение.
+        return EveningSend(step, board_text=body, board_buttons=_rows([play, table]))
+    # Итог вечера: табло уже было — правка того же сообщения; не было — новое (TASK-439).
     had_board = step.board is not None and step.board.message_id is not None
-    final_board = ev.board_text(day=step.day, picks=picks, now=now, open_matches=[], fan=None) if had_board else None
-    parts = [ev.final_header(picks, with_lines=not had_board and len(picks) > 1, now=now)]
+    parts: list[str] = []
+    if not had_board:
+        parts.append(ev.final_header(picks, with_lines=len(picks) > 1, now=now))
     if len(picks) == 1 and picks[0].ready:
         p = picks[0]
         tribune = tribune_line(
@@ -1006,7 +1039,10 @@ async def _evening_send(session: AsyncSession, step, *, picks: list, now: dateti
             same_exact=p.same_exact,
         )
         if tribune:
-            parts[0] += "\n" + tribune  # «Трибуна» — с какой долей игроков совпал ход
+            if parts:
+                parts[0] += "\n" + tribune  # «Трибуна» — с какой долей игроков совпал ход
+            else:
+                parts.append(tribune)
     changes, _leagues = await ev.place_changes(
         session,
         player_key=step.player_key,
@@ -1053,15 +1089,11 @@ async def _evening_send(session: AsyncSession, step, *, picks: list, now: dateti
         [play, table],
         [offer] if offer else [],
         [evening_button(evening.league_id, evening.day)] if evening else [],
-        off_button(KIND_RESULT),
     )
-    return EveningSend(
-        step,
-        board_text=final_board,
-        board_buttons=_rows([table]) if final_board else [],
-        final_text="\n\n".join(parts),
-        final_buttons=buttons,
-    )
+    if had_board:
+        body = ev.compose_evening_close(day=step.day, picks=picks, now=now, extras=parts)
+        return EveningSend(step, board_text=body, board_buttons=buttons)
+    return EveningSend(step, final_text="\n\n".join(parts), final_buttons=buttons)
 
 
 class _Row:
@@ -1097,7 +1129,7 @@ async def _nomove_candidates(session: AsyncSession, *, now: datetime) -> dict[in
         if r.player_key in out:
             continue
         body = nomove_text(home=r.home_team, away=r.away_team, starts_at=r.starts_at, now=now)
-        buttons = _rows([url_button("Сыграть", f"{START_PICK}_{r.match_id}")], off_button(KIND_NOMOVE))
+        buttons = _rows([url_button("Сыграть", f"{START_PICK}_{r.match_id}")])
         out[r.player_key] = Notice(KIND_NOMOVE, r.player_key, r.match_id, body, buttons)
     return out
 
@@ -1155,7 +1187,6 @@ async def _mfinal_candidates(session: AsyncSession, *, now: datetime, cache: dic
         buttons = _rows(
             [] if has_pick else [url_button("Сыграть", f"{START_PICK}_{final.id}")],
             [url_button("Таблица", f"{START_PICK}_{final.id}")],
-            off_button(KIND_MFINAL),
         )
         out[fan.player_key] = Notice(KIND_MFINAL, fan.player_key, final.id, body, buttons)
     return out
@@ -1371,7 +1402,7 @@ async def _rescore_notices(session: AsyncSession) -> list[Notice]:
             old_points=int(payload.get("old_points", 0)),
             new_points=int(r.points) * (2 if r.doubled else 1),
         )
-        buttons = _rows([url_button("Таблица", f"{START_PICK}_{r.match_id}")], off_button(KIND_RESULT))
+        buttons = _rows([url_button("Таблица", f"{START_PICK}_{r.match_id}")])
         out.append(Notice(KIND_RESCORE, r.player_key, r.match_id, body, buttons, preclaimed=True))
     return out
 
@@ -1622,8 +1653,8 @@ async def _finish_evening(session_factory, notice: Notice, outcome: str, *, now:
 
 
 async def _deliver_evening(session_factory, notice: Notice, *, now: datetime, io: EveningIO) -> str:
-    """Табло: правка, а если не вышло — новое; финал: последняя правка табло и новое «Итог вечера»; поздний итог —
-    новым. Номер нового табло записываем сразу после отправки отдельной транзакцией."""
+    """Табло: правка, а если не вышло — новое. Финал с табло — только правка (итог в том же сообщении);
+    без табло или правка не вышла — новое. Поздний итог — новым. Номер табло пишем сразу после отправки."""
     from src.application import kk_evening as ev
 
     send = notice.evening  # type: ignore[assignment]
@@ -1641,9 +1672,20 @@ async def _deliver_evening(session_factory, notice: Notice, *, now: datetime, io
                     async with session_factory() as session:
                         await ev.save_board(session, player_key=chat, day=step.day, message_id=message_id)
                         await session.commit()
+        elif step.action == ev.ACTION_FINAL and board_id is not None and send.board_text and not send.final_text:
+            # Табло уже было: дописываем итог правкой, второе сообщение не шлём (TASK-439).
+            outcome = await io.edit(chat, board_id, send.board_text, send.board_buttons)
+            if outcome in (GONE, FAILED):
+                outcome, message_id = await io.send(chat, send.board_text, send.board_buttons)
+                if outcome == SENT and message_id is not None:
+                    async with session_factory() as session:
+                        await ev.save_board(session, player_key=chat, day=step.day, message_id=message_id)
+                        await session.commit()
+            if outcome == SENT:
+                async with session_factory() as session:
+                    await ev.close_board(session, player_key=chat, day=step.day, now=now)
+                    await session.commit()
         else:
-            if step.action == ev.ACTION_FINAL and board_id is not None and send.board_text:
-                await io.edit(chat, board_id, send.board_text, send.board_buttons)  # не вышло — не беда: итог ниже
             outcome, _ = await io.send(chat, send.final_text or "", send.final_buttons)
             if outcome == SENT and step.action == ev.ACTION_FINAL:
                 async with session_factory() as session:
@@ -1913,7 +1955,7 @@ async def deliver_outfit_notices(session_factory, *, now: datetime, send: Sender
                 )
             continue
         text_ = outfit_text(captain=award.captain_name, league_name=r.league_name, item=award.item)  # type: ignore[union-attr]
-        buttons = _rows([evening_button(r.league_id, r.day)], off_button(KIND_OUTFIT))
+        buttons = _rows([evening_button(r.league_id, r.day)])
         try:
             outcome = _outcome(await send(r.to_key, text_, buttons))
         except Exception:  # noqa: BLE001

@@ -1,12 +1,11 @@
-"""«Кто кого»: табло вечера — итоги ходов одним сообщением на игрока и игровой день (PDEC-038, TASK-434).
+"""«Кто кого»: табло вечера — итоги ходов одним сообщением на игрока и игровой день (PDEC-038, TASK-434, TASK-439).
 
-Вечер — матчи с ходом игрока, начавшиеся в одни сутки по Минску (``game_day``). Правила доставки (владелец,
-2026-11-20, закреплены в TASK-434):
+Вечер — матчи с ходом игрока, начавшиеся в одни сутки по Минску (``game_day``). Правила доставки:
 
-* итог матча готов — ``final`` + ``RESULT_SEND_DELAY``, не на ручной проверке (``hold_until``);
+* итог матча готов — ``status = final`` и очки посчитаны (как в Mini App); буфера и ``hold_until`` нет;
 * готова часть вечера, табло нет — новое сообщение-табло; табло есть — правка (без звука);
-* готов весь вечер — финальная правка табло (если было) и новое «Итог вечера»; всё готово сразу (один матч,
-  утро после тихих часов) — только «Итог вечера»;
+* готов весь вечер и табло уже есть — правка того же сообщения с итогом (без второго пуша); табло не было
+  (один матч / всё сразу) — новое «Итог вечера»;
 * матч с ходом начался больше ``STUCK_AFTER`` назад без итога — вечер закрываем без него («итог позже»);
   его итог потом — коротким отдельным сообщением (``late``), как и любой итог уже закрытого вечера.
 
@@ -42,6 +41,8 @@ LEAGUES_MAX = 3
 # Таблицы команд вечера (Экстралига, Динамо) — сколько строк максимум: только где место сдвинулось.
 TEAMS_MAX = 2
 TEAM_TABLE_MIN = 3
+# Лимит текста Telegram: при закрытии вечера в одно сообщение ужимаем строки матчей, заголовок не трогаем.
+TG_TEXT_LIMIT = 4096
 
 ACTION_BOARD = "board"  # новое табло или правка существующего
 ACTION_FINAL = "final"  # «Итог вечера» (и финальная правка табло, если оно было)
@@ -154,9 +155,8 @@ _EVENING_PICKS = text("""
     SELECT m.id AS match_id, m.home_team, m.away_team, m.starts_at, m.league, m.status,
            m.home_score AS final_home, m.away_score AS final_away,
            p.side, p.home_score, p.away_score, p.doubled, p.points,
-           (m.status = 'final' AND p.points IS NOT NULL AND m.finalized_at <= :ready
-            AND (m.result_probe->>'hold_until' IS NULL
-                 OR CAST(m.result_probe->>'hold_until' AS TIMESTAMPTZ) <= :now)) AS ready,
+           -- Как Mini App: итог виден при status=final и посчитанных очках (hold_until приложение не смотрит).
+           (m.status = 'final' AND p.points IS NOT NULL) AS ready,
            EXISTS (SELECT 1 FROM hockey_notices AS n
                    WHERE n.player_key = p.player_key AND n.match_id = m.id AND n.kind = 'result') AS noticed,
            (SELECT COUNT(*) FROM hockey_picks x WHERE x.match_id = m.id AND x.side = 'home')::int AS home_picks,
@@ -190,16 +190,8 @@ _OPEN_BOARDS = text("""
 
 
 async def evening_picks(session: AsyncSession, *, player_key: int, day: date, now: datetime) -> list[EveningPick]:
-    from src.application.hockey_notices import RESULT_SEND_DELAY
-
     since, until = day_bounds(day)
-    params = {
-        "player_key": player_key,
-        "since": since,
-        "until": until,
-        "ready": _utc(now) - RESULT_SEND_DELAY,
-        "now": _utc(now),
-    }
+    params = {"player_key": player_key, "since": since, "until": until}
     return [EveningPick(**r._mapping) for r in (await session.execute(_EVENING_PICKS, params)).all()]
 
 
@@ -600,6 +592,35 @@ def final_header(picks: list[EveningPick], *, with_lines: bool, now: datetime) -
     return head
 
 
+def compose_evening_close(*, day: date, picks: list[EveningPick], now: datetime, extras: list[str]) -> str:
+    """Одно сообщение при закрытии вечера, когда табло уже было: заголовок, строки матчей, итог.
+
+    Если текст длиннее ``TG_TEXT_LIMIT``, убираем строки матчей с конца; заголовок и хвост (место, фраза) не режем.
+    """
+    done = [p for p in picks if p.ready]
+    head = f"🏒 <b>ВЕЧЕР {_day_title(day)}</b> · {len(done)} из {len(picks)} {_matches_word(len(picks))}"
+    lines = [match_line(p, now) for p in picks]
+    mid: list[str] = []
+    if picks:
+        mid.append(final_header(picks, with_lines=False, now=now))
+    mid.extend(x for x in extras if x)
+    tail = "\n\n".join(mid)
+
+    def build(match_lines: list[str]) -> str:
+        parts = [head]
+        if match_lines:
+            parts.append("\n".join(match_lines))
+        if tail:
+            parts.append(tail)
+        return "\n\n".join(parts)
+
+    text = build(lines)
+    while len(text) > TG_TEXT_LIMIT and lines:
+        lines.pop()
+        text = build(lines)
+    return text if len(text) <= TG_TEXT_LIMIT else text[:TG_TEXT_LIMIT]
+
+
 def late_text(p: EveningPick) -> str:
     """Итог матча уже закрытого вечера: одна строка, без мест — места были в «Итоге вечера»."""
     return f"Итог позже, чем вечер: {match_line(p, datetime.now(timezone.utc))}"
@@ -615,8 +636,10 @@ __all__ = [
     "PlaceChange",
     "STUCK_AFTER",
     "Step",
+    "TG_TEXT_LIMIT",
     "board_text",
     "close_board",
+    "compose_evening_close",
     "decide",
     "evening_picks",
     "final_header",
