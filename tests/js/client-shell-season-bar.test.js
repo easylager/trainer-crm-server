@@ -129,7 +129,10 @@ class Node {
 
 function bootShell({ pathname = '/webapp/client-home', search = '', flags, bodyShell = 'tabs', userId = 42, responses = {}, connection = null, readyState = 'complete', fetchAll = false, fetchFail = null, scriptSrc = null, winExtra = null } = {}) {
   const store = new Map();
-  if (flags) store.set(FLAGS_KEY, JSON.stringify(Object.assign({ u: String(userId), at: Date.now() }, flags)));
+  /* TASK-437: без кэша season_ui включён. flags не передан — свежий явный «выключено» (старый бар);
+     flags: null — кэша нет вовсе. */
+  const cacheFlags = flags === undefined ? { season_ui: false, bookings_tab: false } : flags;
+  if (cacheFlags) store.set(FLAGS_KEY, JSON.stringify(Object.assign({ u: String(userId), at: Date.now() }, cacheFlags)));
   const session = new Map();
   const docListeners = {};
   const winListeners = {};
@@ -244,7 +247,7 @@ const SEASON_BOOKINGS = { season_ui: true, bookings_tab: true };
 
 describe('AC-1: season_ui = false — старый бар байт в байт', () => {
   const variants = {
-    'флага нет в кэше': undefined,
+    'флаг выключен свежим кэшем': undefined,
     'season_ui:false': { season_ui: false, bookings_tab: false },
     'bookings_tab без season_ui игнорируется': { season_ui: false, bookings_tab: true },
   };
@@ -441,7 +444,23 @@ describe('AC-5: повторный тап шлёт client-shell:retap', () => {
 describe('AC-6: client-shell:ui-flags пересобирает бар', () => {
   const URL_FLAGS = '/api/webapp/client/ui-flags';
 
-  it('кэша нет, сервер включил season_ui: бар заменён на месте, шторка убрана, событие одно', async () => {
+  it('TASK-437: кэша нет — сразу текущий бар (Главная, Поиск, Кто кого, Я), без «Ещё»; сервер подтвердил — бар не пересобирается', async () => {
+    const t = bootShell({ flags: null, responses: { [URL_FLAGS]: { season_ui: true, bookings_tab: false } } });
+    assert.deepEqual(t.tabIds(), ['home', 'catalog', 'kk', 'me']);
+    assert.equal(t.overlay(), null);
+    const before = t.bar();
+    await t.flush();
+    assert.equal(t.bar(), before);
+  });
+
+  it('TASK-437: кэша нет и сети нет — бар остаётся текущим', async () => {
+    const t = bootShell({ flags: null, fetchFail: () => true });
+    await t.flush();
+    assert.deepEqual(t.tabIds(), ['home', 'catalog', 'kk', 'me']);
+    assert.equal(t.overlay(), null);
+  });
+
+  it('кэш выключен, сервер включил season_ui: бар заменён на месте, шторка убрана, событие одно', async () => {
     const t = bootShell({ responses: { [URL_FLAGS]: { season_ui: true, bookings_tab: true } } });
     const before = t.bar();
     assert.deepEqual(t.tabIds(), ['home', 'catalog', 'bookings', 'more']);

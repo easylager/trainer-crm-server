@@ -706,6 +706,34 @@ async def resolve_confirm_flood(
     return await set_state_admin(session, arena_id, decision, admin_id=admin_id, now=now)
 
 
+async def flood_many(
+    session: AsyncSession, tokens: list[str], *, admin_id: int | None, now: datetime | None = None
+) -> dict[str, Any]:
+    """``/winter_flood id1 id2 …`` (TASK-436): «залит» пачкой в одной транзакции.
+
+    Рассылку не шлём отсюда: каждая точка оставляет событие заливки, цикл зимы забирает их одной
+    обработкой очереди и склеивает в одно сообщение на подписчика. Возвращает ``set`` — id, которым
+    поставлено «залит», и ``rejected`` — пары (как прислали, почему не поставлено).
+    """
+    now = _utc(now)
+    done: list[int] = []
+    rejected: list[tuple[str, str]] = []
+    seen: set[int] = set()
+    for raw in tokens:
+        if not raw.isdigit() or int(raw) <= 0 or int(raw) >= 2**31:
+            rejected.append((raw, "не id"))
+            continue
+        aid = int(raw)
+        if aid in seen:
+            continue
+        seen.add(aid)
+        if await resolve_confirm_flood(session, aid, "flooded", admin_id=admin_id, now=now):
+            done.append(aid)
+        else:
+            rejected.append((raw, "нет в сезоне"))
+    return {"set": done, "rejected": rejected}
+
+
 async def merge_preview(session: AsyncSession, source_id: int, target_id: int) -> dict[str, Any]:
     """Что переедет при слиянии: числа для экрана подтверждения."""
     row = (

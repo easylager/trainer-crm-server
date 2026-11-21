@@ -249,10 +249,13 @@ async def release_hold(session: AsyncSession, match_id: int) -> None:
 
 
 def delivery_time(finalized_at: datetime) -> tuple[datetime, bool]:
-    """Когда клиентам уйдёт итог: ``finalized_at`` + буфер, а в тихие часы — в 09:00. Второе значение: «утром»."""
-    from src.application.hockey_notices import QUIET_FROM, QUIET_TO, RESULT_SEND_DELAY, in_quiet_hours
+    """Когда клиентам уйдёт итог: сразу после ``finalized_at`` (как в Mini App), в тихие часы — в 09:00.
 
-    when = (finalized_at + RESULT_SEND_DELAY).astimezone(MINSK_TZ)
+    Второе значение: «утром». Буфер ``RESULT_SEND_DELAY`` снят (TASK-439): ошибочный итог чинит rescore.
+    """
+    from src.application.hockey_notices import QUIET_FROM, QUIET_TO, in_quiet_hours
+
+    when = finalized_at.astimezone(MINSK_TZ) if finalized_at.tzinfo else finalized_at.replace(tzinfo=MINSK_TZ)
     if not in_quiet_hours(when):
         return when, False
     morning = when.replace(hour=QUIET_TO, minute=0, second=0, microsecond=0)

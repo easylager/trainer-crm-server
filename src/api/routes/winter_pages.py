@@ -18,7 +18,14 @@ from src.application.ice_city_day import city_slug, resolve_city_by_ref
 from src.application.place_links import place_path
 from src.application.public_site_footer import render_site_footer_html
 from src.application.public_web_cta import public_page_view_beacon_script
-from src.application.winter_page import render_city_page, render_gone_page, render_point_page, winter_city_path
+from src.application.winter_page import (
+    city_bell_shown,
+    point_bell_shown,
+    render_city_page,
+    render_gone_page,
+    render_point_page,
+    winter_city_path,
+)
 from src.shared.config import Settings
 from src.shared.glide_city_cookie import apply_glide_city_cookie, glide_city_pin_script
 
@@ -68,7 +75,9 @@ async def winter_city_page(city_ref: str, request: Request, session: AsyncSessio
         ymaps_key=settings.yandex_maps_js_api_key,
         suggest_href=f"/suggest?city={int(city['id'])}",
         city_href=f"/c/{city_slug(name)}",
-        beacon=public_page_view_beacon_script(surface="selection_page", city_id=int(city["id"])),
+        beacon=public_page_view_beacon_script(
+            surface="selection_page", city_id=int(city["id"]), bell=city_bell_shown(data)
+        ),
         city_pin=glide_city_pin_script(city_slug(name)),
         og_image=catalog_home_og_image_url(base),
     )
@@ -108,7 +117,9 @@ async def maybe_winter_point_response(
         indexable=winter_public.is_indexable(item),
         list_href=list_href,
         suggest_href=f"/suggest?city={int(city['id'])}",
-        beacon=public_page_view_beacon_script(surface="place_page", city_id=int(city["id"]), arena_id=int(item["id"])),
+        beacon=public_page_view_beacon_script(
+            surface="place_page", city_id=int(city["id"]), arena_id=int(item["id"]), bell=point_bell_shown(item)
+        ),
         city_pin=glide_city_pin_script(city_slug(name)),
         og_image=catalog_home_og_image_url(base),
     )

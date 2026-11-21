@@ -192,14 +192,29 @@ async def test_ui_flags_endpoint(app_use_test_db, db_session, season_env) -> Non
     await db_session.commit()
 
     season_env()
-    assert await _get_flags(tid) == {"season_ui": False, "bookings_tab": False, "fast_tabs": False}
+    assert await _get_flags(tid) == {"season_ui": False, "bookings_tab": False, "fast_tabs": False, "search_board": False}
 
     season_env(ids=str(tid))
-    assert await _get_flags(tid) == {"season_ui": True, "bookings_tab": True, "fast_tabs": False}
+    assert await _get_flags(tid) == {"season_ui": True, "bookings_tab": True, "fast_tabs": False, "search_board": False}
 
     other = unique_test_telegram_id()
     season_env(ids=f"{tid},{other}")
-    assert await _get_flags(other) == {"season_ui": True, "bookings_tab": False, "fast_tabs": False}
+    assert await _get_flags(other) == {"season_ui": True, "bookings_tab": False, "fast_tabs": False, "search_board": False}
+
+
+@pytest.mark.asyncio
+async def test_ui_flags_search_board_by_list(app_use_test_db, monkeypatch: pytest.MonkeyPatch) -> None:
+    """TASK-438: search_board по своему списку, без season_ui."""
+    tid = unique_test_telegram_id()
+    monkeypatch.delenv("CLIENT_SEASON_UI_TELEGRAM_IDS", raising=False)
+    monkeypatch.delenv("CLIENT_SEARCH_BOARD_PERCENT", raising=False)
+    monkeypatch.setenv("CLIENT_SEARCH_BOARD_TELEGRAM_IDS", str(tid))
+    get_settings.cache_clear()
+    try:
+        assert (await _get_flags(tid))["search_board"] is True
+        assert (await _get_flags(unique_test_telegram_id()))["search_board"] is False
+    finally:
+        get_settings.cache_clear()
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,8 @@ CONTACT_ACTION_COACH_JOIN = "coach_join"
 COACH_ACTIONS = frozenset({CONTACT_ACTION_COACH_OPEN, CONTACT_ACTION_COACH_JOIN})
 # «Написать в Telegram» тренеру без онлайн-записи (TASK-351): в payload — trainer_id и источник.
 CONTACT_ACTION_TELEGRAM = "telegram"
+# TASK-436: «Позвонить и забронировать» в блоке аренды льда — отдельно от обычного «Позвонить».
+CONTACT_ACTION_RINK_CALL = "rink_call"
 
 _ALLOWED_CONTACT_ACTIONS = frozenset(
     {CONTACT_ACTION_PHONE, CONTACT_ACTION_TICKETS, CONTACT_ACTION_DIRECTION}
@@ -100,7 +102,7 @@ _TRAINER_CARD_VIEW_BEACON = r"""<script>
 })(typeof globalThis !== 'undefined' ? globalThis : window);
 </script>"""
 
-PAGE_VIEW_BEACON_VERSION = "3"  # TASK-428: маячок передаёт utm_source
+PAGE_VIEW_BEACON_VERSION = "4"  # TASK-436: маячок передаёт bell (показ колокольчика зимы)
 
 
 def public_page_view_beacon_script(
@@ -108,9 +110,12 @@ def public_page_view_beacon_script(
     surface: str,
     city_id: int | None = None,
     arena_id: int | None = None,
+    bell: bool = False,
 ) -> str:
     """``sendBeacon`` при разборе страницы (не на bfcache-возврате) — учёт просмотра публички."""
     attrs = [f'data-surface="{_esc(surface)}"']
+    if bell:
+        attrs.append('data-bell="1"')
     if city_id is not None and int(city_id) > 0:
         attrs.append(f'data-city-id="{int(city_id)}"')
     if arena_id is not None and int(arena_id) > 0:

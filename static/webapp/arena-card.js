@@ -1782,11 +1782,7 @@
       return (
         '<div class="arena-sec">' +
         '<p class="arena-h">' + esc(iceSectionTitle()) + '</p>' +
-        '<div class="arena-empty">' +
-        '<b>Не удалось загрузить расписание</b>' +
-        '<p>Похоже, пропала связь. Расписание можно загрузить заново.</p>' +
-        '<button type="button" class="arena-btn" data-action="retry-sessions">Повторить</button>' +
-        '</div>' +
+        loadErrorHtml('retry-sessions') +
         '</div>'
       );
     }
@@ -1972,11 +1968,8 @@
     if (state.trainersError) {
       return (
         '<div class="arena-sec"><p class="arena-h">Тренеры на этой арене</p>' +
-        '<div class="arena-empty">' +
-        '<b>Не удалось загрузить тренеров</b>' +
-        '<p>Похоже, пропала связь. Список тренеров можно загрузить заново.</p>' +
-        '<button type="button" class="arena-btn" data-action="retry-trainers">Повторить</button>' +
-        '</div></div>'
+        loadErrorHtml('retry-trainers') +
+        '</div>'
       );
     }
     var items = (state.trainers && state.trainers.items) || [];
@@ -2920,12 +2913,22 @@
     });
   }
 
-  function showError(text, retry) {
+  function showError(text) {
     if (!root) return;
-    root.innerHTML =
-      '<div class="arena-state">' + esc(text) +
-      (retry ? '<br><button type="button" class="arena-btn" data-action="retry-load">Повторить</button>' : '') +
-      '</div>';
+    root.innerHTML = '<div class="arena-state">' + esc(text) + '</div>';
+    state.card = null;
+  }
+
+  /* TASK-437: сбой загрузки — общий компонент «Нет связи / Не загрузилось · Повторить» (mini-app-telegram-chrome.js);
+     «Повторить» идёт через делегированный data-action, как остальные кнопки карточки. */
+  function loadErrorHtml(action, err) {
+    var ui = global.MiniAppErrorUi;
+    return ui && ui.loadErrorHtml ? ui.loadErrorHtml({ error: err, data: { action: action } }) : '';
+  }
+
+  function showLoadError(err) {
+    if (!root) return;
+    root.innerHTML = loadErrorHtml('retry-load', err);
     state.card = null;
   }
 
@@ -3008,9 +3011,9 @@
           }
         });
       })
-      .catch(function () {
+      .catch(function (err) {
         if (state.card) return;
-        showError('Не удалось загрузить карточку.', true);
+        showLoadError(err);
       });
   }
 

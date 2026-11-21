@@ -473,18 +473,30 @@ async def on_confirm_flood(query: CallbackQuery) -> None:
 
 @ops_router.message(Command("winter_flood"))
 async def cmd_winter_flood(message: Message) -> None:
-    """``/winter_flood <id точки>`` — админ сам ставит «залит» (без отметок людей); ``/winter_wait <id>`` — вернуть «ждём»."""
+    """``/winter_flood id1 id2 …`` — админ сам ставит «залит» (без отметок людей), можно пачкой; ``/winter_wait <id>`` — вернуть «ждём».
+
+    Подписчикам — одно сообщение на человека: события заливки склеивает цикл рассылки (TASK-436).
+    """
     if not message.from_user or not winter_bot._is_admin(message.from_user.id):
         await message.answer("Нет доступа.")
         return
-    parts = (message.text or "").split()
-    if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer("Формат: /winter_flood <id точки>. Поставит «Залит» и разошлёт подписчикам.")
+    tokens = [t.strip(",;") for t in (message.text or "").split()[1:]]
+    tokens = [t for t in tokens if t]
+    if not tokens:
+        await message.answer("Формат: /winter_flood <id точки> [id …]. Поставит «Залит» и разошлёт подписчикам.")
         return
     async with async_session_factory() as session:
-        ok = await wa.resolve_confirm_flood(session, int(parts[1]), "flooded", admin_id=message.from_user.id, now=_now())
+        res = await wa.flood_many(session, tokens, admin_id=message.from_user.id, now=_now())
         await session.commit()
-    await message.answer("«Залит» поставлен, подписчикам уйдёт сообщение." if ok else "Точка не найдена в сезоне.")
+    await message.answer(flood_many_reply(res))
+
+
+def flood_many_reply(res: dict) -> str:
+    n = len(res["set"])
+    lines = [f"«Залит» поставлен: {n}." + (" Подписчикам уйдёт одно сообщение на человека." if n else "")]
+    if res["rejected"]:
+        lines.append("Не поставлено: " + ", ".join(f"{html.escape(raw)} — {why}" for raw, why in res["rejected"]) + ".")
+    return "\n".join(lines)
 
 
 @ops_router.message(Command("winter_wait"))

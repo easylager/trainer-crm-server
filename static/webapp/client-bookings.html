@@ -6,25 +6,25 @@
   <title>Записи</title>
   <!-- TASK-306: вкладка «Записи» на языке хаба. Свои шрифты, без Google. -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611211" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611211" />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611217" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611217" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="client-mini-app-theme.js?v=202611211"></script>
-  <script src="mini-app-phone-field.js?v=202611211"></script>
-  <link rel="stylesheet" href="theme.css?v=202611211" />
-  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611211" />
-  <link rel="stylesheet" href="mini-app-components.css?v=202611211" />
-  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611211" />
-  <script src="mini-app-telegram-chrome.js?v=202611211"></script>
-  <script src="client-profile-switcher.js?v=202611211"></script>
-  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202611211" />
-  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611211" />
-  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611211" />
-  <script src="mini-app-empty-state.js?v=202611211"></script>
-  <script src="mini-app-more-icons.js?v=202611211"></script>
-  <script src="write-access.js?v=202611211"></script>
-  <script src="mini-app-client-shell.js?v=202611211"></script>
-  <script src="learn-block.js?v=202611211"></script>
+  <script src="client-mini-app-theme.js?v=202611217"></script>
+  <script src="mini-app-phone-field.js?v=202611217"></script>
+  <link rel="stylesheet" href="theme.css?v=202611217" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611217" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202611217" />
+  <link rel="stylesheet" href="/static/webapp/glide-app.css?v=202611217" />
+  <script src="mini-app-telegram-chrome.js?v=202611217"></script>
+  <script src="client-profile-switcher.js?v=202611217"></script>
+  <link rel="stylesheet" href="mini-app-client-bookings.css?v=202611217" />
+  <link rel="stylesheet" href="mini-app-client-nav.css?v=202611217" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611217" />
+  <script src="mini-app-empty-state.js?v=202611217"></script>
+  <script src="mini-app-more-icons.js?v=202611217"></script>
+  <script src="write-access.js?v=202611217"></script>
+  <script src="mini-app-client-shell.js?v=202611217"></script>
+  <script src="learn-block.js?v=202611217"></script>
   <script>
     (function () {
       try {
@@ -40,7 +40,7 @@
   </style>
   <!-- TASK-094: не снимать переход по пустой странице. -->
   <link rel="expect" href="#screenList" blocking="render" />
-  <script defer src="/static/webapp/ga-press.js?v=202611211"></script>
+  <script defer src="/static/webapp/ga-press.js?v=202611217"></script>
 </head>
 <body class="client-bookings-body ga-body" data-client-shell="tabs">
   <script>
@@ -931,6 +931,15 @@
         listEl.innerHTML = html;
       }
 
+      /* TASK-437: сбой загрузки списка — общий компонент «Нет связи / Не загрузилось · Повторить». */
+      function showListLoadError(err, onRetry) {
+        var listEl = document.getElementById('listContent');
+        var ui = window.MiniAppErrorUi;
+        if (!listEl) return;
+        if (ui && ui.renderLoadError) ui.renderLoadError(listEl, { error: err, onRetry: onRetry });
+        else listEl.innerHTML = '<div class="error">Не загрузилось</div>';
+      }
+
       /* silent — тихое обновление из оболочки вкладок (TASK-391): тот же список не перерисовывается,
          сбой не стирает показанное. Страница сама зовёт без аргумента — как раньше. */
       function loadBookings(silent) {
@@ -962,11 +971,13 @@
             }
             tryOpenBookingFromQuery();
           })
-          .catch(function() {
+          .catch(function(err) {
             if (bookingsHydratedFromWarm || silent === true) return;
             if (state.mode === 'upcoming') {
-              document.getElementById('listContent').innerHTML =
-                '<div class="error">Не удалось загрузить записи. Попробуйте обновить страницу.</div>';
+              showListLoadError(err, function() {
+                renderBookingsListSkeleton();
+                loadBookings();
+              });
             }
           });
       }
@@ -1040,12 +1051,14 @@
             state.historyLoading = false;
             if (state.mode === 'history') renderHistoryList();
           })
-          .catch(function() {
+          .catch(function(err) {
             state.historyLoading = false;
             if (!state.historyLoaded) {
               if (state.mode === 'history') {
-                document.getElementById('listContent').innerHTML =
-                  '<div class="error">Не удалось загрузить историю. Попробуйте обновить страницу.</div>';
+                showListLoadError(err, function() {
+                  renderBookingsListSkeleton();
+                  loadHistory(true);
+                });
               }
               return;
             }
@@ -1322,7 +1335,7 @@
       loadBookings();
     })();
   </script>
-  <script src="mini-app-client-home.js?v=202611211"></script>
+  <script src="mini-app-client-home.js?v=202611217"></script>
   <script>
     /* TASK-303: серия недель — тихой строкой над записями, тап ведёт в «Вашу активность». */
     (function () {
@@ -1354,6 +1367,6 @@
         .catch(function () { /* без серии — просто без строки */ });
     })();
   </script>
-  <script src="/static/webapp/ga-touch.js?v=202611211"></script>
+  <script src="/static/webapp/ga-touch.js?v=202611217"></script>
 </body>
 </html>

@@ -171,14 +171,33 @@ describe('исполнение страниц: флаг включён (кэш s
   }
 });
 
-describe('исполнение страниц: флаг выключен — как раньше', () => {
-  const offStates = [
+const OFF = JSON.stringify({ u: '42', season_ui: false, at: Date.now() });
+
+/* TASK-437: неизвестное состояние флага = включено (на проде season_ui у всех). */
+describe('исполнение страниц: флаг неизвестен — как при включённом', () => {
+  const unknownStates = [
     ['нет кэша', { cache: null }],
-    ['season_ui false', { cache: JSON.stringify({ u: '42', season_ui: false, at: Date.now() }) }],
     ['"true" строкой', { cache: JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }) }],
-    ['чужой u', { cache: JSON.stringify({ u: '7', season_ui: true, at: Date.now() }) }],
+    ['чужой u с false', { cache: JSON.stringify({ u: '7', season_ui: false, at: Date.now() }) }],
     ['битый JSON', { cache: '{oops' }],
     ['storage бросает', { storageThrows: true }],
+  ];
+  for (const page of PAGES) {
+    for (const [name, st] of unknownStates) {
+      it(`${page}: ${name} → «назад» ведёт в client-me`, () => {
+        const r = loadPage(page, { ...st, history: 1 });
+        assert.deepEqual(r.log.errors, []);
+        assert.equal(r.btn.hidden, false);
+        r.btn.onclick();
+        assert.deepEqual(r.log.hrefs, ['/webapp/client-me?init_data=a%3D1']);
+      });
+    }
+  }
+});
+
+describe('исполнение страниц: флаг выключен — как раньше', () => {
+  const offStates = [
+    ['season_ui false свежий', { cache: OFF }],
   ];
   for (const page of PAGES) {
     for (const [name, st] of offStates) {
@@ -191,7 +210,7 @@ describe('исполнение страниц: флаг выключен — к�
       });
     }
     it(`${page}: нет флага, есть история — по-прежнему только там, где «назад» был`, () => {
-      const r = loadPage(page, { cache: null, history: 3 });
+      const r = loadPage(page, { cache: OFF, history: 3 });
       const visible = !r.btn.hidden;
       // saved-trainers, certificates, family-access, support показывают «назад» с историей; корни skip-страниц — нет.
       const expected = ['client-saved-trainers', 'client-certificates', 'client-family-access', 'client-support'].includes(page);
@@ -212,7 +231,7 @@ describe('исполнение страниц: флаг выключен — к�
   for (const [page, detail, listId] of [['client-passes', 'screenDetail', 'screenList'],
     ['client-passes-certificates', 'pass-screenDetail', 'pass-screenList']]) {
     it(`${page}: флаг выкл, экран детали — «назад» ведёт к списку внутри страницы, как раньше`, () => {
-      const r = loadPage(page, { cache: null, history: 3 });
+      const r = loadPage(page, { cache: OFF, history: 3 });
       r.els[detail] = r.window.document.getElementById(detail);
       r.els[listId] = r.window.document.getElementById(listId);
       r.els[detail].classList.add('active');

@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { loadErrorUi } = require('./helpers/load-error-component.js');
 
 const webapp = path.resolve(__dirname, '../../static/webapp');
 const tabSource = fs.readFileSync(path.join(webapp, 'ice-tab.js'), 'utf8');
@@ -156,6 +157,7 @@ async function bootArenaCard(fetchImpl) {
   const root = makeElement('arenaRoot');
   const sandboxWindow = {
     ArenaCardModel: model,
+    MiniAppErrorUi: loadErrorUi({ getElementById: () => ({}), createElement: () => ({}), head: { appendChild() {} } }),
     RuText: {},
     location: { search: '?arena_id=42', href: 'https://example.test/arena' },
     history: { length: 1, back() {} },
@@ -289,9 +291,10 @@ describe('TASK-185 AC-2: карточка арены', () => {
     assert.match(root.innerHTML, /Arena Test Rink/);
     assert.match(root.innerHTML, /<p class="arena-h">Массовое катание<\/p>/);
     assert.match(root.innerHTML, /id="arenaRows"/);
-    assert.doesNotMatch(root.innerHTML, /Не удалось загрузить расписание/);
-    assert.match(root.innerHTML, /Не удалось загрузить тренеров/);
-    assert.match(root.innerHTML, /data-action="retry-trainers"/);
+    assert.doesNotMatch(root.innerHTML, /data-action="retry-sessions"/);
+    assert.equal((root.innerHTML.match(/data-miniapp-load-error/g) || []).length, 1);
+    assert.match(root.innerHTML, /Тренеры на этой арене<\/p><div class="miniapp-load-error"/);
+    assert.match(root.innerHTML, /data-action="retry-trainers">Повторить</);
     assert.ok(page.state.card, 'карточка должна остаться на экране');
     assert.equal(page.state.trainersError, true);
     assert.equal(page.state.sessionsError, false);

@@ -111,14 +111,17 @@
    */
   var UI_FLAGS_KEY = 'cw_ui_flags_v1';
   /*
-   * Кэш живёт сутки по полю at: просроченный (и с at из будущего) = «выключено». То же правило и тот же
-   * TTL — в client-season-back.js и в гейте #kk-shell-gate (kto-kogo.html); tests/js/client-shell-ui-flags-ttl.test.js
-   * держит три копии одинаковыми.
+   * TASK-437: по умолчанию season_ui ВКЛЮЧЁН — на проде CLIENT_SEASON_UI_PERCENT=100, старый бар с «Ещё»
+   * не видит никто. Выключает только свежий (моложе суток по at) кэш этого пользователя с season_ui === false,
+   * то есть явный ответ сервера. Нет кэша, он битый, чужой или просрочен, storage недоступен, нет сети —
+   * текущий бар «Главная · Поиск · Кто кого · Я». Вне Telegram (нет id пользователя) — выключено.
+   * То же правило и тот же TTL — в client-season-back.js и в гейте #kk-shell-gate (kto-kogo.html);
+   * tests/js/client-shell-ui-flags.test.js держит три копии одинаковыми.
    */
   var UI_FLAGS_TTL_MS = 24 * 60 * 60 * 1000;
   /* Метка «флаги уже спрошены в этой сессии» (sessionStorage): один запрос на сессию, а не на страницу. */
   var UI_FLAGS_SYNC_KEY = 'cw_ui_flags_sync_v1';
-  var uiFlags = { season_ui: false, bookings_tab: false };
+  var uiFlags = { season_ui: true, bookings_tab: false };
   var uiFlagsRefreshed = false;
 
   function normalizeUiFlags(raw) {
@@ -141,17 +144,20 @@
     }
   }
 
+  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false };
+
   function readUiFlags() {
     var uid = initDataUserId();
     if (!uid) return normalizeUiFlags(null);
     try {
       var cached = JSON.parse(global.localStorage.getItem(UI_FLAGS_KEY) || 'null');
-      if (!cached || String(cached.u) !== uid) return normalizeUiFlags(null);
+      if (!cached || String(cached.u) !== uid) return UI_FLAGS_DEFAULT;
       var age = Date.now() - cached.at;
-      if (typeof cached.at !== 'number' || !(age >= 0 && age < UI_FLAGS_TTL_MS)) return normalizeUiFlags(null);
-      return normalizeUiFlags(cached);
+      if (typeof cached.at !== 'number' || !(age >= 0 && age < UI_FLAGS_TTL_MS)) return UI_FLAGS_DEFAULT;
+      if (cached.season_ui === false) return normalizeUiFlags(null);
+      return { season_ui: true, bookings_tab: cached.bookings_tab === true };
     } catch (e) {
-      return normalizeUiFlags(null);
+      return UI_FLAGS_DEFAULT;
     }
   }
 
@@ -1686,21 +1692,21 @@
    */
   var KK_BASE = '/static/webapp/';
   var KK_ASSET_VERSIONS = [
-    ['kto-kogo.css', '202611211'],
-    ['kto-kogo-model.js', '202611211'],
-    ['kto-kogo-screens-model.js', '202611211'],
-    ['kto-kogo.js', '202611211'],
-    ['kto-kogo-kit.js', '202611211'],
-    ['kto-kogo-views.js', '202611211'],
-    ['kto-kogo-hub-cards.js', '202611211'],
-    ['kto-kogo-board.js', '202611211'],
-    ['kto-kogo-stand.js', '202611211'],
-    ['kto-kogo-leagues.js', '202611211'],
-    ['kto-kogo-coin-model.js', '202611211'],
-    ['kto-kogo-coin.js', '202611211'],
-    ['kto-kogo-matches.js', '202611211'],
-    ['kto-kogo-league-identity.js', '202611211'],
-    ['kto-kogo-boot.js', '202611211'],
+    ['kto-kogo.css', '202611217'],
+    ['kto-kogo-model.js', '202611217'],
+    ['kto-kogo-screens-model.js', '202611217'],
+    ['kto-kogo.js', '202611217'],
+    ['kto-kogo-kit.js', '202611217'],
+    ['kto-kogo-views.js', '202611217'],
+    ['kto-kogo-hub-cards.js', '202611217'],
+    ['kto-kogo-board.js', '202611217'],
+    ['kto-kogo-stand.js', '202611217'],
+    ['kto-kogo-leagues.js', '202611217'],
+    ['kto-kogo-coin-model.js', '202611217'],
+    ['kto-kogo-coin.js', '202611217'],
+    ['kto-kogo-matches.js', '202611217'],
+    ['kto-kogo-league-identity.js', '202611217'],
+    ['kto-kogo-boot.js', '202611217'],
   ];
   /* Сервер подставляет в html всех страниц одну метку ?v= (asset_stamp.py), а не литерал из kto-kogo.html.
      Поэтому берём метку самой оболочки (ASSET_V — из её же <script src>); литерал из списка — запасной,

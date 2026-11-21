@@ -2630,17 +2630,15 @@
     }
   }
 
-  function loadFailed() {
-    // TASK-096: «Попробуйте ещё раз» without a button is an instruction the screen doesn't honour.
-    renderEmpty(
-      listEl(),
-      {
-        title: 'Не удалось загрузить список',
-        body: 'Похоже, пропала связь. Список загрузится заново по кнопке.',
-        action: { label: 'Повторить', kind: 'retry' },
-      },
-      'retry'
-    );
+  /* TASK-437: сбой загрузки — общий компонент «Нет связи / Не загрузилось · Повторить» (mini-app-telegram-chrome.js). */
+  function renderLoadError(container, err, kind) {
+    var ui = global.MiniAppErrorUi;
+    if (!container || !ui || !ui.renderLoadError) return;
+    ui.renderLoadError(container, { error: err, onRetry: emptyAction(kind) });
+  }
+
+  function loadFailed(err) {
+    renderLoadError(listEl(), err, 'retry');
   }
 
   function beginListFetch(lens) {
@@ -2748,7 +2746,7 @@
         }
         onListLoaded();
       })
-      .catch(function () {
+      .catch(function (err) {
         if (!isCurrentFetch(gen, 'skate')) {
           if (state.loading && state.intent === 'coach') {
             state.loading = false;
@@ -2757,7 +2755,7 @@
           return;
         }
         state.loading = false;
-        loadFailed();
+        loadFailed(err);
       });
   }
 
@@ -2778,10 +2776,10 @@
         state.loadedIntent = 'coach';
         onListLoaded();
       })
-      .catch(function () {
+      .catch(function (err) {
         if (!isCurrentFetch(gen, 'coach')) return;
         state.loading = false;
-        loadFailed();
+        loadFailed(err);
       });
   }
 
@@ -3544,15 +3542,7 @@
         if (listSec) listSec.hidden = true;
         if (mapSec) mapSec.hidden = true;
         if (document.body) document.body.classList.remove('ice-view-map');
-        renderEmpty(
-          errBox,
-          {
-            title: 'Не удалось выполнить поиск',
-            body: 'Похоже, пропала связь. Повторите запрос по кнопке.',
-            action: { label: 'Повторить', kind: 'retry-search' },
-          },
-          'search'
-        );
+        renderLoadError(errBox, err, 'retry-search');
       });
   }
 

@@ -33,6 +33,7 @@ from src.application.style_b import (
 )
 from src.shared.city_locative import city_locative
 from src.shared.html_template import fill_placeholders, html_lang_for_country, json_for_script
+from src.application.winter_links import NEAR_PARAM, bell_param
 from src.shared.winter_text import phone_links
 
 _TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "static" / "share" / "winter-page.html"
@@ -275,6 +276,29 @@ def dispute_note(item: Mapping[str, Any]) -> str:
     return "Есть отметки «не залит» · проверяем" if item.get("dispute") and item.get("state") == "flooded" else ""
 
 
+# --- колокольчик: показ и клик (TASK-436) ----------------------------------------------
+def city_bell_shown(data: Mapping[str, Any]) -> bool:
+    """Колокольчик «Лёд рядом с вами» на списке города: есть точки и ссылка на бота."""
+    return bool(int(data.get("total") or 0) and data.get("bell_near_link"))
+
+
+def point_bell_shown(item: Mapping[str, Any]) -> bool:
+    """«Напишем, когда зальют» — только пока не залито; у залитой точки колокольчик ничего бы не обещал."""
+    links = item.get("links") or {}
+    return bool(links.get("bell") and item.get("state") in ("waiting", "stale") and not item.get("doubtful"))
+
+
+def _bell_href(direct: str, base_url: str, *, start_param: str, surface: str, city_id: Any = None,
+               arena_id: Any = None) -> str:
+    """Клик по колокольчику идёт через учёт ``public_telegram_cta`` (с ``ua_class``), затем в бота."""
+    from src.application.place_links import public_telegram_cta_url
+
+    return public_telegram_cta_url(
+        base_url, start_param=start_param, surface=surface,
+        city_id=int(city_id) if city_id else None, arena_id=int(arena_id) if arena_id else None,
+    ) or direct
+
+
 # --- головы страниц -------------------------------------------------------------------
 def _shell(
     *, title: str, description: str, canonical: str, robots: str, og_image: str, body: str, jsonld: str,
@@ -405,7 +429,9 @@ def render_city_page(
         head_note = '<p class="w-sub">Пока ни одной точки. Знаете, где в городе заливают лёд, — предложите.</p>'
 
     bell_html = ""
-    if total and bell:
+    if city_bell_shown(data):
+        # Без city_id: wnear города не несёт, и учёт пометил бы клик как scope_mismatch.
+        bell = _bell_href(str(bell), base_url, start_param=NEAR_PARAM, surface="selection_page")
         bell_html = (
             '<div class="w-bell"><span class="w-bell__text"><span class="w-bell__title">Лёд рядом с вами</span>'
             '<span class="w-bell__hint">Напишем в Telegram, когда зальют лёд в 2 км от вас</span></span>'
@@ -463,7 +489,7 @@ def render_city_page(
         ],
     }
     description = (
-        f"Уличные катки и хоккейные коробки {('в ' + where) if where else name}: где залит лёд, часы и цены сезона 2025/26, "
+        f"Уличные катки и хоккейные коробки {('в ' + where) if where else name}: где уже залит лёд, часы работы, "
         "как добраться. Отметки о льде от людей."
     )
     return _shell(
@@ -649,14 +675,16 @@ def render_point_page(
     canonical = _abs(base_url, place_path(city_name=name, slug=str(item["slug"])))
     kind = _kind_label(item)
     addr_line = " · ".join(b for b in (item.get("address"), (f"{item['district']}, " if item.get("district") else "") + name) if b)
-    bell = links.get("bell")
-    # «Напишем, когда зальют» — только пока не залито; у залитой точки колокольчик ничего бы не обещал.
-    bell_html = (
-        f'<a class="w-btn w-btn--tg w-btn--wide" href="{_esc(bell)}" rel="noopener">{_icon("bell")}'
-        "Сообщить мне в Telegram, когда зальют</a>"
-        if bell and item.get("state") in ("waiting", "stale") and not item.get("doubtful")
-        else ""
-    )
+    bell_html = ""
+    if point_bell_shown(item):
+        bell = _bell_href(
+            str(links["bell"]), base_url, start_param=bell_param(int(item["id"])), surface="place_page",
+            arena_id=item["id"],
+        )
+        bell_html = (
+            f'<a class="w-btn w-btn--tg w-btn--wide" href="{_esc(bell)}" rel="noopener">{_icon("bell")}'
+            "Сообщить мне в Telegram, когда зальют</a>"
+        )
     body = (
         f'<div class="w-page w-page--point" data-w-page="point" data-w-arena="{int(item["id"])}" data-w-state="{_esc(item.get("state"))}" '
         f'data-w-api="/api/public/winter/points/{int(item["id"])}">'

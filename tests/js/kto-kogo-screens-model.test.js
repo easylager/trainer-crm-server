@@ -288,6 +288,15 @@ describe('таблица', () => {
     assert.match(S.noMeLine('Юность', '2026-11', '2026-11-06T09:00:00Z'), /на матч Юности/);
     assert.match(S.noMeLine(null, '2026-10', '2026-11-06T09:00:00Z'), /не было ходов/);
   });
+  it('TASK-437: открытых матчей нет — строка не зовёт сделать ход; «0 игроков» не пишем', () => {
+    const line = S.noMeLine(null, 'season', '2026-11-06T09:00:00Z', false);
+    assert.doesNotMatch(line, /^Сделай/);
+    assert.match(line, /Ближайших матчей пока нет/);
+    assert.match(S.noMeLine(null, 'season', '2026-11-06T09:00:00Z', true), /^Сделай первый ход/);
+    assert.equal(S.tableCaption({ players: 0 }, null), 'Пока никого · Динамо и вся Экстралига');
+    assert.equal(S.tableCaption({}, 'Шахтер'), 'Пока никого · только матчи Шахтёра');
+    assert.doesNotMatch(S.tableCaption({ players: 0 }, null), /\b0\b/);
+  });
   it('строка про корону: порог трёх, моё положение, звание сезона', () => {
     const view = { players_with_points: 5, me: { rank: 3 }, to_crown: 20 };
     assert.match(S.tableCrownLine(view, 'Юность', '2026-11', 'сезон 2026/27'), /^Корона за ноябрь по матчам Юности — у лидера после последнего матча месяца\. Придёт в течение двух суток\. До первого места — 20.очков\.$/);

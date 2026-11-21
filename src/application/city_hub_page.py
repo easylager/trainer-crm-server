@@ -25,9 +25,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.arena_profile import has_known_hours, intervals_for_weekday, normalize_hhmm
 from src.application.arena_public_use_cases import (
     STATUS_ACTIVE,
+    _CURRENT_SESSION_SQL,
     _NOT_HOCKEY_CENTER_SQL,
     _OHM_SESSION_SQL,
     _is_hockey_center,
+    _schedule_freshness,
     city_hockey_center_count,
 )
 from src.application.catalog_home_page import _USER_UPCOMING_SQL, _session_card
@@ -66,6 +68,7 @@ from src.application.place_links import (
 from src.shared.catalog_sharpening import row_in_sharpening_section
 from src.shared.catalog_visibility import CATALOG_LISTED_SQL
 from src.shared.city_locative import city_locative
+from src.shared.currency import currency_label_ru
 from src.application.style_b import b_photo_url
 from src.shared.copy_ru import t
 from src.application.site_learn_block import TITLE as LEARN_TITLE, render_learn_block
@@ -79,6 +82,8 @@ from src.application.city_style_b import (
     nearby_section_html,
     city_origin,
     load_week,
+    money_range,
+    money_range_body,
     price_sentence,
     week_days,
 )
@@ -116,6 +121,42 @@ _WEEK_COMPARISON_SQL = text(
       AND {_NOT_HOCKEY_CENTER_SQL}
       {ICE_CITY_DAY_SESSION_WHERE_SQL}
     ORDER BY a.id, s.starts_at_utc, s.id
+    """
+)
+
+# TASK-435: цены массового катания по аренам и дням на неделю — те же сеансы и то же окно
+# (picker_dates), что у списка «Катки на ближайшие 7 дней». Нулевая цена — не цена.
+# В той же строке — свежесть расписания арены, те же поля, что у карточки места
+# (``_ONE_ARENA_SQL``): строка таблицы цен проходит то же правило, что штамп «Проверено».
+_CITY_PRICE_DAYS_SQL = text(
+    f"""
+    SELECT a.id AS arena_id, s.local_date,
+           MIN(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0)::int AS adult_lo,
+           MAX(s.price_adult_minor) FILTER (WHERE s.price_adult_minor > 0)::int AS adult_hi,
+           MIN(s.price_child_minor) FILTER (WHERE s.price_child_minor > 0)::int AS child_lo,
+           MAX(s.price_child_minor) FILTER (WHERE s.price_child_minor > 0)::int AS child_hi,
+           MIN(s.price_rental_minor) FILTER (WHERE s.price_rental_minor > 0)::int AS rental_lo,
+           MAX(s.price_rental_minor) FILTER (WHERE s.price_rental_minor > 0)::int AS rental_hi,
+           MIN(s.price_adult_minor + s.price_rental_minor)
+               FILTER (WHERE s.price_adult_minor > 0 AND s.price_rental_minor > 0)::int AS with_rental_lo,
+           MAX(s.price_adult_minor + s.price_rental_minor)
+               FILTER (WHERE s.price_adult_minor > 0 AND s.price_rental_minor > 0)::int AS with_rental_hi,
+           MIN(s.currency_code) AS currency_code,
+           (
+               SELECT MAX(s.observed_at) FROM ice_sessions s
+               WHERE s.arena_id = a.id AND {_CURRENT_SESSION_SQL}
+           ) AS sessions_observed_at,
+           COALESCE(ipj.is_enabled, false) AS ice_job_enabled,
+           ipj.last_ok_at AS ice_last_ok_at,
+           ipj.config AS ice_job_config,
+           ipj.created_at AS ice_job_created_at
+    {ICE_CITY_DAY_FROM_SQL}
+    LEFT JOIN ice_parser_jobs ipj ON ipj.arena_id = a.id
+    WHERE a.city_id = :city_id AND s.local_date BETWEEN :first_day AND :last_day
+      AND COALESCE(a.venue_type, 'ice') IN ('ice', 'outdoor')
+      AND {_NOT_HOCKEY_CENTER_SQL}
+      {ICE_CITY_DAY_SESSION_WHERE_SQL}
+    GROUP BY a.id, s.local_date, ipj.id
     """
 )
 
@@ -322,6 +363,89 @@ async def _city_matches(session: AsyncSession, *, city_id: int, city_name: str, 
     if not site_matches.site_enabled():
         return None
     return await site_matches.city_feed(session, city_name=city_name, city_id=city_id, now=now)
+
+
+_PRICE_FIELDS = ("adult", "child", "rental", "with_rental")
+# Блок «Цены на массовое катание» — только когда сравнивать есть что: от двух арен с ценой.
+PRICE_TABLE_MIN_ARENAS = 2
+
+
+async def _load_arena_prices(
+    session: AsyncSession, *, city_id: int, days: list[date], now: datetime, scope: Mapping[str, Any]
+) -> dict[int, dict[str, Any]]:
+    """{arena_id: {"currency_code", "days": {date: {"adult": (lo, hi), ...}}}} на неделю ``days``."""
+    rows = await session.execute(
+        _CITY_PRICE_DAYS_SQL,
+        {**scope, "city_id": city_id, "now": now, "st": STATUS_ACTIVE, "first_day": days[0], "last_day": days[-1]},
+    )
+    out: dict[int, dict[str, Any]] = {}
+    for row in rows.mappings():
+        arena = out.setdefault(int(row["arena_id"]), {"currency_code": None, "days": {}, "freshness_row": dict(row)})
+        arena["currency_code"] = arena["currency_code"] or row.get("currency_code")
+        arena["days"][row["local_date"]] = {
+            key: (row[f"{key}_lo"], row[f"{key}_hi"]) for key in _PRICE_FIELDS if row.get(f"{key}_lo") is not None
+        }
+    return out
+
+
+def arena_price_ranges(prices: Mapping[str, Any] | None, day: date | None = None) -> dict[str, list[int]]:
+    """Цены арены за неделю (или за один день ``day``): {"adult": [lo, hi], ...}; нет цены — нет ключа."""
+    out: dict[str, list[int]] = {}
+    if not isinstance(prices, Mapping):
+        return out
+    for local_date, bounds in (prices.get("days") or {}).items():
+        if day is not None and local_date != day:
+            continue
+        for key, (lo, hi) in bounds.items():
+            out.setdefault(key, []).extend((int(lo), int(hi)))
+    return out
+
+
+def _price_table(
+    *,
+    places: list[Mapping[str, Any]],
+    arena_prices: Mapping[int, Mapping[str, Any]],
+    now: datetime,
+) -> dict[str, Any] | None:
+    """Таблица цен хаба (TASK-435): арены с ценой и свежим расписанием, по названию.
+
+    Свежесть — то же правило, что штамп «Проверено» на карточке места (``proof_stamp``):
+    несвежие цены не подписываем и не показываем. «Проверено» блока — самая ранняя сверка
+    среди строк. Меньше ``PRICE_TABLE_MIN_ARENAS`` строк — блока нет (``None``).
+    """
+    from src.application.rink_brief import proof_stamp
+
+    priced = {
+        p["id"]: p
+        for p in places
+        if p.get("slug") and _is_rink(str(p.get("venue_type") or "ice")) and not _is_hockey_center(p)
+        and any(k in arena_price_ranges(arena_prices.get(p["id"])) for k in ("adult", "child", "rental"))
+    }
+    if len(priced) < PRICE_TABLE_MIN_ARENAS:
+        return None
+    rows: list[dict[str, Any]] = []
+    for arena_id, place in priced.items():
+        prices = arena_prices[arena_id]
+        freshness = _schedule_freshness(prices["freshness_row"], now=now)
+        stamp = proof_stamp(freshness, now=now)
+        if stamp is None:
+            continue
+        rows.append(
+            {
+                "arena_id": place["id"],
+                "name": format_public_name(str(place["name"])),
+                "slug": str(place["slug"]),
+                "currency_code": str(prices.get("currency_code") or "BYN"),
+                "ranges": arena_price_ranges(prices),
+                "observed_at": freshness["schedule_observed_at"],
+                "day_label": stamp.day_label,
+            }
+        )
+    if len(rows) < PRICE_TABLE_MIN_ARENAS:
+        return None
+    rows.sort(key=lambda r: r["name"].casefold())
+    earliest = min(rows, key=lambda r: datetime.fromisoformat(str(r["observed_at"])))
+    return {"rows": rows, "checked": earliest["day_label"]}
 
 
 async def load_city_hub_view(
@@ -534,6 +658,11 @@ async def load_city_hub_view(
             },
         )
         week_comparison = {int(row["arena_id"]): row for row in rows.mappings()}
+    arena_prices: dict[int, dict[str, Any]] = {}
+    price_table: dict[str, Any] | None = None
+    if rinks and variant not in (VARIANT_ONE, VARIANT_PHONE):
+        arena_prices = await _load_arena_prices(session, city_id=city_id, days=picker_dates, now=now, scope=scope)
+        price_table = _price_table(places=places, arena_prices=arena_prices, now=now)
     week_rows: list[dict[str, Any]] = []
     one_rink_place_view: dict[str, Any] | None = None
     nearby: list[dict[str, Any]] = []
@@ -600,6 +729,8 @@ async def load_city_hub_view(
         "variant": variant,
         "week_rows": week_rows,
         "week_comparison": week_comparison,
+        "arena_prices": arena_prices,
+        "price_table": price_table,
         "one_rink_place_view": one_rink_place_view,
         "nearby": nearby,
         # TASK-347: хоккей города на 7 дней; нет матчей или флаг выключен — None, блоков нет.
@@ -651,6 +782,27 @@ def _session_when(card: Mapping[str, Any], *, today: date) -> tuple[str, str]:
     return starts, f"{wd}, {rel}"
 
 
+def _tile_price_line(view: Mapping[str, Any], card: Mapping[str, Any], place: Mapping[str, Any]) -> str:
+    """Плитка «Лёд сегодня»: цены арены за день сеанса диапазоном — «8,50–9 BYN · с прокатом 15–15,50 BYN».
+
+    Цен арены за этот день нет в недельной выборке — строка ближайшего сеанса, как раньше.
+    """
+    local_date = card.get("local_date")
+    if isinstance(local_date, datetime):
+        local_date = local_date.date()
+    prices = (view.get("arena_prices") or {}).get(place.get("id")) if place else None
+    ranges = arena_price_ranges(prices, day=local_date) if isinstance(local_date, date) else {}
+    if not ranges.get("adult"):
+        return _price_bits(card)
+    currency = str((prices or {}).get("currency_code") or card.get("currency_code") or "BYN")
+    bits = [money_range(ranges["adult"], currency)]
+    if ranges.get("with_rental"):
+        bits.append(
+            t("price.with_rental", total=money_range_body(ranges["with_rental"]), currency=currency_label_ru(currency))
+        )
+    return " · ".join(bits)
+
+
 def _price_bits(card: Mapping[str, Any]) -> str:
     currency = str(card.get("currency_code") or "BYN")
     bits: list[str] = []
@@ -692,15 +844,25 @@ def city_hub_document_title(view: Mapping[str, Any]) -> str:
     city_name = format_public_name(str(view["city"]["name"]))
     where = city_locative(str(view["city"]["name"]))
     brand = "Glide"
+    # TASK-435: на хабе есть блок «Цены на массовое катание» — слово «цены» и в заголовке.
+    priced = bool((view.get("price_table") or {}).get("rows"))
     if city_slug(city_name) == "minsk" and int(view.get("rink_count") or 0):
+        if priced:
+            return f"Катки Минска — массовое катание, расписание и цены | {brand}"
         return f"Катки Минска — массовое катание и расписание | {brand}"
     if where and int((view.get("skate_counts") or {}).get("all") or 0):
+        if priced:
+            return f"Массовое катание в {where} — расписание и цены катков | {brand}"
         return f"Массовое катание в {where} — расписание катков | {brand}"
     if int(view.get("rink_count") or 0) and where:
+        if priced:
+            return f"Катки в {where} — массовое катание, расписание и цены | {brand}"
         return f"Катки в {where} — массовое катание и расписание | {brand}"
     bits: list[str] = []
     if int(view.get("rink_count") or 0):
         bits.append("катки")
+    if priced:
+        bits.append("цены")
     if int(view.get("service_count") or 0):
         bits.append("заточка")
     if int((view.get("ohm_counts") or {}).get("all") or 0) or int(view.get("center_count") or 0):
@@ -1156,7 +1318,7 @@ def _b_upcoming(view: Mapping[str, Any]) -> str:
         tile = tile_html(
             href=href,
             name=name,
-            line=_price_bits(card) or day,
+            line=_tile_price_line(view, card, place) or day,
             more_line=f"ещё {more_n} {plural_ru(more_n, 'сеанс', 'сеанса', 'сеансов')}" if more_n > 0 else "",
             photo_url=place.get("photo_url"),
             photo_alt=name,
@@ -1391,13 +1553,13 @@ def _b_minsk_rink_list(view: Mapping[str, Any], rinks: list[Mapping[str, Any]]) 
         line = _esc(" · ".join(details))
         if card:
             clock, day = _session_when(card, today=view["today"])
-            adult, child, rental = (card[key] for key in ("price_adult_minor", "price_child_minor", "price_rental_minor"))
-            prices = [("взрослый", adult), ("детский", child)]
-            if adult is not None and rental is not None:
-                prices.append(("взрослый с прокатом", adult + rental))
-            currency = str(card["currency_code"] or "BYN")
+            # TASK-435 AC-7: цены за неделю диапазоном («11–12 BYN»), а не цена ближайшего сеанса.
+            week = (view.get("arena_prices") or {}).get(rink["id"])
+            ranges = arena_price_ranges(week)
+            currency = str((week or {}).get("currency_code") or card["currency_code"] or "BYN")
+            prices = [("взрослый", "adult"), ("детский", "child"), ("взрослый с прокатом", "with_rental")]
             price_line = " · ".join(
-                f"{label} {format_price_minor(value, currency)}" for label, value in prices if value is not None
+                f"{label} {money_range(ranges[key], currency)}" for label, key in prices if ranges.get(key)
             )
             session_line = _esc(f"Ближайший сеанс: {day} в {clock}")
             line = "<br>".join(part for part in (line, session_line, _esc(price_line)) if part)
@@ -1410,6 +1572,51 @@ def _b_minsk_rink_list(view: Mapping[str, Any], rinks: list[Mapping[str, Any]]) 
             )
         )
     return section("Катки на ближайшие 7 дней", f'<div class="b-list">{"".join(rows)}</div>', sec_id="rinks")
+
+
+def _b_price_cell(key: str, label: str, ranges: Mapping[str, list[int]], currency: str) -> str:
+    """Клетка цены: «8,50–9<span> BYN</span>». Нет цены — пустая клетка, без «—» и «0»."""
+    body = money_range_body(ranges.get(key) or [])
+    if not body:
+        return f'<td data-k="{_esc(label)}"></td>'
+    return (
+        f'<td data-k="{_esc(label)}">{_esc(body)}'
+        f'<span class="b-cost__u"> {_esc(currency_label_ru(currency))}</span></td>'
+    )
+
+
+def _b_price_table(view: Mapping[str, Any]) -> str:
+    """TASK-435: «Цены на массовое катание» (#ceny) — арена · взрослый · детский · прокат за неделю."""
+    table = view.get("price_table")
+    if not isinstance(table, Mapping) or not table.get("rows"):
+        return ""
+    city_name = str(view["city"]["name"])
+    cols = (
+        ("adult", t("hub.prices_col_adult")),
+        ("child", t("hub.prices_col_child")),
+        ("rental", t("hub.prices_col_rental")),
+    )
+    head = f'<th scope="col">{_esc(t("hub.prices_col_rink"))}</th>' + "".join(
+        f'<th scope="col">{_esc(label)}</th>' for _, label in cols
+    )
+    body = []
+    for row in table["rows"]:
+        href = place_path(city_name=city_name, slug=str(row["slug"]))
+        cells = "".join(_b_price_cell(key, label, row["ranges"], str(row["currency_code"])) for key, label in cols)
+        body.append(
+            f'<tr><th scope="row"><a class="b-cost__name" href="{_esc(href)}">{_esc(row["name"])}</a></th>{cells}</tr>'
+        )
+    proof = (
+        '<div class="b-proof" data-nosnippet>'
+        '<svg class="b-proof__ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        f'<path d="M20 6 9 17l-5-5"/></svg><span>{_esc(t("hub.prices_checked", day=table["checked"]))}</span></div>'
+    )
+    return (
+        '<section class="b-sec" id="ceny" aria-labelledby="ceny-t"><div class="b-sec__head">'
+        f'<h2 class="b-h2" id="ceny-t">{_esc(t("hub.prices_title"))}</h2></div>{proof}'
+        f'<div class="b-cost"><table class="b-cost__t"><thead><tr>{head}</tr></thead>'
+        f'<tbody>{"".join(body)}</tbody></table></div></section>'
+    )
 
 
 def _b_all_places(view: Mapping[str, Any]) -> str:
@@ -1803,10 +2010,13 @@ def _b_body(
     rink_list = _b_minsk_rink_list(view, rinks) if minsk else ""
     routes = _b_routes(view)
     sub_html = f"<span data-nosnippet>{_esc(city_hub_topic_line(view))}</span>"
+    price_table = _b_price_table(view)
     if rink_list:
         sub_html += ' · <a href="#rinks">Список катков</a>'
-        if routes:
-            sub_html += ' · <a href="#city-sections">Все разделы</a>'
+    if price_table:
+        sub_html += f' · <a href="#ceny">{_esc(t("hub.prices_link"))}</a>'
+    if rink_list and routes:
+        sub_html += ' · <a href="#city-sections">Все разделы</a>'
     hero = hero_html(
         title="Катки Минска" if minsk else t("hub.on_ice", city=city_name),
         title_break="" if minsk else "на льду",
@@ -1831,6 +2041,7 @@ def _b_body(
             routes,
             kk_banner,
             rink_list,
+            price_table,
             _b_for_you(view),
             empty,
             _b_all_places(view),

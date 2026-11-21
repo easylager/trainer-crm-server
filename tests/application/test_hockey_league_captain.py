@@ -317,7 +317,7 @@ async def test_given_from_chat_and_the_recipient_gets_one_message(db_session) ->
     await hockey_notices.deliver_outfit_notices(factory, now=NOW, send=send)
     assert [(k, b.split("</b>")[0]) for k, b, _ in sent] == [(SASHA, "<b>Макс выдаёт тебе экипировку")]
     assert "плакат «Разыскивается» — до следующего вечера" in sent[0][1]
-    assert [b["callback_data"] for row in sent[0][2] for b in row if "callback_data" in b] == ["kk:off:of"]
+    assert not any("kk:off:" in b.get("callback_data", "") for row in sent[0][2] for b in row)
 
     await _give(db, league_id, ME, SASHA, "bag", day)  # тому же — другая вещь: второе сообщение не шлём
     await hockey_notices.deliver_outfit_notices(factory, now=NOW, send=send)

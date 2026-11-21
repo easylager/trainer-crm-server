@@ -18,7 +18,8 @@ from tests.api.test_public_arenas import _add_future_session, _insert_arena, _in
 # С лишним load_selection_view на хабе (fb656681) на этом сиде было 15 SQL; без — 7.
 CITY_HUB_SQL_BUDGET = 10
 # Свежести расписания на публичке больше нет (feel/F) — ещё на один SQL меньше.
-CITY_HUB_SQL_EXPECT = 6
+# TASK-435: цены арен за неделю со свежестью — один запрос на блок «Цены на массовое катание».
+CITY_HUB_SQL_EXPECT = 7
 
 
 def _count_sql(db_session):

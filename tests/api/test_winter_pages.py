@@ -383,3 +383,53 @@ def test_facts_block_splits_last_winter_from_phone_and_source():
     assert "ПРОШЛОЙ ЗИМОЙ · 2025/26" in html
     assert html.index("Часы") < html.index("Цена") < html.index("Телефон") < html.index("Источник")
     assert "minsksport.by</a></dd>" in html and "таблица сезона" not in html and "зимой 2025/26" not in html
+
+
+# --- TASK-436 AC-4: воронка колокольчика — показ едет с просмотром, клик через учёт CTA ----------------
+@pytest.mark.asyncio
+async def test_bell_shown_flag_and_click_goes_through_cta(on, client, db_session, monkeypatch):
+    monkeypatch.setenv("CLIENT_BOT_USERNAME", "glide_test_bot")
+    aid = await point(db_session, name="Колокольчик")
+    html = (await client.get("/c/minsk/zimoy")).text
+    assert 'data-surface="selection_page"' in html and 'data-bell="1"' in html
+    assert 'href="https://glideclub.test/api/public/catalog/open-telegram?startapp=wnear&amp;surface=selection_page"' in html
+    slug = await slug_of(db_session, aid)
+    point_html = (await client.get(f"/p/minsk/{slug}")).text
+    assert 'data-bell="1"' in point_html
+    assert f"open-telegram?startapp=wbell_{aid}&amp;surface=place_page&amp;arena_id={aid}" in point_html
+
+    # Залитая точка: колокольчика нет — и показа нет.
+    flooded = await point(db_session, name="Залитая", state="flooded", state_source="engine")
+    flooded_html = (await client.get(f"/p/minsk/{await slug_of(db_session, flooded)}")).text
+    assert "open-telegram?startapp=wbell_" not in flooded_html and 'data-bell="1"' not in flooded_html
+
+    city_id = (await db_session.execute(text("SELECT city_id FROM arenas WHERE id=:a"), {"a": aid})).scalar_one()
+    ua = {"User-Agent": UA + f" bell{aid}"}
+    view = await client.post(
+        "/api/public/catalog/page-view",
+        params={"surface": "selection_page", "city_id": city_id, "path": "/c/minsk/zimoy", "bell": "1"},
+        headers=ua,
+    )
+    assert view.status_code == 204
+    click = await client.get(
+        "/api/public/catalog/open-telegram",
+        params={"startapp": f"wbell_{aid}", "surface": "place_page", "arena_id": aid},
+        headers=ua, follow_redirects=False,
+    )
+    assert click.status_code == 302 and click.headers["location"] == f"https://t.me/glide_test_bot?start=wbell_{aid}"
+    near = await client.get(
+        "/api/public/catalog/open-telegram",
+        params={"startapp": "wnear", "surface": "selection_page"}, headers=ua, follow_redirects=False,
+    )
+    assert near.headers["location"] == "https://t.me/glide_test_bot?start=wnear"
+
+    shown = (await db_session.execute(text(
+        "SELECT payload->>'bell', payload->>'ua_class' FROM catalog_consumer_events "
+        "WHERE kind='public_page_view' AND city_id=:c AND payload->>'path'='/c/minsk/zimoy' ORDER BY id DESC LIMIT 1"
+    ), {"c": city_id})).one()
+    assert tuple(shown) == ("1", "human")
+    clicked = (await db_session.execute(text(
+        "SELECT arena_id, payload->>'ua_class', (payload->>'scope_mismatch')::boolean FROM catalog_consumer_events "
+        "WHERE kind='public_telegram_cta' AND start_param=:p ORDER BY id DESC LIMIT 1"
+    ), {"p": f"wbell_{aid}"})).one()
+    assert tuple(clicked) == (aid, "human", False)

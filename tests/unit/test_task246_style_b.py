@@ -52,6 +52,20 @@ def test_price_sentence_uses_only_prices_that_exist() -> None:
     assert price_sentence([{"price_child_minor": 250}], has_rental=False, has_sharpening=False) == ""
 
 
+def test_price_sentence_shows_the_week_range_not_the_first_price() -> None:
+    """TASK-435 AC-1: будни 11, выходные 12 — «11–12 BYN», вторая цена не теряется."""
+    rows = [
+        {"price_adult_minor": 1100, "price_child_minor": 800, "currency_code": "BYN"},
+        {"price_adult_minor": 1200, "price_child_minor": 900, "currency_code": "BYN"},
+        {"price_adult_minor": 1100, "price_child_minor": None, "currency_code": "BYN"},
+    ]
+    assert price_sentence(rows, has_rental=False, has_sharpening=False) == (
+        "Взрослый билет — 11–12 BYN, детский — 8–9 BYN"
+    )
+    rows = [{"price_adult_minor": 850}, {"price_adult_minor": 900}]
+    assert price_sentence(rows, has_rental=False, has_sharpening=False) == "Взрослый билет — 8,50–9 BYN"
+
+
 def test_motif_and_icons_have_no_emoji_and_no_missing_photo_caption() -> None:
     motif = rink_motif_svg()
     assert "нет фото" not in motif
