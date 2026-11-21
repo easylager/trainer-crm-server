@@ -3,6 +3,9 @@
 Всем ответам — HSTS (только https), nosniff и Referrer-Policy. HTML вне
 ``/webapp/`` — ещё и ``frame-ancestors``: чужой сайт не встроит страницу во
 фрейм, а Telegram Web (страница места открывается и как Mini App) — встроит.
+Яндекс Метрика тоже в списке: Вебвизор и карта кликов открывают страницу
+в своём фрейме (иначе «Невозможно воспроизвести посещение»). Домены —
+из справки Яндекса (install-counter-csp, frame-ancestors) плюс ``*.webvisor.com``.
 ``/webapp/`` не трогаем: у Mini App свои правила (SEC-G2), фрейм Telegram там
 обязателен, а полный CSP требует постраничной политики.
 """
@@ -14,7 +17,23 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 HSTS = "max-age=31536000"
 # Сайт не просит камеру, микрофон, оплату и USB; геолокацию не трогаем (ближайший каток).
 PERMISSIONS_POLICY = "camera=(), microphone=(), payment=(), usb=()"
-FRAME_ANCESTORS = "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
+# Telegram + Яндекс Метрика (Вебвизор / карта кликов). Список Метрики:
+# https://yandex.ru/support/metrica/ru/code/install-counter-csp
+FRAME_ANCESTORS = (
+    "frame-ancestors 'self' "
+    "https://web.telegram.org https://*.telegram.org "
+    "https://metrika.yandex.ru https://metrika.yandex.by https://metrika.yandex.com "
+    "https://metrika.yandex.com.tr https://metrika.yandex.kz https://metrika.yandex.uz "
+    "https://metrika.yandex https://metrika.ya.ru "
+    "https://metrica.yandex.ru https://metrica.yandex.by https://metrica.yandex.com "
+    "https://metrica.yandex.com.tr https://metrica.yandex.kz https://metrica.yandex "
+    "https://metrica.ya.ru "
+    "https://metr.yandex.ru https://metr.yandex.by https://metr.yandex.com "
+    "https://metr.yandex.com.tr https://metr.yandex.kz "
+    "https://analytics.yandex.ru https://analytics.yandex.by https://analytics.yandex.com "
+    "https://analytics.yandex.com.tr https://analytics.yandex.kz "
+    "https://*.webvisor.com"
+)
 
 _ALL: tuple[tuple[bytes, bytes], ...] = (
     (b"strict-transport-security", HSTS.encode()),

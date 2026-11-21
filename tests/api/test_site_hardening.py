@@ -44,6 +44,29 @@ def test_permissions_policy_on_site_not_on_mini_app():
     assert "permissions-policy" not in client.get("/webapp/nope").headers
 
 
+def test_city_hub_frame_ancestors_allow_metrika_and_telegram():
+    """Вебвизор/карта кликов Метрики встраивают HTML во фрейм — без их доменов пусто."""
+    r = TestClient(app).get("/c/minsk")
+    assert r.status_code == 200
+    csp = r.headers["content-security-policy"]
+    assert csp.startswith("frame-ancestors 'self'")
+    assert "https://web.telegram.org" in csp and "https://*.telegram.org" in csp
+    assert "https://metrika.yandex.ru" in csp
+    assert "https://metrika.yandex.by" in csp
+    assert "https://*.webvisor.com" in csp
+
+
+def test_mini_app_html_keeps_its_own_frame_rules():
+    r = TestClient(app).get("/webapp/ice")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
+    assert "content-security-policy" not in r.headers
+
+
+def test_non_html_has_no_frame_ancestors():
+    r = TestClient(app).get("/robots.txt")
+    assert "content-security-policy" not in r.headers
+
+
 # ── Детектор обхода ──────────────────────────────────────────────────────
 
 
