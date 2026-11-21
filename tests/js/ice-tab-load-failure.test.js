@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { loadErrorUi } = require('./helpers/load-error-component.js');
 
 const webapp = path.resolve(__dirname, '../../static/webapp');
 const modelPath = path.join(webapp, 'ice-tab-model.js');
@@ -119,8 +120,17 @@ function boot(opts) {
     return reply({ ok: true, body: {} });
   };
   let lastEmpty = null;
+  let lastLoadError = null;
+  const realLoadError = loadErrorUi({ getElementById: () => ({}), createElement: () => ({}), head: { appendChild() {} } });
   const sandboxWindow = {
     IceTabModel: model,
+    /* Общий компонент ошибки (TASK-437): разметка настоящая, обработчик «Повторить» сохраняем для теста. */
+    MiniAppErrorUi: {
+      renderLoadError(container, o) {
+        lastLoadError = o;
+        container.innerHTML = realLoadError.loadErrorHtml(o);
+      },
+    },
     /* Настоящий MiniAppEmptyState подменён: нам важны заголовок и обработчик кнопки. */
     MiniAppEmptyState: {
       ICONS: {},
@@ -163,7 +173,7 @@ function boot(opts) {
     console,
   });
   vm.runInContext(tabSource, context);
-  return { requests, store, model, elements, ctl, lastEmpty: () => lastEmpty };
+  return { requests, store, model, elements, ctl, lastEmpty: () => lastEmpty, lastLoadError: () => lastLoadError };
 }
 
 const arenasCalls = (reqs) => reqs.filter((r) => r.url.includes('/api/public/ice/arenas'));
@@ -180,13 +190,13 @@ describe('ice-tab: сбой сервера не выдаётся за успех
     const calls = arenasCalls(t.requests);
     assert.ok(calls.length >= 1, JSON.stringify(t.requests));
     calls.forEach((c) => assert.match(c.url, /[?&]season=winter(&|$)/, c.url));
-    assert.match(t.elements.iceList.innerHTML + t.elements.iceListSkate.innerHTML, /Не удалось загрузить список\|Повторить/);
+    assert.match(t.elements.iceList.innerHTML + t.elements.iceListSkate.innerHTML, /miniapp-load-error__title">Не загрузилось<[\s\S]*>Повторить</);
     assert.equal(JSON.parse(t.store[t.model.ICE_STATE_KEY]).season, 'winter');
 
     /* «Повторить» перезапрашивает ту же ленту и снова с «Зимой». */
     t.ctl.arenas = () => ({ ok: false, status: 503 });
     const before = arenasCalls(t.requests).length;
-    t.lastEmpty().onCta();
+    t.lastLoadError().onRetry();
     await flushPromises(60);
     const after = arenasCalls(t.requests);
     assert.equal(after.length, before + 1);

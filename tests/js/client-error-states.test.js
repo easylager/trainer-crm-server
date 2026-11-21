@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { loadErrorUi } = require('./helpers/load-error-component.js');
 
 const webapp = path.resolve(__dirname, '../../static/webapp');
 const tabSource = fs.readFileSync(path.join(webapp, 'ice-tab.js'), 'utf8');
@@ -52,7 +53,7 @@ async function flush(n) {
 const json = (body, ok = true, status = 200) => Promise.resolve({ ok, status, json: () => Promise.resolve(body) });
 
 describe('поиск при сбое сервера', () => {
-  it('500 → «Не удалось выполнить поиск» и «Повторить», а не «ничего нет»', async () => {
+  it('500 → общий компонент «Не загрузилось · Повторить», а не «ничего нет» (TASK-437)', async () => {
     delete require.cache[require.resolve(iceModelPath)];
     const model = require(iceModelPath);
     const ids = [
@@ -79,6 +80,7 @@ describe('поиск при сбое сервера', () => {
         ICONS: {},
         render(c, o) { lastEmpty = o; c.innerHTML = '[' + o.title + ']'; },
       },
+      MiniAppErrorUi: loadErrorUi({ getElementById: () => ({}), createElement: () => ({}), head: { appendChild() {} } }),
       location: { search: '?city_id=1' },
       sessionStorage: { getItem: () => null, setItem() {} },
       localStorage: { getItem: () => null, setItem() {} },
@@ -109,8 +111,11 @@ describe('поиск при сбое сервера', () => {
     elements.iceSearchInput.value = 'каток';
     elements.iceSearchInput.dispatch('input');
     await flush(60);
-    assert.equal(lastEmpty && lastEmpty.title, 'Не удалось выполнить поиск');
-    assert.equal(lastEmpty.ctaLabel, 'Повторить');
+    assert.ok(!lastEmpty || !/Ничего не найдено/.test(lastEmpty.title || ''), 'не «ничего не найдено»');
+    const html = elements.iceSearchResults.innerHTML;
+    assert.match(html, /data-miniapp-load-error/);
+    assert.match(html, /miniapp-load-error__title">Не загрузилось</);
+    assert.match(html, /data-miniapp-retry[^>]*>Повторить</);
   });
 });
 
@@ -162,6 +167,7 @@ async function bootArena(opts) {
   const posts = [];
   const win = {
     ArenaCardModel: model,
+    MiniAppErrorUi: loadErrorUi({ getElementById: () => ({}), createElement: () => ({}), head: { appendChild() {} } }),
     RuText: {},
     location: { search: '?arena_id=42', href: 'https://example.test/arena' },
     history: { length: 1, back() {} },
@@ -218,20 +224,20 @@ describe('карточка катка', () => {
     });
     assert.equal(t.page.state.sessionsError, true);
     assert.equal(t.page.state.sessions, null);
-    assert.match(t.root.innerHTML, /Не удалось загрузить расписание/);
+    assert.match(t.root.innerHTML, /data-action="retry-sessions">Повторить</);
     assert.doesNotMatch(t.root.innerHTML, /id="arenaRows"/);
     const warm = JSON.parse(t.store[t.model.ARENA_WARM_KEY || 'glideArenaWarm:v1'])['42'];
     assert.equal(warm.sessions, null);
   });
 
-  it('сеть молчит: по таймауту — «Не удалось загрузить карточку» и «Повторить»', async () => {
+  it('сеть молчит: по таймауту — общий компонент «Не загрузилось» и «Повторить»', async () => {
     const t = await bootArena({ fetch: () => new Promise(() => {}) });
-    assert.doesNotMatch(t.root.innerHTML, /Не удалось загрузить карточку/);
+    assert.doesNotMatch(t.root.innerHTML, /data-miniapp-load-error/);
     assert.ok(t.timers.length >= 1, 'ждали таймер таймаута');
     t.timers.forEach((fn) => fn());
     await flush(80);
-    assert.match(t.root.innerHTML, /Не удалось загрузить карточку/);
-    assert.match(t.root.innerHTML, /data-action="retry-load"/);
+    assert.match(t.root.innerHTML, /miniapp-load-error__title">(Не загрузилось|Нет связи)</);
+    assert.match(t.root.innerHTML, /data-action="retry-load">Повторить</);
   });
 
   it('двойной тап по 🔔 даёт один POST', async () => {

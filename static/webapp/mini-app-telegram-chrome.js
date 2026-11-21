@@ -858,12 +858,13 @@ window.wireHubSlotMessageButtons = function (root) {
     }
   }
 
+  /* Запрос без ответа: даём экрану показать свою ошибку; общий экран «Нет связи» — только если экран молчит. */
   function armOutageOverlay(origFetch) {
     if (outageOverlayShown || outageArmTimer || pageIsLeaving()) return;
     outageArmTimer = global.setTimeout(function () {
       outageArmTimer = 0;
-      if (pageIsLeaving()) return;
-      showOutageOverlay(origFetch);
+      if (pageIsLeaving() || screenShowsLoadError()) return;
+      showOutageOverlay(origFetch, 'offline');
     }, 800);
   }
 
@@ -881,24 +882,127 @@ window.wireHubSlotMessageButtons = function (root) {
     } catch (e2) {}
   }
 
+  /* miniapp-load-error:begin — tests/js/helpers/load-error-component.js исполняет этот блок отдельно. */
+  /*
+   * TASK-437: один компонент «не загрузилось» на всё клиентское приложение — главная, поиск, арена,
+   * записи, «Кто кого», «Я» и общий экран без сети. Разметка, стили и тексты живут только здесь.
+   * Тема — по экрану: цвета из --miniapp-state-* (экран может задать их сам, как «Кто кого»),
+   * иначе из --g-* (glide-tokens.css, тёмные по body.tg-dark).
+   */
+  var LOAD_ERROR_COPY = { offline: 'Нет связи', failed: 'Не загрузилось', retry: 'Повторить' };
+  var STATE_INK = 'var(--miniapp-state-ink,var(--g-ink,#0d1b26))';
+  var STATE_MUTED = 'var(--miniapp-state-muted,var(--g-muted,#5d7285))';
+  var STATE_BG = 'var(--miniapp-state-bg,var(--g-bg,#f5f7f8))';
+  var STATE_FONT = 'var(--miniapp-state-font,var(--g-font,system-ui,-apple-system,sans-serif))';
+
+  function isOffline(err) {
+    try {
+      if (global.navigator && global.navigator.onLine === false) return true;
+    } catch (e) { /* нет navigator — считаем, что сеть есть */ }
+    /* fetch без HTTP-ответа: TypeError («Failed to fetch», «Load failed»). */
+    return !!err && err.name === 'TypeError';
+  }
+
+  function loadErrorTitle(err) {
+    return isOffline(err) ? LOAD_ERROR_COPY.offline : LOAD_ERROR_COPY.failed;
+  }
+
+  function ensureLoadErrorStyles() {
+    if (document.getElementById('miniAppLoadErrorStyles')) return;
+    var css = document.createElement('style');
+    css.id = 'miniAppLoadErrorStyles';
+    css.textContent =
+      '.miniapp-load-error{box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:12px;' +
+      'margin:0 auto;padding:32px 16px;max-width:320px;text-align:center;color:' + STATE_INK + ';font-family:' + STATE_FONT + '}' +
+      '.miniapp-load-error__title{margin:0;font-size:17px;font-weight:600;line-height:1.3;letter-spacing:-.01em}' +
+      '.miniapp-load-error__hint{margin:-6px 0 0;font-size:14px;line-height:1.4;color:' + STATE_MUTED + '}' +
+      '.miniapp-load-error__btn{box-sizing:border-box;min-height:44px;min-width:160px;padding:0 24px;border:0;border-radius:999px;' +
+      'font:600 15px/1 ' + STATE_FONT + ';cursor:pointer;-webkit-tap-highlight-color:transparent;' +
+      'background:var(--miniapp-state-btn-bg,var(--g-accent,#3390ec));color:var(--miniapp-state-btn-ink,var(--g-on-accent,#fff))}' +
+      '.miniapp-load-error__btn:active{transform:scale(.97)}' +
+      '.miniapp-load-error__btn:disabled{opacity:.6;cursor:default;transform:none}' +
+      '@media (prefers-reduced-motion:reduce){.miniapp-load-error__btn:active{transform:none}}';
+    (document.head || document.documentElement).appendChild(css);
+  }
+
+  function escText(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function dataAttrs(data) {
+    var out = '';
+    if (!data) return out;
+    Object.keys(data).forEach(function (k) {
+      if (/^[a-z][a-z0-9-]*$/.test(k)) out += ' data-' + k + '="' + escText(data[k]) + '"';
+    });
+    return out;
+  }
+
+  /**
+   * Разметка компонента строкой — для экранов, которые рисуют innerHTML и ловят клики делегированием.
+   * opts.error — пойманная ошибка (TypeError без ответа = «Нет связи»); opts.hint — уточнение, о чём речь;
+   * opts.data — data-атрибуты кнопки ({ action: 'retry-load' } → data-action) для делегированных обработчиков экрана.
+   */
+  function loadErrorHtml(opts) {
+    opts = opts || {};
+    ensureLoadErrorStyles();
+    return (
+      '<div class="miniapp-load-error" role="alert" data-miniapp-load-error>' +
+      '<p class="miniapp-load-error__title">' + escText(loadErrorTitle(opts.error)) + '</p>' +
+      (opts.hint ? '<p class="miniapp-load-error__hint">' + escText(opts.hint) + '</p>' : '') +
+      '<button type="button" class="miniapp-load-error__btn ga-press" data-miniapp-retry' + dataAttrs(opts.data) + '>' +
+      LOAD_ERROR_COPY.retry + '</button>' +
+      '</div>'
+    );
+  }
+
+  function wireRetry(root, opts) {
+    var btn = root && root.querySelector ? root.querySelector('[data-miniapp-retry]') : null;
+    if (!btn || typeof opts.onRetry !== 'function') return;
+    btn.addEventListener('click', function (ev) {
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      opts.onRetry(ev);
+    });
+  }
+
+  /** Элемент компонента — для экранов, которые собирают DOM («Кто кого»). opts.onRetry — повтор того же запроса. */
+  function loadErrorNode(opts) {
+    opts = opts || {};
+    var wrap = document.createElement('div');
+    wrap.innerHTML = loadErrorHtml(opts);
+    var node = wrap.firstChild;
+    wireRetry(node, opts);
+    return node;
+  }
+
+  /** Ставит компонент в контейнер вместо содержимого. */
+  function renderLoadError(container, opts) {
+    if (!container) return null;
+    opts = opts || {};
+    container.innerHTML = loadErrorHtml(opts);
+    var node = container.firstChild;
+    wireRetry(node, opts);
+    return node;
+  }
+
+  /* miniapp-load-error:end */
+
   function ensureOutageStyles() {
     if (document.getElementById('miniAppOutageStyles')) return;
+    ensureLoadErrorStyles();
     var css = document.createElement('style');
     css.id = 'miniAppOutageStyles';
     css.textContent =
       '#miniAppOutageOverlay{position:fixed;inset:0;z-index:10050;display:flex;align-items:flex-start;justify-content:center;' +
       'padding:max(20px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom));overflow-y:auto;' +
-      'background:var(--tg-theme-bg-color,var(--miniapp-bg,#0b1220));color:var(--tg-theme-text-color,var(--miniapp-text,#e8eef7));' +
-      'font-family:var(--app-font-sans,system-ui,-apple-system,sans-serif);box-sizing:border-box}' +
-      '#miniAppOutageOverlay .mini-app-outage__card{width:100%;max-width:400px;margin:12vh auto 0;padding:22px 18px 20px;' +
-      'border-radius:16px;background:var(--tg-theme-secondary-bg-color,var(--miniapp-secondary-bg,#152033));' +
-      'box-shadow:0 2px 12px rgba(0,0,0,.12);box-sizing:border-box}' +
-      '#miniAppOutageOverlay .mini-app-outage__icon{font-size:32px;line-height:1;text-align:center;margin-bottom:10px}' +
-      '#miniAppOutageOverlay .mini-app-outage__title{margin:0 0 10px;font-size:18px;font-weight:700;text-align:center}' +
-      '#miniAppOutageOverlay .mini-app-outage__hint{margin:0 0 16px;font-size:14px;line-height:1.45;opacity:.88;text-align:center}' +
-      '#miniAppOutageOverlay .mini-app-outage__btn{display:block;width:100%;border:0;border-radius:12px;padding:12px 16px;' +
-      'font-size:15px;font-weight:600;cursor:pointer;background:var(--tg-theme-button-color,var(--miniapp-button,#3390ec));' +
-      'color:var(--tg-theme-button-text-color,var(--miniapp-button-text,#fff))}';
+      'background:' + STATE_BG + ';color:' + STATE_INK + ';font-family:' + STATE_FONT + ';box-sizing:border-box}' +
+      '#miniAppOutageOverlay .miniapp-load-error{margin-top:18vh}' +
+      '#miniAppOutageOverlay .mini-app-outage__icon{width:32px;height:32px;color:' + STATE_MUTED + '}' +
+      '#miniAppOutageOverlay .mini-app-outage__icon svg{width:100%;height:100%;display:block}';
     (document.head || document.documentElement).appendChild(css);
   }
 
@@ -909,7 +1013,7 @@ window.wireHubSlotMessageButtons = function (root) {
       origFetch('/health/ready', { cache: 'no-store' })
         .then(function (r) {
           if (r && r.ok) {
-            try { global.location.reload(); } catch (e) { global.location.href = global.location.href.split('#')[0]; }
+            reloadPage();
             return;
           }
           outagePollTimer = global.setTimeout(tick, 15000);
@@ -920,36 +1024,92 @@ window.wireHubSlotMessageButtons = function (root) {
     }, 15000);
   }
 
-  function showOutageOverlay(origFetch) {
-    if (outageOverlayShown) return;
+  function reloadPage() {
+    try { global.location.reload(); } catch (e) { global.location.href = global.location.href.split('#')[0]; }
+  }
+
+  /* Иконка «технических работ» — гаечный ключ в геометрии иконок оболочки (stroke 2, 24×24), вместо эмодзи. */
+  var MAINTENANCE_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+
+  /**
+   * Общий экран поверх страницы.
+   * kind 'maintenance' — только по настоящему ответу о работах (502/504, 503 с X-Ice-Studio-Outage или
+   * code=service_unavailable): «Ведутся технические работы», опрос /health/ready, страница откроется сама.
+   * kind 'offline' — запрос ушёл и не вернулся: «Нет связи» / «Не загрузилось» тем же компонентом,
+   * «Повторить» проверяет связь и перезагружает страницу (те же запросы), без связи — остаётся.
+   */
+  function showOutageOverlay(origFetch, kind) {
+    var maintenance = kind !== 'offline';
+    var existing = document.getElementById(OUTAGE_OVERLAY_ID);
+    if (outageOverlayShown && (!maintenance || (existing && existing.getAttribute('data-kind') === 'maintenance'))) return;
     outageOverlayShown = true;
     overlayShown = true;
     ensureOutageStyles();
     hideHubSkeleton();
-    var existing = document.getElementById(OUTAGE_OVERLAY_ID);
     var el = existing || document.createElement('div');
     el.id = OUTAGE_OVERLAY_ID;
+    el.setAttribute('data-kind', maintenance ? 'maintenance' : 'offline');
     el.setAttribute('role', 'alertdialog');
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-live', 'assertive');
-    el.innerHTML =
-      '<div class="mini-app-outage__card">' +
-      '<div class="mini-app-outage__icon" aria-hidden="true">🛠️</div>' +
-      '<h2 class="mini-app-outage__title">Ведутся технические работы</h2>' +
-      '<p class="mini-app-outage__hint">Записи и расписание на месте. Обычно это занимает несколько минут — нажмите «Обновить» или подождите, приложение откроется само.</p>' +
-      '<button type="button" class="mini-app-outage__btn" data-miniapp-outage="reload">Обновить</button>' +
-      '</div>';
+    if (maintenance) {
+      el.innerHTML =
+        '<div class="miniapp-load-error" data-miniapp-load-error>' +
+        '<div class="mini-app-outage__icon">' + MAINTENANCE_ICON + '</div>' +
+        '<p class="miniapp-load-error__title">Ведутся технические работы</p>' +
+        '<p class="miniapp-load-error__hint">Записи и расписание на месте. Обычно это несколько минут, приложение откроется само.</p>' +
+        '<button type="button" class="miniapp-load-error__btn ga-press" data-miniapp-retry>' + LOAD_ERROR_COPY.retry + '</button>' +
+        '</div>';
+    } else {
+      el.innerHTML = loadErrorHtml({ error: { name: 'TypeError' } });
+    }
     if (!existing) {
       var mount = document.body || document.documentElement;
       mount.appendChild(el);
     }
-    var btn = el.querySelector('[data-miniapp-outage="reload"]');
+    var btn = el.querySelector('[data-miniapp-retry]');
     if (btn) {
-      btn.onclick = function () {
-        try { global.location.reload(); } catch (e) { global.location.href = global.location.href.split('#')[0]; }
-      };
+      btn.onclick = maintenance ? reloadPage : function () { retryAfterOffline(origFetch, btn); };
     }
-    if (typeof origFetch === 'function') pollUntilReady(origFetch);
+    if (maintenance && typeof origFetch === 'function') pollUntilReady(origFetch);
+    if (!maintenance && !offlineListenerWired) {
+      offlineListenerWired = true;
+      global.addEventListener('online', function () {
+        var b = document.querySelector('#' + OUTAGE_OVERLAY_ID + '[data-kind="offline"] [data-miniapp-retry]');
+        if (b) retryAfterOffline(origFetch, b);
+      });
+    }
+  }
+
+  var offlineListenerWired = false;
+
+  /** «Повторить» без связи: сначала дешёвая проверка, страница перезагружается только когда сервер отвечает. */
+  function retryAfterOffline(origFetch, btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    var probe = typeof origFetch === 'function' ? origFetch : global.fetch;
+    probe('/health/live', { cache: 'no-store' })
+      .then(function (r) {
+        if (r && r.ok) {
+          reloadPage();
+          return;
+        }
+        btn.disabled = false;
+      })
+      .catch(function () {
+        btn.disabled = false;
+      });
+  }
+
+  /** Экран уже показал свою ошибку компонентом — общий экран поверх не нужен. */
+  function screenShowsLoadError() {
+    try {
+      return !!document.querySelector('[data-miniapp-load-error]');
+    } catch (e) {
+      return false;
+    }
   }
 
   function inspectOutage(url, res, origFetch) {
@@ -1027,6 +1187,12 @@ window.wireHubSlotMessageButtons = function (root) {
     showRecoverableOverlay: showRecoverableOverlay,
     showOutageOverlay: function () { showOutageOverlay(global.fetch); },
     installFetchGuard: installFetchGuard,
+    LOAD_ERROR_COPY: LOAD_ERROR_COPY,
+    isOffline: isOffline,
+    loadErrorTitle: loadErrorTitle,
+    loadErrorHtml: loadErrorHtml,
+    loadErrorNode: loadErrorNode,
+    renderLoadError: renderLoadError,
   };
 
   /**

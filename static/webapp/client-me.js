@@ -594,15 +594,13 @@
     el.classList.add('cm-name--break');
   }
 
-  function showError() {
+  /* TASK-437: общий компонент ошибки (mini-app-telegram-chrome.js); «Повторить» — data-act="retry" ниже. */
+  function showError(err) {
     state.keys = null;
     state.failed = true;
     mount.removeAttribute('aria-busy');
-    mount.innerHTML =
-      '<div class="state-panel error cm-state" role="alert">' +
-      '<p class="cm-state__text">Не загрузилось</p>' +
-      '<button type="button" class="cm-state__retry ga-press" data-act="retry">Повторить</button>' +
-      '</div>';
+    var ui = root.MiniAppErrorUi;
+    mount.innerHTML = ui && ui.loadErrorHtml ? ui.loadErrorHtml({ error: err, data: { act: 'retry' } }) : '';
   }
 
   function writeWarm(data) {
@@ -649,8 +647,8 @@
           paint(data);
         });
       })
-      .catch(function () {
-        if (!state.data) showError();
+      .catch(function (err) {
+        if (!state.data) showError(err);
       })
       .then(function () {
         state.loading = null;

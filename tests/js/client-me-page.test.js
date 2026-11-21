@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { loadErrorUi } = require('./helpers/load-error-component.js');
 
 const ROOT = path.resolve(__dirname, '../..');
 const webapp = path.join(ROOT, 'static/webapp');
@@ -145,6 +146,7 @@ function boot(opts) {
   };
 
   const win = {
+    MiniAppErrorUi: loadErrorUi({ getElementById: () => ({}), createElement: () => ({}), head: { appendChild() {} } }),
     document,
     location: { search: '', href: '' },
     sessionStorage: {

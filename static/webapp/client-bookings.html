@@ -931,6 +931,15 @@
         listEl.innerHTML = html;
       }
 
+      /* TASK-437: сбой загрузки списка — общий компонент «Нет связи / Не загрузилось · Повторить». */
+      function showListLoadError(err, onRetry) {
+        var listEl = document.getElementById('listContent');
+        var ui = window.MiniAppErrorUi;
+        if (!listEl) return;
+        if (ui && ui.renderLoadError) ui.renderLoadError(listEl, { error: err, onRetry: onRetry });
+        else listEl.innerHTML = '<div class="error">Не загрузилось</div>';
+      }
+
       /* silent — тихое обновление из оболочки вкладок (TASK-391): тот же список не перерисовывается,
          сбой не стирает показанное. Страница сама зовёт без аргумента — как раньше. */
       function loadBookings(silent) {
@@ -962,11 +971,13 @@
             }
             tryOpenBookingFromQuery();
           })
-          .catch(function() {
+          .catch(function(err) {
             if (bookingsHydratedFromWarm || silent === true) return;
             if (state.mode === 'upcoming') {
-              document.getElementById('listContent').innerHTML =
-                '<div class="error">Не удалось загрузить записи. Попробуйте обновить страницу.</div>';
+              showListLoadError(err, function() {
+                renderBookingsListSkeleton();
+                loadBookings();
+              });
             }
           });
       }
@@ -1040,12 +1051,14 @@
             state.historyLoading = false;
             if (state.mode === 'history') renderHistoryList();
           })
-          .catch(function() {
+          .catch(function(err) {
             state.historyLoading = false;
             if (!state.historyLoaded) {
               if (state.mode === 'history') {
-                document.getElementById('listContent').innerHTML =
-                  '<div class="error">Не удалось загрузить историю. Попробуйте обновить страницу.</div>';
+                showListLoadError(err, function() {
+                  renderBookingsListSkeleton();
+                  loadHistory(true);
+                });
               }
               return;
             }

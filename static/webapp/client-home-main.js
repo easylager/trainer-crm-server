@@ -303,10 +303,27 @@
       /* ── Error / status ─────────────────────────────────────────────── */
       function setStateMessage(text, kind) {
         var el = document.getElementById('stateMessage');
-        if (!text) { el.style.display = 'none'; el.textContent = ''; return; }
+        if (!text) { el.style.display = 'none'; el.textContent = ''; el.className = 'state-panel loading'; return; }
         el.textContent = text;
         el.className = 'state-panel ' + (kind === 'error' ? 'error' : 'loading');
         el.style.display = 'block';
+      }
+
+      /* TASK-437: сбой загрузки — общий компонент «Нет связи / Не загрузилось · Повторить»;
+         «Повторить» запускает ту же загрузку главной, без перезагрузки страницы. */
+      function showHubLoadError(err) {
+        var el = document.getElementById('stateMessage');
+        var ui = window.MiniAppErrorUi;
+        if (!el || !ui || !ui.renderLoadError) return;
+        el.className = '';
+        el.style.display = 'block';
+        ui.renderLoadError(el, {
+          error: err,
+          onRetry: function () {
+            setStateMessage('', '');
+            loadAll();
+          },
+        });
       }
 
       /* ── Hero text ──────────────────────────────────────────────────── */
@@ -1159,9 +1176,12 @@
 
 
 
+      var allBookingsWired = false;
       function wireAllBookingsLink() {
         var btn = document.getElementById('btnAllBookings');
-        if (btn) btn.addEventListener('click', function() { navigateTo('client-bookings'); });
+        if (!btn || allBookingsWired) return; // loadAll() повторяется по «Повторить» — обработчик один
+        allBookingsWired = true;
+        btn.addEventListener('click', function() { navigateTo('client-bookings'); });
       }
 
       function resetHubChromeForState(opts) {
@@ -2050,8 +2070,8 @@
               );
             });
           })
-          .catch(function() {
-            setStateMessage('Не удалось загрузить данные. Откройте страницу из клиентского бота.', 'error');
+          .catch(function(err) {
+            showHubLoadError(err);
             hideNextBookingSkeleton();
             clearNextBookingBlock();
             hideMyTrainerBlock();
