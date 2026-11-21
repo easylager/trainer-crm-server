@@ -461,6 +461,21 @@ _NEXT_FOR_CLUB = text("""
     LIMIT 1
     """)
 
+# «Дальше» в итоге вечера: ближайший матч в окне, где ещё можно что-то сделать — нет хода или нет счёта.
+_NEXT_OPEN = text("""
+    SELECT m.id AS match_id, m.home_team, m.away_team, m.starts_at, (p.player_key IS NOT NULL) AS picked
+    FROM game_matches AS m
+    LEFT JOIN hockey_picks AS p ON p.match_id = m.id AND p.player_key = :player_key
+    WHERE m.status = 'scheduled' AND m.starts_at > :from_ AND m.starts_at < :until
+      AND (CAST(:club AS text) IS NULL OR m.home_team = :club OR m.away_team = :club)
+      AND (p.player_key IS NULL OR (CAST(:with_partial AS boolean) AND p.home_score IS NULL))
+    ORDER BY m.starts_at, m.id
+    LIMIT 1
+    """)
+
+# Окно «скоро» для «Дальше»: своя команда в эти сутки — важнее любого другого матча.
+NEXT_SOON = timedelta(hours=48)
+
 _FAN_CLUB_OF = text(f"""
     SELECT {_FAN_CLUB} AS club FROM hockey_players AS pl LEFT JOIN hockey_player_prefs AS pr ON pr.player_key = pl.player_key WHERE pl.player_key = :player_key
     """)
@@ -702,6 +717,34 @@ async def _next_for(session: AsyncSession, player_key: int, *, now: datetime, cl
         )
     ).one_or_none()
     return dict(row._mapping) if row else None
+
+
+async def _next_after_evening(
+    session: AsyncSession, player_key: int, *, now: datetime, club: str | None
+) -> dict | None:
+    """«Дальше» в итоге вечера — гибко (владелец 2026-11-21):
+
+    1. своя команда в ближайшие ``NEXT_SOON``: нет хода или ход без счёта (счёт ещё можно добавить);
+    2. иначе любой матч в том же окне без хода;
+    3. иначе ближайший матч своей команды без хода (иначе любой) — как «Следующий ход».
+    """
+    from_ = _utc(now) + PICK_CLOSES_BEFORE
+    until = _utc(now) + NEXT_SOON
+    steps = ([(club, True)] if club else []) + [(None, False)]
+    for step_club, with_partial in steps:
+        params = {
+            "player_key": player_key,
+            "from_": from_,
+            "until": until,
+            "club": step_club,
+            "with_partial": with_partial,
+        }
+        row = (await session.execute(_NEXT_OPEN, params)).one_or_none()
+        if row:
+            return dict(row._mapping)
+    return await _next_for(session, player_key, now=now, club=club) or (
+        await _next_for(session, player_key, now=now, club=None) if club else None
+    )
 
 
 async def fan_club(session: AsyncSession, player_key: int, *, now: datetime) -> str | None:
@@ -997,14 +1040,13 @@ async def _evening_send(session: AsyncSession, step, *, picks: list, now: dateti
     quip = ev.pick_quip(ev.quip_kind(picks, changes), player_key=step.player_key, day=step.day, n=len(ready))
     if quip:
         parts.append(f"<i>{html.escape(quip)}</i>")
-    nxt = await _next_for(session, step.player_key, now=now, club=club) or (
-        await _next_for(session, step.player_key, now=now, club=None) if club else None
-    )
+    nxt = await _next_after_evening(session, step.player_key, now=now, club=club)
     play = None
     if nxt:
+        tail = " · счёт ещё можно добавить" if nxt.get("picked") else ""
         parts.append(
             f"Дальше: {html.escape(club_name(nxt['home_team']))} — {html.escape(club_name(nxt['away_team']))}, "
-            f"{_day_word(nxt['starts_at'], now)} в {_hhmm(nxt['starts_at'])}"
+            f"{_day_word(nxt['starts_at'], now)} в {_hhmm(nxt['starts_at'])}{tail}"
         )
         play = url_button("Сыграть", f"{START_PICK}_{nxt['match_id']}")
     buttons = _rows(

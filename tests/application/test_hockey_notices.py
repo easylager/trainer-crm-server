@@ -1016,3 +1016,28 @@ async def test_evening_summary_shows_team_table_moves_and_skips_solo_leagues(db_
     # В таблице «Гомель» один Саша — меньше порога, строки нет.
     assert "Таблица «Гомель»" not in body
     assert "Лига «Пример»" not in body
+
+
+@pytest.mark.asyncio
+async def test_evening_next_line_prefers_own_team_soon_then_any_open_match(db_session) -> None:
+    """«Дальше»: своя команда в ближайшие сутки — даже с ходом без счёта; иначе ближайший матч без хода."""
+    await _fan(db_session, SASHA, name="Саша")
+    await set_fav_club(db_session, SASHA, "Юность")
+    tonight = await _match(db_session, "n-now", at(12), home="Неман", away="Лида")
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=tonight, side="home", now=at(9))
+    own_soon = await _match(db_session, "n-own", at(15, day=11), home="Юность", away="Шахтер")
+    await make_pick(db_session, player_key=SASHA, display_name="Саша", match_id=own_soon, side="home", now=at(9))
+    await _match(db_session, "n-any", at(19), home="Гомель", away="Брест")
+    await _match(db_session, "n-own-late", at(17, day=13), home="Металлург Мг", away="Юность")
+    await _finish(db_session, tonight, 2, 1, at(14, 30))
+
+    ready = at(14, 30) + hockey_notices.RESULT_SEND_DELAY
+    body = {n.player_key: n for n in await due_notices(db_session, now=ready)}[SASHA].text
+    assert "Дальше: Юность — Шахтёр, завтра в 15:00 · счёт ещё можно добавить" in body
+
+    await make_pick(
+        db_session, player_key=SASHA, display_name="Саша", match_id=own_soon, home_score=3, away_score=1, now=at(14, 31)
+    )
+    body = {n.player_key: n for n in await due_notices(db_session, now=ready)}[SASHA].text
+    assert "Дальше: Гомель — Брест, сегодня в 19:00" in body
+    assert "Металлург" not in body
