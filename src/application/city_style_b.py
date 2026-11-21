@@ -190,6 +190,26 @@ def _money(minor: Any, currency: str) -> str:
     return f"{body} {currency_label_ru(currency)}"
 
 
+def _money_body(minor: int) -> str:
+    """``850`` → ``"8,50"``, ``900`` → ``"9"``: число без валюты, копейки через запятую."""
+    return _money(minor, "BYN").rsplit(" ", 1)[0]
+
+
+def money_range_body(values: Any) -> str:
+    """Диапазон цен без валюты: «11–12», при одной цене — «12». Нет цен — пусто."""
+    nums = [int(v) for v in values if v is not None]
+    if not nums:
+        return ""
+    lo, hi = min(nums), max(nums)
+    return _money_body(lo) if lo == hi else f"{_money_body(lo)}–{_money_body(hi)}"
+
+
+def money_range(values: Any, currency: str) -> str:
+    """«11–12 BYN» — все цены недели, а не первая попавшаяся (PDEC-030). Нет цен — пусто."""
+    body = money_range_body(values)
+    return f"{body} {currency_label_ru(currency)}" if body else ""
+
+
 def city_origin(places: list[Mapping[str, Any]]) -> tuple[float, float] | None:
     lats = [float(p["latitude"]) for p in places if p.get("latitude") is not None and p.get("longitude") is not None]
     lons = [float(p["longitude"]) for p in places if p.get("latitude") is not None and p.get("longitude") is not None]
@@ -199,15 +219,18 @@ def city_origin(places: list[Mapping[str, Any]]) -> tuple[float, float] | None:
 
 
 def price_sentence(rows: list[Mapping[str, Any]], *, has_rental: bool, has_sharpening: bool) -> str:
-    """Одна фраза из цен, которые есть. Нет взрослого билета — пусто."""
-    adult = next((r.get("price_adult_minor") for r in rows if r.get("price_adult_minor") is not None), None)
-    if adult is None:
-        return ""
+    """Одна фраза из цен, которые есть. Нет взрослого билета — пусто.
+
+    Цены разные в разные дни — диапазон по всем сеансам («11–12 BYN»), а не цена первого.
+    """
     currency = str(next((r.get("currency_code") for r in rows if r.get("currency_code")), "BYN"))
-    child = next((r.get("price_child_minor") for r in rows if r.get("price_child_minor") is not None), None)
-    text = f"Взрослый билет — {_money(adult, currency)}"
-    if child is not None:
-        text += f", детский — {_money(child, currency)}"
+    adult = money_range((r.get("price_adult_minor") for r in rows), currency)
+    if not adult:
+        return ""
+    child = money_range((r.get("price_child_minor") for r in rows), currency)
+    text = f"Взрослый билет — {adult}"
+    if child:
+        text += f", детский — {child}"
     extras: list[str] = []
     rental_price = any(r.get("price_rental_minor") is not None for r in rows)
     if has_rental or rental_price:
