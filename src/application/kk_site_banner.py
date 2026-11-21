@@ -38,11 +38,11 @@ def kk_banner_html(src: str, *, compact: bool = False, card: bool = False) -> st
         return ""
     href = f"/kk?from={html.escape(src)}"
     return (
-        f'<a class="kkb{" kkb--sm" if compact else ""}{" kkb--card" if card else ""}" href="{href}" data-kkb-intro aria-label="Игра «КТО КОГО»: угадывай матчи и обыгрывай друзей">'
+        f'<a class="kkb{" kkb--sm" if compact else ""}{" kkb--card" if card else ""}" href="{href}" data-kkb-intro aria-label="Игра «КТО КОГО»: хоккейная игра для своей компании">'
         f"{_rail()}"
         '<span class="kkb__body">'
         '<span class="kkb__brand" aria-hidden="true"><span class="kkb__puck"></span><span class="kkb__tag">КТО КОГО?</span></span>'
-        '<span class="kkb__row"><span class="kkb__title">Угадывай матчи — обыгрывай друзей</span>'
+        '<span class="kkb__row"><span class="kkb__title">Хоккейная игра для своей компании</span>'
         '<span class="kkb__go"><span class="kkb__go-t">Об игре</span><span class="kkb__arrow" aria-hidden="true">→</span></span>'
         "</span></span></a>"
         f"{_INTRO_SCRIPT}"

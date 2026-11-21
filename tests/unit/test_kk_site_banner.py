@@ -15,7 +15,7 @@ def test_banner_links_to_landing_with_place_label_and_loops_the_club_rail(monkey
     logos = re.findall(r'<img src="([^"]+)"', track)
     half = len(logos) // 2
     assert half >= 10 and logos[:half] == logos[half:]  # дважды — петля без шва
-    assert "Угадывай матчи — обыгрывай друзей" in html
+    assert "Хоккейная игра для своей компании" in html
     assert 'id="kk"' in kk_banner_section("sitehub") and "from=sitehub" in kk_banner_section("sitehub")
 
 

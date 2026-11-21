@@ -31,8 +31,8 @@ DEFAULT_SRC = "site"
 _TITLE = "КТО КОГО — угадай, кто победит в матче Динамо-Минск"
 _DESCRIPTION = "Тапни за команду, набирай очки и соревнуйся с друзьями. Бесплатно, в Telegram."
 _LANDING_DESCRIPTION = (
-    "«КТО КОГО» — бесплатная хоккейная игра в Telegram. Угадывай победителей матчей, набирай очки "
-    "и создай свою лигу для друзей."
+    "Бесплатная хоккейная игра в Telegram: выбирай, кто победит в матчах Динамо и Экстралиги, "
+    "собирай свою лигу с друзьями и меряйтесь очками."
 )
 _LOGO = "/logos/01-icon/glide-icon-teal-square-512.png"
 # Картинка превью 1200×630 и лёгкие копии логотипов для ленты: static/landing/kk, отдаёт /landing/{path}.
@@ -298,7 +298,7 @@ async def get_kk_promo_page(
     e = html.escape
     landing = s is None and hockey_event.enabled(cfg)
     robots = "index, follow" if landing else "noindex"
-    title = "КТО КОГО — игра с прогнозами на хоккей | Glide" if landing else _TITLE
+    title = "КТО КОГО — хоккейная игра для своей компании | Glide" if landing else _TITLE
     description = _LANDING_DESCRIPTION if landing else _DESCRIPTION
     canonical = (
         f'<link rel="canonical" href="{e(base)}/kk">\n<meta property="og:url" content="{e(base)}/kk">'
