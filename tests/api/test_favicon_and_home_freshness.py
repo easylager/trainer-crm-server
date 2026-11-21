@@ -29,12 +29,15 @@ async def test_favicon_get_and_head_200(path: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_favicon_120_is_square_and_has_no_background() -> None:
+async def test_favicon_120_is_square_with_opaque_light_corner() -> None:
     async with _client() as client:
         body = (await client.get("/favicon-120.png")).content
     with Image.open(BytesIO(body)) as icon:
         assert icon.size == (120, 120)
-        assert icon.convert("RGBA").getpixel((0, 0))[3] == 0
+        corner = icon.convert("RGBA").getpixel((0, 0))
+        assert corner[3] == 255
+        # Светлый фон (~#F3F8FB), не чёрная подложка.
+        assert corner[0] > 200 and corner[1] > 200 and corner[2] > 200
 
 
 @pytest.mark.asyncio
@@ -52,4 +55,4 @@ async def test_home_html_has_actual_line_and_icon_120(app_use_test_db) -> None:
     html = resp.text
     assert f'<p class="b-hero__fresh">{HOME_ACTUAL_LINE}</p>' in html
     assert HOME_ACTUAL_LINE.startswith("Актуальное расписание")
-    assert 'sizes="120x120" href="/favicon-120.png?v=2"' in html
+    assert 'sizes="120x120" href="/favicon-120.png?v=3"' in html

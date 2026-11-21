@@ -3208,7 +3208,11 @@ async def _static_webapp_cache_align(request: Request, call_next):
     if path.startswith("/static/webapp"):
         for k, v in _webapp_versioned_asset_cache_headers(request).items():
             response.headers[k] = v
-    elif path.startswith("/logos") or path in ("/favicon.ico", "/favicon-120.png"):
+    elif path.startswith("/logos") or path in (
+        "/favicon.ico",
+        "/favicon-120.png",
+        "/apple-touch-icon.png",
+    ):
         response.headers["Cache-Control"] = "public, max-age=604800"
     return response
 
@@ -3226,13 +3230,19 @@ def _icon_file(name: str) -> FileResponse:
 @app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)
 def favicon_ico():
     """Иконка вкладки. Файл бренда, не отдельный .ico."""
-    return _icon_file("glide-icon-teal-transparent-128.png")
+    return _icon_file("glide-icon-teal-square-light-192.png")
 
 
 @app.api_route("/favicon-120.png", methods=["GET", "HEAD"], include_in_schema=False)
 def favicon_120_png():
     """Иконка 120×120 — рекомендованный Яндексом размер для сниппета."""
-    return _icon_file("glide-icon-teal-transparent-120.png")
+    return _icon_file("glide-icon-teal-square-light-120.png")
+
+
+@app.api_route("/apple-touch-icon.png", methods=["GET", "HEAD"], include_in_schema=False)
+def apple_touch_icon_png():
+    """Алиас: некоторые клиенты запрашивают /apple-touch-icon.png с корня."""
+    return _icon_file("glide-icon-teal-square-light-512.png")
 
 
 if _LOGOS_DIR.is_dir():
