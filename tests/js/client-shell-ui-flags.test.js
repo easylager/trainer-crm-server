@@ -91,20 +91,21 @@ describe('TASK-366 client shell ui flags', () => {
     assert.equal(s.flagFetches().length, 0);
   });
 
-  it('кэш другого пользователя, битый JSON и недоступный storage → выключено', () => {
-    for (const opts of [{ stored: { ...on, u: '7' } }, { stored: '{oops' }, { storageThrows: true }]) {
+  it('TASK-437: кэш другого пользователя, битый JSON и недоступный storage → включено по умолчанию, без «Записей»', () => {
+    for (const opts of [{ stored: { ...on, u: '7' } }, { stored: '{oops' }, { storageThrows: true }, {}]) {
       const s = bootShell({ ...opts, response: { season_ui: false, bookings_tab: false } });
-      assert.deepEqual(s.startFlags, { season_ui: false, bookings_tab: false });
+      assert.deepEqual(s.startFlags, { season_ui: true, bookings_tab: false });
     }
   });
 
   it('bookings_tab без season_ui в кэше не включается', () => {
-    const s = bootShell({ stored: { u: '42', season_ui: false, bookings_tab: true } });
+    const s = bootShell({ stored: { u: '42', season_ui: false, bookings_tab: true, at: Date.now() } });
     assert.deepEqual(s.startFlags, { season_ui: false, bookings_tab: false });
   });
 
   it('после монтирования спрашивает сервер, пишет кэш и шлёт событие один раз при изменении', async () => {
-    const s = bootShell({ response: { season_ui: true, bookings_tab: false } });
+    const s = bootShell({ response: { season_ui: true, bookings_tab: true } });
+    assert.deepEqual(s.startFlags, { season_ui: true, bookings_tab: false });
     await s.runTimers();
     const f = s.flagFetches();
     assert.equal(f.length, 1);
@@ -113,12 +114,12 @@ describe('TASK-366 client shell ui flags', () => {
     const cached = JSON.parse(s.store.get(KEY));
     assert.equal(cached.u, '42');
     assert.equal(cached.season_ui, true);
-    assert.equal(cached.bookings_tab, false);
+    assert.equal(cached.bookings_tab, true);
     assert.equal(typeof cached.at, 'number');
     assert.equal(s.events.length, 1);
     assert.equal(s.events[0].type, 'client-shell:ui-flags');
-    assert.deepEqual({ ...s.events[0].detail }, { season_ui: true, bookings_tab: false });
-    assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: false });
+    assert.deepEqual({ ...s.events[0].detail }, { season_ui: true, bookings_tab: true });
+    assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true });
     await s.runTimers();
     assert.equal(s.events.length, 1);
   });
@@ -181,25 +182,27 @@ function readers(raw, { throws = false, user = 42 } = {}) {
 describe('TASK-381 кэш флагов: одно правило в трёх местах', () => {
   const now = Date.now();
   const cases = [
-    ['нет кэша', undefined, false],
-    ['season_ui false', JSON.stringify({ u: '42', season_ui: false, bookings_tab: false, at: now }), false],
-    ['"true" строкой', JSON.stringify({ u: '42', season_ui: 'true', at: now }), false],
-    ['чужой u', JSON.stringify({ u: '7', season_ui: true, at: now }), false],
-    ['битый JSON', '{season_ui:true', false],
-    ['свежий (минуту назад)', JSON.stringify({ u: '42', season_ui: true, bookings_tab: true, at: now - 60000 }), true],
-    ['почти сутки', JSON.stringify({ u: '42', season_ui: true, at: now - DAY + 60000 }), true],
-    ['просроченный (сутки и минута)', JSON.stringify({ u: '42', season_ui: true, at: now - DAY - 60000 }), false],
-    ['без at (старый кэш)', JSON.stringify({ u: '42', season_ui: true }), false],
-    ['at строкой', JSON.stringify({ u: '42', season_ui: true, at: String(now) }), false],
-    ['at из будущего', JSON.stringify({ u: '42', season_ui: true, at: now + DAY }), false],
+    /* TASK-437: по умолчанию включено; выключает только свежий false этого пользователя. */
+    ['нет кэша', undefined, true],
+    ['season_ui false свежий', JSON.stringify({ u: '42', season_ui: false, bookings_tab: false, at: now }), false],
+    ['season_ui false почти сутки', JSON.stringify({ u: '42', season_ui: false, at: now - DAY + 60000 }), false],
+    ['season_ui false просроченный', JSON.stringify({ u: '42', season_ui: false, at: now - DAY - 60000 }), true],
+    ['season_ui false без at', JSON.stringify({ u: '42', season_ui: false }), true],
+    ['season_ui false, at строкой', JSON.stringify({ u: '42', season_ui: false, at: String(now) }), true],
+    ['season_ui false, at из будущего', JSON.stringify({ u: '42', season_ui: false, at: now + DAY }), true],
+    ['"false" строкой', JSON.stringify({ u: '42', season_ui: 'false', at: now }), true],
+    ['чужой u с false', JSON.stringify({ u: '7', season_ui: false, at: now }), true],
+    ['битый JSON', '{season_ui:false', true],
+    ['свежий true', JSON.stringify({ u: '42', season_ui: true, bookings_tab: true, at: now - 60000 }), true],
+    ['просроченный true', JSON.stringify({ u: '42', season_ui: true, at: now - DAY - 60000 }), true],
   ];
   for (const [name, raw, want] of cases) {
     it(`${name} → ${want ? 'включено' : 'выключено'} везде`, () => {
       assert.deepEqual(readers(raw), { shell: want, back: want, gate: want });
     });
   }
-  it('storage бросает → выключено везде', () => {
-    assert.deepEqual(readers(undefined, { throws: true }), { shell: false, back: false, gate: false });
+  it('storage бросает → включено везде', () => {
+    assert.deepEqual(readers(undefined, { throws: true }), { shell: true, back: true, gate: true });
   });
   it('нет пользователя Telegram → выключено везде', () => {
     assert.deepEqual(readers(JSON.stringify({ u: '42', season_ui: true, at: now }), { user: null }), { shell: false, back: false, gate: false });

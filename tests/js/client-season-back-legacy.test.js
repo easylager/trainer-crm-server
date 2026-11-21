@@ -120,12 +120,9 @@ function run(src, { flag, history = 3, withHelper = true, attrs = {}, cache, nav
 
 describe('mini-app-client-home.js: флаг выключен = прежнее поведение (6 страниц)', () => {
   const states = [
-    ['нет кэша', { flag: false }],
+    /* TASK-437: нет кэша, битый, чужой, storage бросает — это «включено» (на проде у всех);
+       выключено только свежим явным false или без хелпера. */
     ['кэш season_ui false', { flag: false, cache: JSON.stringify({ u: '42', season_ui: false, at: Date.now() }) }],
-    ['"true" строкой', { cache: JSON.stringify({ u: '42', season_ui: 'true', at: Date.now() }) }],
-    ['чужой u', { cache: JSON.stringify({ u: '7', season_ui: true, at: Date.now() }) }],
-    ['битый JSON', { cache: '{oops' }],
-    ['storage бросает', { storageThrows: true }],
     ['хелпер не загрузился', { flag: true, withHelper: false }],
   ];
   const buttons = [

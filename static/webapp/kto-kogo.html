@@ -25,10 +25,10 @@
   <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611211">
   <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611211">
-  <!-- TASK-374: оболочка (бар вкладок) грузится ТОЛЬКО при season_ui из кэша флагов оболочки (cw_ui_flags_v1, привязан к id
-       пользователя Telegram). Флаг выключен, кэша нет, кэш битый, чужой или старше суток — оболочки на странице нет вовсе: ни запросов
-       client/session и ui-flags, ни событий, ни переадресаций, игра как раньше. При флаге — синхронно (document.write),
-       чтобы бар был до первого кадра. Пробел: при пустом кэше бар появится после захода на другую вкладку приложения. -->
+  <!-- TASK-374/437: оболочка (бар вкладок) грузится при season_ui. Правило то же, что в оболочке: включено по умолчанию
+       (на проде у всех), выключает только свежий кэш флагов (cw_ui_flags_v1) этого пользователя Telegram с season_ui === false;
+       тогда оболочки на странице нет вовсе. Вне Telegram — тоже нет. При флаге — синхронно (document.write), чтобы бар был
+       до первого кадра. -->
   <script id="kk-shell-gate">
   (function () {
     var on = false;
@@ -39,8 +39,9 @@
       var c = uid ? JSON.parse(window.localStorage.getItem('cw_ui_flags_v1') || 'null') : null;
       var age = c ? Date.now() - c.at : -1;
       /* Правило и TTL (сутки) те же, что в mini-app-client-shell.js и client-season-back.js. */
-      on = !!c && String(c.u) === uid && c.season_ui === true && typeof c.at === 'number' && age >= 0 && age < 86400000;
-    } catch (e) { on = false; }
+      /* TASK-437: включено по умолчанию; выключает только свежий кэш этого пользователя с season_ui === false. */
+      on = !!uid && !(!!c && String(c.u) === uid && c.season_ui === false && typeof c.at === 'number' && age >= 0 && age < 86400000);
+    } catch (e) { on = !!uid; }
     if (!on) return;
     document.write('<link rel="stylesheet" href="/static/webapp/mini-app-client-shell.css?v=202611211">'
       + '<script src="/static/webapp/write-access.js?v=202611211"><\/script>'
