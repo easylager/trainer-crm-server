@@ -11,8 +11,9 @@
   --ib-sun: #ffd23f;
   --ib-bg: #f4f6f8;
   --ib-card: #fff;
-  --ib-ink: var(--g-ink, #0d1b26);
-  --ib-muted: var(--g-muted, #5d7285);
+  /* Не тянуть --g-ink/--g-muted: в тёмной теме Telegram они светлые и сливаются с белой лентой. */
+  --ib-ink: #0d1b26;
+  --ib-muted: #5d7285;
   --ib-chev: #9aabb8;
   --ib-line: #e6ebef;
   --ib-now: #e5484d;
