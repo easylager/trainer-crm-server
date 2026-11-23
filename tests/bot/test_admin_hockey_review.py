@@ -243,7 +243,13 @@ async def _full_month(db_session) -> None:
         ).scalar_one()
         for key, (hs, as_) in ((A, (3, 1)), (B, (2, 1)), (C, (1, 0))):
             await make_pick(
-                db_session, player_key=key, display_name=f"И{key}", match_id=m, home_score=hs, away_score=as_, now=at(19)
+                db_session,
+                player_key=key,
+                display_name=f"И{key}",
+                match_id=m,
+                home_score=hs,
+                away_score=as_,
+                now=at(19),
             )
         await set_manual_result(db_session, m, home_score=3, away_score=1, decided_in="regulation", now=at(20, 22))
     await score_finished_matches(db_session, now=at(20, 22))
@@ -298,15 +304,16 @@ async def test_close_month_refuses_while_matches_are_open(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_hockey_command_lists_queue_and_months(db_session, monkeypatch) -> None:
-    import src.application.hockey_races as hockey_races
-
-    real_pending = hockey_races.pending_month_closures
-
-    async def pending_on_22nd(session, *, now):
-        return await real_pending(session, now=at(22))
-
-    monkeypatch.setattr(hockey_races, "pending_month_closures", pending_on_22nd)
     await _full_month(db_session)
+    # Срез в ноябре 2026: после 22-го он закрывается сам, поэтому «сейчас» для списка срезов — 22-е.
+    from src.application import hockey_races
+
+    real = hockey_races.pending_month_closures
+
+    async def _on_22nd(session, *, now, **kw):
+        return await real(session, now=at(22), **kw)
+
+    monkeypatch.setattr(hockey_races, "pending_month_closures", _on_22nd)
     # Матч на проверке из октября: ноябрьский срез он не держит.
     m = await _review_match(db_session, "z1", probe=PROBE, start=datetime(2026, 10, 30, 19, 0, tzinfo=MINSK_TZ))
     msg = _message("/hockey")
