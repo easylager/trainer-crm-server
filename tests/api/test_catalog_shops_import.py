@@ -200,6 +200,13 @@ def test_real_rinks_file_parses() -> None:
     assert by_key["f1-nemiga"].venue_type == "outdoor"
     assert by_key["f1-nemiga"].season == (11, 3)
     assert by_key["olympic-arena"].match == ["олимпик"]
+    chavez = by_key["ugo-chavez"]
+    assert chavez.venue_type == "outdoor"
+    assert chavez.season == (11, 3)
+    assert chavez.point == (53.918281, 27.423907)
+    assert chavez.photo is not None and chavez.photo.is_file()
+    assert chavez.photo_attribution
+    assert "skate_rental" not in chavez.amenities
 
 
 def test_rink_record_rejects_shop_only_services(tmp_path: Path) -> None:
