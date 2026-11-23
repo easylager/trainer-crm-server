@@ -297,7 +297,15 @@ async def test_close_month_refuses_while_matches_are_open(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_hockey_command_lists_queue_and_months(db_session) -> None:
+async def test_hockey_command_lists_queue_and_months(db_session, monkeypatch) -> None:
+    import src.application.hockey_races as hockey_races
+
+    real_pending = hockey_races.pending_month_closures
+
+    async def pending_on_22nd(session, *, now):
+        return await real_pending(session, now=at(22))
+
+    monkeypatch.setattr(hockey_races, "pending_month_closures", pending_on_22nd)
     await _full_month(db_session)
     # Матч на проверке из октября: ноябрьский срез он не держит.
     m = await _review_match(db_session, "z1", probe=PROBE, start=datetime(2026, 10, 30, 19, 0, tzinfo=MINSK_TZ))
