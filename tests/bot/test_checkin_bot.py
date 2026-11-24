@@ -223,7 +223,7 @@ async def test_callback_answer_and_mute_twice() -> None:
                 text("SELECT status FROM ice_checkin_prompts WHERE id=:i"), {"i": pid})).scalar()
             assert st == "answered"
         # «нет» дважды → стрик 2 → muted_until ≈ +30d (каждый промпт — свой сеанс, uq по (tg,session))
-        for i in range(2):
+        for _ in range(2):
             async with engine.begin() as conn:
                 sx = int((await conn.execute(
                     text("INSERT INTO ice_sessions (arena_id,kind,starts_at_utc,ends_at_utc,local_date,"
