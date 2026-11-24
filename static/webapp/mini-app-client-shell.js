@@ -123,7 +123,7 @@
   var UI_FLAGS_TTL_MS = 24 * 60 * 60 * 1000;
   /* Метка «флаги уже спрошены в этой сессии» (sessionStorage): один запрос на сессию, а не на страницу. */
   var UI_FLAGS_SYNC_KEY = 'cw_ui_flags_sync_v1';
-  var uiFlags = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false, redesign_s2: false };
+  var uiFlags = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false, redesign_s2: false, redesign_s3: false };
   var uiFlagsRefreshed = false;
 
   function normalizeUiFlags(raw) {
@@ -139,6 +139,8 @@
       redesign_s5: !!raw && raw.redesign_s5 === true,
       /* TASK-447: redesign_s2 — состояния главной: серверу нужен только флаг в ответе. */
       redesign_s2: !!raw && raw.redesign_s2 === true,
+      /* TASK-448: redesign_s3 — скорость и переходы: серверу нужен только флаг в ответе. */
+      redesign_s3: !!raw && raw.redesign_s3 === true,
     };
   }
 
@@ -157,7 +159,7 @@
     }
   }
 
-  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false, redesign_s2: false };
+  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false, redesign_s2: false, redesign_s3: false };
 
   function readUiFlags() {
     var uid = initDataUserId();
@@ -169,7 +171,7 @@
       if (typeof cached.at !== 'number' || !(age >= 0 && age < UI_FLAGS_TTL_MS)) return UI_FLAGS_DEFAULT;
       /* Явный свежий false гасит флаг; всё остальное (true, мусор, отсутствие поля) — включено,
          как и раньше. redesign_s1 в кэше всегда идёт с season-режимом. */
-      if (cached.season_ui === false && cached.redesign_s1 !== true && cached.redesign_s5 !== true && cached.redesign_s2 !== true) return normalizeUiFlags(null);
+      if (cached.season_ui === false && cached.redesign_s1 !== true && cached.redesign_s5 !== true && cached.redesign_s2 !== true && cached.redesign_s3 !== true) return normalizeUiFlags(null);
       /* s5 сам по себе season-режим не включает — возвращаем его честно. */
       var seasonOn = cached.season_ui !== false || cached.redesign_s1 === true;
       return {
@@ -178,6 +180,7 @@
         redesign_s1: cached.redesign_s1 === true,
         redesign_s5: cached.redesign_s5 === true,
         redesign_s2: cached.redesign_s2 === true,
+        redesign_s3: cached.redesign_s3 === true,
       };
     } catch (e) {
       return UI_FLAGS_DEFAULT;
@@ -197,6 +200,7 @@
           redesign_s1: flags.redesign_s1 === true,
           redesign_s5: flags.redesign_s5 === true,
           redesign_s2: flags.redesign_s2 === true,
+          redesign_s3: flags.redesign_s3 === true,
           at: Date.now(),
         })
       );
@@ -223,7 +227,8 @@
       next.bookings_tab !== uiFlags.bookings_tab ||
       next.redesign_s1 !== uiFlags.redesign_s1 ||
       next.redesign_s5 !== uiFlags.redesign_s5 ||
-      next.redesign_s2 !== uiFlags.redesign_s2;
+      next.redesign_s2 !== uiFlags.redesign_s2 ||
+      next.redesign_s3 !== uiFlags.redesign_s3;
     uiFlags = next;
     if (changed && typeof global.CustomEvent === 'function') {
       global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
@@ -260,7 +265,7 @@
   }
 
   function getUiFlags() {
-    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab, redesign_s1: uiFlags.redesign_s1 === true, redesign_s5: uiFlags.redesign_s5 === true, redesign_s2: uiFlags.redesign_s2 === true };
+    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab, redesign_s1: uiFlags.redesign_s1 === true, redesign_s5: uiFlags.redesign_s5 === true, redesign_s2: uiFlags.redesign_s2 === true, redesign_s3: uiFlags.redesign_s3 === true };
   }
 
   function getTg() {
@@ -1010,7 +1015,15 @@
    * Страница вкладки зовёт, когда на экране первое осмысленное содержимое (данные или тёплый
    * кэш, не скелетон). Один раз за загрузку страницы; время берётся в кадре после показа.
    */
-  function contentShown() {
+  /* TASK-448: узкий вход для прогрева вкладки со страниц (главная догревает «Лёд»). */
+  function prefetchTab(tab) {
+    if (tab === 'catalog' || tab === 'ice') {
+      return Promise.all([prefetchIceAssets(), prefetchCatalogAssets(), prefetchCatalogWarmCache()]);
+    }
+    return Promise.resolve();
+  }
+
+  function contentShown(extra) {
     if (tabTimingDone) return;
     tabTimingDone = true;
     try {
@@ -1034,6 +1047,9 @@
           nav: tabTimingNav || readNavType(),
           platform: tg && tg.platform,
           seasonUi: uiFlags.season_ui,
+          /* TASK-448: источник первого кадра и время до данных — передают страницы с кэшем. */
+          src: extra && extra.src,
+          dataMs: extra && extra.data_ms,
         };
         loadTabTimingModel(function (model) {
           if (!model) return;
@@ -1141,6 +1157,8 @@
     } catch (e) {
       path = raw;
     }
+    /* TASK-448: под s3 у целей свой opt-in — исключение не нужно. */
+    if (uiFlags.redesign_s3) return false;
     return NO_VIEW_TRANSITION_PAGE.test(path);
   }
 
@@ -1162,7 +1180,7 @@
     var entry = ev && ev.activation && ev.activation.entry;
     if (!vt || !entry || !entry.url) return;
     try {
-      if (NO_VIEW_TRANSITION_PAGE.test(new URL(entry.url).pathname)) vt.skipTransition();
+      if (!uiFlags.redesign_s3 && NO_VIEW_TRANSITION_PAGE.test(new URL(entry.url).pathname)) vt.skipTransition();
     } catch (e) { /* */ }
   }
 
@@ -1192,6 +1210,12 @@
       var dir = traversalBack ? 'back' : stored || 'forward';
       try {
         ev.viewTransition.types.add(dir);
+        /* TASK-448: переход между вкладками — свой тип, чистый кросс-фейд без сдвига. */
+        if (uiFlags.redesign_s3) {
+          var fromBar = false;
+          try { fromBar = !!global.sessionStorage.getItem(TAP_KEY); } catch (e2) { /* */ }
+          if (fromBar) ev.viewTransition.types.add('tab');
+        }
       } catch (e) {
         /* types не поддержаны — останется кросс-фейд по умолчанию */
       }
@@ -2083,6 +2107,7 @@
     prefetchCatalogWarmCache: prefetchCatalogWarmCache,
     prefetchCatalogAssets: prefetchCatalogAssets,
     prefetchIceAssets: prefetchIceAssets,
+    prefetchTab: prefetchTab,
     scheduleCatalogNavigationPrefetch: scheduleCatalogNavigationPrefetch,
     readCatalogWarmCache: readCatalogWarmCache,
     writeCatalogWarmCache: writeCatalogWarmCache,

@@ -495,6 +495,19 @@ html body.hv2 { padding: 0; margin: 0; }
 }
 .hv2-fade { animation: hv2-fade .2s ease both; }
 @keyframes hv2-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* TASK-448: тихое обновление блока из сети — короткий кросс-фейд 150мс. */
+.hv2-xfade { animation: hv2-xfade .15s ease; }
+@keyframes hv2-xfade { from { opacity: .3; } to { opacity: 1; } }
+
+/* TASK-448: «Нет сети» — белая плашка под верхней строкой шапки (макет 12, светлая тема). */
+.hv2-offline {
+  position: absolute; left: 20px; right: 20px; top: 92px; z-index: 5;
+  background: #fff; border: 1px solid var(--line); border-radius: 16px;
+  padding: 13px 16px; text-align: center;
+  font: 600 15px/1.3 var(--g-font); color: var(--ink);
+  box-shadow: 0 8px 24px rgba(15, 23, 32, .10);
+}
 @media (prefers-reduced-motion: reduce) {
   .hv2-up, .hv2-fade, .hv2-skel__card, .hv2-skel__title, .hv2-skel__tile,
   .hv2-chip__dot, .hv2-rail--fade { animation: hv2-fade .2s ease both; }
@@ -694,3 +707,14 @@ html body.hv2 { padding: 0; margin: 0; }
 }
 .hv2-hero #clientProfileSwitcherMount .cps-chip__avatar { background: #fff; color: var(--ink); }
 .hv2-hero #clientProfileSwitcherMount .cps-chip__chevron { opacity: .8; }
+
+/* TASK-448: переход между вкладками — чистый кросс-фейд 150мс, без сдвига.
+   Правила срабатывают только с типом `tab` (его ставит оболочка при redesign_s3). */
+@keyframes client-vt-tab-out { to { opacity: 0; } }
+@keyframes client-vt-tab-in { from { opacity: 0; } }
+html:active-view-transition-type(tab)::view-transition-old(root) {
+  animation: client-vt-tab-out 150ms cubic-bezier(.2, .8, .2, 1);
+}
+html:active-view-transition-type(tab)::view-transition-new(root) {
+  animation: client-vt-tab-in 150ms cubic-bezier(.2, .8, .2, 1);
+}

@@ -3137,6 +3137,9 @@ async def get_client_hub_bootstrap(
     (``X-Profile-Id``). ``_hub_session`` edges/saved trainers and rebook/primary hints use the
     same acting profile.
     """
+    from time import monotonic
+
+    t0 = monotonic()
     telegram_id = client_catalog_telegram_key(principal)
     requested_profile_id = _parse_profile_id_header(x_profile_id)
     # TASK-445: новая главная v2 — доп. ключи в ``home`` только под флагом;
@@ -3725,6 +3728,8 @@ async def get_client_hub_bootstrap(
         )
     except Exception:
         logger.exception("client hub ice teaser failed")
+    # TASK-448: дешёвый замер серверного времени — для всех, без флага.
+    response.headers["Server-Timing"] = f"app;dur={(monotonic() - t0) * 1000:.0f}"
     return {
         "bookings": bookings,
         "requests": requests,

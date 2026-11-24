@@ -10,8 +10,6 @@
        Остальные получают client-home.html (см. webapp_client_home_page). -->
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611231" />
-  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611231" />
   <script>
     /* Тот же ранний bootstrap, что на старой главной (TASK-314): запрос уходит из <head>,
        пока грузятся SDK и скрипты. Профиль — та же догадка (выбранный или с прошлого раза). */
@@ -39,6 +37,9 @@
     })();
   </script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- s3:assets -->
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611231" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611231" />
   <script src="glide-deeplink.js?v=202611231"></script>
   <script src="write-access.js?v=202611231"></script>
   <script src="client-mini-app-theme.js?v=202611231"></script>
@@ -53,11 +54,12 @@
   <script defer src="client-profile-switcher.js?v=202611231"></script>
   <script src="ru-person-name.js?v=202611231"></script>
   <script defer src="/static/webapp/ga-press.js?v=202611231"></script>
+  <!-- /s3:assets -->
 </head>
 <body class="hv2 ga-body" data-client-shell="tabs">
   <div class="hv2__page">
     <header class="hv2-hero" id="hv2Hero">
-      <img class="hv2-hero__img" id="hv2HeroImg" alt="" hidden />
+      <img class="hv2-hero__img" id="hv2HeroImg" alt="" fetchpriority="high" hidden />
       <span class="hv2-hero__shade" aria-hidden="true"></span>
       <div class="hv2-hero__top">
         <button type="button" class="hv2-hero__city ga-press" id="hv2City" aria-haspopup="dialog">
@@ -149,7 +151,9 @@
       } catch (e) {}
     })();
   </script>
+  <!-- s3:assets -->
   <script src="home-v2.js?v=202611231"></script>
   <script src="/static/webapp/ga-touch.js?v=202611231"></script>
+  <!-- /s3:assets -->
 </body>
 </html>

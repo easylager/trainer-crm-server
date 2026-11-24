@@ -38,9 +38,51 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2',
 };
+/* TASK-448: эмуляция серверных бандлов s3 — то же склеивание, что home_v2_bundles.py
+   (списки держать синхронно). Сервер отдаёт их на /webapp/home-v2.{head,app,bundle}.* */
+const S3_HEAD_JS = ['glide-deeplink.js', 'write-access.js', 'client-mini-app-theme.js', 'mini-app-client-shell.js', 'ru-person-name.js'];
+const S3_APP_JS = ['mini-app-telegram-chrome.js', 'mini-app-empty-state.js', 'mini-app-more-icons.js', 'client-profile-switcher.js', 'ga-press.js', 'home-v2.js', 'ga-touch.js'];
+const S3_CSS = ['shared/glide-public-fonts.css', 'shared/glide-tokens.css', 'webapp/mini-app-client-theme.css', 'webapp/mini-app-client-shell.css', 'webapp/home-v2.css'];
+const s3bundle = (files, sep) => files.map((f) => {
+  const rel = f.includes('/') ? f : 'webapp/' + f;
+  return '/* file: ' + rel + ' */\n' + readFileSync(path.join(staticDir, rel), 'utf-8');
+}).join(sep);
+const S3_BUNDLES = {
+  '/webapp/home-v2.head.js': { body: s3bundle(S3_HEAD_JS, ';\n'), type: 'text/javascript' },
+  '/webapp/home-v2.app.js': { body: s3bundle(S3_APP_JS, ';\n'), type: 'text/javascript' },
+  '/webapp/home-v2.bundle.css': { body: s3bundle(S3_CSS, '\n'), type: 'text/css' },
+};
+function s3BundledHtml() {
+  const html = readFileSync(path.join(staticDir, 'webapp/client-home-v2.html'), 'utf-8');
+  const regions = [...html.matchAll(/<!-- s3:assets -->[\s\S]*?<!-- \/s3:assets -->/g)];
+  if (!regions.length) return null;
+  let out = html;
+  for (let i = regions.length - 1; i >= 0; i--) {
+    const m = regions[i];
+    out = out.slice(0, m.index) + (i === 0
+      ? '  <link rel="stylesheet" href="/webapp/home-v2.bundle.css?v=s3" />\n' +
+        '  <script src="/webapp/home-v2.head.js?v=s3"></script>\n' +
+        '  <script defer src="/webapp/home-v2.app.js?v=s3"></script>\n'
+      : '') + out.slice(m.index + m[0].length);
+  }
+  return out;
+}
+let S3_SERVE = false;
+
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
   let file;
+  if (S3_SERVE && p === '/webapp/client-home') {
+    const bundled = s3BundledHtml();
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(bundled || readFileSync(path.join(staticDir, 'webapp/client-home-v2.html')));
+    return;
+  }
+  if (S3_BUNDLES[p]) {
+    res.writeHead(200, { 'content-type': S3_BUNDLES[p].type });
+    res.end(S3_BUNDLES[p].body);
+    return;
+  }
   if (p.startsWith('/photos/')) {
     file = path.join(photosDir, p.slice('/photos/'.length));
     if (!file.startsWith(photosDir) || !existsSync(file) || statSync(file).isDirectory()) {
@@ -234,6 +276,7 @@ function bootstrap(over) {
 
 const UI_FLAGS_ON = { season_ui: false, bookings_tab: true, fast_tabs: false, search_board: false, redesign_s1: true };
 const UI_FLAGS_S2 = { ...UI_FLAGS_ON, redesign_s2: true };
+const UI_FLAGS_S3 = { ...UI_FLAGS_S2, redesign_s3: true };
 const UI_FLAGS_OFF = { season_ui: false, bookings_tab: false, fast_tabs: false, search_board: false, redesign_s1: false };
 
 function tgMock(colorScheme, photoUrl) {
@@ -278,22 +321,33 @@ function assetMeter(page) {
 }
 
 const WATCH_CALLS = [];
-async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePath, now, profiles }) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
+async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePath, now, profiles, bootDelay, flagsCache, bundled, ctx: sharedCtx }) {
+  const ctx = sharedCtx || await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_FAILED|net::|404/.test(m.text())) errors.push(m.text()); });
   await page.clock.setFixedTime(now || NOW);
   const meter = assetMeter(page);
+  const s3cache = flagsCache || flags;
+  if (s3cache) {
+    await page.addInitScript((fl) => {
+      try {
+        localStorage.setItem('cw_ui_flags_v1', JSON.stringify({ u: '1', ...fl, at: Date.now() }));
+      } catch (e) {}
+    }, s3cache);
+  }
   await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock(tgScheme, tgPhoto) }));
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
-  await page.route('**/api/**', (r) => {
+  await page.route('**/api/**', async (r) => {
     const url = new URL(r.request().url());
     const p = url.pathname;
     const json = (body) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     if (p === '/api/webapp/client/ui-flags') return json(flags || UI_FLAGS_ON);
-    if (p === '/api/webapp/client/hub/bootstrap') return json(boot);
+    if (p === '/api/webapp/client/hub/bootstrap') {
+      if (bootDelay) await new Promise((r2) => setTimeout(r2, bootDelay));
+      return json(boot);
+    }
     if (p === '/api/webapp/client/profiles') return json(profiles || { items: [], default_profile_id: null });
     if (p === '/api/webapp/client/ice-watches' && r.request().method() === 'POST') {
       WATCH_CALLS.push(JSON.parse(r.request().postData() || '{}'));
@@ -329,6 +383,7 @@ async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePat
     }
     return json({});
   });
+  S3_SERVE = !!bundled;
   await page.goto(base + (pagePath || '/webapp/client-home'));
   await page.waitForSelector('#hv2Skel', { state: 'hidden', timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(500);
@@ -936,6 +991,193 @@ try {
       await page.locator('.hv2-ret').count() === 0);
     await shot(page, '26-s2-off-coach');
     await ctx.close();
+  }
+
+  /* ── TASK-448: этап 3 (redesign_s3) — бандлы, кэш экрана, «Нет сети» ────── */
+
+  /* 27. s3 cold: бандлы вместо одиночных файлов, страница та же */
+  {
+    const { page, ctx, errors, meter } = await openHome(browser, {
+      boot: bootstrap({ bookings: bookingToday() }),
+      flags: UI_FLAGS_S3, flagsCache: UI_FLAGS_S3, bundled: true,
+    });
+    /* Рендер-блокирующие JS/CSS (script/link), без фонового префетча «Льда» (fetch). */
+    const m = await page.evaluate(() =>
+      performance.getEntriesByType('resource')
+        .filter((e) => /\.(js|css)(\?|$)/.test(e.name) && e.initiatorType !== 'fetch')
+        .map((e) => e.name));
+    const names = [...new Set(m)].map((u) => u.split('/').pop().split('?')[0]);
+    check('27: JS/CSS файлов на первый кадр ≤ 8', names.length <= 8, `${names.length}: ${names.join(',')}`);
+    check('27: отданы бандлы', names.includes('home-v2.head.js') && names.includes('home-v2.app.js') && names.includes('home-v2.bundle.css'), names.join(','));
+    check('27: нет одиночного home-v2.js/mini-app-client-shell.js', !names.some((n) => n === 'home-v2.js' || n === 'mini-app-client-shell.js'), names.join(','));
+    /* Префетч «Льда» сработал в фоне (idle). */
+    const prefetched = await page.evaluate(() =>
+      performance.getEntriesByType('resource').filter((e) => e.initiatorType === 'fetch' && /ice|catalog/.test(e.name)).length);
+    check('27: «Лёд» прогрет в фоне', prefetched > 0, `${prefetched}`);
+    check('27: билет на месте', await page.locator('.hv2-ticket').count() === 1);
+    check('27: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await shot(page, '27-s3-cold');
+    await ctx.close();
+  }
+
+  /* Общий прогрев кэша: один заход пишет hv2_screen_v1 в localStorage контекста. */
+  async function primeCache(browser, boot, extraInit) {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
+    const { page, errors } = await openHome(browser, {
+      boot, flags: UI_FLAGS_S3, flagsCache: UI_FLAGS_S3, bundled: true, ctx,
+    });
+    await page.waitForSelector('.hv2-ticket, .hv2-pcard, .hv2-card', { timeout: 10000 });
+    await page.waitForFunction(() => Object.keys(localStorage).some((k) => k.startsWith('hv2_screen_v1:')), null, { timeout: 5000 });
+    await page.close();
+    return { ctx, errors };
+  }
+
+  /* 28. s3 warm: кэш экрана виден мгновенно, скелетона нет */
+  {
+    const { ctx } = await primeCache(browser, bootstrap({ bookings: bookingToday() }));
+    const { page, errors } = await openHome(browser, {
+      boot: bootstrap({ bookings: bookingToday() }),
+      flags: UI_FLAGS_S3, flagsCache: UI_FLAGS_S3, bundled: true, ctx, bootDelay: 3000,
+    });
+    await page.waitForTimeout(300);
+    const early = await page.evaluate(() => ({
+      ticket: !!document.querySelector('.hv2-ticket'),
+      skelVisible: (() => { const s = document.getElementById('hv2Skel'); return s && s.offsetHeight > 0; })(),
+    }));
+    check('28: кэш показан ≤300мс — билет виден', early.ticket === true);
+    check('28: скелетон не показывался', !early.skelVisible);
+    await shot(page, '28-s3-warm-cache');
+    check('28: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 29. s3 offline: кэш + сеть упала → белая плашка «Нет сети · данные на HH:MM» */
+  {
+    const { ctx } = await primeCache(browser, bootstrap({ bookings: bookingToday() }));
+    const ctx2 = ctx;
+    const page = await ctx2.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.clock.setFixedTime(NOW);
+    await page.addInitScript((fl) => {
+      try { localStorage.setItem('cw_ui_flags_v1', JSON.stringify({ u: '1', ...fl, at: Date.now() })); } catch (e) {}
+    }, UI_FLAGS_S3);
+    await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock() }));
+    await page.route('**/api/**', (r) => {
+      const p = new URL(r.request().url()).pathname;
+      if (p === '/api/webapp/client/hub/bootstrap') return r.abort();
+      return r.fulfill({ contentType: 'application/json', body: '{}' });
+    });
+    S3_SERVE = true;
+    await page.goto(base + '/webapp/client-home');
+    await page.waitForSelector('.hv2-offline', { timeout: 15000 });
+    const plate = await page.locator('.hv2-offline').textContent();
+    check('29: плашка «Нет сети · данные на HH:MM»', /Нет сети · данные на \d{2}:\d{2}/.test(plate || ''), plate);
+    check('29: кэш на экране под плашкой', await page.locator('.hv2-ticket').count() === 1);
+    const plateBox = await page.locator('.hv2-offline').boundingBox();
+    check('29: плашка белая и в вьюпорте', plateBox && plateBox.y > 60 && plateBox.y < 200, JSON.stringify(plateBox));
+    await shot(page, '29-s3-offline');
+    check('29: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx2.close();
+  }
+
+  /* 30. s3 refresh: сеть прислала другое время записи — блок обновился без скелетона, скролл на месте */
+  {
+    const { ctx } = await primeCache(browser, bootstrap({ bookings: bookingToday() }));
+    const { page, errors } = await openHome(browser, {
+      boot: bootstrap({ bookings: bookingToday({ start_time: '21:10', end_time: '22:00' }) }),
+      flags: UI_FLAGS_S3, flagsCache: UI_FLAGS_S3, bundled: true, ctx, bootDelay: 1200,
+    });
+    await page.waitForSelector('.hv2-ticket', { timeout: 10000 });
+    await page.evaluate(() => window.scrollTo(0, 300));
+    const yBefore = await page.evaluate(() => window.scrollY);
+    await page.waitForFunction(() => (document.querySelector('.hv2-ticket__time') || {}).textContent === '21:10', null, { timeout: 8000 });
+    const after = await page.evaluate(() => ({
+      skel: (() => { const s = document.getElementById('hv2Skel'); return s && s.offsetHeight > 0; })(),
+      y: window.scrollY,
+    }));
+    check('30: время записи обновилось до 21:10', true);
+    check('30: скелетон не появлялся при обновлении', !after.skel);
+    check('30: скролл сохранён', Math.abs(after.y - yBefore) < 2, `y=${after.y} was=${yBefore}`);
+    await shot(page, '30-s3-quiet-refresh');
+    check('30: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 31. Другой профиль — чужой кэш не показывается */
+  {
+    const { ctx } = await primeCache(browser, bootstrap({ bookings: bookingToday() }));
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.clock.setFixedTime(NOW);
+    await page.addInitScript((fl) => {
+      try {
+        localStorage.setItem('cw_ui_flags_v1', JSON.stringify({ u: '1', ...fl, at: Date.now() }));
+        localStorage.setItem('cw_active_profile_id_v1', '5');
+      } catch (e) {}
+    }, UI_FLAGS_S3);
+    await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock() }));
+    await page.route('**/api/**', async (r) => {
+      const p = new URL(r.request().url()).pathname;
+      const json = (b) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(b) });
+      if (p === '/api/webapp/client/hub/bootstrap') {
+        await new Promise((r2) => setTimeout(r2, 2500));
+        return json(bootstrap({ bookings: bookingToday() }));
+      }
+      if (p === '/api/webapp/client/ui-flags') return json(UI_FLAGS_S3);
+      if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
+      return json({});
+    });
+    S3_SERVE = true;
+    await page.goto(base + '/webapp/client-home');
+    await page.waitForTimeout(400);
+    const st = await page.evaluate(() => ({
+      ticket: !!document.querySelector('.hv2-ticket'),
+      skel: (() => { const s = document.getElementById('hv2Skel'); return s && s.offsetHeight > 0; })(),
+    }));
+    check('31: чужой кэш не показан — билета нет в первые 400мс', !st.ticket);
+    check('31: показан скелетон (кэш не подошёл)', st.skel === true);
+    await shot(page, '31-s3-other-profile');
+    check('31: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 31b. С s3 переходы на kto-kogo и trainers идут с первого клика (TASK-391 regression). */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ bookings: bookingToday() }),
+      flags: UI_FLAGS_S3, flagsCache: UI_FLAGS_S3, bundled: true,
+    });
+    await page.evaluate(() => {
+      const a = document.createElement('a');
+      a.href = 'kto-kogo'; a.id = 'testNavKk'; a.textContent = 'x';
+      document.body.appendChild(a);
+    });
+    await Promise.all([
+      page.waitForURL(/kto-kogo/, { timeout: 8000 }),
+      page.click('#testNavKk'),
+    ]);
+    check('31b: home→kto-kogo с первого клика', page.url().includes('kto-kogo'));
+    const { page: page2, ctx: ctx2 } = await openHome(browser, {
+      boot: bootstrap({ bookings: bookingToday() }),
+      flags: UI_FLAGS_S3, flagsCache: UI_FLAGS_S3, bundled: true,
+    });
+    await page2.evaluate(() => {
+      const a = document.createElement('a');
+      a.href = 'trainers'; a.id = 'testNavTr'; a.textContent = 'x';
+      document.body.appendChild(a);
+    });
+    await Promise.all([
+      page2.waitForURL(/trainers/, { timeout: 8000 }),
+      page2.click('#testNavTr'),
+    ]);
+    check('31b: home→trainers с первого клика', page2.url().includes('trainers'));
+    /* «Transition was aborted … opt-in disabled» — шум Chromium при прерванном VT
+       на уходе со страницы, навигация сама проходит (проверено выше). */
+    check('31b: без JS-ошибок', errors.filter((e) => !/Transition was aborted/.test(e)).length === 0, errors.join('; '));
+    await ctx.close();
+    await ctx2.close();
   }
 } finally {
   await browser.close();

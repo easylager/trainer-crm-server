@@ -419,7 +419,7 @@
     }
     var pass = passForTrainer(state.data, b.trainer_id);
     var pp = (home().place_photos || {})[String(b.arena_id)] || {};
-    var thumb = pp.card || pp.thumb;
+    var thumb = s3On() ? (pp.thumb || pp.card) : (pp.card || pp.thumb);
     var face = b.trainer_list_photo_key
       ? '<img class="hv2-ticket__face" src="' + esc(trainerPhotoUrl(b.trainer_list_photo_key)) + '" alt="">'
       : '<span class="hv2-ticket__face">' + esc(((b.trainer_name || 'Т').charAt(0)).toUpperCase()) + '</span>';
@@ -680,9 +680,9 @@
       var tr = Number(c.trainer_count) || 0;
       if (ts) sub.push(ts + ' ' + plural(ts, 'сеанс', 'сеанса', 'сеансов') + ' сегодня');
       if (tr) sub.push(tr + ' ' + plural(tr, 'тренер', 'тренера', 'тренеров'));
-      var photo = c.photo && (c.photo.card || c.photo.thumb);
+      var photo = c.photo && (s3On() ? (c.photo.thumb || c.photo.card) : (c.photo.card || c.photo.thumb));
       var img = photo
-        ? '<img class="hv2-cprow__img" src="' + esc(photo) + '" alt="">'
+        ? '<img class="hv2-cprow__img" src="' + esc(photo) + '" alt="" loading="lazy" decoding="async">'
         : '<span class="hv2-cprow__img">' + esc(String(c.name || '?').charAt(0).toUpperCase()) + '</span>';
       return '<button type="button" class="hv2-cprow ga-press" data-city="' + c.id + '">' + img +
         '<span><span class="hv2-cprow__name">' + esc(c.name) + '</span><br>' +
@@ -727,7 +727,8 @@
     return null;
   }
   function railArenaHtml(a, wkey) {
-    var photo = a.photo && (a.photo.card || a.photo.thumb);
+    var s3 = s3On();
+    var photo = a.photo && ((s3 ? a.photo.thumb : a.photo.card) || a.photo.card || a.photo.thumb);
     var t0 = (a.times || [])[0] || {};
     var chip = fmtUntilCap(t0.minutes_until) || (wkey === 'tomorrow' ? 'Завтра' : wkey === 'weekend' ? 'На выходных' : 'Сегодня');
     var chips = (a.times || []).slice(0, 3).map(function (t) {
@@ -735,7 +736,7 @@
     }).join('');
     return '<div class="hv2-rcard ga-press" role="link" tabindex="0" data-act="nav" data-path="' + esc(a.href || 'ice') + '">' +
       '<span class="hv2-rcard__imgwrap">' +
-        (photo ? '<img class="hv2-rcard__img" src="' + esc(photo) + '" alt="" loading="lazy">' : '') +
+        (photo ? '<img class="hv2-rcard__img" src="' + esc(photo) + '" alt="" loading="lazy" decoding="async">' : '') +
         (chip ? '<span class="hv2-rcard__chip">' + esc(chip) + '</span>' : '') +
       '</span>' +
       '<span class="hv2-rcard__name">' + esc(a.name) + '</span>' +
@@ -761,7 +762,7 @@
     /* TASK-447: ≥3 — rail, 2 — две колонки, 1 — широкая карточка. */
     host.classList.toggle('hv2-rail--grid2', arenas.length === 2);
     host.classList.toggle('hv2-rail--one', arenas.length === 1);
-    host.innerHTML = arenas.map(function (a) { return railArenaHtml(a, w.key); }).join('');
+    setBlockHtml(host, arenas.map(function (a) { return railArenaHtml(a, w.key); }).join(''), state.quiet);
   }
   function renderIce() {
     var windows = railWindows();
@@ -1017,6 +1018,171 @@
     } catch (e) { return null; }
   }
 
+  /* ── TASK-448: этап 3 — скорость и переходы (флаг redesign_s3) ─────────── */
+  /* Читаем флаг из кэша cw_ui_flags_v1 синхронно — как тема читает redesign_s1. */
+  function s3On() {
+    try {
+      var u = tgUser();
+      var uid = u && u.id != null ? String(u.id) : '';
+      var c = JSON.parse(localStorage.getItem('cw_ui_flags_v1') || 'null');
+      return !!(c && String(c.u) === uid && c.redesign_s3 === true);
+    } catch (e) { return false; }
+  }
+  function screenCacheKey() {
+    var u = tgUser();
+    var uid = u && u.id != null ? String(u.id) : '0';
+    return 'hv2_screen_v1:' + uid + ':' + (profileId() || 0);
+  }
+  function screenCacheRead() {
+    try {
+      var c = JSON.parse(localStorage.getItem(screenCacheKey()) || 'null');
+      if (!c || c.v !== 1 || !c.data || typeof c.at !== 'number') return null;
+      if (Date.now() - c.at > 24 * 60 * 60 * 1000) return null;
+      return c;
+    } catch (e) { return null; }
+  }
+  /* Урезаем лишнее, чтобы не упираться в квоту localStorage. */
+  function trimForCache(data) {
+    try {
+      var d = JSON.parse(JSON.stringify(data));
+      var h = d.home || {};
+      if (h.now && h.now.items) h.now.items = h.now.items.slice(0, 5);
+      if (h.matches && h.matches.matches) h.matches.matches = h.matches.matches.slice(0, 6);
+      var r = h.ice_rail;
+      if (r && r.windows) r.windows.forEach(function (w) {
+        (w.arenas || []).slice(0, 8).forEach(function (a) { if (a.times) a.times = a.times.slice(0, 6); });
+        w.arenas = (w.arenas || []).slice(0, 8);
+      });
+      if (h.nearby) h.nearby = h.nearby.slice(0, 6);
+      if (h.week) h.week.forEach(function (d2) { if (d2.times) d2.times = d2.times.slice(0, 6); });
+      if (d.bookings && d.bookings.days) {
+        d.bookings.days = d.bookings.days.slice(0, 7).map(function (day) {
+          return { date: day.date, day_label: day.day_label, bookings: (day.bookings || []).slice(0, 4) };
+        });
+      }
+      return d;
+    } catch (e) { return data; }
+  }
+  function screenCacheWrite(data) {
+    try {
+      var payload = JSON.stringify({ v: 1, at: Date.now(), data: data });
+      if (payload.length > 150 * 1024) payload = JSON.stringify({ v: 1, at: Date.now(), data: trimForCache(data) });
+      if (payload.length > 220 * 1024) return;
+      localStorage.setItem(screenCacheKey(), payload);
+    } catch (e) {
+      /* QuotaExceeded — чистим только свои ключи и пропускаем запись. */
+      try {
+        var ks = [];
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('hv2_screen_v1:') === 0) ks.push(k);
+        }
+        ks.forEach(function (k) { localStorage.removeItem(k); });
+      } catch (e2) { /* */ }
+    }
+  }
+  /* Кэш старый — пересчитываем «мёртвое»: прошедшие записи и отметку «на льду». */
+  function sanitizeCached(data) {
+    var d = data;
+    var today = minskDate();
+    var nowM = localMin();
+    if (d.bookings && d.bookings.days) {
+      d.bookings.days = d.bookings.days.map(function (day) {
+        return { date: day.date, day_label: day.day_label, bookings: (day.bookings || []).filter(function (b) {
+          if (day.date < today) return false;
+          if (day.date === today && nowM != null && b.end_time) {
+            var sp = String(b.end_time).split(':');
+            if (parseInt(sp[0], 10) * 60 + parseInt(sp[1] || '0', 10) <= nowM) return false;
+          }
+          return true;
+        }) };
+      }).filter(function (day) { return day.bookings.length; });
+    }
+    var o = (d.home || {}).on_ice;
+    if (o && o.ends_local && nowM != null) {
+      var sp2 = String(o.ends_local).split(':');
+      if (parseInt(sp2[0], 10) * 60 + parseInt(sp2[1] || '0', 10) <= nowM) d.home.on_ice = null;
+    }
+    /* Рейл: минуты до сеанса хранятся в ответе — пересчитываем от «сейчас». */
+    var r = (d.home || {}).ice_rail;
+    if (r && r.windows) r.windows.forEach(function (w) {
+      var wDate = w.key === 'today' ? minskDate()
+        : w.key === 'tomorrow' ? (function () { var dd = new Date(minskDate() + 'T12:00:00'); dd.setDate(dd.getDate() + 1); return dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0') + '-' + String(dd.getDate()).padStart(2, '0'); })()
+        : null;
+      (w.arenas || []).forEach(function (a) {
+        (a.times || []).forEach(function (t) {
+          if (wDate && t.time) {
+            var mu = minutesUntil(wDate, t.time);
+            if (mu != null) t.minutes_until = mu;
+          }
+        });
+      });
+    });
+    /* Неделя: прошедшие сегодняшние слоты помечаем past. */
+    var wk = (d.home || {}).week;
+    if (wk) wk.forEach(function (d2) {
+      if (d2.date !== today || nowM == null) return;
+      (d2.times || []).forEach(function (t) {
+        var sp3 = String(t.time || '').split(':');
+        if (parseInt(sp3[0], 10) * 60 + parseInt(sp3[1] || '0', 10) <= nowM) t.past = true;
+      });
+    });
+    return d;
+  }
+  /* Плашка «Нет сети · данные на HH:MM» (макет 12, белая по доку) под верхней строкой шапки. */
+  function showOfflinePlate(cacheAt) {
+    removeOfflinePlate();
+    var t = '';
+    try {
+      t = new Intl.DateTimeFormat('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }).format(new Date(cacheAt));
+    } catch (e) { t = ''; }
+    var el = document.createElement('div');
+    el.className = 'hv2-offline';
+    el.id = 'hv2Offline';
+    el.textContent = 'Нет сети' + (t ? ' · данные на ' + t : '');
+    els.hero.appendChild(el);
+  }
+  function removeOfflinePlate() {
+    var el = document.getElementById('hv2Offline');
+    if (el) el.remove();
+  }
+  /* Тихая замена блока: общий html не трогаем, изменённый — короткий кросс-фейд. */
+  function setBlockHtml(el, htmlStr, quiet) {
+    if (el.__lastHtml === htmlStr) return;
+    el.__lastHtml = htmlStr;
+    if (quiet) {
+      el.classList.remove('hv2-xfade');
+      void el.offsetWidth;
+      el.classList.add('hv2-xfade');
+    }
+    el.innerHTML = htmlStr;
+  }
+  function notifyContent(src) {
+    try {
+      if (window.ClientShell && typeof window.ClientShell.contentShown === 'function') {
+        window.ClientShell.contentShown({ src: src, data_ms: Math.round(performance.now()) });
+      }
+    } catch (e) { /* */ }
+  }
+  /* «Лёд» прогревается, пока главная простаивает — один раз за сессию. */
+  function scheduleIcePrefetch() {
+    if (state.icePrefetched) return;
+    state.icePrefetched = true;
+    try { if (sessionStorage.getItem('hv2_ice_pf') === '1') return; } catch (e) { /* */ }
+    var go = function () {
+      try { sessionStorage.setItem('hv2_ice_pf', '1'); } catch (e) { /* */ }
+      try {
+        var conn = navigator.connection || {};
+        if (conn.saveData === true || /(^|-)2g$/.test(String(conn.effectiveType || ''))) return;
+      } catch (e) { /* */ }
+      if (window.ClientShell && typeof window.ClientShell.prefetchTab === 'function') {
+        window.ClientShell.prefetchTab('catalog');
+      }
+    };
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(go, { timeout: 2500 });
+    else setTimeout(go, 1500);
+  }
+
   /* Все не-мертвые записи от сегодня вперёд, по дате и времени. */
   function futureBookings(data) {
     var days = (data.bookings && data.bookings.days) || [];
@@ -1237,7 +1403,7 @@
     var cards = list.map(function (n) {
       var inner =
         '<span class="hv2-rcard__imgwrap">' +
-          (n.photo ? '<img class="hv2-rcard__img" src="' + esc(n.photo) + '" alt="" loading="lazy">' : '') +
+          (n.photo ? '<img class="hv2-rcard__img" src="' + esc(n.photo) + '" alt="" loading="lazy" decoding="async">' : '') +
           (n.rink_count ? '<span class="hv2-rcard__chip">' + esc(n.rink_count + ' ' + plural(n.rink_count, 'каток', 'катка', 'катков')) + '</span>' : '') +
         '</span>' +
         '<span class="hv2-rcard__name">' + esc(n.name) + '</span>' +
@@ -1359,7 +1525,7 @@
     }
     state.topState = top;
     renderHero(top);
-    els.top.innerHTML = html;
+    setBlockHtml(els.top, html, state.quiet);
     if (top === 'citypick') {
       els.iceSec.hidden = true; els.matchSec.hidden = true; els.moreSec.hidden = true;
       bindCityPick();
@@ -1370,11 +1536,13 @@
     }
     if (top === 'pass') fetchSlots(activePass(data).trainer_id);
     if (top === 'coach' || top === 'return') fetchSlots((data.client_session || {}).primary_trainer_id);
-    /* появление блоков со сдвигом по очереди (≤6) */
-    var kids = els.main.querySelectorAll('.hv2-card, .hv2-pcard, .hv2-pcard__btns, .hv2-sec');
-    kids.forEach(function (el, i) {
-      if (i < 6) { el.classList.add('hv2-up'); el.style.animationDelay = (i * 30) + 'ms'; }
-    });
+    /* появление блоков со сдвигом по очереди (≤6) — при тихом обновлении не машем. */
+    if (!state.quiet) {
+      var kids = els.main.querySelectorAll('.hv2-card, .hv2-pcard, .hv2-pcard__btns, .hv2-sec');
+      kids.forEach(function (el, i) {
+        if (i < 6) { el.classList.add('hv2-up'); el.style.animationDelay = (i * 30) + 'ms'; }
+      });
+    }
   }
 
   function showError() {
@@ -1386,15 +1554,58 @@
     $('hv2Retry').addEventListener('click', function () { boot(); });
   }
 
+  function applyNetData(data, quiet) {
+    state.data = data;
+    state.quiet = quiet;
+    renderAll();
+    state.quiet = false;
+    els.skel.style.display = 'none';
+    if (!quiet) els.top.classList.add('hv2-fade');
+    if (s3On()) screenCacheWrite(data);
+  }
+
   function boot() {
-    els.skel.style.display = '';
-    state.railTab = null; state.yellowUsed = false; state.dedupSession = null; state.topPhoto = null;
-    fetchBootstrap().then(function (data) {
-      state.data = data;
+    var s3 = s3On();
+    var cached = s3 ? screenCacheRead() : null;
+    var hadCache = !!(cached && cached.data);
+    if (hadCache) {
+      /* TASK-448: прошлый экран из кэша до сети — скелетон не показываем. */
+      state.railTab = null; state.yellowUsed = false; state.dedupSession = null; state.topPhoto = null;
+      state.data = sanitizeCached(cached.data);
+      state.quiet = false;
       renderAll();
       els.skel.style.display = 'none';
-      els.top.classList.add('hv2-fade');
-    }).catch(function () { showError(); });
+      notifyContent('cache');
+      scheduleIcePrefetch();
+    } else {
+      els.skel.style.display = '';
+    }
+    state.railTab = null; state.yellowUsed = false; state.dedupSession = null; state.topPhoto = null;
+    fetchBootstrap(s3 ? 8000 : 0).then(function (data) {
+      removeOfflinePlate();
+      if (hadCache) {
+        applyNetData(data, true);
+      } else {
+        applyNetData(data, false);
+      }
+      notifyContent('net');
+      scheduleIcePrefetch();
+    }).catch(function () {
+      if (hadCache) {
+        /* Кэш уже на экране — белая плашка и ретраи по сети/возврату на страницу. */
+        showOfflinePlate(cached.at);
+        var retry = function () { boot(); };
+        window.addEventListener('online', retry, { once: true });
+        document.addEventListener('visibilitychange', function vis() {
+          if (document.visibilityState === 'visible' && document.getElementById('hv2Offline')) {
+            document.removeEventListener('visibilitychange', vis);
+            retry();
+          }
+        });
+      } else {
+        showError();
+      }
+    });
   }
 
   function init() {

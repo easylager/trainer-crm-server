@@ -35,6 +35,9 @@ class TabTimingBody(BaseModel):
     nav: Literal["navigate", "reload", "back_forward", "prerender", "shell"] = "navigate"
     platform: str = Field("unknown", pattern=r"^[a-z0-9_]{1,16}$")
     season_ui: bool = False
+    # TASK-448: src — откуда первый кадр (cache|net), data_ms — время до данных.
+    src: Literal["cache", "net"] | None = None
+    data_ms: int | None = Field(None, ge=0, le=120_000)
 
 
 @router.post("/client/tab-timing", status_code=204)
@@ -44,7 +47,7 @@ async def post_client_tab_timing(
 ) -> Response:
     """Best-effort: ответ пустой, ошибки клиент глотает. Один вызов на переход."""
     logger.info(
-        "client tab-timing kind=%s from=%s to=%s ms=%d page_ms=%d platform=%s season_ui=%d nav=%s",
+        "client tab-timing kind=%s from=%s to=%s ms=%d page_ms=%d platform=%s season_ui=%d nav=%s src=%s data_ms=%s",
         body.kind,
         body.from_ or "-",
         body.to,
@@ -53,5 +56,7 @@ async def post_client_tab_timing(
         body.platform,
         1 if body.season_ui else 0,
         body.nav,
+        body.src or "-",
+        body.data_ms if body.data_ms is not None else "-",
     )
     return Response(status_code=204)

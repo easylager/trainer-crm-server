@@ -2350,3 +2350,46 @@ async def test_client_hub_bootstrap_s2_keys_with_flag(
                 await conn.execute(text("DELETE FROM clients WHERE telegram_id = :t"), {"t": ctg})
         finally:
             await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_webapp_client_home_bundles_only_with_s3(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """TASK-448: s3 подменяет одиночные ассеты бандлами; без s3 разметка как раньше."""
+    from src.shared.config import get_settings
+
+    ctg = _fresh_client_telegram_id()
+    monkeypatch.setenv("CLIENT_REDESIGN_S1_TELEGRAM_IDS", str(ctg))
+    monkeypatch.setenv("CLIENT_REDESIGN_S3_TELEGRAM_IDS", "")
+    monkeypatch.setenv("CLIENT_REDESIGN_S3_PERCENT", "0")
+    get_settings.cache_clear()
+    try:
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                off = await client.get("/webapp/client-home", headers={"X-Telegram-Init-Data": "mock"})
+        assert off.status_code == 200
+        assert "/webapp/home-v2.app.js" not in off.text
+        assert 'src="home-v2.js' in off.text
+
+        monkeypatch.setenv("CLIENT_REDESIGN_S3_TELEGRAM_IDS", str(ctg))
+        get_settings.cache_clear()
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                on = await client.get("/webapp/client-home", headers={"X-Telegram-Init-Data": "mock"})
+                head = await client.get("/webapp/home-v2.head.js")
+                appjs = await client.get("/webapp/home-v2.app.js")
+                css = await client.get("/webapp/home-v2.bundle.css")
+        assert on.status_code == 200
+        assert 'src="/webapp/home-v2.head.js?v=' in on.text
+        assert 'defer src="/webapp/home-v2.app.js?v=' in on.text
+        assert 'href="/webapp/home-v2.bundle.css?v=' in on.text
+        assert 'src="home-v2.js' not in on.text
+        assert "telegram.org/js/telegram-web-app.js" in on.text
+        assert "__clientEarlyBootstrap" in on.text
+        assert head.status_code == 200 and "mini-app-client-shell" in head.text
+        assert appjs.status_code == 200 and "home-v2" in appjs.text
+        assert css.status_code == 200 and "hv2-hero" in css.text
+        assert "immutable" in (appjs.headers.get("cache-control") or "")
+    finally:
+        get_settings.cache_clear()

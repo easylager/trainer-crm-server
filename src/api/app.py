@@ -70,7 +70,7 @@ from src.shared.outage import (
 from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, get_optional_client_miniapp_principal
 from src.api.miniapp_auth.principal_keys import client_catalog_telegram_key
 from src.api.miniapp_auth.types import MiniAppPrincipal
-from src.application.client_ui_flags import fast_tabs_enabled, redesign_s1_enabled, search_board_enabled
+from src.application.client_ui_flags import fast_tabs_enabled, redesign_s1_enabled, redesign_s3_enabled, search_board_enabled
 from src.shared.config import Settings, get_settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
 from src.shared.sentry_init import init_sentry
@@ -451,6 +451,35 @@ def webapp_client_saved_trainers_page():
 _HOME_V2_PATH = _WEBAPP_DIR / "client-home-v2.html"
 
 
+def _home_v2_bundle_response(kind: str):
+    """TASK-448: контентно-адресованный бандл главной — кэш immutable."""
+    from src.application.home_v2_bundles import build_bundle, media_type
+
+    try:
+        _version, body = build_bundle(kind)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="bundle source missing")
+    return Response(content=body, media_type=media_type(kind), headers=_WEBAPP_IMMUTABLE_CACHE_HEADERS)
+
+
+@app.get("/webapp/home-v2.head.js")
+def webapp_home_v2_head_js():
+    """Синхронные head-скрипты главной v2 одним файлом (redesign_s3). ``?v=`` = sha256."""
+    return _home_v2_bundle_response("head.js")
+
+
+@app.get("/webapp/home-v2.app.js")
+def webapp_home_v2_app_js():
+    """Defer/body-скрипты главной v2 одним файлом (redesign_s3). ``?v=`` = sha256."""
+    return _home_v2_bundle_response("app.js")
+
+
+@app.get("/webapp/home-v2.bundle.css")
+def webapp_home_v2_bundle_css():
+    """Все стили главной v2 одним файлом (redesign_s3). ``?v=`` = sha256."""
+    return _home_v2_bundle_response("bundle.css")
+
+
 @app.get("/webapp/client-home")
 def webapp_client_home_page(
     principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
@@ -469,6 +498,11 @@ def webapp_client_home_page(
         path = _HOME_V2_PATH
         if path.is_file():
             html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
+            if redesign_s3_enabled(client_catalog_telegram_key(principal), get_settings()):
+                from src.application.home_v2_bundles import apply_bundles
+
+                # TASK-448: регионы s3:assets → 3 бандла; без флага/при сбое — как раньше.
+                html = apply_bundles(html) or html
             return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
     path = _WEBAPP_DIR / "client-home.html"
     if not path.is_file():

@@ -58,7 +58,7 @@ async def test_logs_one_line_without_personal_data(auth, caplog) -> None:
     assert resp.status_code == 204
     lines = [r.getMessage() for r in caplog.records if "client tab-timing" in r.getMessage()]
     assert lines == [
-        "client tab-timing kind=tab from=home to=kk ms=412 page_ms=381 platform=android season_ui=1 nav=navigate"
+        "client tab-timing kind=tab from=home to=kk ms=412 page_ms=381 platform=android season_ui=1 nav=navigate src=- data_ms=-"
     ]
     assert str(_USER_ID) not in lines[0]
     parsed = report.parse_line(lines[0])
@@ -71,7 +71,7 @@ async def test_shell_nav_is_accepted(auth, caplog) -> None:
     with caplog.at_level(logging.INFO):
         resp = await _post(_body(**{"from": "bookings"}, to="me", ms=14, nav="shell"))
     assert resp.status_code == 204
-    assert any("from=bookings to=me ms=14" in r.getMessage() and r.getMessage().endswith("nav=shell") for r in caplog.records)
+    assert any("from=bookings to=me ms=14" in r.getMessage() and "nav=shell" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -104,3 +104,41 @@ def test_report_percentiles() -> None:
     [(key, n, med, p90, _page)] = report.summarize(rows, ("kind", "to", "platform"))
     assert key == ("tab", "kk", "ios")
     assert (n, med, p90) == (10, 550, 900)
+
+
+@pytest.mark.asyncio
+async def test_src_and_data_ms_logged(auth, caplog) -> None:
+    """TASK-448: необязательные src и data_ms доезжают до строки лога."""
+    with caplog.at_level(logging.INFO):
+        resp = await _post(_body(src="cache", data_ms=240))
+    assert resp.status_code == 204
+    lines = [r.getMessage() for r in caplog.records if "client tab-timing" in r.getMessage()]
+    assert lines and "src=cache" in lines[-1] and "data_ms=240" in lines[-1]
+
+
+@pytest.mark.asyncio
+async def test_old_payload_still_accepted(auth, caplog) -> None:
+    """Старые клиенты без src/data_ms — те же 204 и прочерк в логе."""
+    with caplog.at_level(logging.INFO):
+        resp = await _post(_body())
+    assert resp.status_code == 204
+    lines = [r.getMessage() for r in caplog.records if "client tab-timing" in r.getMessage()]
+    assert lines and "src=-" in lines[-1]
+
+
+@pytest.mark.asyncio
+async def test_bad_src_rejected(auth) -> None:
+    resp = await _post(_body(src="wifi"))
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_report_splits_by_src() -> None:
+    rows = [
+        {"kind": "cold", "to": "home", "ms": "2200", "src": "net", "data_ms": "1800"},
+        {"kind": "cold", "to": "home", "ms": "300", "src": "cache", "data_ms": "120"},
+        {"kind": "cold", "to": "home", "ms": "500", "src": "cache", "data_ms": "140"},
+    ]
+    out = report.summarize_by_src(rows)
+    assert ("cache", 2, 400, 130) in out
+    assert ("net", 1, 2200, 1800) in out
