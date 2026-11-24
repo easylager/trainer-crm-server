@@ -543,3 +543,25 @@ html body.hv2 { padding: 0; margin: 0; }
   text-align: left;
 }
 .hv2-csheet .hv2-cprow { padding: 12px 20px; }
+
+/* TASK-446: состояние «Ты на катке?» (s5) */
+.hv2-chip__dot--pulse { animation: hv2-pulse 1.8s var(--ease) infinite; }
+.hv2-onice__load { white-space: nowrap; }
+.hv2-onice__bars { display: inline-flex; align-items: flex-end; gap: 2px; margin-right: 4px; vertical-align: -2px; }
+.hv2-onice__bars i { width: 4px; border-radius: 2px; background: rgba(255,255,255,.4); }
+.hv2-onice__bars i:nth-child(1) { height: 5px; }
+.hv2-onice__bars i:nth-child(2) { height: 8px; }
+.hv2-onice__bars i:nth-child(3) { height: 11px; }
+.hv2-onice__bars i.on { background: var(--green); }
+.hv2-onice__stats { padding: 8px 20px; margin-top: 12px; }
+.hv2-onice__row { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.hv2-onice__row + .hv2-onice__row { border-top: 1px solid var(--line); }
+.hv2-onice__ic { flex: 0 0 20px; color: var(--teal); }
+.hv2-onice__t { font: 700 15px/1.25 var(--g-font); }
+.hv2-onice__s { margin-top: 2px; font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-weeks { display: flex; gap: 4px; margin-left: auto; }
+.hv2-weeks i { width: 18px; height: 8px; border-radius: 4px; background: var(--soft); }
+.hv2-weeks i.on { background: var(--teal); }
+@media (prefers-reduced-motion: reduce) {
+  .hv2-chip__dot--pulse { animation: none; }
+}

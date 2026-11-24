@@ -123,7 +123,7 @@
   var UI_FLAGS_TTL_MS = 24 * 60 * 60 * 1000;
   /* Метка «флаги уже спрошены в этой сессии» (sessionStorage): один запрос на сессию, а не на страницу. */
   var UI_FLAGS_SYNC_KEY = 'cw_ui_flags_sync_v1';
-  var uiFlags = { season_ui: true, bookings_tab: false, redesign_s1: false };
+  var uiFlags = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false };
   var uiFlagsRefreshed = false;
 
   function normalizeUiFlags(raw) {
@@ -135,6 +135,8 @@
       season_ui: season,
       bookings_tab: season && raw.bookings_tab === true,
       redesign_s1: redesign,
+      /* TASK-446: redesign_s5 («Я здесь») — не включает season-режим, только ассеты листа. */
+      redesign_s5: !!raw && raw.redesign_s5 === true,
     };
   }
 
@@ -153,7 +155,7 @@
     }
   }
 
-  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false, redesign_s1: false };
+  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false };
 
   function readUiFlags() {
     var uid = initDataUserId();
@@ -165,11 +167,14 @@
       if (typeof cached.at !== 'number' || !(age >= 0 && age < UI_FLAGS_TTL_MS)) return UI_FLAGS_DEFAULT;
       /* Явный свежий false гасит флаг; всё остальное (true, мусор, отсутствие поля) — включено,
          как и раньше. redesign_s1 в кэше всегда идёт с season-режимом. */
-      if (cached.season_ui === false && cached.redesign_s1 !== true) return normalizeUiFlags(null);
+      if (cached.season_ui === false && cached.redesign_s1 !== true && cached.redesign_s5 !== true) return normalizeUiFlags(null);
+      /* s5 сам по себе season-режим не включает — возвращаем его честно. */
+      var seasonOn = cached.season_ui !== false || cached.redesign_s1 === true;
       return {
-        season_ui: true,
-        bookings_tab: cached.bookings_tab === true,
+        season_ui: seasonOn,
+        bookings_tab: seasonOn && cached.bookings_tab === true,
         redesign_s1: cached.redesign_s1 === true,
+        redesign_s5: cached.redesign_s5 === true,
       };
     } catch (e) {
       return UI_FLAGS_DEFAULT;
@@ -187,6 +192,7 @@
           season_ui: flags.season_ui,
           bookings_tab: flags.bookings_tab,
           redesign_s1: flags.redesign_s1 === true,
+          redesign_s5: flags.redesign_s5 === true,
           at: Date.now(),
         })
       );
@@ -211,7 +217,8 @@
     var changed =
       next.season_ui !== uiFlags.season_ui ||
       next.bookings_tab !== uiFlags.bookings_tab ||
-      next.redesign_s1 !== uiFlags.redesign_s1;
+      next.redesign_s1 !== uiFlags.redesign_s1 ||
+      next.redesign_s5 !== uiFlags.redesign_s5;
     uiFlags = next;
     if (changed && typeof global.CustomEvent === 'function') {
       global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
@@ -248,7 +255,7 @@
   }
 
   function getUiFlags() {
-    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab, redesign_s1: uiFlags.redesign_s1 === true };
+    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab, redesign_s1: uiFlags.redesign_s1 === true, redesign_s5: uiFlags.redesign_s5 === true };
   }
 
   function getTg() {
@@ -1357,6 +1364,33 @@
   }
 
   /*
+   * TASK-446 (5.2): «Я здесь» на старых страницах — лист + живые строки грузим
+   * только при включённом redesign_s5 и только на страницах Лёд/каток/«Я».
+   * Флаг выключен → ни одного тега, DOM не трогаем.
+   */
+  var CHECKIN_LIVE_PAGES = { ice: 1, arena: 1, 'client-me': 1 };
+  var checkinLiveRequested = false;
+
+  function maybeLoadCheckinLive() {
+    if (checkinLiveRequested || !uiFlags.redesign_s5) return;
+    if (!CHECKIN_LIVE_PAGES[pathnameKey()]) return;
+    checkinLiveRequested = true;
+    var base = webappBasePath();
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = assetUrl(base, 'checkin-sheet.css');
+    link.setAttribute('data-checkin-live', 'css');
+    document.head.appendChild(link);
+    ['checkin-sheet.js', 'checkin-live.js'].forEach(function (file) {
+      var sc = document.createElement('script');
+      sc.src = assetUrl(base, file);
+      sc.async = false;
+      sc.setAttribute('data-checkin-live', 'js');
+      document.head.appendChild(sc);
+    });
+  }
+
+  /*
    * TASK-369: флаг сменился на лету (client-shell:ui-flags, TASK-366) — бар пересобирается на
    * месте. Без перезагрузки, без анимации: новый узел встаёт на место старого целиком.
    */
@@ -1364,6 +1398,7 @@
     var body = document.body;
     if (!state.inited || !body) return;
     state.mode = computeMode(state.baseMode);
+    maybeLoadCheckinLive();
     var old = document.getElementById('clientTabBar');
     var overlay = document.getElementById('clientMoreOverlay');
 
@@ -2302,6 +2337,7 @@
     if (isPublicPlaceRoute() && !getInitData()) return;
     init();
     if (typeof global.setTimeout === 'function') global.setTimeout(refreshUiFlags, 0);
+    maybeLoadCheckinLive();
     if (isPublicPlaceRoute()) {
       if (state.mode === 'tabs') setForcedTab('catalog');
       return;

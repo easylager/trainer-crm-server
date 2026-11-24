@@ -1397,18 +1397,18 @@ describe('TASK-391: шелл отдаёт вкладки оболочки роу
 /* ── TASK-445: redesign_s1 — бар всегда из пяти вкладок, «Лёд» вместо «Поиска» ── */
 
 describe('TASK-445: redesign_s1 — пять вкладок с «Лёд»', () => {
-  const REDESIGN = { season_ui: false, bookings_tab: true, redesign_s1: true };
+  const REDESIGN = { season_ui: false, bookings_tab: true, redesign_s1: true, redesign_s5: false };
 
   it('кэш redesign_s1 без season_ui: season-режим включается, «Записи» есть', () => {
     const t = bootShell({ flags: REDESIGN });
-    assert.deepEqual({ ...t.win.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true, redesign_s1: true });
+    assert.deepEqual({ ...t.win.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true, redesign_s1: true, redesign_s5: false });
     assert.deepEqual(t.tabIds(), ['home', 'catalog', 'bookings', 'kk', 'me']);
     assert.deepEqual(t.labels(), ['Главная', 'Лёд', 'Записи', 'Кто кого', 'Я']);
     assert.equal(t.overlay(), null, 'шторки «Ещё» нет');
   });
 
   it('сервер прислал redesign_s1 на лету: бар пересобрался в пять вкладок «Лёд»', async () => {
-    const t = bootShell({ responses: { '/api/webapp/client/ui-flags': { season_ui: false, bookings_tab: true, redesign_s1: true } } });
+    const t = bootShell({ responses: { '/api/webapp/client/ui-flags': { season_ui: false, bookings_tab: true, redesign_s1: true, redesign_s5: false } } });
     assert.deepEqual(t.tabIds(), ['home', 'catalog', 'bookings', 'more']);
     await t.flush();
     assert.deepEqual(t.tabIds(), ['home', 'catalog', 'bookings', 'kk', 'me']);
@@ -1417,7 +1417,7 @@ describe('TASK-445: redesign_s1 — пять вкладок с «Лёд»', () =
   });
 
   it('флаг выключен сервером — старый бар возвращается', async () => {
-    const t = bootShell({ flags: REDESIGN, responses: { '/api/webapp/client/ui-flags': { season_ui: false, bookings_tab: false, redesign_s1: false } } });
+    const t = bootShell({ flags: REDESIGN, responses: { '/api/webapp/client/ui-flags': { season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: false } } });
     assert.deepEqual(t.tabIds(), ['home', 'catalog', 'bookings', 'kk', 'me']);
     await t.flush();
     assert.equal(t.bar().html(), LEGACY_BAR_HTML);

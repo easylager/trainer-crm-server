@@ -306,6 +306,17 @@ async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePat
       });
     }
     if (p === '/api/webapp/client/session/catalog-filters') return json({ success: true });
+    /* TASK-446: «Я здесь» — ответы для сценариев 13–15 */
+    if (p === '/api/webapp/client/checkins' && r.request().method() === 'POST') {
+      return json({ checkin_id: 900, session_id: 401, load_level: null, season_days: 6, nth_label: '6-й раз за сезон', streak_weeks: 2, has_this_week: true, live: { level: 2, count: 3, last_min: 0 } });
+    }
+    if (/^\/api\/webapp\/client\/checkins\/\d+$/.test(p) && r.request().method() === 'PATCH') {
+      return json({ live: { level: 2, count: 4, last_min: 0 } });
+    }
+    if (/^\/api\/webapp\/client\/checkins\/\d+\/share$/.test(p)) {
+      return json({ prepared_message_id: null, share_url: 'https://t.me/share/url?url=https%3A%2F%2Ft.me%2Fglidebot', text: 'Максим на «Каток на Немиге» до 21:15\nПодъезжай!' });
+    }
+    if (p.startsWith('/api/webapp/client/checkins')) return json({});
     if (p.startsWith('/api/public/photos')) {
       /* «Фото тренера» — реальный кадр катка: на скрине лицо-кружок, не серая заглушка. */
       return r.fulfill({ contentType: 'image/jpeg', body: readFileSync(path.join(photosDir, 'arena-25', 'hero.jpg')) });
@@ -548,6 +559,84 @@ try {
     await shot(page, '12-skeleton');
     check('12: скелетон виден', await page.locator('#hv2Skel').isVisible());
     check('12: форма билета в скелетоне', await page.locator('#hv2Skel .hv2-skel__card').count() === 1);
+    await ctx.close();
+  }
+
+  /* TASK-446 «Я здесь» (флаг s5 → ключ home.on_ice в bootstrap) */
+  const ON_ICE = {
+    session_id: 401, arena_id: 11, arena_name: 'Каток на Немиге',
+    photo: { thumb: PHOTO.nemiga, card: PHOTO.nemiga, hero: PHOTO.nemiga },
+    starts_local: '19:45', ends_local: '21:15', minutes_left: 95,
+    live: { level: 2, count: 3, last_min: 4 },
+    checked_in: false, checkin_id: null, load_level: null,
+    season_days: 5, streak_weeks: 2, has_this_week: false,
+    invite_url: 'https://t.me/glidebot?start=arena_11_s_401',
+  };
+
+  /* 13. На катке до отметки: фото-карточка + «✓ Я здесь» + статистика */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { on_ice: ON_ICE } }),
+    });
+    await shot(page, '13-on-ice');
+    await systemCheck(page, '13');
+    check('13: заголовок «Ты на катке?»', (await page.locator('#hv2Title').textContent() || '') === 'Ты на катке?');
+    check('13: жёлтая «✓ Я здесь»', await page.locator('button[data-act="checkin"]', { hasText: 'Я здесь' }).count() === 1);
+    check('13: чип «Идёт сеанс»', (await page.locator('.hv2-pcard__chip').textContent() || '').includes('Идёт сеанс'));
+    check('13: карточка серии и сезона', await page.locator('.hv2-onice__stats .hv2-onice__row').count() === 2);
+    check('13: «Позвать сюда» мягкая', await page.locator('button[data-act="share"]', { hasText: 'Позвать сюда' }).count() === 1);
+    check('13: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 14. Лист отметки открыт, выбрано «В меру» */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { on_ice: ON_ICE } }),
+    });
+    await page.click('button[data-act="checkin"]');
+    await page.waitForSelector('.cis', { state: 'visible', timeout: 8000 });
+    await page.click('.cis__lvl[data-level="2"]');
+    await page.waitForTimeout(600);
+    await shot(page, '14-checkin-sheet');
+    check('14: лист виден', await page.locator('.cis').isVisible());
+    check('14: «В меру» выбрано', await page.locator('.cis__lvl[data-level="2"].cis-sel').count() === 1);
+    check('14: «Отмечено» и строка сезона', (await page.locator('.cis__title').textContent()) === 'Отмечено');
+    check('14: «Позвать сюда» одна и жёлтая', await page.locator('.cis__share').count() === 1);
+    const hit = await page.evaluate(() => ['.cis__share', '.cis__close'].map((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return sel + ':missing';
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const at = document.elementFromPoint(cx, cy);
+      const inside = r.bottom <= innerHeight && r.top >= 0;
+      const coveredBy = at && (at === el || el.contains(at) || at.contains(el));
+      return sel + (inside && coveredBy ? ':ok' : `:bad(${JSON.stringify({b:r.bottom,ih:innerHeight,at:at&&at.className})})`);
+    }));
+    check('14: «Позвать сюда» и «Готово» видны и не перекрыты', hit.every((h) => h.endsWith(':ok')), hit.join(', '));
+    check('14: дим перекрыл таб-бар', await page.evaluate(() => {
+      const bar = document.querySelector('#clientTabBar');
+      if (!bar) return true;
+      const r = bar.getBoundingClientRect();
+      const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return at && (at.closest('.cis-dim') || at.closest('.cis'));
+    }));
+    check('14: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 15. Уже отмечен: мягкая «Отмечено · N-й раз», серия обновлена */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { on_ice: { ...ON_ICE, checked_in: true, checkin_id: 900, season_days: 6, streak_weeks: 3, has_this_week: true } } }),
+    });
+    await shot(page, '15-on-ice-checked');
+    await systemCheck(page, '15');
+    check('15: заголовок «Ты на катке?»', (await page.locator('#hv2Title').textContent() || '') === 'Ты на катке?');
+    check('15: мягкая «Отмечено · 6-й раз»', (await page.locator('button[data-act="checkin"]').textContent() || '').includes('Отмечено · 6-й раз'));
+    check('15: нет жёлтой кнопки', await page.locator('.hv2-btn--yellow').count() === 0);
+    check('15: «Сегодня будет» сменилось на «Отметка засчитана»', (await page.locator('.hv2-onice__stats').textContent() || '').includes('Отметка засчитана'));
+    check('15: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
 } finally {

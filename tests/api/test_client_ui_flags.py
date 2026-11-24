@@ -195,12 +195,14 @@ async def test_ui_flags_endpoint(app_use_test_db, db_session, season_env) -> Non
     assert await _get_flags(tid) == {
         "season_ui": False, "bookings_tab": False, "fast_tabs": False, "search_board": False,
         "redesign_s1": False,
+        "redesign_s5": False,
     }
 
     season_env(ids=str(tid))
     assert await _get_flags(tid) == {
         "season_ui": True, "bookings_tab": True, "fast_tabs": False, "search_board": False,
         "redesign_s1": False,
+        "redesign_s5": False,
     }
 
     other = unique_test_telegram_id()
@@ -208,6 +210,7 @@ async def test_ui_flags_endpoint(app_use_test_db, db_session, season_env) -> Non
     assert await _get_flags(other) == {
         "season_ui": True, "bookings_tab": False, "fast_tabs": False, "search_board": False,
         "redesign_s1": False,
+        "redesign_s5": False,
     }
 
 
@@ -231,6 +234,37 @@ async def test_ui_flags_redesign_s1(app_use_test_db, db_session, monkeypatch: py
         other = await _get_flags(unique_test_telegram_id())
         assert other["redesign_s1"] is False
         assert other["bookings_tab"] is False
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_ui_flags_redesign_s5(app_use_test_db, db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    """TASK-446: redesign_s5 — свой список и своя корзина, независим от redesign_s1."""
+    tid = unique_test_telegram_id()
+    await _insert_client(db_session, telegram_id=tid)
+    await db_session.commit()
+    monkeypatch.delenv("CLIENT_SEASON_UI_TELEGRAM_IDS", raising=False)
+    monkeypatch.delenv("CLIENT_REDESIGN_S1_TELEGRAM_IDS", raising=False)
+    monkeypatch.delenv("CLIENT_REDESIGN_S5_PERCENT", raising=False)
+    monkeypatch.setenv("CLIENT_REDESIGN_S5_TELEGRAM_IDS", str(tid))
+    get_settings.cache_clear()
+    try:
+        flags = await _get_flags(tid)
+        assert flags["redesign_s5"] is True
+        assert flags["redesign_s1"] is False
+        assert flags["season_ui"] is False
+        assert (await _get_flags(unique_test_telegram_id()))["redesign_s5"] is False
+    finally:
+        get_settings.cache_clear()
+
+    # Своя корзина: redesign_s5_percent=100 включает именно s5, не трогая s1.
+    monkeypatch.delenv("CLIENT_REDESIGN_S5_TELEGRAM_IDS", raising=False)
+    monkeypatch.setenv("CLIENT_REDESIGN_S5_PERCENT", "100")
+    get_settings.cache_clear()
+    try:
+        assert (await _get_flags(tid))["redesign_s5"] is True
+        assert (await _get_flags(tid))["redesign_s1"] is False
     finally:
         get_settings.cache_clear()
 

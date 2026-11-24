@@ -11,6 +11,7 @@ from src.application.client_ui_flags import (
     fast_tabs_enabled,
     has_trainer_history,
     redesign_s1_enabled,
+    redesign_s5_enabled,
     search_board_enabled,
     season_ui_enabled,
 )
@@ -38,4 +39,5 @@ async def get_client_ui_flags(
         "fast_tabs": fast_tabs_enabled(account_key, settings),
         "search_board": search_board_enabled(account_key, settings),
         "redesign_s1": redesign_s1,
+        "redesign_s5": redesign_s5_enabled(account_key, settings),
     }

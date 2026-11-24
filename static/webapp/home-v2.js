@@ -319,6 +319,13 @@
     if (top === 'citypick') {
       els.dateEl.textContent = 'Glide';
       title = 'Где вы катаетесь?';
+    } else if (top === 'onice') {
+      var oi = home().on_ice || {};
+      title = 'Ты на катке?';
+      try {
+        var hm = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+        els.dateEl.textContent += ' · ' + hm;
+      } catch (e) {}
     } else if (top === 'newbie') {
       title = ((c && c.name) || 'Город') + ' на льду';
     } else {
@@ -502,6 +509,114 @@
         (bits.length ? '<span class="hv2-pcard__sub">' + esc(bits.join(' · ')) + '</span>' : '') +
       '</span></article>' +
       '<div class="hv2-pcard__btns">' + route + share + '</div>';
+  }
+
+  /* ── TASK-446: состояние «Ты на катке?» (флаг s5, ключ home.on_ice) ──── */
+  function loadCheckinAssets() {
+    if (window.GlideCheckin || state.ciAssets) return;
+    state.ciAssets = true;
+    var v = (document.querySelector('link[href*="home-v2.css"]') || {}).href || '';
+    var m = v.match(/[?&]v=([^&]+)/);
+    var q = m ? '?v=' + m[1] : '';
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'checkin-sheet.css' + q;
+    document.head.appendChild(css);
+    var js = document.createElement('script');
+    js.src = 'checkin-sheet.js' + q;
+    js.defer = true;
+    document.head.appendChild(js);
+  }
+
+  function fmtLeft(min) {
+    if (min == null) return '';
+    var h = Math.floor(min / 60), m = min % 60;
+    if (h && m) return h + ' ч ' + m + ' мин';
+    if (h) return h + ' ч';
+    return m + ' мин';
+  }
+  function loadBarsHtml(live) {
+    if (!live) return '';
+    var lv = live.level;
+    var bars = '';
+    for (var i = 1; i <= 3; i++) bars += '<i class="' + (i <= lv ? 'on' : '') + '"></i>';
+    var word = { 1: 'свободно', 2: 'в меру', 3: 'людно' }[lv] || '';
+    return '<span class="hv2-onice__load"><span class="hv2-onice__bars">' + bars + '</span>сейчас ' + esc(word) +
+      ' · ' + live.count + ' ' + plural(live.count, 'отметка', 'отметки', 'отметок') + '</span>';
+  }
+  function weekPillsHtml(streak) {
+    var out = '';
+    for (var i = 0; i < 4; i++) out += '<i class="' + (i < Math.min(4, streak) ? 'on' : '') + '"></i>';
+    return '<span class="hv2-weeks">' + out + '</span>';
+  }
+  function onIceHtml(o) {
+    var img = o.photo && (o.photo.card || o.photo.hero || o.photo.thumb);
+    var live = o.live;
+    var bits = ['до ' + o.ends_local];
+    var liveHtml = loadBarsHtml(live);
+    var checked = !!o.checked_in;
+    var mainBtn = checked
+      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="checkin">Отмечено · ' + o.season_days + '-й раз</button>'
+      : '<button type="button" class="hv2-btn hv2-btn--yellow ga-press" data-act="checkin">✓ Я здесь</button>';
+    state.yellowUsed = !checked;
+    var share = o.invite_url
+      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="share" data-url="' + esc(o.invite_url) + '">Позвать сюда</button>'
+      : '';
+    var stats =
+      '<article class="hv2-card hv2-onice__stats">' +
+        '<div class="hv2-onice__row">' +
+          '<svg class="hv2-onice__ic" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3c2 4-3 5-3 9a3 3 0 006 0c0-2-1-3-1-3s4 2 4 6a6 6 0 11-12 0c0-6 6-8 6-12z" fill="currentColor"/></svg>' +
+          '<div><div class="hv2-onice__t">Серия: ' + o.streak_weeks + ' ' + plural(o.streak_weeks, 'неделя', 'недели', 'недель') + ' подряд</div>' +
+          '<div class="hv2-onice__s">' + (o.has_this_week ? 'Отметка этой недели засчитана' : 'Отметься сегодня — будет ' + (o.streak_weeks + 1) + '-я') + '</div></div>' +
+          weekPillsHtml(o.streak_weeks) +
+        '</div>' +
+        '<div class="hv2-onice__row">' +
+          '<svg class="hv2-onice__ic" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 4v4m0 0-2 2m2-2 2 2M4 20l2-9h12l2 9z"/></svg>' +
+          '<div><div class="hv2-onice__t">На льду ' + o.season_days + ' ' + plural(o.season_days, 'раз', 'раза', 'раз') + ' за сезон</div>' +
+          '<div class="hv2-onice__s">' + (checked ? 'Отметка засчитана' : 'Сегодня будет ' + (o.season_days + 1) + '-й') + '</div></div>' +
+        '</div>' +
+      '</article>';
+    return '<article class="hv2-pcard" data-act="nav" data-path="arena?ref=' + o.arena_id + '&s=' + o.session_id + '">' +
+      (img ? '<img class="hv2-pcard__img" src="' + esc(img) + '" alt="">' : '') +
+      '<span class="hv2-pcard__shade"></span>' +
+      '<span class="hv2-pcard__chip"><span class="hv2-chip__dot hv2-chip__dot--pulse"></span>Идёт сеанс · ещё ' + esc(fmtLeft(o.minutes_left)) + '</span>' +
+      '<span class="hv2-pcard__in">' +
+        '<span class="hv2-pcard__time">' + esc(o.starts_local || '') + '</span>' +
+        '<span class="hv2-pcard__place">' + esc(o.arena_name || '') + '</span>' +
+        '<span class="hv2-pcard__sub">' + esc(bits.join(' · ')) + (liveHtml ? ' · ' + liveHtml : '') + '</span>' +
+      '</span></article>' +
+      '<div class="hv2-pcard__btns">' + mainBtn + share + '</div>' + stats;
+  }
+
+  function openCheckinSheet() {
+    var o = home().on_ice;
+    if (!o) return;
+    var go = function () {
+      if (!window.GlideCheckin) return;
+      window.GlideCheckin.open({
+        session_id: o.session_id,
+        arena_name: o.arena_name,
+        checkin_id: o.checked_in ? o.checkin_id : null,
+        load_level: o.load_level,
+        season_days: o.checked_in ? o.season_days : null,
+        streak_weeks: o.streak_weeks,
+        onLive: function (live) { o.live = live; renderAll(); },
+        onDone: function () {
+          /* После отметки перечитываем состояние — кнопка и цифры свежие. */
+          boot();
+        },
+      });
+    };
+    if (window.GlideCheckin) go();
+    else {
+      loadCheckinAssets();
+      var tries = 0;
+      var t = setInterval(function () {
+        tries++;
+        if (window.GlideCheckin) { clearInterval(t); go(); }
+        else if (tries > 40) clearInterval(t);
+      }, 50);
+    }
   }
 
   function cityPickHtml() {
@@ -827,7 +942,14 @@
     var data = state.data;
     var top = 'citypick';
     var html = '';
-    if (cityId()) {
+    var onIce = home().on_ice;
+    if (onIce) {
+      /* TASK-446: «Ты на катке?» — главнее любой карточки. */
+      top = 'onice';
+      state.topPhoto = onIce.photo && (onIce.photo.hero || onIce.photo.card || onIce.photo.thumb);
+      html = onIceHtml(onIce);
+      loadCheckinAssets();
+    } else if (cityId()) {
       var rec = topBooking(data);
       var p = rec ? null : activePass(data);
       var cs = data.client_session || {};
@@ -908,6 +1030,7 @@
       var actEl = closest('[data-act]');
       if (actEl) {
         var act = actEl.getAttribute('data-act');
+        if (act === 'checkin') { ev.preventDefault(); haptic('light'); openCheckinSheet(); return; }
         if (act === 'share') { ev.preventDefault(); haptic('light'); shareUrl(actEl.getAttribute('data-url')); return; }
         if (act === 'map') { ev.preventDefault(); haptic('light'); openExternal(actEl.getAttribute('data-href')); return; }
         if (act === 'book' || act === 'nav') {

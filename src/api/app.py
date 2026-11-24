@@ -2288,6 +2288,45 @@ def webapp_home_v2_css(request: Request):
     )
 
 
+@app.get("/webapp/checkin-sheet.js")
+def webapp_checkin_sheet_js(request: Request):
+    """TASK-446: лист отметки «Я здесь» (флаг redesign_s5). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "checkin-sheet.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/checkin-sheet.css")
+def webapp_checkin_sheet_css(request: Request):
+    """TASK-446: стили листа отметки. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "checkin-sheet.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/checkin-live.js")
+def webapp_checkin_live_js(request: Request):
+    """TASK-446 (5.2): живые строки загрузки на страницах Лёд/каток/«Я». Use ``?v=…``."""
+    path = _WEBAPP_DIR / "checkin-live.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/client-profile-switcher.js")
 def webapp_client_profile_switcher_js(request: Request):
     """EPIC1: profile chip + «Добавить ребёнка» (+ X-Profile-Id fetch patch)."""

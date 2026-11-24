@@ -39,7 +39,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from src.api.client_bootstrap import ensure_acting_client_id
 from src.api.deps import get_session
 from src.application.arena_visit_info import VisitInfoError, normalize_visit_info
-from src.application.client_ui_flags import redesign_s1_enabled
+from src.application.client_ui_flags import redesign_s1_enabled, redesign_s5_enabled
 from src.application.hub_home import now_slot
 from src.application.trainer_custom_service_use_cases import MAX_CUSTOM_SERVICES_PER_TRAINER
 from src.shared.byr_currency_display import BYR_SIGN
@@ -3609,11 +3609,76 @@ async def get_client_hub_bootstrap(
             logger.exception("client hub extraliga feed failed")
             return None
 
+    async def _home_on_ice() -> dict[str, Any] | None:
+        """TASK-446: карточка «Ты на катке?» — лучший идущий сеанс человека (s5)."""
+        if not redesign_s5_enabled(telegram_id, Settings()):
+            return None
+        from src.application import ice_checkins as ic
+        from src.application.hub_home import _photo
+
+        try:
+            async with async_session_factory() as s:
+                now = datetime.now(timezone.utc)
+                pid = None
+                if requested_profile_id is not None:
+                    acting = await resolve_acting_client_id(s, telegram_id, requested_profile_id)
+                    from src.application.client_use_cases import get_client_id_by_telegram_id
+
+                    own = await get_client_id_by_telegram_id(s, telegram_id)
+                    if acting is not None and acting != own:
+                        pid = int(acting)
+                row = await ic.on_ice_for(s, telegram_id, pid, now)
+                if row is None:
+                    return None
+                stats = await ic.me_stats(
+                    s, telegram_id, pid, now.astimezone(ic.MINSK).date()
+                )
+                variants = (
+                    await s.execute(
+                        text(
+                            """
+                            SELECT m.variants FROM media m
+                            WHERE m.owner_type = 'arena' AND m.owner_id = :a
+                              AND m.status = 'published'
+                            ORDER BY m.sort_order, m.id LIMIT 1
+                            """
+                        ),
+                        {"a": row["arena_id"]},
+                    )
+                ).scalar()
+                photo = _photo({"photo_variants": variants if isinstance(variants, Mapping) else {}})
+                from src.application.place_links import place_start_param, public_telegram_entry_link
+
+                settings = Settings()
+                return {
+                    "session_id": row["session_id"],
+                    "arena_id": row["arena_id"],
+                    "arena_name": row["arena_name"],
+                    "photo": photo,
+                    "invite_url": public_telegram_entry_link(
+                        settings,
+                        start_param=place_start_param(row["arena_id"], row["session_id"]),
+                    ),
+                    "starts_local": row["starts_local"],
+                    "ends_local": row["ends_local"],
+                    "minutes_left": row["minutes_left"],
+                    "live": row["live"],
+                    "checked_in": row["checked_in"],
+                    "checkin_id": row["checkin_id"],
+                    "load_level": row["load_level"],
+                    "season_days": stats["season_days"],
+                    "streak_weeks": stats["streak_weeks"],
+                    "has_this_week": stats["has_this_week"],
+                }
+        except Exception:
+            logger.exception("client hub on-ice card failed")
+            return None
+
     (
-        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick
+        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick, home_on_ice
     ) = await asyncio.gather(
         _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(),
-        _home_hockey(), _home_extraliga(), _home_city_pick(),
+        _home_hockey(), _home_extraliga(), _home_city_pick(), _home_on_ice(),
     )
     ice_teaser = None
     try:
@@ -3669,6 +3734,11 @@ async def get_client_hub_bootstrap(
             **(
                 {"city_pick": home_city_pick}
                 if redesign and home_city_pick is not None
+                else {}
+            ),
+            **(
+                {"on_ice": home_on_ice}
+                if home_on_ice is not None
                 else {}
             ),
         },
@@ -11856,6 +11926,7 @@ from src.api.routes.webapp_client_hockey_event import router as _webapp_client_h
 from src.api.routes.webapp_client_hockey_leagues import router as _webapp_client_hockey_leagues_router
 from src.api.routes.webapp_client_hockey_screens import router as _webapp_client_hockey_screens_router
 from src.api.routes.webapp_client_hockey_share import router as _webapp_client_hockey_share_router
+from src.api.routes.webapp_client_checkins import router as _webapp_client_checkins_router
 from src.api.routes.webapp_client_trainer_edges import router as _webapp_client_trainer_edges_router
 from src.api.routes.webapp_client_watches import router as _webapp_client_watches_router
 from src.api.routes.webapp_client_ui_flags import router as _webapp_client_ui_flags_router
@@ -11884,6 +11955,7 @@ router.include_router(_webapp_client_hockey_event_router)
 router.include_router(_webapp_client_hockey_leagues_router)
 router.include_router(_webapp_client_hockey_screens_router)
 router.include_router(_webapp_client_hockey_share_router)
+router.include_router(_webapp_client_checkins_router)
 router.include_router(_webapp_training_groups_router)
 router.include_router(_admin_ice_sessions_router)
 router.include_router(_admin_ice_sources_router)

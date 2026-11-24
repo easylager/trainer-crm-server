@@ -23,7 +23,7 @@ function el() {
   };
 }
 
-function bootShell({ userId = 42, initData = 'user=%7B%22id%22%3A42%7D&hash=x', stored, response, failFetch, storageThrows, status, session, sessionThrows } = {}) {
+function bootShell({ userId = 42, initData = 'user=%7B%22id%22%3A42%7D&hash=x', stored, response, failFetch, storageThrows, status, session, sessionThrows, pathname = '/webapp/client-home' } = {}) {
   const store = new Map();
   if (stored !== undefined) store.set(KEY, typeof stored === 'string' ? stored : JSON.stringify(stored));
   const events = [];
@@ -37,13 +37,13 @@ function bootShell({ userId = 42, initData = 'user=%7B%22id%22%3A42%7D&hash=x', 
     ? { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } }
     : { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
   const window = {
-    location: { pathname: '/webapp/client-home', search: '', href: 'https://test/webapp/client-home', replace() {} },
+    location: { pathname, search: '', href: 'https://test' + pathname, replace() {} },
     history: { length: 1 },
     document: {
       readyState: 'complete', body, documentElement: { style: { setProperty() {} } },
       getElementById() { return null; },
       createElement() { domOps.push(['create']); return el(); },
-      head: { appendChild() {} }, addEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; },
+      head: { appendChild(c) { domOps.push(['head', c]); return c; } }, addEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; },
     },
     addEventListener() {},
     dispatchEvent(ev) { events.push(ev); return true; },
@@ -87,25 +87,25 @@ const on = { u: '42', season_ui: true, bookings_tab: true, at: Date.now() };
 describe('TASK-366 client shell ui flags', () => {
   it('читает кэш своего пользователя синхронно, до запроса', () => {
     const s = bootShell({ stored: on, response: on });
-    assert.deepEqual(s.startFlags, { season_ui: true, bookings_tab: true, redesign_s1: false });
+    assert.deepEqual(s.startFlags, { season_ui: true, bookings_tab: true, redesign_s1: false, redesign_s5: false });
     assert.equal(s.flagFetches().length, 0);
   });
 
   it('TASK-437: кэш другого пользователя, битый JSON и недоступный storage → включено по умолчанию, без «Записей»', () => {
     for (const opts of [{ stored: { ...on, u: '7' } }, { stored: '{oops' }, { storageThrows: true }, {}]) {
-      const s = bootShell({ ...opts, response: { season_ui: false, bookings_tab: false, redesign_s1: false } });
-      assert.deepEqual(s.startFlags, { season_ui: true, bookings_tab: false, redesign_s1: false });
+      const s = bootShell({ ...opts, response: { season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: false } });
+      assert.deepEqual(s.startFlags, { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false });
     }
   });
 
   it('bookings_tab без season_ui в кэше не включается', () => {
     const s = bootShell({ stored: { u: '42', season_ui: false, bookings_tab: true, at: Date.now() } });
-    assert.deepEqual(s.startFlags, { season_ui: false, bookings_tab: false, redesign_s1: false });
+    assert.deepEqual(s.startFlags, { season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: false });
   });
 
   it('после монтирования спрашивает сервер, пишет кэш и шлёт событие один раз при изменении', async () => {
-    const s = bootShell({ response: { season_ui: true, bookings_tab: true, redesign_s1: false } });
-    assert.deepEqual(s.startFlags, { season_ui: true, bookings_tab: false, redesign_s1: false });
+    const s = bootShell({ response: { season_ui: true, bookings_tab: true, redesign_s1: false, redesign_s5: false } });
+    assert.deepEqual(s.startFlags, { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false });
     await s.runTimers();
     const f = s.flagFetches();
     assert.equal(f.length, 1);
@@ -118,14 +118,14 @@ describe('TASK-366 client shell ui flags', () => {
     assert.equal(typeof cached.at, 'number');
     assert.equal(s.events.length, 1);
     assert.equal(s.events[0].type, 'client-shell:ui-flags');
-    assert.deepEqual({ ...s.events[0].detail }, { season_ui: true, bookings_tab: true, redesign_s1: false });
-    assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true, redesign_s1: false });
+    assert.deepEqual({ ...s.events[0].detail }, { season_ui: true, bookings_tab: true, redesign_s1: false, redesign_s5: false });
+    assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true, redesign_s1: false, redesign_s5: false });
     await s.runTimers();
     assert.equal(s.events.length, 1);
   });
 
   it('без изменений события нет; выключенный флаг не трогает DOM', async () => {
-    const s = bootShell({ stored: { u: '42', season_ui: false, bookings_tab: false, at: Date.now() }, response: { season_ui: false, bookings_tab: false, redesign_s1: false } });
+    const s = bootShell({ stored: { u: '42', season_ui: false, bookings_tab: false, at: Date.now() }, response: { season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: false } });
     await s.runTimers();
     assert.equal(s.flagFetches().length, 1);
     assert.equal(s.events.length, 0);
@@ -138,18 +138,18 @@ describe('TASK-366 client shell ui flags', () => {
     await s.runTimers();
     assert.equal(s.store.get(KEY), raw);
     assert.equal(s.events.length, 0);
-    assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true, redesign_s1: false });
+    assert.deepEqual({ ...s.window.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true, redesign_s1: false, redesign_s5: false });
   });
 
   it('TASK-445: redesign_s1 из кэша и с сервера включает season-режим и «Записи»', async () => {
     const cached = bootShell({
       stored: { u: '42', season_ui: false, bookings_tab: true, redesign_s1: true, at: Date.now() },
-      response: { season_ui: false, bookings_tab: true, redesign_s1: true },
+      response: { season_ui: false, bookings_tab: true, redesign_s1: true, redesign_s5: false },
     });
-    assert.deepEqual({ ...cached.startFlags }, { season_ui: true, bookings_tab: true, redesign_s1: true });
-    const fresh = bootShell({ response: { season_ui: false, bookings_tab: true, redesign_s1: true } });
+    assert.deepEqual({ ...cached.startFlags }, { season_ui: true, bookings_tab: true, redesign_s1: true, redesign_s5: false });
+    const fresh = bootShell({ response: { season_ui: false, bookings_tab: true, redesign_s1: true, redesign_s5: false } });
     await fresh.runTimers();
-    assert.deepEqual({ ...fresh.window.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true, redesign_s1: true });
+    assert.deepEqual({ ...fresh.window.ClientShell.uiFlags() }, { season_ui: true, bookings_tab: true, redesign_s1: true, redesign_s5: false });
     const saved = JSON.parse(fresh.store.get(KEY));
     assert.equal(saved.redesign_s1, true);
     assert.equal(saved.season_ui, true);
@@ -159,7 +159,7 @@ describe('TASK-366 client shell ui flags', () => {
   it('вне Telegram — выключено и без запроса', async () => {
     const s = bootShell({ initData: '', userId: null, stored: on });
     await s.runTimers();
-    assert.deepEqual(s.startFlags, { season_ui: false, bookings_tab: false, redesign_s1: false });
+    assert.deepEqual(s.startFlags, { season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: false });
     assert.equal(s.flagFetches().length, 0);
   });
 });
@@ -167,8 +167,8 @@ describe('TASK-366 client shell ui flags', () => {
 /* ── Кэш флагов: TTL, сброс по ошибке, один запрос на сессию ───────────────────────────── */
 
 const DAY = 24 * 60 * 60 * 1000;
-const OFF = { season_ui: false, bookings_tab: false, redesign_s1: false };
-const ON = { season_ui: true, bookings_tab: true, redesign_s1: false };
+const OFF = { season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: false };
+const ON = { season_ui: true, bookings_tab: true, redesign_s1: false, redesign_s5: false };
 const seasonBack = require('../../static/webapp/client-season-back.js');
 const gateSrc = (() => {
   const html = fs.readFileSync(path.resolve(__dirname, '../../static/webapp/kto-kogo.html'), 'utf8');
@@ -319,5 +319,64 @@ describe('TASK-381 ответ сервера и сессия', () => {
     assert.equal(s.flagFetches().length, 1);
     assert.equal(s.events.length, 0);
     assert.equal(s.domOps.length, s.domOpsAtBoot);
+  });
+});
+
+/* ── TASK-446 (5.2): redesign_s5 — проброс флага и загрузчик checkin-live ──────── */
+
+describe('TASK-446 redesign_s5', () => {
+  it('кэш только с s5 (season_ui:false): флаг доезжает, season-режим не включается', () => {
+    const s = bootShell({
+      stored: { u: '42', season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: true, at: Date.now() },
+      response: { season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: true },
+    });
+    assert.deepEqual(s.startFlags, { season_ui: false, bookings_tab: false, redesign_s1: false, redesign_s5: true });
+  });
+
+  it('сервер прислал redesign_s5: uiFlags и кэш его сохраняют', async () => {
+    const s = bootShell({ response: { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: true } });
+    await s.runTimers();
+    assert.equal(s.window.ClientShell.uiFlags().redesign_s5, true);
+    assert.equal(JSON.parse(s.store.get(KEY)).redesign_s5, true);
+  });
+
+  it('s5 на странице «Лёд»: подгружаются checkin-sheet.css, checkin-sheet.js, checkin-live.js', async () => {
+    const s = bootShell({
+      pathname: '/webapp/ice',
+      stored: { u: '42', season_ui: false, redesign_s5: true, at: Date.now() },
+      response: { season_ui: false, redesign_s5: true },
+    });
+    await s.runTimers();
+    const srcs = s.domOps.filter(([k]) => k === 'head').map(([, c]) => c.src || c.href || '');
+    assert.equal(srcs.filter((x) => x.includes('checkin-sheet.css')).length, 1);
+    assert.equal(srcs.filter((x) => x.includes('checkin-sheet.js')).length, 1);
+    assert.equal(srcs.filter((x) => x.includes('checkin-live.js')).length, 1);
+  });
+
+  it('s5 на «Я» и катке грузит, на главной — нет; флаг выключен — ни одного тега', async () => {
+    for (const path of ['/webapp/client-me', '/webapp/arena']) {
+      const s = bootShell({
+        pathname: path,
+        stored: { u: '42', season_ui: false, redesign_s5: true, at: Date.now() },
+        response: { season_ui: false, redesign_s5: true },
+      });
+      await s.runTimers();
+      const srcs = s.domOps.filter(([k]) => k === 'head').map(([, c]) => c.src || c.href || '');
+      assert.equal(srcs.filter((x) => x.includes('checkin-live.js')).length, 1, path);
+    }
+    const home = bootShell({
+      pathname: '/webapp/client-home',
+      stored: { u: '42', season_ui: false, redesign_s5: true, at: Date.now() },
+      response: { season_ui: false, redesign_s5: true },
+    });
+    await home.runTimers();
+    assert.equal(home.domOps.filter(([k]) => k === 'head').length, 0);
+    const off = bootShell({
+      pathname: '/webapp/ice',
+      stored: { u: '42', season_ui: false, redesign_s5: false, at: Date.now() },
+      response: { season_ui: false, redesign_s5: false },
+    });
+    await off.runTimers();
+    assert.equal(off.domOps.filter(([k]) => k === 'head').length, 0);
   });
 });
