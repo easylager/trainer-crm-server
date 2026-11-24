@@ -92,15 +92,27 @@ function check(name, cond, extra) {
    из реального shape_schedule; ключ "<variant>|<day>|<kind>". */
 const ICE_FIX = JSON.parse(readFileSync(path.join(here, 'fixtures', 'ice-v2.json'), 'utf-8'));
 let WITH_COMPANY = false;
+let WITH_USUAL = false;
 function scheduleFor(variant, q) {
   const day = q.get('day') || 'today';
   const kind = q.get('kind') || 'skate';
   const base = ICE_FIX[`${variant}|${day}|${kind}`] || ICE_FIX[`base|${day}|${kind}`];
-  if (!WITH_COMPANY) return base;
-  /* TASK-450 (5.3): сервер докидывает company на строки с моей открытой компанией — имитируем на первой видимой. */
+  if (!WITH_COMPANY && !WITH_USUAL) return base;
   const d = JSON.parse(JSON.stringify(base));
-  const row = (d.ongoing || [])[0] || (d.upcoming || [])[0] || ((d.groups || [])[0] || { rows: [] }).rows[0];
-  if (row) row.company = { code: 'abc12345', going_count: 3, page_url: '/k/abc12345' };
+  if (WITH_COMPANY) {
+    /* TASK-450 (5.3): сервер докидывает company на строки с моей открытой компанией — имитируем на первой видимой. */
+    const row = (d.ongoing || [])[0] || (d.upcoming || [])[0] || ((d.groups || [])[0] || { rows: [] }).rows[0];
+    if (row) row.company = { code: 'abc12345', going_count: 3, page_url: '/k/abc12345' };
+  }
+  if (WITH_USUAL) {
+    /* TASK-452 (5.5): blended «обычно» с сервера — usual на строках сеансов. */
+    for (const list of [d.ongoing, d.upcoming]) {
+      for (const r of list || []) {
+        if (r.session_id === 401) r.usual = { key: 'busy', word: 'людно' };
+        if (r.session_id === 403) r.usual = { key: 'calm', word: 'свободно' };
+      }
+    }
+  }
   return d;
 }
 
@@ -108,9 +120,10 @@ const WATCH_CALLS = [];
 let SCHED_VARIANT = 'base';
 let CHECKIN_STATE = {};
 
-async function openIce(browser, { variant, flags, url, now, flagsCache, company } = {}) {
+async function openIce(browser, { variant, flags, url, now, flagsCache, company, usual } = {}) {
   SCHED_VARIANT = variant || 'base';
   WITH_COMPANY = !!company;
+  WITH_USUAL = !!usual;
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
   const page = await ctx.newPage();
   const errors = [];
@@ -366,6 +379,42 @@ try {
     check('12: живая загрузка', (await page.locator('#iv2List').textContent()).includes('Сейчас в меру'));
     check('12: без JS-ошибок', errors.length === 0, errors.join('; '));
     CHECKIN_STATE = {};
+    await ctx.close();
+  }
+
+  /* 14. TASK-452: «Обычно …» на строках под s5; у идущего с live — без дубли. */
+  {
+    CHECKIN_STATE = { sessions: { '401': { live: { level: 2, count: 7, last_min: 5 }, checked_in: false } } };
+    const { page, ctx, errors } = await openIce(browser, {
+      usual: true,
+      flags: { ...UI_FLAGS, redesign_s5: true },
+      flagsCache: { ...UI_FLAGS, redesign_s5: true },
+    });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      const c = [...document.querySelectorAll('.iv2-card')].find((el) => el.getAttribute('data-session') === '403');
+      if (c) c.scrollIntoView({ block: 'center' });
+    });
+    await page.waitForTimeout(300);
+    await shot(page, '14-usual');
+    const rows = await page.evaluate(() => [...document.querySelectorAll('.iv2-card')].map((c) => ({
+      sid: c.getAttribute('data-session'),
+      usual: ((c.querySelector('.iv2-card__usual') || {}).textContent || '').trim(),
+    })));
+    const by = Object.fromEntries(rows.map((r) => [r.sid, r.usual]));
+    check('14: у 403 «Обычно свободно»', /Обычно свободно/.test(by['403'] || ''), JSON.stringify(by));
+    check('14: у 401 с live «Обычно» скрыто', !(by['401'] || ''), by['401']);
+    /* без флага s5 — «Обычно» нет, даже если сервер прислал поле */
+    check('14: без JS-ошибок', errors.length === 0, errors.join('; '));
+    CHECKIN_STATE = {};
+    await ctx.close();
+  }
+  {
+    const { page, ctx, errors } = await openIce(browser, { usual: true, flags: UI_FLAGS, flagsCache: UI_FLAGS });
+    await page.waitForTimeout(500);
+    await shot(page, '14b-usual-off');
+    check('14b: без s5 узлов .iv2-card__usual нет', await page.locator('.iv2-card__usual').count() === 0);
+    check('14b: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
 

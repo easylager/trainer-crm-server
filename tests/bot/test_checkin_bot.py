@@ -270,6 +270,14 @@ def test_risk_text_city():
     assert "в городе ещё есть лёд" in t and "До «" not in t
 
 
+def test_risk_text_usual_line():
+    """TASK-452: строка «обычно» по blended-оценке ближайшего сеанса."""
+    t = cb.risk_text(2, "Чижовка", "18:00", None, home=True, usual_word="свободно")
+    assert "На «Чижовка» в 18:00 обычно свободно." in t
+    t2 = cb.risk_text(2, "Чижовка", "18:00", None, home=True)
+    assert "обычно" not in t2
+
+
 async def _seed_streak_risk(*, name: str, tg: int, streak_weeks: int = 2,
                            now: datetime = RISK_NOW) -> tuple[int, int, int]:
     """Каток «Мой каток» + сеанс сегодня + серия без отметки на этой неделе."""

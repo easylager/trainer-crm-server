@@ -126,6 +126,14 @@
   var BELL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
 
   var LOAD_WORDS = { 1: 'Сейчас свободно', 2: 'Сейчас в меру', 3: 'Сейчас людно' };
+  /* TASK-452 (5.5): «обычно» из истории отметок — blended-уровень usual с сервера. */
+  var USUAL_NUM = { calm: 1, medium: 2, busy: 3 };
+  function usualHtml(r, hasLive) {
+    if (!s5On() || hasLive || !r.usual || !USUAL_NUM[r.usual.key]) return '';
+    var lvl = USUAL_NUM[r.usual.key];
+    var bars = '<span>' + [1, 2, 3].map(function (i) { return '<i class="' + (i <= lvl ? 'on' : '') + '"></i>'; }).join('') + '</span>';
+    return '<div class="iv2-card__usual">' + bars + 'Обычно ' + esc(r.usual.word || '') + '</div>';
+  }
 
   var state = {
     cityId: null, kind: 'skate', day: 'today',
@@ -237,9 +245,11 @@
       comp = '<button type="button" class="iv2-card__comp ga-press" data-company="' + esc(r.company.page_url || '') + '">' +
         'Твоя компания · идут ' + esc(r.company.going_count) + '</button>';
     }
+    var hasLive = false;
     if (opts.ongoing && s5On()) {
       var lv = st && st.live;
       if (lv && lv.level && LOAD_WORDS[lv.level]) {
+        hasLive = true;
         var ago = lv.last_min != null ? (lv.last_min < 1 ? 'только что' : lv.last_min + ' мин назад') : '';
         var bars = '<span>' + [1, 2, 3].map(function (i) { return '<i class="' + (i <= lv.level ? 'on' : '') + '"></i>'; }).join('') + '</span>';
         live = '<div class="iv2-card__live">' + bars + '<em style="font-style:normal">' +
@@ -257,6 +267,7 @@
       '<div class="iv2-card__txt">' + going +
       '<div class="iv2-card__name">' + esc(r.arena_name) + '</div>' +
       '<div class="iv2-card__sub">' + esc(r.price_line || '') + '</div>' +
+      usualHtml(r, hasLive) +
       '</div>' + CHEV + '</div>' + comp + live + '</a></div>';
   }
 
@@ -268,9 +279,11 @@
       going = '<div class="iv2-card__going">идёт' + esc(r.minutes_left != null ? ' · ещё ' + r.minutes_left + ' мин' : '') + '</div>';
     }
     var live = '';
+    var hasLive = false;
     if (ongoing && s5On()) {
       var lv = st && st.live;
       if (lv && lv.level && LOAD_WORDS[lv.level]) {
+        hasLive = true;
         var ago = lv.last_min != null ? (lv.last_min < 1 ? 'только что' : lv.last_min + ' мин назад') : '';
         var bars = '<span>' + [1, 2, 3].map(function (i) { return '<i class="' + (i <= lv.level ? 'on' : '') + '"></i>'; }).join('') + '</span>';
         live = '<div class="iv2-card__live">' + bars + '<em style="font-style:normal">' +
@@ -289,6 +302,7 @@
       '<a class="iv2-card iv2-card--bare ga-press" href="' + esc(r.href) + '" data-arena="' + r.arena_id + '" data-session="' + r.session_id + '">' +
       '<div class="iv2-card__top"><div class="iv2-card__txt">' + going +
       '<div class="iv2-card__sub">' + esc(r.price_line || '') + '</div>' +
+      usualHtml(r, hasLive) +
       '</div>' + CHEV + '</div>' + comp + live + '</a></div>';
   }
 

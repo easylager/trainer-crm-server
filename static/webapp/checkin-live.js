@@ -18,9 +18,10 @@
     if (window.GlideProfileId) h['X-Profile-Id'] = String(window.GlideProfileId);
     return h;
   }
-  function stateApi(ids, focus) {
+  function stateApi(ids, focus, arenaId) {
     var q = '/api/webapp/client/checkins/state?session_ids=' + encodeURIComponent(ids.join(','));
     if (focus != null) q += '&focus=' + encodeURIComponent(String(focus));
+    if (arenaId != null) q += '&arena_id=' + encodeURIComponent(String(arenaId));
     return fetch(q, { headers: headers() }).then(function (r) {
       return r.ok ? r.json() : null;
     }).catch(function () { return null; });
@@ -154,6 +155,14 @@
     } catch (e) { return null; }
   }
 
+  function urlArenaId() {
+    try {
+      var v = new URLSearchParams(location.search).get('ref');
+      var n = parseInt(v, 10);
+      return n > 0 ? n : null;
+    } catch (e) { return null; }
+  }
+
   function arenaSessionIds() {
     var ids = [];
     document.querySelectorAll('[data-session-id]').forEach(function (el) {
@@ -170,6 +179,68 @@
     return el ? el.textContent.trim() : 'катке';
   }
 
+  /* TASK-452 (5.5): «обычно» из истории отметок — сетка «Когда свободнее» +
+     blended-уровень на шкалах сеансов (заменяет чистую admin-оценку). */
+  var USUAL_METER_LABEL = {
+    calm: 'Обычно свободно — можно без спешки',
+    medium: 'Обычно народу в меру',
+    busy: 'Обычно людно — билет лучше взять заранее',
+  };
+  var USUAL_WORD = { calm: 'свободно', medium: 'в меру', busy: 'людно' };
+
+  function patchUsualMeters(sessions) {
+    if (!sessions) return;
+    document.querySelectorAll('[data-session-id]').forEach(function (el) {
+      var st = sessions[el.getAttribute('data-session-id')];
+      if (!st || !st.usual || !USUAL_WORD[st.usual.key]) return;
+      el.querySelectorAll('.arena-load').forEach(function (m) {
+        m.setAttribute('data-level', st.usual.key);
+        m.setAttribute('aria-label', USUAL_METER_LABEL[st.usual.key] || '');
+      });
+      el.querySelectorAll('small').forEach(function (sm) {
+        var t = (sm.textContent || '').trim();
+        if (t.indexOf('обычно') === 0) sm.textContent = 'обычно ' + USUAL_WORD[st.usual.key];
+      });
+    });
+  }
+
+  var usualBlock = null;
+  var usualBlockSig = '';
+  function decorateUsual(g, anchor) {
+    var sig = g ? JSON.stringify(g) : '';
+    /* arena-card перерисовывает секцию сеансов и выносит наш блок из DOM:
+       кэш по подписи считается, только пока блок реально на странице. */
+    if (usualBlock && usualBlock.isConnected && sig === usualBlockSig) return;
+    if (usualBlock) { usualBlock.remove(); usualBlock = null; usualBlockSig = ''; }
+    if (!g || !anchor || !(g.cells || []).length) return;
+    usualBlockSig = sig;
+    var total = Number(g.total) || 0;
+    var byN = total > 0
+      ? 'по ' + total + ' ' + plural(total, 'отметке', 'отметкам', 'отметкам')
+      : 'по правилам катка';
+    var head = '<span></span>' + (g.weekdays || []).map(function (d) {
+      return '<b>' + esc(d) + '</b>';
+    }).join('');
+    var body = (g.cells || []).map(function (row, i) {
+      var label = (g.buckets || [])[i];
+      return '<span>' + esc(label != null ? String(label) : '') + '</span>' +
+        (row || []).map(function (lv) { return '<i class="h' + (lv || 0) + '"></i>'; }).join('');
+    }).join('');
+    usualBlock = document.createElement('div');
+    usualBlock.className = 'cil-usual';
+    usualBlock.innerHTML =
+      '<div class="cil-usual__head"><div class="cil-usual__t">Когда свободнее</div>' +
+      '<div class="cil-usual__n">' + esc(byN) + '</div></div>' +
+      (g.best ? '<div class="cil-usual__best">' + esc(g.best) + '</div>' : '') +
+      '<div class="cil-usual__grid">' + head + body + '</div>' +
+      '<div class="cil-usual__legend">' +
+      '<span><i class="h1"></i>свободно</span>' +
+      '<span><i class="h2"></i>в меру</span>' +
+      '<span><i class="h3"></i>людно</span>' +
+      '<span><i class="h0"></i>мало данных</span></div>';
+    anchor.parentNode.insertBefore(usualBlock, anchor);
+  }
+
   var arenaBlock = null;
   function decorateArena(j) {
     var sessions = j && j.sessions ? j.sessions : {};
@@ -184,6 +255,9 @@
     }
     var host = document.getElementById('arenaRows');
     var anchor = host ? host.parentNode : null;
+    patchUsualMeters(sessions);
+    /* «Когда свободнее» — до «Сейчас», и не зависит от идущего сеанса. */
+    decorateUsual(j.arena_usual, anchor);
     if (arenaBlock) { arenaBlock.remove(); arenaBlock = null; }
     if (!picked || !anchor) return;
     var st = sessions[picked];
@@ -224,7 +298,7 @@
     var run = function () {
       var ids = arenaSessionIds();
       if (!ids.length) return;
-      stateApi(ids, urlSessionId()).then(function (j) { if (j) decorateArena(j); });
+      stateApi(ids, urlSessionId(), urlArenaId()).then(function (j) { if (j) decorateArena(j); });
     };
     run();
     var t = null;

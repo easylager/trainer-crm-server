@@ -403,3 +403,141 @@ async def test_checkin_badges_award_seen_share_and_me(monkeypatch) -> None:
             await conn.execute(text("DELETE FROM client_sessions WHERE telegram_id = :t"), {"t": tg})
         await eng.dispose()
         await _cleanup(city_id=city_id, arena_id=arena_id, tg_id=tg)
+
+
+# ── TASK-452 (5.5): «обычно» — blended-оценка и сетка «Когда свободнее» ────────
+
+
+def _invalidate_usual_caches() -> None:
+    from src.application import ice_usual_load as iul
+    from src.application import session_load as sl
+    from src.application.ice_schedule_v2 import invalidate_ice_schedule_cache
+
+    iul.invalidate_usual_cache()
+    sl.invalidate_session_load_cache()
+    invalidate_ice_schedule_cache()
+
+
+async def _seed_calm_reports(arena_id: int, session_id: int, *, n: int = 6) -> tuple[int, int]:
+    """n чужих «свободно» на сеансе → ячейка (weekday, bucket) сеанса. Возвращает (wd, bucket)."""
+    from src.application import ice_usual_load as iul
+
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            sess = (
+                await conn.execute(
+                    text("SELECT local_date, starts_at_local FROM ice_sessions WHERE id = :s"),
+                    {"s": session_id},
+                )
+            ).mappings().one()
+            now = datetime.now(timezone.utc)
+            for _ in range(n):
+                await conn.execute(
+                    text("INSERT INTO ice_checkins (telegram_id, session_id, arena_id, local_date,"
+                         " load_level, source, counts_for_load, load_set_at)"
+                         " VALUES (:t,:s,:a,:d,1,'app',true,:n)"),
+                    {"t": _tg(), "s": session_id, "a": arena_id, "d": sess["local_date"], "n": now})
+        wd = sess["local_date"].weekday()
+        return wd, iul.bucket_for_hour(sess["starts_at_local"].hour)
+    finally:
+        await engine.dispose()
+
+
+async def _cleanup_reports(arena_id: int) -> None:
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM ice_checkins WHERE arena_id = :a"), {"a": arena_id})
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_state_usual_blended_and_arena_grid(monkeypatch) -> None:
+    """state: usual на сеансе (blend 6×«свободно» → calm при любом prior) + arena_usual."""
+    tg = _tg()
+    city_id, arena_id, sids = await _seed_checkin_env(name=f"ul-{uuid.uuid4().hex[:8]}", tg_id=tg)
+    try:
+        wd, bucket = await _seed_calm_reports(arena_id, sids[0])
+        _invalidate_usual_caches()
+        _enable_s5(monkeypatch, tg)
+        with patch_client_init_auth(tg):
+            async with await _client() as client:
+                rs = await client.get(
+                    f"/api/webapp/client/checkins/state?session_ids={sids[0]}&arena_id={arena_id}",
+                    headers=H,
+                )
+                assert rs.status_code == 200, rs.text
+                body = rs.json()
+                st = body["sessions"][str(sids[0])]
+                # (prior·4 + 6·1 + 0.5·6)/(4+6+3) ≤ 1.62 < 1.67 → «свободно» при любом prior
+                assert st["usual"] == {"key": "calm", "word": "свободно"}, st
+                g = body["arena_usual"]
+                assert g is not None, body
+                assert g["total"] == 6
+                assert g["buckets"] == [10, 14, 18, 20]
+                assert len(g["cells"]) == 4 and all(len(row) == 7 for row in g["cells"])
+                assert g["cells"][bucket][wd] == 1
+                # дефолтные правила миграции дают prior всем ячейкам — «мало данных» нет
+                assert all(v is not None for row in g["cells"] for v in row)
+                # без arena_id сетка не грузится
+                rs2 = await client.get(
+                    f"/api/webapp/client/checkins/state?session_ids={sids[0]}", headers=H)
+                assert rs2.json()["arena_usual"] is None
+    finally:
+        _invalidate_usual_caches()
+        get_settings.cache_clear()
+        await _cleanup_reports(arena_id)
+        await _cleanup(city_id=city_id, arena_id=arena_id, tg_id=tg)
+
+
+@pytest.mark.asyncio
+async def test_ice_schedule_usual_rows_flag(monkeypatch) -> None:
+    """schedule: usual на строках под s5; без s5 ключа нет, admin-оценка как раньше."""
+    tg = _tg()
+    city_id, arena_id, sids = await _seed_checkin_env(name=f"ul-{uuid.uuid4().hex[:8]}", tg_id=tg)
+    try:
+        _invalidate_usual_caches()
+        monkeypatch.setenv("CLIENT_REDESIGN_S4_TELEGRAM_IDS", str(tg))
+        monkeypatch.setenv("CLIENT_REDESIGN_S4_PERCENT", "0")
+        _enable_s5(monkeypatch, tg)
+        with patch_client_init_auth(tg):
+            async with await _client() as client:
+                r = await client.get(
+                    f"/api/webapp/client/ice/schedule?city_id={city_id}&day=today&kind=skate",
+                    headers=H,
+                )
+                assert r.status_code == 200, r.text
+                payload = r.json()
+                rows = (
+                    list(payload.get("ongoing") or [])
+                    + list(payload.get("upcoming") or [])
+                    + [x for g in payload.get("groups") or [] for x in g.get("rows") or []]
+                )
+                mine = [x for x in rows if x.get("session_id") == sids[0]]
+                assert mine, f"сеанс {sids[0]} не найден в payload: {list(payload.keys())}"
+                u = mine[0].get("usual")
+                assert u and u["key"] in ("calm", "medium", "busy") and u["word"], mine[0]
+        # флаг выключен: строка есть, usual нет
+        monkeypatch.setenv("CLIENT_REDESIGN_S5_TELEGRAM_IDS", "0")
+        get_settings.cache_clear()
+        with patch_client_init_auth(tg):
+            async with await _client() as client:
+                r = await client.get(
+                    f"/api/webapp/client/ice/schedule?city_id={city_id}&day=today&kind=skate",
+                    headers=H,
+                )
+                assert r.status_code == 200, r.text
+                payload = r.json()
+                rows = (
+                    list(payload.get("ongoing") or [])
+                    + list(payload.get("upcoming") or [])
+                    + [x for g in payload.get("groups") or [] for x in g.get("rows") or []]
+                )
+                mine = [x for x in rows if x.get("session_id") == sids[0]]
+                assert mine and "usual" not in mine[0]
+    finally:
+        _invalidate_usual_caches()
+        get_settings.cache_clear()
+        await _cleanup(city_id=city_id, arena_id=arena_id, tg_id=tg)

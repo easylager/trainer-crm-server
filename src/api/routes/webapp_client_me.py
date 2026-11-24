@@ -150,6 +150,7 @@ class _BadgeV2(BaseModel):
     model_config = ConfigDict(extra="forbid")
     key: str
     name: str
+    name_gen: str | None = None
     family: str
     total: int
     earned: bool

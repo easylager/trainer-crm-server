@@ -26,6 +26,7 @@ from src.api.miniapp_auth import (
 )
 from src.application import ice_badges as ib
 from src.application import ice_checkins as ic
+from src.application import ice_usual_load as iul
 from src.application.client_profile_use_cases import resolve_acting_client_id
 from src.application.client_ui_flags import redesign_s5_enabled
 from src.application.client_use_cases import get_client_id_by_telegram_id
@@ -241,6 +242,7 @@ async def patch_client_checkin(
 async def get_client_checkins_state(
     session_ids: str,
     focus: int | None = None,
+    arena_id: int | None = None,
     x_profile_id: str | None = Header(None),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -258,6 +260,9 @@ async def get_client_checkins_state(
             await ic.record_helps(session, telegram_id, int(focus), now)
         except Exception:  # noqa: BLE001 — «помог выбрать» не должен ломать state
             logger.exception("checkin record_helps failed")
+    # TASK-452 (5.5): «обычно» из истории отметок — blended-уровень на сеанс.
+    # Контекст лениво: один агрегат-запрос только когда он реально нужен.
+    usual_ctx: iul.UsualLoadContext | None = None
     if not ids:
         sessions: dict[int, dict] = {}
     else:
@@ -266,7 +271,8 @@ async def get_client_checkins_state(
                 await session.execute(
                     text(
                         """
-                        SELECT id, kind, starts_at_utc, ends_at_utc, ends_at_local, status FROM ice_sessions
+                        SELECT id, arena_id, kind, starts_at_utc, ends_at_utc, ends_at_local,
+                               local_date, starts_at_local, status FROM ice_sessions
                         WHERE id = ANY(:ids)
                         """
                     ),
@@ -298,6 +304,8 @@ async def get_client_checkins_state(
         for r in sess_rows:
             sid = int(r["id"])
             my = mine_by_session.get(sid)
+            if usual_ctx is None:
+                usual_ctx = await iul.load_usual_context(session, now=now)
             sessions[sid] = {
                 "ongoing": ic.is_ongoing(r, now),
                 "checked_in": my is not None,
@@ -305,14 +313,27 @@ async def get_client_checkins_state(
                 "load_level": my["load_level"] if my else None,
                 "ends_local": str(r["ends_at_local"])[:5] if r.get("ends_at_local") else None,
                 "live": live_map.get(sid),
+                "usual": iul.usual_for_session(
+                    usual_ctx,
+                    arena_id=int(r["arena_id"]),
+                    kind=str(r["kind"] or ""),
+                    local_date=r.get("local_date"),
+                    starts_at_local=r.get("starts_at_local") or "",
+                ),
             }
     today = now.astimezone(ic.MINSK).date()
     stats = await ic.me_stats(session, telegram_id, profile_id, today)
     helped = await ic.helped_count(session, telegram_id)
+    arena_usual = None
+    if arena_id is not None:
+        if usual_ctx is None:
+            usual_ctx = await iul.load_usual_context(session, now=now)
+        arena_usual = iul.arena_usual_grid(usual_ctx, int(arena_id))
     await session.commit()
     return {
         "sessions": {str(k): v for k, v in sessions.items()},
         "me": {**stats, "helped": helped},
+        "arena_usual": arena_usual,
     }
 
 

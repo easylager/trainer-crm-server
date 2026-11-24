@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application import ice_badges as ib
 from src.application import ice_checkins as ic
+from src.application import ice_usual_load as iul
 from src.application.client_ui_flags import redesign_s5_enabled
 from src.application.hockey_notices import mark_blocked
 from src.application.place_links import place_start_param, public_telegram_entry_link
@@ -342,12 +343,23 @@ RISK_WINDOW_END = time(19, 0)
 RISK_MIN_STREAK = 2
 
 
-def risk_text(streak: int, arena_name: str, starts_local: str, badge_line: str | None, *, home: bool) -> str:
+def risk_text(
+    streak: int,
+    arena_name: str,
+    starts_local: str,
+    badge_line: str | None,
+    *,
+    home: bool,
+    usual_word: str | None = None,
+) -> str:
     lines = [f"Серия {streak} {ic.plural_week(streak)} подряд под угрозой 🔥"]
     if home:
         lines.append(f"Сегодня на «{arena_name}» ближайший сеанс в {starts_local} — успей отметиться.")
     else:
         lines.append(f"Сегодня в городе ещё есть лёд: «{arena_name}», сеанс в {starts_local} — успей отметиться.")
+    # TASK-452: «На Чижовке в 18:00 обычно свободно» — blended-оценка ближайшего сеанса.
+    if usual_word:
+        lines.append(f"На «{arena_name}» в {starts_local} обычно {usual_word}.")
     if badge_line:
         lines.append(badge_line)
     return "\n".join(lines)
@@ -398,7 +410,7 @@ async def _risk_sessions_today(
             await session.execute(
                 text(
                     """
-                    SELECT s.arena_id, a.city_id, a.name AS arena_name, s.starts_at_local
+                    SELECT s.arena_id, s.kind, a.city_id, a.name AS arena_name, s.starts_at_local
                     FROM ice_sessions s
                     JOIN arenas a ON a.id = s.arena_id
                     LEFT JOIN arena_profiles p ON p.arena_id = a.id
@@ -516,6 +528,7 @@ async def run_streak_risk_cycle(bot: Bot, session: AsyncSession, now: datetime, 
     )
     # прогресс/вручённые для строки про ближайший значок
     season_start, _end = ic.season_bounds(today)
+    usual_ctx: iul.UsualLoadContext | None = None
     sent = 0
     for tg in eligible:
         home_id = home_arena.get(tg)
@@ -540,9 +553,20 @@ async def run_streak_risk_cycle(bot: Bot, session: AsyncSession, now: datetime, 
         prog = ib.progress_map([r[0] for r in dates_rows], today)
         earned = set(await ib._earned_rows(session, tg, None, season_start))
         badge_line = ib.nearest_line(prog, earned)
+        # TASK-452: «обычно» ближайшего сеанса — контекст общий на весь цикл (кэш 60 с).
+        if usual_ctx is None:
+            usual_ctx = await iul.load_usual_context(session, now=now)
+        usual = iul.usual_for_session(
+            usual_ctx,
+            arena_id=int(pick["arena_id"]),
+            kind=str(pick.get("kind") or ""),
+            local_date=today,
+            starts_at_local=pick.get("starts_at_local") or "",
+        )
         text_msg = risk_text(
             streaks[tg], str(pick["arena_name"]), str(pick["starts_at_local"])[:5],
             badge_line, home=is_home,
+            usual_word=(usual or {}).get("word"),
         )
         try:
             await bot.send_message(tg, text_msg)

@@ -1206,7 +1206,8 @@
         w.arenas = (w.arenas || []).slice(0, 8);
       });
       if (h.nearby) h.nearby = h.nearby.slice(0, 6);
-      if (h.week) h.week.forEach(function (d2) { if (d2.times) d2.times = d2.times.slice(0, 6); });
+      if (Array.isArray(h.week)) h.week.forEach(function (d2) { if (d2.times) d2.times = d2.times.slice(0, 6); });
+      else h.week = null;
       if (d.bookings && d.bookings.days) {
         d.bookings.days = d.bookings.days.slice(0, 7).map(function (day) {
           return { date: day.date, day_label: day.day_label, bookings: (day.bookings || []).slice(0, 4) };
@@ -1272,13 +1273,17 @@
     });
     /* Неделя: прошедшие сегодняшние слоты помечаем past. */
     var wk = (d.home || {}).week;
-    if (wk) wk.forEach(function (d2) {
-      if (d2.date !== today || nowM == null) return;
-      (d2.times || []).forEach(function (t) {
-        var sp3 = String(t.time || '').split(':');
-        if (parseInt(sp3[0], 10) * 60 + parseInt(sp3[1] || '0', 10) <= nowM) t.past = true;
+    if (!Array.isArray(wk)) {
+      if (d.home) d.home.week = null;
+    } else {
+      wk.forEach(function (d2) {
+        if (d2.date !== today || nowM == null) return;
+        (d2.times || []).forEach(function (t) {
+          var sp3 = String(t.time || '').split(':');
+          if (parseInt(sp3[0], 10) * 60 + parseInt(sp3[1] || '0', 10) <= nowM) t.past = true;
+        });
       });
-    });
+    }
     return d;
   }
   /* Плашка «Нет сети · данные на HH:MM» (макет 12, белая по доку) под верхней строкой шапки. */

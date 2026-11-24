@@ -10,7 +10,10 @@
  *   03 arena        — arena.html?ref=11&s=401: блок «Сейчас свободно» + «Маршрут»→intent;
  *   04 me           — client-me.html: карточка сезона + «Помог выбрать»;
  *   05 me-newbie    — «Сезон ещё не начат»;
- *   06 flag-off     — флаг выключен: ни checkin-ассетов, ни узлов (все 3 страницы).
+ *   07 arena-usual  — TASK-452: сетка «Когда свободнее» + blended «обычно» на шкалах;
+ *   08 usual-quiet  — сетка без идущего сеанса;
+ *   09 usual-none   — arena_usual=null → блока нет;
+ *   06/10 flag-off  — флаг выключен: ни checkin-ассетов, ни узлов (все 3 страницы).
  *
  * Run: node tests/e2e/checkin-live.check.mjs
  * Скриншоты: tests/e2e/__shots__/checkin-live/
@@ -150,6 +153,45 @@ const STATE_ARENA = {
 const STATE_ME = { sessions: {}, me: { season_days: 12, streak_weeks: 3, has_this_week: false, helped: 5 } };
 const STATE_ME_NEWBIE = { sessions: {}, me: { season_days: 0, streak_weeks: 0, has_this_week: false, helped: 0 } };
 
+/* TASK-452 (5.5): «обычно» — сетка «Когда свободнее» + blended-уровень на шкалах. */
+const SESS_LOAD = (id, s, e, lv) => ({ ...SESS(id, s, e), typical_load_level: lv });
+const ARENA_SESSIONS_LOAD = {
+  ...ARENA_SESSIONS,
+  days: [{
+    local_date: TODAY_ISO,
+    sessions: [SESS_LOAD(401, '19:45', '21:15', 'medium'), SESS_LOAD(405, '21:30', '23:00', 'calm')],
+  }],
+};
+const ARENA_USUAL = {
+  total: 14,
+  buckets: [10, 14, 18, 20],
+  weekdays: ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'],
+  cells: [
+    [1, 1, 1, 1, 1, 2, null],
+    [1, 1, 1, 1, 2, 3, null],
+    [2, 2, 2, 2, 3, 3, 1],
+    [2, 2, 2, 2, 3, 2, 1],
+  ],
+  best: 'Свободнее всего — будни в 10:00 и 14:00',
+};
+const STATE_ARENA_USUAL = {
+  sessions: {
+    401: { ongoing: true, checked_in: false, checkin_id: null, load_level: null, ends_local: '21:15',
+           live: null, usual: { key: 'calm', word: 'свободно' } },
+    405: { ongoing: false, checked_in: false, checkin_id: null, load_level: null, ends_local: '23:00',
+           live: null, usual: { key: 'busy', word: 'людно' } },
+  },
+  me: { season_days: 6, streak_weeks: 2, has_this_week: true, helped: 0 },
+  arena_usual: ARENA_USUAL,
+};
+/* Сетка без идущего сеанса: блок «Когда свободнее» не зависит от «Сейчас». */
+const STATE_ARENA_USUAL_QUIET = {
+  sessions: { 405: { ongoing: false, checked_in: false, checkin_id: null, load_level: null,
+                     ends_local: '23:00', live: null, usual: { key: 'busy', word: 'людно' } } },
+  me: { season_days: 6, streak_weeks: 2, has_this_week: true, helped: 0 },
+  arena_usual: ARENA_USUAL,
+};
+
 let failures = 0;
 function check(name, cond, extra) {
   console.log((cond ? '✔' : '✖') + ' ' + name + (cond || !extra ? '' : '  → ' + extra));
@@ -159,7 +201,7 @@ async function shot(page, name) {
   await page.screenshot({ path: path.join(shots, name + '.png') });
 }
 
-async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE, track }) {
+async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE, track, arenaSessions }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
   const page = await ctx.newPage();
   const errors = [];
@@ -193,7 +235,7 @@ async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE,
     }
     if (p.startsWith('/api/public/ice/')) return json({ items: [] });
     if (p === '/api/public/arenas/11') return json(ARENA_CARD);
-    if (p === '/api/public/arenas/11/sessions') return json(ARENA_SESSIONS);
+    if (p === '/api/public/arenas/11/sessions') return json(arenaSessions || ARENA_SESSIONS);
     if (p === '/api/public/arenas/11/matches') return json({ matches: [] });
     if (p === '/api/public/arenas/11/trainers') return json({ trainers: [] });
     if (p === '/api/webapp/client/me') return json(ME);
@@ -378,7 +420,87 @@ try {
     await ctx.close();
   }
 
-  /* 06. Флаг выключен: ни ассетов, ни узлов на всех трёх страницах */
+  /* 07. TASK-452: «Когда свободнее» на катке + blended «обычно» на шкалах сеансов */
+  {
+    const track = [];
+    const { page, ctx, errors } = await openPage(browser, {
+      page: '/webapp/arena?ref=11&s=401', state: STATE_ARENA_USUAL,
+      track, arenaSessions: ARENA_SESSIONS_LOAD,
+    });
+    await page.waitForSelector('.cil-usual', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    await shot(page, '07-arena-usual');
+    await sysCheck(page, '07');
+    const blk = page.locator('.cil-usual');
+    check('07: сетка «Когда свободнее» вставлена', await blk.count() === 1);
+    if (await blk.count()) {
+      check('07: заголовок «Когда свободнее»', (await blk.locator('.cil-usual__t').textContent()) === 'Когда свободнее');
+      check('07: «по 14 отметкам»', (await blk.locator('.cil-usual__n').textContent()) === 'по 14 отметкам',
+        await blk.locator('.cil-usual__n').textContent());
+      check('07: плашка «Свободнее всего»', (await blk.locator('.cil-usual__best').textContent()) === 'Свободнее всего — будни в 10:00 и 14:00',
+        await blk.locator('.cil-usual__best').textContent());
+      check('07: сетка 4×7 ячеек', await blk.locator('.cil-usual__grid i').count() === 28);
+      check('07: «мало данных» (h0) — 2 ячейки', await blk.locator('.cil-usual__grid i.h0').count() === 2);
+      check('07: «людно» (h3) — 4 ячейки', await blk.locator('.cil-usual__grid i.h3').count() === 4);
+      check('07: легенда — 4 пункта', await blk.locator('.cil-usual__legend span').count() === 4);
+      /* сетка выше «Сейчас» (перед блоком сеансов) */
+      const order = await page.evaluate(() => {
+        const u = document.querySelector('.cil-usual');
+        const a = document.querySelector('.cil-arena');
+        return a ? u.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING : 'no-arena';
+      });
+      check('07: сетка выше блока «Сейчас»', typeof order === 'number' && (order & 4) === 4, String(order));
+      const vis = await page.evaluate(() => {
+        const r = document.querySelector('.cil-usual').getBoundingClientRect();
+        return r.top >= 0 && r.left >= 0 && r.right <= innerWidth ? 'in' : `out:${r.top.toFixed(0)},${r.right.toFixed(0)}`;
+      });
+      check('07: сетка внутри экрана', vis === 'in', vis);
+    }
+    /* blended «обычно»: шкала сеанса 401 перепатчена medium → calm, слово «свободно» */
+    const patched = await page.evaluate(() => {
+      const out = { meters: [], smalls: [] };
+      document.querySelectorAll('[data-session-id="401"]').forEach((el) => {
+        el.querySelectorAll('.arena-load').forEach((m) => out.meters.push(m.getAttribute('data-level')));
+        el.querySelectorAll('small').forEach((s) => out.smalls.push((s.textContent || '').trim()));
+      });
+      return out;
+    });
+    check('07: шкала 401 перепатчена в calm', patched.meters.length > 0 && patched.meters.every((l) => l === 'calm'),
+      JSON.stringify(patched.meters));
+    check('07: слово «обычно свободно» на сеансе 401', patched.smalls.some((t) => t === 'обычно свободно'),
+      JSON.stringify(patched.smalls));
+    check('07: arena_id в запросе state', track.some((t) => t.includes('checkins/state') && t.includes('arena_id=11')),
+      track.filter((t) => t.includes('state')).join('|'));
+    check('07: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 08. Сетка без идущего сеанса видна; arena_usual=null → блока нет */
+  {
+    const { page, ctx, errors } = await openPage(browser, {
+      page: '/webapp/arena?ref=11&s=405', state: STATE_ARENA_USUAL_QUIET, arenaSessions: ARENA_SESSIONS_LOAD,
+    });
+    await page.waitForSelector('.cil-usual', { timeout: 10000 }).catch(() => {});
+    await shot(page, '08-arena-usual-quiet');
+    check('08: сетка видна без идущего сеанса', await page.locator('.cil-usual').count() === 1);
+    check('08: блока «Сейчас» нет (не идёт ничего)', await page.locator('.cil-arena').count() === 0);
+    check('08: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+  {
+    const { page, ctx, errors } = await openPage(browser, {
+      page: '/webapp/arena?ref=11&s=401',
+      state: { ...STATE_ARENA, arena_usual: null },
+    });
+    await page.waitForTimeout(1200);
+    await shot(page, '09-arena-usual-none');
+    check('09: arena_usual=null → сетки нет', await page.locator('.cil-usual').count() === 0);
+    check('09: блок «Сейчас» на месте', await page.locator('.cil-arena').count() === 1);
+    check('09: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 06→10. Флаг выключен: ни ассетов, ни узлов на всех трёх страницах */
   const OFF_PAGES = [['ice', '/webapp/ice'], ['arena', '/webapp/arena?ref=11&s=401'], ['me', '/webapp/client-me']];
   for (let i = 0; i < OFF_PAGES.length; i++) {
     const p = OFF_PAGES[i][1];
