@@ -45,13 +45,20 @@ const S3_BUNDLES = {
   '/webapp/home-v2.bundle.css': { body: bundle(S3_CSS, '\n'), type: 'text/css' },
 };
 function v2HtmlBundled() {
+  /* Та же семантика, что home_v2_bundles.apply_bundles: первый регион → 3 тега,
+     остальные регионы → пусто. */
   const html = readFileSync(path.join(staticDir, 'webapp/client-home-v2.html'), 'utf-8');
-  const m = html.match(/<!-- s3:assets -->([\s\S]*?)<!-- \/s3:assets -->/);
-  if (!m) return null;
+  const regions = [...html.matchAll(/<!-- s3:assets -->[\s\S]*?<!-- \/s3:assets -->/g)];
+  if (!regions.length) return null;
   const tags = '  <script src="/webapp/home-v2.head.js?v=s3"></script>\n' +
     '  <link rel="stylesheet" href="/webapp/home-v2.bundle.css?v=s3" />\n' +
     '  <script defer src="/webapp/home-v2.app.js?v=s3"></script>\n';
-  return html.replace(m[0], '<!-- s3:assets -->\n' + tags + '  <!-- /s3:assets -->');
+  let out = html;
+  for (let i = regions.length - 1; i >= 0; i--) {
+    const m = regions[i];
+    out = out.slice(0, m.index) + (i === 0 ? tags : '') + out.slice(m.index + m[0].length);
+  }
+  return out;
 }
 
 let CFG = { old: false, s3: false, bootDelay: 400, flags: {} };
@@ -62,21 +69,44 @@ const server = http.createServer((req, res) => {
     const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
     const acceptGzip = /gzip/.test(String(req.headers['accept-encoding'] || ''));
     const out = acceptGzip ? zlib.gzipSync(buf) : buf;
-    METER.push({ path: req.url.split('?')[0], bytes: out.length, type });
+    METER.push({ path: req.url.split('?')[0], bytes: out.length, type, t: Date.now() });
     res.writeHead(200, {
       'content-type': type,
       ...(acceptGzip ? { 'content-encoding': 'gzip' } : {}),
       'content-length': out.length,
+      ...(S3_BUNDLES[req.url.split('?')[0]] ? { 'cache-control': 'public, max-age=31536000, immutable' } : {}),
     });
     res.end(out);
   };
   let p = decodeURIComponent(req.url.split('?')[0]);
+  /* API-стабы живут в этом же сервере — page.route() отключает HTTP-кэш
+     Chromium и ломает замер «тёплого» кейса. */
+  if (p.startsWith('/api/')) {
+    const json = (body) => send('application/json', JSON.stringify(body));
+    if (p === '/api/webapp/client/ui-flags') return json(CFG.flags);
+    if (p === '/api/webapp/client/hub/bootstrap') {
+      return setTimeout(() => json(BOOT), CFG.bootDelay); // «серверное» время
+    }
+    if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
+    if (p === '/api/webapp/client/session/catalog-filters') return json({ success: true });
+    if (p === '/api/public/ice/cities') return json({ items: [{ id: 1, name: 'Минск', skate_count: 3, trainer_count: 14, latitude: 53.9, longitude: 27.56 }] });
+    if (p === '/api/webapp/client/slots') return json({ slots: [] });
+    if (p.startsWith('/api/public/photos')) {
+      return send('image/jpeg', readFileSync(path.join(photosDir, 'arena-25', 'hero.jpg')));
+    }
+    return json({});
+  }
+  if (p === '/webapp/telegram-stub.js') return send('text/javascript', tgMock());
+  const pageHtml = (file) =>
+    readFileSync(path.join(staticDir, 'webapp', file), 'utf-8')
+      .replace('https://telegram.org/js/telegram-web-app.js', '/webapp/telegram-stub.js');
   if (p === '/webapp/client-home' || p === '/') {
     if (CFG.old) {
-      send('text/html', readFileSync(path.join(staticDir, 'webapp/client-home.html'), 'utf-8'));
+      send('text/html', pageHtml('client-home.html'));
     } else {
       const bundled = CFG.s3 ? v2HtmlBundled() : null;
-      send('text/html', bundled || readFileSync(path.join(staticDir, 'webapp/client-home-v2.html'), 'utf-8'));
+      send('text/html', (bundled || pageHtml('client-home-v2.html'))
+        .replace('https://telegram.org/js/telegram-web-app.js', '/webapp/telegram-stub.js'));
     }
     return;
   }
@@ -103,9 +133,14 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, r));
 const base = 'http://localhost:' + server.address().port;
 
-/* ── фикстуры (booking today) ────────────────────────────────────────────── */
-const NOW = new Date('2026-11-22T16:30:00Z');
-const TODAY = '2026-11-22';
+/* ── фикстуры (booking today) — привязаны к реальному «сейчас», без page.clock:
+     фейковые часы искажают performance.now() и прячут resource-записи. ───────── */
+const NOW = new Date();
+const TODAY = NOW.toLocaleDateString('sv-SE'); // YYYY-MM-DD в локали Europe/Minsk из контекста ниже не нужна — sv-SE даёт ISO
+const _in = (min) => new Date(NOW.getTime() + min * 60000);
+const HM = (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+const BOOK_START = HM(_in(70));
+const BOOK_END = HM(_in(120));
 const P = (n) => '/photos/' + n;
 const PHOTO = { nemiga: P('arena-38/hero.webp'), ledoviy: P('arena-25/hero.jpg'), gorky: P('arena-11/hero.webp'), chizh: P('arena-115/hockey-rink-interior.jpg') };
 const CITY = {
@@ -127,7 +162,7 @@ const RAIL = {
 };
 const BOOT = {
   bookings: { days: [{ date: TODAY, day_label: 'вс', bookings: [{
-    id: 501, status: 'confirmed', start_time: '19:40', end_time: '20:30', duration_minutes: 50,
+    id: 501, status: 'confirmed', start_time: BOOK_START, end_time: BOOK_END, duration_minutes: 50,
     trainer_id: 7, trainer_name: 'Максим', trainer_telegram_username: 'maxim_coach', trainer_list_photo_key: null,
     service_name: 'Индивидуальное занятие', arena_name: 'Ледовый дворец', arena_id: 12,
     place_display: 'Ледовый дворец', map_link: 'https://yandex.ru/maps/?pt=27.5,53.9&z=16', slot_date: TODAY,
@@ -175,16 +210,9 @@ async function measure(browser, selKey, label, opts) {
   if (opts && opts.warm) {
     /* Прогрев: HTTP-кэш + localStorage (кэш экрана) живут в контексте. */
     const p0 = await ctx.newPage();
-    await p0.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock() }));
-    await p0.route('**/api/**', async (r) => {
-      const json = (body) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
-      const p = new URL(r.request().url()).pathname;
-      if (p === '/api/webapp/client/ui-flags') return json(CFG.flags);
-      if (p === '/api/webapp/client/hub/bootstrap') return json(BOOT);
-      if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
-      if (p === '/api/webapp/client/session/catalog-filters') return json({ success: true });
-      return json({});
-    });
+    await p0.addInitScript((fl) => {
+      try { localStorage.setItem('cw_ui_flags_v1', JSON.stringify({ u: '1', ...fl, at: Date.now() })); } catch (e) {}
+    }, CFG.flags);
     await p0.goto(base + '/webapp/client-home', { waitUntil: 'load' });
     await p0.waitForTimeout(1500);
     await p0.close();
@@ -199,26 +227,10 @@ async function measure(browser, selKey, label, opts) {
     downloadThroughput: (1.6 * 1024 * 1024) / 8,
     uploadThroughput: (750 * 1024) / 8,
   });
-  await page.clock.setFixedTime(NOW);
   METER.length = 0;
-  await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock() }));
-  await page.route('**/api/**', async (r) => {
-    const p = new URL(r.request().url()).pathname;
-    const json = (body) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
-    if (p === '/api/webapp/client/ui-flags') return json(CFG.flags);
-    if (p === '/api/webapp/client/hub/bootstrap') {
-      await new Promise((r2) => setTimeout(r2, CFG.bootDelay)); // «серверное» время
-      return json(BOOT);
-    }
-    if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
-    if (p === '/api/public/ice/cities') return json({ items: [{ id: 1, name: 'Минск', skate_count: 3, trainer_count: 14, latitude: 53.9, longitude: 27.56 }] });
-    if (p === '/api/webapp/client/slots') return json({ slots: [] });
-    if (p === '/api/webapp/client/session/catalog-filters') return json({ success: true });
-    if (p.startsWith('/api/public/photos')) {
-      return r.fulfill({ contentType: 'image/jpeg', body: readFileSync(path.join(photosDir, 'arena-25', 'hero.jpg')) });
-    }
-    return json({});
-  });
+  await page.addInitScript((fl) => {
+    try { localStorage.setItem('cw_ui_flags_v1', JSON.stringify({ u: '1', ...fl, at: Date.now() })); } catch (e) {}
+  }, CFG.flags);
   await page.addInitScript((selJson) => {
     window.__perf = { marks: {}, cls: 0 };
     const sels = JSON.parse(selJson);
@@ -245,13 +257,18 @@ async function measure(browser, selKey, label, opts) {
   }, JSON.stringify(SELS[selKey]));
 
   const t0 = Date.now();
-  await page.goto(base + '/webapp/client-home', { waitUntil: 'load' });
+  const nav = page.goto(base + '/webapp/client-home', { waitUntil: 'load' });
+  await nav;
   await page.waitForSelector(SELS[selKey].data.split(',')[0].trim(), { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(1200); // догрузить «хвост»
   const marks = await page.evaluate(() => window.__perf);
-  const meter = [...METER];
+  /* Только запросы до первого кадра с контентом (+ запас на таймеры) —
+     фоновый префетч «Льда» и ленивые картинки в счёт первого кадра не входят. */
+  const contentCut = marks.marks.content != null ? t0 + marks.marks.content + 50 : Infinity;
+  const meter = METER.filter((m) => m.t <= contentCut);
   const js = meter.filter((m) => /\.js$/.test(m.path) || m.type === 'text/javascript');
   const css = meter.filter((m) => /\.css$/.test(m.path) || m.type === 'text/css');
+  const idle = METER.filter((m) => m.t > contentCut);
   await ctx.close();
   return {
     label,
@@ -259,6 +276,7 @@ async function measure(browser, selKey, label, opts) {
     jsFiles: js.length, jsKb: Math.round(js.reduce((a, m) => a + m.bytes, 0) / 1024),
     cssKb: Math.round(css.reduce((a, m) => a + m.bytes, 0) / 1024),
     contentMs: marks.marks.content != null ? Math.round(marks.marks.content) : null,
+    idleFiles: idle.filter((m) => /\.js$|\.css$/.test(m.path)).length,
     dataMs: marks.marks.data != null ? Math.round(marks.marks.data) : null,
     cls: +marks.cls.toFixed(4),
     wallMs: Date.now() - t0,
@@ -286,5 +304,5 @@ try {
 console.log('\n| case | JS/CSS files | JS gzip | CSS gzip | first content | data shown | CLS |');
 console.log('|---|---|---|---|---|---|---|');
 for (const r of rows) {
-  console.log(`| ${r.label} | ${r.files} (${r.jsFiles} js) | ${r.jsKb} КБ | ${r.cssKb} КБ | ${r.contentMs} мс | ${r.dataMs} мс | ${r.cls} |`);
+  console.log(`| ${r.label} | ${r.files} (${r.jsFiles} js) | ${r.jsKb} КБ | ${r.cssKb} КБ | ${r.contentMs} мс | ${r.dataMs} мс | ${r.cls} |${r.idleFiles ? `  (+${r.idleFiles} idle)` : ''}`);
 }

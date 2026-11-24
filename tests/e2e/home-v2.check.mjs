@@ -308,14 +308,17 @@ function assetMeter(page) {
     try {
       const b = await r.body();
       const key = u.split('?')[0];
-      seen.set(key, (seen.get(key) || 0) + b.length);
+      const rt = r.request().resourceType();
+      seen.set(key, (seen.get(key) || { bytes: 0, types: new Set() }));
+      seen.get(key).bytes += b.length;
+      seen.get(key).types.add(rt);
     } catch (e) {}
   });
   return () => ({
     files: seen.size,
-    bytes: [...seen.values()].reduce((a, b) => a + b, 0),
+    bytes: [...seen.values()].reduce((a, b) => a + b.bytes, 0),
     list: [...seen.entries()]
-      .map(([u, n]) => ({ name: u.split('/').pop(), kb: (n / 1024).toFixed(1) }))
+      .map(([u, n]) => ({ name: u.split('/').pop(), kb: (n.bytes / 1024).toFixed(1), types: [...n.types] }))
       .sort((a, b) => b.kb - a.kb),
   });
 }
@@ -1001,18 +1004,15 @@ try {
       boot: bootstrap({ bookings: bookingToday() }),
       flags: UI_FLAGS_S3, flagsCache: UI_FLAGS_S3, bundled: true,
     });
-    /* Рендер-блокирующие JS/CSS (script/link), без фонового префетча «Льда» (fetch). */
-    const m = await page.evaluate(() =>
-      performance.getEntriesByType('resource')
-        .filter((e) => /\.(js|css)(\?|$)/.test(e.name) && e.initiatorType !== 'fetch')
-        .map((e) => e.name));
-    const names = [...new Set(m)].map((u) => u.split('/').pop().split('?')[0]);
+    /* Рендер-блокирующие JS/CSS (script/stylesheet), без фонового префетча «Льда» (fetch). */
+    const m = meter();
+    const paint = m.list.filter((f) => !f.types.every((t) => t === 'fetch' || t === 'xhr'));
+    const names = paint.map((f) => f.name.split('?')[0]);
     check('27: JS/CSS файлов на первый кадр ≤ 8', names.length <= 8, `${names.length}: ${names.join(',')}`);
     check('27: отданы бандлы', names.includes('home-v2.head.js') && names.includes('home-v2.app.js') && names.includes('home-v2.bundle.css'), names.join(','));
     check('27: нет одиночного home-v2.js/mini-app-client-shell.js', !names.some((n) => n === 'home-v2.js' || n === 'mini-app-client-shell.js'), names.join(','));
-    /* Префетч «Льда» сработал в фоне (idle). */
-    const prefetched = await page.evaluate(() =>
-      performance.getEntriesByType('resource').filter((e) => e.initiatorType === 'fetch' && /ice|catalog/.test(e.name)).length);
+    /* Префетч «Лёд» сработал в фоне (fetch-запросы к ассетам каталога). */
+    const prefetched = m.list.filter((f) => f.types.every((t) => t === 'fetch' || t === 'xhr') && /ice|catalog/.test(f.name)).length;
     check('27: «Лёд» прогрет в фоне', prefetched > 0, `${prefetched}`);
     check('27: билет на месте', await page.locator('.hv2-ticket').count() === 1);
     check('27: без JS-ошибок', errors.length === 0, errors.join('; '));
@@ -1066,6 +1066,7 @@ try {
     await page.route('**/api/**', (r) => {
       const p = new URL(r.request().url()).pathname;
       if (p === '/api/webapp/client/hub/bootstrap') return r.abort();
+      if (p === '/api/webapp/client/ui-flags') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(UI_FLAGS_S3) });
       return r.fulfill({ contentType: 'application/json', body: '{}' });
     });
     S3_SERVE = true;
@@ -1074,6 +1075,8 @@ try {
     const plate = await page.locator('.hv2-offline').textContent();
     check('29: плашка «Нет сети · данные на HH:MM»', /Нет сети · данные на \d{2}:\d{2}/.test(plate || ''), plate);
     check('29: кэш на экране под плашкой', await page.locator('.hv2-ticket').count() === 1);
+    const tabs29 = await page.locator('#clientTabBar .client-tab-bar__btn').allTextContents();
+    check('29: бар — 5 вкладок с «Лёд»', tabs29.length === 5 && tabs29.some((t) => t.includes('Лёд')), tabs29.join('|'));
     const plateBox = await page.locator('.hv2-offline').boundingBox();
     check('29: плашка белая и в вьюпорте', plateBox && plateBox.y > 60 && plateBox.y < 200, JSON.stringify(plateBox));
     await shot(page, '29-s3-offline');
