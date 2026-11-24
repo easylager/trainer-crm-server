@@ -50,6 +50,19 @@ def search_board_enabled(account_key: int, settings: Settings) -> bool:
     return search_board_bucket(account_key) < settings.client_search_board_percent
 
 
+def redesign_s1_bucket(account_key: int) -> int:
+    """Своя корзина: процент redesign_s1 не повторяет выборки season_ui/fast_tabs/search_board."""
+    digest = hashlib.sha256(f"redesign-s1:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def redesign_s1_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-445: этап 1 редизайна — новая главная, меню 5 вкладок, светлая тема."""
+    if int(account_key) in (settings.client_redesign_s1_telegram_ids or ()):
+        return True
+    return redesign_s1_bucket(account_key) < settings.client_redesign_s1_percent
+
+
 # Профили аккаунта — как у GET /client/passes и /client/bookings/history: своя строка,
 # семейный доступ (resolve_acting_client_id) и профили из client_profile_links.
 # Любой статус и любая давность: вкладка, появившись, не исчезает.

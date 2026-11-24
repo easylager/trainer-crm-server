@@ -1,0 +1,249 @@
+/*
+ * Главная v2 (TASK-445, эпик glide-home-v1): палитра и компоненты из
+ * glide-home-system-final.html. Только светлая тема — флаг redesign_s1,
+ * data-force-theme="light" на <html>.
+ *
+ * Палитра документа: bg #f5f6f8 · surface #fff · ink #0b1620 · muted #6b7a86 ·
+ * line #e7ebee · teal #0a6f73 · жёлтый #ffd241 (одно главное действие) ·
+ * синий #2c4dd0 («Кто кого») · зелёный #22b35e («идёт») · красный #e5484d («Сейчас»).
+ * Шаг отступов 4: 8/12/16/20/28/34. Скругления: кнопка 14, плитка 20, карточка 26, лист 28.
+ * Golos 30/22/17/15/13/11; Dela Gothic — только крупное время.
+ */
+
+.hv2 {
+  --hv-bg: #f5f6f8;
+  /* Холст страницы: mini-app-client-theme.css красит body через !important
+     (--app-canvas-bg), здесь он не определён — фиксируем цвет документа.
+     Селектор повторяет его специфичность (0,2,2); home-v2.css грузится позже — побеждает. */
+  background: var(--hv-bg);
+  color: var(--hv-ink);
+  --hv-surface: #ffffff;
+  --hv-ink: #0b1620;
+  --hv-muted: #6b7a86;
+  --hv-line: #e7ebee;
+  --hv-teal: #0a6f73;
+  --hv-teal-ink: #0a5f63;
+  --hv-teal-wash: #e3f4f6;
+  --hv-yellow: #ffd241;
+  --hv-yellow-ink: #4a3a00;
+  --hv-blue: #2c4dd0;
+  --hv-green: #22b35e;
+  --hv-red: #e5484d;
+  --hv-chip: #eef1f3;
+  --hv-r-btn: 14px;
+  --hv-r-tile: 20px;
+  --hv-r-card: 26px;
+  --hv-r-sheet: 28px;
+  --hv-shadow: 0 1px 2px rgba(11, 22, 32, .06), 0 8px 24px rgba(11, 22, 32, .06);
+  --hv-ease: cubic-bezier(.2, .8, .2, 1);
+  color: var(--hv-ink);
+  font-family: var(--g-font);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.hv2__page { padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
+
+/* Фон body: перекрываем !important-правило mini-app-client-theme.css (--app-canvas-bg
+   на этой странице не определён). Та же специфичность (0,2,2), файл грузится позже. */
+html body.hv2,
+html.trainer-theme-light body.hv2,
+html.trainer-theme-dark body.hv2 {
+  background: #f5f6f8 !important;
+  color: #0b1620 !important;
+}
+
+/* ── Шапка ─────────────────────────────────────────────────── */
+.hv2-head { padding: 14px 0 4px; }
+.hv2-head__in { display: flex; align-items: center; gap: 10px; }
+.hv2-city {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 36px; padding: 0 14px; border: 0; border-radius: var(--hv-r-pill, 999px);
+  background: var(--hv-surface); color: var(--hv-ink);
+  font: 600 15px/1 var(--g-font); box-shadow: var(--hv-shadow); cursor: pointer;
+}
+.hv2-profile { margin-left: auto; }
+.hv2-hello { padding: 14px 4px 10px; }
+.hv2-hello__kicker { font: 600 12px/1 var(--g-font); letter-spacing: .06em; text-transform: uppercase; color: var(--hv-teal-ink); }
+.hv2-hello__title { margin: 6px 0 0; font: 400 22px/1.1 var(--g-font-display); letter-spacing: -.01em; }
+
+/* ── Секции ────────────────────────────────────────────────── */
+/* Секции: display:flex перебивает UA-правило [hidden] — гасим явно. */
+.hv2-sec[hidden] { display: none; }
+.hv2-main { display: flex; flex-direction: column; gap: 20px; }
+.hv2-sec { display: flex; flex-direction: column; gap: 10px; }
+.hv2-sec__head { display: flex; align-items: baseline; justify-content: space-between; }
+.hv2-sec__title { margin: 0; font: 400 17px/1.2 var(--g-font); font-weight: 600; }
+.hv2-sec__more { font: 600 14px/1 var(--g-font); color: var(--hv-teal-ink); text-decoration: none; }
+
+/* ── Общие карточки ────────────────────────────────────────── */
+.hv2-card {
+  background: var(--hv-surface); border-radius: var(--hv-r-card);
+  box-shadow: var(--hv-shadow); overflow: hidden;
+}
+.hv2-rows { background: var(--hv-surface); border-radius: var(--hv-r-card); box-shadow: var(--hv-shadow); overflow: hidden; }
+
+/* Строка (список): фото-тайл, текст, мета, шеврон. */
+.hv2-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 12px 16px; border: 0; background: transparent; text-align: left; cursor: pointer;
+  color: var(--hv-ink); font-family: var(--g-font); text-decoration: none;
+}
+.hv2-row + .hv2-row { border-top: 1px solid var(--hv-line); }
+.hv2-row__time {
+  flex: none; width: 52px; font: 700 17px/1.1 var(--g-font); color: var(--hv-ink);
+  font-variant-numeric: tabular-nums;
+}
+.hv2-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.hv2-row__title { font: 600 15px/1.25 var(--g-font); color: var(--hv-ink); }
+.hv2-row__sub { font: 400 13px/1.3 var(--g-font); color: var(--hv-muted); }
+.hv2-row__meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.hv2-row__price { font: 600 13px/1.2 var(--g-font); color: var(--hv-muted); }
+.hv2-row__chev { flex: none; color: var(--hv-muted); }
+
+/* Фото-карточка сеанса. */
+.hv2-photo {
+  position: relative; display: block; border-radius: var(--hv-r-card); overflow: hidden;
+  background: var(--hv-teal-wash); color: #fff; text-decoration: none;
+  box-shadow: var(--hv-shadow); min-height: 148px;
+}
+.hv2-photo__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hv2-photo__shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgba(11, 22, 32, .28) 0%, transparent 34%, rgba(11, 22, 32, .86) 100%);
+}
+.hv2-photo__in { position: relative; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; min-height: 148px; padding: 16px; }
+.hv2-photo__badge {
+  align-self: flex-start; padding: 5px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); color: var(--hv-ink);
+  font: 700 13px/1 var(--g-font); font-variant-numeric: tabular-nums;
+}
+.hv2-photo__title { margin: 0; font: 600 20px/1.15 var(--g-font); color: #fff; }
+.hv2-photo__sub { font: 400 14px/1.3 var(--g-font); color: rgba(255, 255, 255, .82); }
+.hv2-photo__actions { display: flex; gap: 8px; margin-top: 12px; }
+
+/* Билет (моё обязательство). */
+.hv2-ticket { padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.hv2-ticket__top { display: flex; align-items: flex-start; gap: 14px; }
+.hv2-ticket__time { font: 400 34px/1 var(--g-font-display); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.hv2-ticket__when { font: 600 15px/1.3 var(--g-font); margin-top: 6px; }
+.hv2-ticket__status {
+  margin-left: auto; flex: none; padding: 6px 10px; border-radius: 999px;
+  background: var(--hv-yellow); color: var(--hv-yellow-ink);
+  font: 700 12px/1 var(--g-font); letter-spacing: .02em;
+}
+.hv2-ticket__status--ok { background: var(--hv-teal-wash); color: var(--hv-teal-ink); }
+.hv2-ticket__place { font: 600 16px/1.3 var(--g-font); }
+.hv2-ticket__meta { font: 400 14px/1.4 var(--g-font); color: var(--hv-muted); display: flex; flex-direction: column; gap: 2px; }
+.hv2-ticket__pass {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--hv-r-tile);
+  background: var(--hv-chip); font: 600 14px/1.2 var(--g-font);
+}
+.hv2-ticket__pass b { font-weight: 700; }
+.hv2-ticket__actions { display: flex; gap: 8px; }
+
+/* Кнопки. */
+.hv2-btn {
+  flex: 1; min-height: 46px; padding: 0 16px; border: 0; border-radius: var(--hv-r-btn);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: 700 15px/1 var(--g-font); text-decoration: none; cursor: pointer;
+  transition: transform var(--ga-t-press, 70ms) ease;
+}
+.hv2-btn:active { transform: scale(.97); }
+.hv2-btn--dark { background: var(--hv-ink); color: #fff; }
+.hv2-btn--yellow { background: var(--hv-yellow); color: var(--hv-yellow-ink); }
+.hv2-btn--soft { background: var(--hv-chip); color: var(--hv-ink); font-weight: 600; }
+.hv2-btn--teal { background: var(--hv-teal); color: #fff; }
+.hv2-btn--block { width: 100%; }
+
+/* Абонемент: кольцо остатка. */
+.hv2-pass { display: flex; align-items: center; gap: 16px; padding: 18px 16px; }
+.hv2-pass__ring { position: relative; flex: none; width: 76px; height: 76px; }
+.hv2-pass__ring svg { display: block; transform: rotate(-90deg); }
+.hv2-pass__ring-num {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font: 700 20px/1 var(--g-font); font-variant-numeric: tabular-nums;
+}
+.hv2-pass__ring-num small { font: 600 11px/1 var(--g-font); color: var(--hv-muted); margin-top: 3px; }
+.hv2-pass__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.hv2-pass__title { font: 600 16px/1.25 var(--g-font); }
+.hv2-pass__sub { font: 400 13px/1.35 var(--g-font); color: var(--hv-muted); }
+
+/* Тренер (строка-карточка). */
+.hv2-coach { display: flex; align-items: center; gap: 14px; padding: 16px; }
+.hv2-coach__photo {
+  flex: none; width: 56px; height: 56px; border-radius: 50%; object-fit: cover;
+  background: var(--hv-teal-wash);
+}
+.hv2-coach__photo--empty { display: flex; align-items: center; justify-content: center; color: var(--hv-teal-ink); font: 700 20px/1 var(--g-font); }
+.hv2-coach__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.hv2-coach__name { font: 600 16px/1.25 var(--g-font); }
+.hv2-coach__sub { font: 400 13px/1.35 var(--g-font); color: var(--hv-muted); }
+
+/* Выбор города. */
+.hv2-citypick { padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+.hv2-citypick__title { margin: 0; font: 600 18px/1.25 var(--g-font); }
+.hv2-citypick__sub { margin: 0; font: 400 14px/1.4 var(--g-font); color: var(--hv-muted); }
+.hv2-cityopts { display: flex; flex-direction: column; }
+.hv2-cityopt {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 13px 4px; border: 0; border-top: 1px solid var(--hv-line); background: transparent;
+  font: 600 15px/1.2 var(--g-font); color: var(--hv-ink); text-align: left; cursor: pointer;
+}
+.hv2-cityopt:first-child { border-top: 0; }
+.hv2-cityopt__count { font: 400 13px/1 var(--g-font); color: var(--hv-muted); }
+
+/* Матч (строка). */
+.hv2-match { display: flex; align-items: center; gap: 10px; padding: 12px 16px; text-decoration: none; color: var(--hv-ink); }
+.hv2-match + .hv2-match { border-top: 1px solid var(--hv-line); }
+.hv2-match__time { flex: none; width: 74px; font: 600 13px/1.2 var(--g-font); color: var(--hv-muted); font-variant-numeric: tabular-nums; }
+.hv2-match__teams { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font: 600 15px/1.2 var(--g-font); }
+.hv2-match__logo { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex: none; }
+.hv2-match__logo--empty { background: var(--hv-chip); }
+.hv2-match__place { flex: none; font: 400 12px/1.2 var(--g-font); color: var(--hv-muted); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hv2-match__sticker {
+  flex: none; padding: 3px 8px; border-radius: 6px; background: var(--hv-blue); color: #fff;
+  font: 700 10px/1 var(--g-font); letter-spacing: .04em;
+}
+
+/* Пустое состояние. */
+.hv2-empty { padding: 26px 20px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.hv2-empty__title { margin: 0; font: 600 17px/1.25 var(--g-font); }
+.hv2-empty__text { margin: 0; font: 400 14px/1.45 var(--g-font); color: var(--hv-muted); }
+
+/* Лист города. */
+.hv2-sheet {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end;
+  background: rgba(11, 22, 32, .3);
+}
+.hv2-sheet[hidden] { display: none; }
+.hv2-sheet__panel {
+  width: 100%; max-height: 78vh; overflow-y: auto;
+  background: var(--hv-surface); border-radius: var(--hv-r-sheet) var(--hv-r-sheet) 0 0;
+  padding: 10px 16px calc(20px + env(safe-area-inset-bottom));
+  animation: hv2-sheet-up .24s var(--hv-ease);
+}
+@keyframes hv2-sheet-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+.hv2-sheet__grip { display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--hv-line); margin: 4px auto 12px; }
+.hv2-sheet__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.hv2-sheet__head h2 { margin: 0; font: 600 20px/1.2 var(--g-font); }
+.hv2-sheet__close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--hv-chip); color: var(--hv-ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.hv2-geo {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 13px 14px; margin-bottom: 8px; border: 0; border-radius: var(--hv-r-tile);
+  background: var(--hv-teal-wash); color: var(--hv-teal-ink);
+  font: 600 15px/1 var(--g-font); cursor: pointer; text-align: left;
+}
+
+/* Скелетон первой загрузки — форма карточки, без прыжков. */
+.hv2-skel { display: flex; flex-direction: column; gap: 12px; }
+.hv2-skel__card { height: 220px; border-radius: var(--hv-r-card); background: var(--hv-surface); }
+.hv2-skel__row { height: 64px; border-radius: var(--hv-r-card); background: var(--hv-surface); }
+.hv2-skel__row--short { height: 64px; width: 70%; }
+
+.hv2-fade-in { animation: hv2-fade .2s var(--hv-ease); }
+@keyframes hv2-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .hv2-fade-in, .hv2-sheet__panel { animation: none; }
+  .hv2-btn, .hv2-btn:active { transition: none; transform: none; }
+}

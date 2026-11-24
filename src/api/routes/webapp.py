@@ -3454,6 +3454,9 @@ async def get_client_hub_bootstrap(
         "pending_referral": await _pending_referral_payload(telegram_id, session),
         "home": {
             "city": home_city,
+            # TASK-445: лента матчей города для блока «Матчи» новой главной — те же
+            # данные, что now_slot уже собрал (home_extraliga), без лишнего запроса.
+            "matches": home_extraliga,
             "now": now_slot(
                 bookings=bookings,
                 hockey=home_hockey,

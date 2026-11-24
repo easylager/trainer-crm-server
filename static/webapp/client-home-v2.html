@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru" data-force-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f5f6f8">
+  <title>Главная</title>
+  <!-- TASK-445 (glide-home-v1, этап 1): новая главная за флагом redesign_s1.
+       Остальные получают client-home.html (см. webapp_client_home_page). -->
+  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611231" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611231" />
+  <link rel="stylesheet" href="/static/shared/glide-components.css?v=202611231" />
+  <script>
+    /* Тот же ранний bootstrap, что на старой главной (TASK-314): запрос уходит из <head>,
+       пока грузятся SDK и скрипты. Профиль — та же догадка (выбранный или с прошлого раза). */
+    (function () {
+      try {
+        var init = new URLSearchParams((location.hash || '').replace(/^#/, '')).get('tgWebAppData') ||
+          new URLSearchParams(location.search).get('init_data') || '';
+        if (!init) return;
+        var pid = null;
+        try {
+          var v = localStorage.getItem('cw_active_profile_id_v1');
+          pid = v ? parseInt(v, 10) : null;
+          if (pid == null) {
+            var user = JSON.parse(new URLSearchParams(init).get('user') || 'null');
+            var d = JSON.parse(localStorage.getItem('cw_default_profile_v1') || 'null');
+            if (user && d && d.u === String(user.id) && Number(d.id) > 0) pid = Number(d.id);
+          }
+        } catch (e) { pid = null; }
+        if (pid == null || !(pid > 0)) return;
+        var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': init, 'X-Profile-Id': String(pid) };
+        var promise = fetch('/api/webapp/client/hub/bootstrap?init_data=' + encodeURIComponent(init), { headers: headers, cache: 'no-store' });
+        promise.catch(function () {});
+        window.__clientEarlyBootstrap = { init: init, pid: pid, promise: promise };
+      } catch (e) { /* обычный путь подхватит */ }
+    })();
+  </script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="glide-deeplink.js?v=202611231"></script>
+  <script src="booking-source.js?v=202611231"></script>
+  <script src="write-access.js?v=202611231"></script>
+  <script src="bell-follow.js?v=202611231"></script>
+  <script src="client-mini-app-theme.js?v=202611231"></script>
+  <script src="mini-app-client-shell.js?v=202611231"></script>
+  <link rel="stylesheet" href="theme.css?v=202611231" />
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611231" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202611231" />
+  <script defer src="mini-app-telegram-chrome.js?v=202611231"></script>
+  <link rel="preload" href="home-v2.js?v=202611231" as="script" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611231" />
+  <link rel="stylesheet" href="home-v2.css?v=202611231" />
+  <script defer src="mini-app-empty-state.js?v=202611231"></script>
+  <script defer src="mini-app-more-icons.js?v=202611231"></script>
+  <script defer src="client-profile-switcher.js?v=202611231"></script>
+  <script defer src="ga-press.js?v=202611231"></script>
+</head>
+<body class="hv2 ga-body" data-client-shell="tabs">
+  <div class="hv2__page">
+    <header class="hv2-head">
+      <div class="hv2-head__in">
+        <button type="button" class="hv2-city ga-press" id="hv2City" aria-haspopup="dialog">
+          <span id="hv2CityLabel">Город</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="clientProfileSwitcherMount" class="hv2-profile"></div>
+      </div>
+      <div class="hv2-hello" id="hv2Hello" aria-live="polite">
+        <span class="hv2-hello__kicker" id="hv2Kicker">Glide</span>
+        <h1 class="hv2-hello__title" id="hv2Title">Лёд рядом</h1>
+      </div>
+    </header>
+
+    <main class="hv2-main" id="hv2Main">
+      <div class="hv2-skel" id="hv2Skel" role="status" aria-busy="true" aria-label="Загрузка главной">
+        <div class="hv2-skel__card"></div>
+        <div class="hv2-skel__row"></div>
+        <div class="hv2-skel__row hv2-skel__row--short"></div>
+      </div>
+      <div id="hv2Top"></div>
+      <section class="hv2-sec" id="hv2IceSec" hidden>
+        <div class="hv2-sec__head">
+          <h2 class="hv2-sec__title">Лёд в городе</h2>
+          <a class="hv2-sec__more" id="hv2IceMore" href="ice">Все</a>
+        </div>
+        <div id="hv2Ice"></div>
+      </section>
+      <section class="hv2-sec" id="hv2MatchSec" hidden>
+        <div class="hv2-sec__head">
+          <h2 class="hv2-sec__title">Матчи</h2>
+          <a class="hv2-sec__more" id="hv2MatchMore" href="client-matches">Все</a>
+        </div>
+        <div id="hv2Matches"></div>
+      </section>
+      <section class="hv2-sec" id="hv2MoreSec" hidden>
+        <h2 class="hv2-sec__title">Ещё</h2>
+        <div class="hv2-rows" id="hv2More"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="hv2-sheet" id="hv2Sheet" hidden>
+    <section class="hv2-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="hv2SheetTitle">
+      <span class="hv2-sheet__grip" aria-hidden="true"></span>
+      <div class="hv2-sheet__head">
+        <h2 id="hv2SheetTitle">Город</h2>
+        <button type="button" class="hv2-sheet__close" data-close aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <button type="button" class="hv2-geo ga-press" id="hv2Geo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="8"/></svg>
+        <span>Определить по геолокации</span>
+      </button>
+      <div id="hv2CityList"></div>
+    </section>
+  </div>
+
+  <script src="home-v2.js?v=202611231"></script>
+  <script src="/static/webapp/ga-touch.js?v=202611231"></script>
+</body>
+</html>

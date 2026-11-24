@@ -28,11 +28,31 @@
     return window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   }
 
+  /* TASK-445 (glide-home-v1): у аккаунтов redesign_s1 все экраны светлые — тема Telegram
+     не перекрашивает. Признак читаем из того же кэша флагов, что и оболочка
+     (cw_ui_flags_v1), синхронно до первого кадра; свежее значение придёт событием
+     client-shell:ui-flags — на него переприменяем тему. */
+  var REDESIGN_BG = '#f5f6f8';
+  function redesignPinned() {
+    try {
+      var tg = getTg();
+      var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      var uid = u && u.id != null ? String(u.id) : '';
+      if (!uid) return false;
+      var c = JSON.parse(window.localStorage.getItem('cw_ui_flags_v1') || 'null');
+      return !!(c && String(c.u) === uid && c.redesign_s1 === true);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function isAppDark() {
-    /* data-force-theme на <html> — жёсткий замок экрана (витрина тренеров всегда светлая). */
+    /* data-force-theme на <html> — жёсткий замок экрана (витрина тренеров всегда светлая,
+       новая главная v2 — тоже). */
     var forced = document.documentElement.getAttribute('data-force-theme');
     if (forced === 'light') return false;
     if (forced === 'dark') return true;
+    if (redesignPinned()) return false;
     var tg = getTg();
     if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
     return false;
@@ -41,7 +61,7 @@
   function applyTelegramChromeColors(dark) {
     var tg = getTg();
     if (!tg) return;
-    var bgHex = dark ? DARK_BG : LIGHT_BG;
+    var bgHex = redesignPinned() ? REDESIGN_BG : dark ? DARK_BG : LIGHT_BG;
     try {
       if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
       if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
@@ -71,7 +91,7 @@
     d.style.setProperty('--tg-theme-button-text-color', GLIDE_CTA_TEXT, 'important');
     d.style.setProperty('--accent-rgb', ACCENT_RGB, 'important');
     d.style.setProperty('--accent-rgb-alt', ACCENT_RGB, 'important');
-    d.style.setProperty('--tg-theme-bg-color', dark ? DARK_BG : LIGHT_BG, 'important');
+    d.style.setProperty('--tg-theme-bg-color', redesignPinned() ? REDESIGN_BG : dark ? DARK_BG : LIGHT_BG, 'important');
     d.style.setProperty('--tg-theme-text-color', dark ? DARK_TEXT : LIGHT_TEXT, 'important');
     d.style.setProperty(
       '--tg-theme-secondary-bg-color',
@@ -87,11 +107,18 @@
 
   function bindThemeEvents() {
     var tg = getTg();
-    if (!tg || typeof tg.onEvent !== 'function') return;
-    try {
-      tg.onEvent('themeChanged', applyClientMiniAppTheme);
-    } catch (e) {
-      /* older clients */
+    if (tg && typeof tg.onEvent === 'function') {
+      try {
+        tg.onEvent('themeChanged', applyClientMiniAppTheme);
+      } catch (e) {
+        /* older clients */
+      }
+    }
+    /* Флаги доехали с сервера — переприменяем тему (кэш мог быть пустым на старте). */
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('client-shell:ui-flags', function () {
+        setTimeout(applyClientMiniAppTheme, 0);
+      });
     }
   }
 

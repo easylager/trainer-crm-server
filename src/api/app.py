@@ -70,7 +70,7 @@ from src.shared.outage import (
 from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, get_optional_client_miniapp_principal
 from src.api.miniapp_auth.principal_keys import client_catalog_telegram_key
 from src.api.miniapp_auth.types import MiniAppPrincipal
-from src.application.client_ui_flags import fast_tabs_enabled, search_board_enabled
+from src.application.client_ui_flags import fast_tabs_enabled, redesign_s1_enabled, search_board_enabled
 from src.shared.config import Settings, get_settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
 from src.shared.sentry_init import init_sentry
@@ -448,15 +448,28 @@ def webapp_client_saved_trainers_page():
     return _webapp_file_response(path)
 
 
+_HOME_V2_PATH = _WEBAPP_DIR / "client-home-v2.html"
+
+
 @app.get("/webapp/client-home")
-def webapp_client_home_page():
+def webapp_client_home_page(
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
+):
     """Client hub (TASK-303): шапка города, слот «сейчас», «Мои занятия», лёд и «Что нужно».
 
     В разметке `__FONT_V__` — версия своих шрифтов: preload обязан совпасть с адресом
     из glide-public-fonts.css, иначе Dela Gothic качается второй раз и заголовок прыгает.
+
+    TASK-445 (glide-home-v1): при флаге redesign_s1 — новая главная client-home-v2.html.
+    Без флага или без init_data — страница как была.
     """
     from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
 
+    if principal is not None and redesign_s1_enabled(client_catalog_telegram_key(principal), get_settings()):
+        path = _HOME_V2_PATH
+        if path.is_file():
+            html = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
+            return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
     path = _WEBAPP_DIR / "client-home.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
@@ -2245,6 +2258,32 @@ def webapp_client_home_main_js(request: Request):
     return FileResponse(
         path,
         media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/home-v2.js")
+def webapp_home_v2_js(request: Request):
+    """TASK-445: логика новой главной (флаг redesign_s1). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "home-v2.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/home-v2.css")
+def webapp_home_v2_css(request: Request):
+    """TASK-445: стили новой главной. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "home-v2.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
 

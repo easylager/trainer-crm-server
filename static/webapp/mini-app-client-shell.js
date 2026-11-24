@@ -30,6 +30,8 @@
     catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>',
     bookings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     /* TASK-369: вкладки режима season_ui. Шайба — «Кто кого», человек — «Я». */
+    /* TASK-445: вкладка «Лёд» (редизайн) — снежинка вместо лупы. */
+    ice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M4 6l16 12M20 6 4 18M12 2l-2 3m2-3 2 3M12 22l-2-3m2 3 2-3M4 6l3.5.5M4 6 4.5 9.5M20 18l-3.5-.5m3.5.5-.5-3.5M20 6l-3.5.5M20 6l-.5 3.5M4 18l3.5-.5M4 18l.5-3.5"/></svg>',
     kk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="9.5" rx="8" ry="3.5"/><path d="M4 9.5v4.5c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5V9.5"/></svg>',
     me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6.5 8-6.5s7.2 2.5 8 6.5"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
@@ -121,12 +123,19 @@
   var UI_FLAGS_TTL_MS = 24 * 60 * 60 * 1000;
   /* Метка «флаги уже спрошены в этой сессии» (sessionStorage): один запрос на сессию, а не на страницу. */
   var UI_FLAGS_SYNC_KEY = 'cw_ui_flags_sync_v1';
-  var uiFlags = { season_ui: true, bookings_tab: false };
+  var uiFlags = { season_ui: true, bookings_tab: false, redesign_s1: false };
   var uiFlagsRefreshed = false;
 
   function normalizeUiFlags(raw) {
-    var season = !!raw && raw.season_ui === true;
-    return { season_ui: season, bookings_tab: season && raw.bookings_tab === true };
+    /* TASK-445: redesign_s1 — своя навигация и новая главная; для оболочки это тот же
+       режим season_ui (бар без «Ещё», «Записи» у всех), плюс свой набор вкладок. */
+    var redesign = !!raw && raw.redesign_s1 === true;
+    var season = !!raw && (raw.season_ui === true || redesign);
+    return {
+      season_ui: season,
+      bookings_tab: season && raw.bookings_tab === true,
+      redesign_s1: redesign,
+    };
   }
 
   function initDataUserId() {
@@ -144,7 +153,7 @@
     }
   }
 
-  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false };
+  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false, redesign_s1: false };
 
   function readUiFlags() {
     var uid = initDataUserId();
@@ -154,8 +163,14 @@
       if (!cached || String(cached.u) !== uid) return UI_FLAGS_DEFAULT;
       var age = Date.now() - cached.at;
       if (typeof cached.at !== 'number' || !(age >= 0 && age < UI_FLAGS_TTL_MS)) return UI_FLAGS_DEFAULT;
-      if (cached.season_ui === false) return normalizeUiFlags(null);
-      return { season_ui: true, bookings_tab: cached.bookings_tab === true };
+      /* Явный свежий false гасит флаг; всё остальное (true, мусор, отсутствие поля) — включено,
+         как и раньше. redesign_s1 в кэше всегда идёт с season-режимом. */
+      if (cached.season_ui === false && cached.redesign_s1 !== true) return normalizeUiFlags(null);
+      return {
+        season_ui: true,
+        bookings_tab: cached.bookings_tab === true,
+        redesign_s1: cached.redesign_s1 === true,
+      };
     } catch (e) {
       return UI_FLAGS_DEFAULT;
     }
@@ -167,7 +182,13 @@
     try {
       global.localStorage.setItem(
         UI_FLAGS_KEY,
-        JSON.stringify({ u: uid, season_ui: flags.season_ui, bookings_tab: flags.bookings_tab, at: Date.now() })
+        JSON.stringify({
+          u: uid,
+          season_ui: flags.season_ui,
+          bookings_tab: flags.bookings_tab,
+          redesign_s1: flags.redesign_s1 === true,
+          at: Date.now(),
+        })
       );
     } catch (e) { /* storage может быть запрещён */ }
   }
@@ -187,7 +208,10 @@
   }
 
   function applyUiFlags(next) {
-    var changed = next.season_ui !== uiFlags.season_ui || next.bookings_tab !== uiFlags.bookings_tab;
+    var changed =
+      next.season_ui !== uiFlags.season_ui ||
+      next.bookings_tab !== uiFlags.bookings_tab ||
+      next.redesign_s1 !== uiFlags.redesign_s1;
     uiFlags = next;
     if (changed && typeof global.CustomEvent === 'function') {
       global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
@@ -224,7 +248,7 @@
   }
 
   function getUiFlags() {
-    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab };
+    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab, redesign_s1: uiFlags.redesign_s1 === true };
   }
 
   function getTg() {
@@ -326,7 +350,7 @@
       if (q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0) return 'catalog';
       return null;
     }
-    if (key === 'client-bookings') return uiFlags.bookings_tab ? 'bookings' : 'me';
+    if (key === 'client-bookings') return uiFlags.bookings_tab || uiFlags.redesign_s1 ? 'bookings' : 'me';
     if (key === 'kto-kogo') return 'kk';
     if (SEASON_ME_ROUTES[key] === 1) return 'me';
     return null;
@@ -334,7 +358,7 @@
 
   function seasonForcedTab(id) {
     if (id === 'more') return 'me';
-    if (id === 'bookings' && !uiFlags.bookings_tab) return 'me';
+    if (id === 'bookings' && !uiFlags.bookings_tab && !uiFlags.redesign_s1) return 'me';
     return id;
   }
 
@@ -374,6 +398,17 @@
    * Живёт отдельно от buildTabBar ниже: тот остаётся как был, ветвление по флагу — одно.
    */
   function seasonTabs() {
+    /* TASK-445: редизайн — всегда 5 вкладок «Главная · Лёд · Записи · Кто кого · Я»,
+       «Записи» есть у всех (пустой экран с действием внутри страницы). */
+    if (uiFlags.redesign_s1) {
+      return [
+        { id: 'home', label: 'Главная', path: 'client-home', icon: TAB_ICONS.home },
+        { id: 'catalog', label: 'Лёд', path: 'ice', icon: TAB_ICONS.ice },
+        { id: 'bookings', label: 'Записи', path: 'client-bookings', icon: TAB_ICONS.bookings },
+        { id: 'kk', label: 'Кто кого', path: 'kto-kogo', icon: TAB_ICONS.kk },
+        { id: 'me', label: 'Я', path: 'client-me', icon: TAB_ICONS.me },
+      ];
+    }
     var tabs = [
       { id: 'home', label: 'Главная', path: 'client-home', icon: TAB_ICONS.home },
       { id: 'catalog', label: 'Поиск', path: 'ice', icon: TAB_ICONS.catalog },
