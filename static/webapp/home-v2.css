@@ -1,249 +1,545 @@
 /*
- * Главная v2 (TASK-445, эпик glide-home-v1): палитра и компоненты из
- * glide-home-system-final.html. Только светлая тема — флаг redesign_s1,
- * data-force-theme="light" на <html>.
- *
- * Палитра документа: bg #f5f6f8 · surface #fff · ink #0b1620 · muted #6b7a86 ·
- * line #e7ebee · teal #0a6f73 · жёлтый #ffd241 (одно главное действие) ·
- * синий #2c4dd0 («Кто кого») · зелёный #22b35e («идёт») · красный #e5484d («Сейчас»).
- * Шаг отступов 4: 8/12/16/20/28/34. Скругления: кнопка 14, плитка 20, карточка 26, лист 28.
- * Golos 30/22/17/15/13/11; Dela Gothic — только крупное время.
+ * Главная v2 (TASK-445, флаг redesign_s1). Светлая система Glide:
+ * палитра своя, переменные --tg-theme-* не используются.
+ * Golos Text везде; Dela Gothic только на крупном времени верхней карточки.
  */
-
 .hv2 {
-  --hv-bg: #f5f6f8;
-  /* Холст страницы: mini-app-client-theme.css красит body через !important
-     (--app-canvas-bg), здесь он не определён — фиксируем цвет документа.
-     Селектор повторяет его специфичность (0,2,2); home-v2.css грузится позже — побеждает. */
-  background: var(--hv-bg);
-  color: var(--hv-ink);
-  --hv-surface: #ffffff;
-  --hv-ink: #0b1620;
-  --hv-muted: #6b7a86;
-  --hv-line: #e7ebee;
-  --hv-teal: #0a6f73;
-  --hv-teal-ink: #0a5f63;
-  --hv-teal-wash: #e3f4f6;
-  --hv-yellow: #ffd241;
-  --hv-yellow-ink: #4a3a00;
-  --hv-blue: #2c4dd0;
-  --hv-green: #22b35e;
-  --hv-red: #e5484d;
-  --hv-chip: #eef1f3;
-  --hv-r-btn: 14px;
-  --hv-r-tile: 20px;
-  --hv-r-card: 26px;
-  --hv-r-sheet: 28px;
-  --hv-shadow: 0 1px 2px rgba(11, 22, 32, .06), 0 8px 24px rgba(11, 22, 32, .06);
-  --hv-ease: cubic-bezier(.2, .8, .2, 1);
-  color: var(--hv-ink);
+  --ink: #0b1620;
+  --muted: #6b7a86;
+  --line: #e7ebee;
+  --teal: #0a6f73;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --green: #22b35e;
+  --chip-green-bg: #e8f7ee;
+  --chip-green-text: #15803d;
+  --chip-yellow-bg: #fff4cc;
+  --chip-yellow-text: #8a6d00;
+  --yellow: #ffd241;
+  --blue: #2c4dd0;
+  --soft: #eef1f3;
+  --r-btn: 14px;
+  --r-tile: 20px;
+  --r-card: 26px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--g-font);
-  min-height: 100vh;
-  min-height: 100dvh;
-}
-.hv2__page { padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
-
-/* Фон body: перекрываем !important-правило mini-app-client-theme.css (--app-canvas-bg
-   на этой странице не определён). Та же специфичность (0,2,2), файл грузится позже. */
-html body.hv2,
-html.trainer-theme-light body.hv2,
-html.trainer-theme-dark body.hv2 {
-  background: #f5f6f8 !important;
-  color: #0b1620 !important;
 }
 
-/* ── Шапка ─────────────────────────────────────────────────── */
-.hv2-head { padding: 14px 0 4px; }
-.hv2-head__in { display: flex; align-items: center; gap: 10px; }
-.hv2-city {
-  display: inline-flex; align-items: center; gap: 6px;
-  min-height: 36px; padding: 0 14px; border: 0; border-radius: var(--hv-r-pill, 999px);
-  background: var(--hv-surface); color: var(--hv-ink);
-  font: 600 15px/1 var(--g-font); box-shadow: var(--hv-shadow); cursor: pointer;
-}
-.hv2-profile { margin-left: auto; }
-.hv2-hello { padding: 14px 4px 10px; }
-.hv2-hello__kicker { font: 600 12px/1 var(--g-font); letter-spacing: .06em; text-transform: uppercase; color: var(--hv-teal-ink); }
-.hv2-hello__title { margin: 6px 0 0; font: 400 22px/1.1 var(--g-font-display); letter-spacing: -.01em; }
+.hv2__page { min-height: 100dvh; background: var(--bg); }
+/* Фон <body> под листом и при overscroll — тот же #f5f6f8 (перебивает --app-canvas-bg темы). */
+html body.hv2 { background-color: #f5f6f8 !important; }
+/* Полноэкранная вёрстка: старый body{padding:12px} (mini-app-components) не нужен,
+   нижний отступ под таб-бар даёт .hv2-bottompad. */
+html body.hv2 { padding: 0; margin: 0; }
 
-/* ── Секции ────────────────────────────────────────────────── */
-/* Секции: display:flex перебивает UA-правило [hidden] — гасим явно. */
-.hv2-sec[hidden] { display: none; }
-.hv2-main { display: flex; flex-direction: column; gap: 20px; }
-.hv2-sec { display: flex; flex-direction: column; gap: 10px; }
-.hv2-sec__head { display: flex; align-items: baseline; justify-content: space-between; }
-.hv2-sec__title { margin: 0; font: 400 17px/1.2 var(--g-font); font-weight: 600; }
-.hv2-sec__more { font: 600 14px/1 var(--g-font); color: var(--hv-teal-ink); text-decoration: none; }
-
-/* ── Общие карточки ────────────────────────────────────────── */
-.hv2-card {
-  background: var(--hv-surface); border-radius: var(--hv-r-card);
-  box-shadow: var(--hv-shadow); overflow: hidden;
+/* ── Фото-шапка (единственное тёмное место) ─────────────────── */
+.hv2-hero {
+  position: relative;
+  height: 300px;
+  background: linear-gradient(160deg, #0b1620 0%, #1b2b38 100%);
+  overflow: hidden;
 }
-.hv2-rows { background: var(--hv-surface); border-radius: var(--hv-r-card); box-shadow: var(--hv-shadow); overflow: hidden; }
-
-/* Строка (список): фото-тайл, текст, мета, шеврон. */
-.hv2-row {
-  display: flex; align-items: center; gap: 12px; width: 100%;
-  padding: 12px 16px; border: 0; background: transparent; text-align: left; cursor: pointer;
-  color: var(--hv-ink); font-family: var(--g-font); text-decoration: none;
-}
-.hv2-row + .hv2-row { border-top: 1px solid var(--hv-line); }
-.hv2-row__time {
-  flex: none; width: 52px; font: 700 17px/1.1 var(--g-font); color: var(--hv-ink);
-  font-variant-numeric: tabular-nums;
-}
-.hv2-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.hv2-row__title { font: 600 15px/1.25 var(--g-font); color: var(--hv-ink); }
-.hv2-row__sub { font: 400 13px/1.3 var(--g-font); color: var(--hv-muted); }
-.hv2-row__meta { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.hv2-row__price { font: 600 13px/1.2 var(--g-font); color: var(--hv-muted); }
-.hv2-row__chev { flex: none; color: var(--hv-muted); }
-
-/* Фото-карточка сеанса. */
-.hv2-photo {
-  position: relative; display: block; border-radius: var(--hv-r-card); overflow: hidden;
-  background: var(--hv-teal-wash); color: #fff; text-decoration: none;
-  box-shadow: var(--hv-shadow); min-height: 148px;
-}
-.hv2-photo__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.hv2-photo__shade {
+.hv2-hero__img {
   position: absolute; inset: 0;
-  background: linear-gradient(to bottom, rgba(11, 22, 32, .28) 0%, transparent 34%, rgba(11, 22, 32, .86) 100%);
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity .3s var(--ease);
 }
-.hv2-photo__in { position: relative; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; min-height: 148px; padding: 16px; }
-.hv2-photo__badge {
-  align-self: flex-start; padding: 5px 10px; border-radius: 999px;
-  background: rgba(255, 255, 255, .92); color: var(--hv-ink);
-  font: 700 13px/1 var(--g-font); font-variant-numeric: tabular-nums;
+.hv2-hero--photo .hv2-hero__img { opacity: 1; }
+.hv2-hero__shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(11, 22, 32, .18) 0%, rgba(11, 22, 32, 0) 34%, rgba(11, 22, 32, .62) 100%);
 }
-.hv2-photo__title { margin: 0; font: 600 20px/1.15 var(--g-font); color: #fff; }
-.hv2-photo__sub { font: 400 14px/1.3 var(--g-font); color: rgba(255, 255, 255, .82); }
-.hv2-photo__actions { display: flex; gap: 8px; margin-top: 12px; }
-
-/* Билет (моё обязательство). */
-.hv2-ticket { padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
-.hv2-ticket__top { display: flex; align-items: flex-start; gap: 14px; }
-.hv2-ticket__time { font: 400 34px/1 var(--g-font-display); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
-.hv2-ticket__when { font: 600 15px/1.3 var(--g-font); margin-top: 6px; }
-.hv2-ticket__status {
-  margin-left: auto; flex: none; padding: 6px 10px; border-radius: 999px;
-  background: var(--hv-yellow); color: var(--hv-yellow-ink);
-  font: 700 12px/1 var(--g-font); letter-spacing: .02em;
+.hv2-hero__top {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  left: 16px; right: 16px;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.hv2-ticket__status--ok { background: var(--hv-teal-wash); color: var(--hv-teal-ink); }
-.hv2-ticket__place { font: 600 16px/1.3 var(--g-font); }
-.hv2-ticket__meta { font: 400 14px/1.4 var(--g-font); color: var(--hv-muted); display: flex; flex-direction: column; gap: 2px; }
-.hv2-ticket__pass {
-  display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--hv-r-tile);
-  background: var(--hv-chip); font: 600 14px/1.2 var(--g-font);
+.hv2-hero__city {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  background: rgba(255, 255, 255, .14);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  color: #fff;
+  font: 600 15px/1 var(--g-font);
 }
-.hv2-ticket__pass b { font-weight: 700; }
-.hv2-ticket__actions { display: flex; gap: 8px; }
-
-/* Кнопки. */
-.hv2-btn {
-  flex: 1; min-height: 46px; padding: 0 16px; border: 0; border-radius: var(--hv-r-btn);
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  font: 700 15px/1 var(--g-font); text-decoration: none; cursor: pointer;
-  transition: transform var(--ga-t-press, 70ms) ease;
+.hv2-hero__right { display: flex; align-items: center; gap: 8px; }
+.hv2-profile:empty { display: none; }
+.hv2-hero__ava {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .9);
+  background: var(--teal);
+  color: #fff;
+  font: 700 17px/38px var(--g-font);
+  text-align: center;
+  padding: 0;
+  overflow: hidden;
 }
-.hv2-btn:active { transform: scale(.97); }
-.hv2-btn--dark { background: var(--hv-ink); color: #fff; }
-.hv2-btn--yellow { background: var(--hv-yellow); color: var(--hv-yellow-ink); }
-.hv2-btn--soft { background: var(--hv-chip); color: var(--hv-ink); font-weight: 600; }
-.hv2-btn--teal { background: var(--hv-teal); color: #fff; }
-.hv2-btn--block { width: 100%; }
-
-/* Абонемент: кольцо остатка. */
-.hv2-pass { display: flex; align-items: center; gap: 16px; padding: 18px 16px; }
-.hv2-pass__ring { position: relative; flex: none; width: 76px; height: 76px; }
-.hv2-pass__ring svg { display: block; transform: rotate(-90deg); }
-.hv2-pass__ring-num {
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font: 700 20px/1 var(--g-font); font-variant-numeric: tabular-nums;
+.hv2-hero__ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hv2-hero__ava img[hidden] { display: none; }
+.hv2-hero__hello {
+  position: absolute;
+  left: 20px; right: 20px; bottom: 40px;
+  display: flex; flex-direction: column; gap: 4px;
 }
-.hv2-pass__ring-num small { font: 600 11px/1 var(--g-font); color: var(--hv-muted); margin-top: 3px; }
-.hv2-pass__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.hv2-pass__title { font: 600 16px/1.25 var(--g-font); }
-.hv2-pass__sub { font: 400 13px/1.35 var(--g-font); color: var(--hv-muted); }
-
-/* Тренер (строка-карточка). */
-.hv2-coach { display: flex; align-items: center; gap: 14px; padding: 16px; }
-.hv2-coach__photo {
-  flex: none; width: 56px; height: 56px; border-radius: 50%; object-fit: cover;
-  background: var(--hv-teal-wash);
+.hv2-hero__date {
+  font: 400 13px/1.3 var(--g-font);
+  color: rgba(255, 255, 255, .8);
 }
-.hv2-coach__photo--empty { display: flex; align-items: center; justify-content: center; color: var(--hv-teal-ink); font: 700 20px/1 var(--g-font); }
-.hv2-coach__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.hv2-coach__name { font: 600 16px/1.25 var(--g-font); }
-.hv2-coach__sub { font: 400 13px/1.35 var(--g-font); color: var(--hv-muted); }
-
-/* Выбор города. */
-.hv2-citypick { padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; }
-.hv2-citypick__title { margin: 0; font: 600 18px/1.25 var(--g-font); }
-.hv2-citypick__sub { margin: 0; font: 400 14px/1.4 var(--g-font); color: var(--hv-muted); }
-.hv2-cityopts { display: flex; flex-direction: column; }
-.hv2-cityopt {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 13px 4px; border: 0; border-top: 1px solid var(--hv-line); background: transparent;
-  font: 600 15px/1.2 var(--g-font); color: var(--hv-ink); text-align: left; cursor: pointer;
-}
-.hv2-cityopt:first-child { border-top: 0; }
-.hv2-cityopt__count { font: 400 13px/1 var(--g-font); color: var(--hv-muted); }
-
-/* Матч (строка). */
-.hv2-match { display: flex; align-items: center; gap: 10px; padding: 12px 16px; text-decoration: none; color: var(--hv-ink); }
-.hv2-match + .hv2-match { border-top: 1px solid var(--hv-line); }
-.hv2-match__time { flex: none; width: 74px; font: 600 13px/1.2 var(--g-font); color: var(--hv-muted); font-variant-numeric: tabular-nums; }
-.hv2-match__teams { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font: 600 15px/1.2 var(--g-font); }
-.hv2-match__logo { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex: none; }
-.hv2-match__logo--empty { background: var(--hv-chip); }
-.hv2-match__place { flex: none; font: 400 12px/1.2 var(--g-font); color: var(--hv-muted); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hv2-match__sticker {
-  flex: none; padding: 3px 8px; border-radius: 6px; background: var(--hv-blue); color: #fff;
-  font: 700 10px/1 var(--g-font); letter-spacing: .04em;
+.hv2-hero__date:first-letter { text-transform: uppercase; }
+.hv2-hero__title {
+  margin: 0;
+  font: 700 30px/1.15 var(--g-font);
+  color: #fff;
+  letter-spacing: -0.01em;
 }
 
-/* Пустое состояние. */
-.hv2-empty { padding: 26px 20px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
-.hv2-empty__title { margin: 0; font: 600 17px/1.25 var(--g-font); }
-.hv2-empty__text { margin: 0; font: 400 14px/1.45 var(--g-font); color: var(--hv-muted); }
-
-/* Лист города. */
+/* ── Контент-лист ───────────────────────────────────────────── */
 .hv2-sheet {
-  position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end;
-  background: rgba(11, 22, 32, .3);
+  position: relative;
+  margin-top: -28px;
+  padding: 16px 20px 0;
+  background: var(--bg);
+  border-radius: 28px 28px 0 0;
+  min-height: 60dvh;
 }
-.hv2-sheet[hidden] { display: none; }
-.hv2-sheet__panel {
-  width: 100%; max-height: 78vh; overflow-y: auto;
-  background: var(--hv-surface); border-radius: var(--hv-r-sheet) var(--hv-r-sheet) 0 0;
-  padding: 10px 16px calc(20px + env(safe-area-inset-bottom));
-  animation: hv2-sheet-up .24s var(--hv-ease);
-}
-@keyframes hv2-sheet-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
-.hv2-sheet__grip { display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--hv-line); margin: 4px auto 12px; }
-.hv2-sheet__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.hv2-sheet__head h2 { margin: 0; font: 600 20px/1.2 var(--g-font); }
-.hv2-sheet__close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--hv-chip); color: var(--hv-ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.hv2-geo {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 13px 14px; margin-bottom: 8px; border: 0; border-radius: var(--hv-r-tile);
-  background: var(--hv-teal-wash); color: var(--hv-teal-ink);
-  font: 600 15px/1 var(--g-font); cursor: pointer; text-align: left;
+.hv2-bottompad { height: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+.hv2-card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: 0 8px 24px rgba(11, 22, 32, .08);
 }
 
-/* Скелетон первой загрузки — форма карточки, без прыжков. */
-.hv2-skel { display: flex; flex-direction: column; gap: 12px; }
-.hv2-skel__card { height: 220px; border-radius: var(--hv-r-card); background: var(--hv-surface); }
-.hv2-skel__row { height: 64px; border-radius: var(--hv-r-card); background: var(--hv-surface); }
-.hv2-skel__row--short { height: 64px; width: 70%; }
+.hv2-sec { margin-top: 28px; }
+.hv2-sec__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 4px;
+  margin-bottom: 12px;
+}
+.hv2-sec__title {
+  margin: 0;
+  font: 700 22px/1.2 var(--g-font);
+  color: var(--ink);
+}
+.hv2-sec__more {
+  font: 600 15px/1 var(--g-font);
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
-.hv2-fade-in { animation: hv2-fade .2s var(--hv-ease); }
+/* ── Билет ──────────────────────────────────────────────────── */
+.hv2-ticket { padding: 20px; }
+.hv2-ticket__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.hv2-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font: 600 13px/1 var(--g-font);
+  background: var(--chip-green-bg); color: var(--chip-green-text);
+}
+.hv2-chip--gray { background: var(--soft); color: var(--muted); }
+.hv2-chip--yellow { background: var(--chip-yellow-bg); color: var(--chip-yellow-text); }
+.hv2-chip__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green);
+  animation: hv2-pulse 1.8s var(--ease) infinite;
+}
+@keyframes hv2-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+.hv2-ticket__thumb {
+  flex: 0 0 84px;
+  width: 84px; height: 84px;
+  border-radius: 18px;
+  object-fit: cover;
+  background: var(--soft);
+}
+.hv2-ticket__time {
+  margin-top: 12px;
+  font: 400 52px/1 var(--g-font-display);
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.hv2-ticket__name { margin-top: 6px; font: 700 17px/1.3 var(--g-font); }
+.hv2-ticket__sub { margin-top: 2px; font: 400 15px/1.35 var(--g-font); color: var(--muted); }
+.hv2-ticket__perf {
+  position: relative;
+  margin: 16px -20px;
+  border-top: 1.5px dashed var(--line);
+}
+.hv2-ticket__perf::before,
+.hv2-ticket__perf::after {
+  content: '';
+  position: absolute; top: -11px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--bg);
+}
+.hv2-ticket__perf::before { left: -11px; }
+.hv2-ticket__perf::after { right: -11px; }
+.hv2-ticket__trainer { display: flex; align-items: center; gap: 12px; }
+.hv2-ticket__face {
+  width: 44px; height: 44px; border-radius: 50%;
+  object-fit: cover; background: var(--soft);
+  color: var(--muted);
+  font: 700 17px/44px var(--g-font); text-align: center;
+  flex: 0 0 44px;
+}
+.hv2-ticket__tname { font: 700 15px/1.3 var(--g-font); }
+.hv2-ticket__trole { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-ticket__acts { margin-left: auto; display: flex; gap: 8px; }
+.hv2-rbtn {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--soft); color: var(--ink);
+  border: 0; padding: 0;
+}
+.hv2-rbtn--ink { background: var(--ink); color: #fff; }
+.hv2-ticket__passline {
+  margin-top: 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font: 400 13px/1.3 var(--g-font); color: var(--muted);
+}
+.hv2-dots { display: inline-flex; gap: 4px; }
+.hv2-dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #dfe5e8;
+}
+.hv2-dots i.on { background: var(--teal); }
+
+/* ── Абонемент / тренер ─────────────────────────────────────── */
+.hv2-pass, .hv2-coach { padding: 20px; }
+.hv2-pass__head { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: flex-start; }
+.hv2-pass__body { min-width: 0; }
+.hv2-pass__title { margin-top: 10px; font: 700 20px/1.2 var(--g-font); }
+.hv2-pass__sub { margin-top: 4px; font: 400 15px/1.35 var(--g-font); color: var(--muted); }
+.hv2-ring { position: relative; flex: 0 0 76px; width: 76px; height: 76px; }
+.hv2-ring svg { display: block; transform: rotate(-90deg); }
+.hv2-ring__num {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.hv2-ring__num b { font: 700 26px/1 var(--g-font); }
+.hv2-ring__num span { font: 400 12px/1.2 var(--g-font); color: var(--muted); }
+.hv2-slots__title { margin-top: 18px; font: 400 13px/1 var(--g-font); color: var(--muted); }
+.hv2-slots { margin-top: 10px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.hv2-slots::-webkit-scrollbar { display: none; }
+.hv2-slot {
+  flex: 0 0 auto;
+  min-width: 84px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: center;
+  display: flex; flex-direction: column; gap: 3px;
+  text-decoration: none; color: var(--ink);
+}
+.hv2-slot__day { font: 600 11px/1 var(--g-font); color: var(--muted); text-transform: uppercase; }
+.hv2-slot__time { font: 700 17px/1.1 var(--g-font); color: var(--ink); }
+.hv2-slot--all {
+  border: 0;
+  justify-content: center;
+  font: 600 15px/1 var(--g-font); color: var(--teal);
+}
+.hv2-slot--skel { min-width: 84px; height: 64px; }
+.hv2-coach__head { display: flex; align-items: center; gap: 14px; }
+.hv2-coach__face {
+  width: 56px; height: 56px; border-radius: 50%;
+  object-fit: cover; background: var(--soft);
+  color: var(--muted); font: 700 20px/56px var(--g-font); text-align: center;
+  flex: 0 0 56px;
+}
+.hv2-coach__name { font: 700 17px/1.3 var(--g-font); }
+.hv2-coach__role { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 16px;
+  border: 0; border-radius: 16px;
+  font: 700 17px/1 var(--g-font);
+}
+.hv2-btn--yellow { background: var(--yellow); color: var(--ink); }
+.hv2-btn--ink { background: var(--ink); color: #fff; }
+.hv2-btn--soft { background: var(--soft); color: var(--ink); }
+
+/* ── Фото-карточка (новичок) ────────────────────────────────── */
+.hv2-pcard {
+  position: relative;
+  height: 300px;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background: linear-gradient(160deg, #0b1620, #1b2b38);
+}
+.hv2-pcard__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hv2-pcard__shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(11, 22, 32, .1) 0%, rgba(11, 22, 32, 0) 40%, rgba(11, 22, 32, .68) 100%);
+}
+.hv2-pcard__chip {
+  position: absolute; top: 14px; left: 14px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  font: 600 13px/1 var(--g-font); color: var(--ink);
+}
+.hv2-pcard__in {
+  position: absolute; left: 18px; right: 18px; bottom: 16px;
+  display: flex; flex-direction: column; gap: 3px;
+  color: #fff;
+}
+.hv2-pcard__time, .hv2-pcard__place, .hv2-pcard__sub { display: block; }
+.hv2-pcard__time { font: 400 52px/1 var(--g-font-display); }
+.hv2-pcard__place { font: 700 17px/1.3 var(--g-font); }
+.hv2-pcard__sub { font: 400 15px/1.35 var(--g-font); color: rgba(255, 255, 255, .85); }
+.hv2-pcard__btns { display: flex; gap: 10px; margin-top: 12px; }
+.hv2-pcard__btns .hv2-btn { margin-top: 0; flex: 1; }
+
+/* ── Выбор города ───────────────────────────────────────────── */
+.hv2-citypick { overflow: hidden; }
+.hv2-cprow {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 0;
+  text-align: left;
+  font-family: var(--g-font);
+}
+.hv2-cprow + .hv2-cprow { border-top: 1px solid var(--line); }
+.hv2-cprow__img {
+  width: 64px; height: 64px; border-radius: 16px;
+  object-fit: cover;
+  background: var(--teal);
+  color: #fff;
+  font: 700 24px/64px var(--g-font); text-align: center;
+  flex: 0 0 64px;
+}
+.hv2-cprow__name { font: 700 17px/1.3 var(--g-font); }
+.hv2-cprow__sub { font: 400 14px/1.35 var(--g-font); color: var(--muted); }
+.hv2-cprow__part { white-space: nowrap; }
+.hv2-cprow__chev { margin-left: auto; color: var(--muted); flex: 0 0 auto; }
+.hv2-cprow--geo { color: var(--teal); font: 600 17px/1 var(--g-font); }
+
+/* ── Дни-вкладки ────────────────────────────────────────────── */
+.hv2-tabs {
+  position: relative;
+  display: flex; gap: 18px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.hv2-tab {
+  position: relative;
+  padding: 6px 2px 10px;
+  border: 0; background: none;
+  font: 600 17px/1 var(--g-font); color: var(--muted);
+}
+.hv2-tab sup { font: 600 11px/1 var(--g-font); margin-left: 3px; }
+.hv2-tab--on { color: var(--ink); }
+.hv2-tab--empty { opacity: .45; }
+.hv2-tabs__ink {
+  position: absolute; bottom: -1px; left: 0;
+  height: 2px; background: var(--ink);
+  transition: transform .18s var(--ease), width .18s var(--ease);
+}
+
+/* ── Рейл катков ────────────────────────────────────────────── */
+.hv2-rail {
+  display: flex; gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 20px;
+  scrollbar-width: none;
+  padding-inline: 20px;
+  margin-inline: -20px;
+  padding-bottom: 4px;
+}
+.hv2-rail::-webkit-scrollbar { display: none; }
+.hv2-rcard {
+  flex: 0 0 260px;
+  scroll-snap-align: start;
+  display: block;
+  cursor: pointer;
+  text-decoration: none; color: var(--ink);
+}
+.hv2-rcard__imgwrap { position: relative; display: block; width: 260px; height: 170px; border-radius: 22px; overflow: hidden; background: var(--soft); }
+.hv2-rcard__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hv2-rcard__chip {
+  position: absolute; top: 10px; left: 10px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  font: 600 13px/1 var(--g-font); color: var(--ink);
+}
+.hv2-rcard__name {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  margin-top: 10px;
+  font: 700 17px/1.3 var(--g-font);
+}
+.hv2-rcard__chips { display: flex; gap: 6px; margin-top: 8px; }
+.hv2-rcard__tchip {
+  padding: 7px 12px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface);
+  font: 700 13px/1 var(--g-font); color: var(--ink);
+  text-decoration: none;
+}
+.hv2-rcard__sub { display: block; margin-top: 8px; font: 400 13px/1.35 var(--g-font); color: var(--muted); }
+.hv2-rail__empty {
+  padding: 6px 4px;
+  font: 400 15px/1.4 var(--g-font); color: var(--muted);
+}
+.hv2-rail__empty a { color: var(--ink); font-weight: 600; }
+.hv2-rail--fade { opacity: 0; transition: opacity .18s var(--ease); }
+.hv2-rail--in { opacity: 1; }
+
+/* ── Матчи ──────────────────────────────────────────────────── */
+.hv2-mcard {
+  flex: 0 0 240px;
+  scroll-snap-align: start;
+  border-radius: 22px;
+  background: var(--surface);
+  padding: 16px;
+  text-decoration: none; color: var(--ink);
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 8px 24px rgba(11, 22, 32, .06);
+}
+.hv2-mcard--kk { background: var(--blue); color: #fff; }
+.hv2-mcard__kick {
+  font: 700 11px/1.2 var(--g-font);
+  text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted);
+}
+.hv2-mcard--kk .hv2-mcard__kick { color: rgba(255, 255, 255, .8); }
+.hv2-mcard__team { display: flex; align-items: center; gap: 10px; }
+.hv2-mcard__logo {
+  width: 24px; height: 24px; border-radius: 50%;
+  object-fit: contain;
+  flex: 0 0 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 9px/24px var(--g-font); color: #fff;
+}
+.hv2-mcard__tname { font: 700 17px/1.2 var(--g-font); }
+.hv2-mcard__place { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-mcard--kk .hv2-mcard__place { color: rgba(255, 255, 255, .85); }
+.hv2-mcard__play {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 9px 18px;
+  border-radius: 12px;
+  background: #fff; color: var(--blue);
+  font: 700 15px/1 var(--g-font);
+}
+.hv2-mcard__play--yellow { background: var(--yellow); color: var(--ink); }
+
+/* ── Ещё в городе ───────────────────────────────────────────── */
+.hv2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hv2-tile {
+  background: var(--surface);
+  border-radius: var(--r-tile);
+  padding: 16px;
+  text-decoration: none; color: var(--ink);
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 108px;
+}
+.hv2-tile__icon { color: var(--teal); display: block; }
+.hv2-tile__title { font: 700 17px/1.2 var(--g-font); }
+.hv2-tile__sub { font: 400 13px/1.35 var(--g-font); color: var(--muted); }
+
+/* ── Скелетон и пустое ──────────────────────────────────────── */
+.hv2-skel__card {
+  height: 230px; border-radius: var(--r-card); background: var(--surface);
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 8px 24px rgba(11, 22, 32, .08);
+}
+.hv2-skel__b { display: block; height: 16px; border-radius: 8px; background: #e9edf0; }
+.hv2-skel__b--chip { width: 34%; height: 24px; border-radius: 999px; }
+.hv2-skel__b--time { width: 52%; height: 52px; border-radius: 12px; margin-top: 4px; }
+.hv2-skel__row { display: flex; align-items: center; gap: 12px; margin-top: auto; }
+.hv2-skel__av { width: 44px; height: 44px; border-radius: 50%; background: #e9edf0; flex: 0 0 44px; }
+.hv2-skel__row .hv2-skel__b { width: 30%; }
+.hv2-skel__title { margin-top: 28px; height: 22px; width: 160px; border-radius: 8px; background: #e9edf0; }
+.hv2-skel__rail { margin-top: 14px; display: flex; gap: 12px; overflow: hidden; }
+.hv2-skel__tile { flex: 0 0 260px; height: 170px; border-radius: 22px; background: var(--surface); }
+.hv2-skel__b, .hv2-skel__av, .hv2-skel__title, .hv2-skel__tile { animation: hv2-shimmer 1.4s ease-in-out infinite; }
+@keyframes hv2-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+.hv2-error {
+  padding: 28px 20px;
+  text-align: center;
+}
+.hv2-error__t { font: 700 17px/1.3 var(--g-font); }
+.hv2-error__s { margin-top: 4px; font: 400 15px/1.4 var(--g-font); color: var(--muted); }
+.hv2-error .hv2-btn { max-width: 220px; margin: 16px auto 0; }
+
+/* ── Появление контента ─────────────────────────────────────── */
+.hv2-up { animation: hv2-rise .28s var(--ease) both; }
+@keyframes hv2-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.hv2-fade { animation: hv2-fade .2s ease both; }
 @keyframes hv2-fade { from { opacity: 0; } to { opacity: 1; } }
-
 @media (prefers-reduced-motion: reduce) {
-  .hv2-fade-in, .hv2-sheet__panel { animation: none; }
-  .hv2-btn, .hv2-btn:active { transition: none; transform: none; }
+  .hv2-up, .hv2-fade, .hv2-skel__card, .hv2-skel__title, .hv2-skel__tile,
+  .hv2-chip__dot, .hv2-rail--fade { animation: hv2-fade .2s ease both; }
+  .hv2-hero__img, .hv2-tabs__ink { transition: none; }
 }
+
+/* ── Лист города ────────────────────────────────────────────── */
+.hv2-sheetbg {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(11, 22, 32, .3);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.hv2-sheetbg[hidden] { display: none; }
+.hv2-csheet {
+  width: 100%; max-width: 480px;
+  max-height: 82dvh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 28px 28px 0 0;
+  padding: 10px 0 calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: hv2-sheet .24s var(--ease) both;
+}
+@keyframes hv2-sheet { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+.hv2-csheet__grip {
+  display: block; margin: 2px auto 10px;
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--line);
+}
+.hv2-csheet__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px 8px;
+}
+.hv2-csheet__head h2 { margin: 0; font: 700 22px/1.2 var(--g-font); }
+.hv2-csheet__close {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 0; background: var(--soft); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.hv2-geo {
+  display: flex; align-items: center; gap: 10px;
+  margin: 4px 16px 8px;
+  padding: 14px 16px;
+  width: calc(100% - 32px);
+  border: 0; border-radius: var(--r-btn);
+  background: var(--surface);
+  color: var(--teal);
+  font: 600 15px/1 var(--g-font);
+  text-align: left;
+}
+.hv2-csheet .hv2-cprow { padding: 12px 20px; }

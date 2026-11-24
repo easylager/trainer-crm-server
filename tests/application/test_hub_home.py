@@ -175,3 +175,67 @@ def test_city_without_matches_has_no_hockey_entry() -> None:
         view = _view()
         view["matches"] = feed
         assert "matches" not in [row["key"] for row in city_block(view)["needs"]]
+
+
+"""TASK-445: «Лёд в городе» новой главной — rail сеансов по каткам (ice_rail_window)."""
+from src.application.hub_home import ICE_RAIL_ARENAS, ICE_RAIL_TIMES, ice_rail_window
+
+
+def _rail_row(slug: str, name: str, hhmm: str, sid: int, starts_utc: str) -> dict:
+    return {
+        "arena_slug": slug,
+        "arena_name": name,
+        "session_id": sid,
+        "starts_at_local": hhmm,
+        "local_date": date(2026, 10, 19),
+        "price_adult_minor": 1000,
+        "currency_code": "BYN",
+        "schedule_basis": "live",
+        "starts_at_utc": datetime.fromisoformat(starts_utc).replace(tzinfo=timezone.utc),
+    }
+
+
+def _rail_places() -> list[dict]:
+    return [
+        {"id": 1, "slug": "a", "venue_type": "ice", "photo_variants": {"card": "k1", "thumb": "t1", "hero": "h1"}},
+        {"id": 2, "slug": "b", "venue_type": "ice", "photo_variants": {}},
+        {"id": 3, "slug": "c", "venue_type": "ice", "photo_variants": {}},
+    ]
+
+
+def test_ice_rail_groups_sessions_by_arena_and_orders_by_first_start() -> None:
+    rows = [
+        _rail_row("b", "Арена Б", "17:30", 102, "2026-10-19T14:30:00"),
+        _rail_row("a", "Арена А", "18:00", 100, "2026-10-19T15:00:00"),
+        _rail_row("a", "Арена А", "19:00", 101, "2026-10-19T16:00:00"),
+        _rail_row("b", "Арена Б", "20:00", 103, "2026-10-19T17:00:00"),
+        _rail_row("b", "Арена Б", "21:00", 104, "2026-10-19T18:00:00"),
+        _rail_row("b", "Арена Б", "22:00", 105, "2026-10-19T19:00:00"),
+    ]
+    out = ice_rail_window(rows, _rail_places(), now=NOW)
+    assert [a["arena_id"] for a in out] == [2, 1], "Б ближе (17:30), А — за ним"
+    b, a = out
+    assert b["name"] == "Арена Б" and b["href"] == "arena?ref=2&s=102"
+    assert [t["time"] for t in b["times"]] == ["17:30", "20:00", "21:00"], "не больше трёх чипов"
+    assert len(b["times"]) == ICE_RAIL_TIMES
+    assert b["times"][1]["href"] == "arena?ref=2&s=103"
+    assert a["price"] == "10 BYN"
+
+
+def test_ice_rail_caps_arenas_and_skips_unknown_slug_gracefully() -> None:
+    rows = [
+        _rail_row(f"slug{i}", f"Каток {i}", "18:00", 200 + i, "2026-10-19T15:00:00")
+        for i in range(ICE_RAIL_ARENAS + 3)
+    ]
+    places = [{"id": i, "slug": f"slug{i}", "venue_type": "ice", "photo_variants": {}} for i in range(20)]
+    out = ice_rail_window(rows, places, now=NOW)
+    assert len(out) == ICE_RAIL_ARENAS
+    # Каток без строки в places: имя из сеанса, href None, фото пустое.
+    rows2 = [_rail_row("ghost", "Призрак", "18:00", 300, "2026-10-19T15:00:00")]
+    out2 = ice_rail_window(rows2, [], now=NOW)
+    assert out2[0]["name"] == "Призрак" and out2[0]["arena_id"] is None and out2[0]["href"] is None
+
+
+def test_ice_rail_empty_window_is_empty_list() -> None:
+    assert ice_rail_window([], _rail_places(), now=NOW) == []
+    assert ice_rail_window(None, None, now=NOW) == []

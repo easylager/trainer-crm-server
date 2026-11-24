@@ -61,8 +61,20 @@
   function applyTelegramChromeColors(dark) {
     var tg = getTg();
     if (!tg) return;
-    var bgHex = redesignPinned() ? REDESIGN_BG : dark ? DARK_BG : LIGHT_BG;
+    var pinned = redesignPinned();
+    var bgHex = pinned ? REDESIGN_BG : dark ? DARK_BG : LIGHT_BG;
     try {
+      if (pinned) {
+        /* Своя палитра передаётся только с Bot API 6.1/7.10 — через isVersionAtLeast,
+           иначе старые клиенты молча её игнорируют или падают. */
+        var v = typeof tg.isVersionAtLeast === 'function' ? tg.isVersionAtLeast.bind(tg) : function () { return false; };
+        if (v('6.1')) {
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        }
+        if (v('7.10') && typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
+        return;
+      }
       if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
       if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
       if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);

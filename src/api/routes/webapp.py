@@ -3,11 +3,13 @@ Web App API: trainer schedule (Mini App) and client booking (Mini App). Auth via
 """
 import asyncio
 import html
+import json
 import logging
 import os
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from itertools import groupby
+from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl
 
@@ -37,6 +39,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from src.api.client_bootstrap import ensure_acting_client_id
 from src.api.deps import get_session
 from src.application.arena_visit_info import VisitInfoError, normalize_visit_info
+from src.application.client_ui_flags import redesign_s1_enabled
 from src.application.hub_home import now_slot
 from src.application.trainer_custom_service_use_cases import MAX_CUSTOM_SERVICES_PER_TRAINER
 from src.shared.byr_currency_display import BYR_SIGN
@@ -3136,6 +3139,9 @@ async def get_client_hub_bootstrap(
     """
     telegram_id = client_catalog_telegram_key(principal)
     requested_profile_id = _parse_profile_id_header(x_profile_id)
+    # TASK-445: новая главная v2 — доп. ключи в ``home`` только под флагом;
+    # для остальных форма ответа как раньше (ключей просто нет).
+    redesign = redesign_s1_enabled(telegram_id, Settings())
     # Personalized, and it decides whether the invite gate covers the hub.
     # A cached copy would keep «Вас пригласил тренер» after registration.
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -3354,10 +3360,19 @@ async def get_client_hub_bootstrap(
             return []
 
     async def _home_city() -> dict[str, Any] | None:
-        """TASK-303: шапка, «Ближайший лёд» и «Что нужно» — тот же вид, что у страницы города."""
-        from src.application.city_hub_page import load_city_hub_view
-        from src.application.hub_home import city_block
+        """TASK-303: шапка, «Ближайший лёд» и «Что нужно» — тот же вид, что у страницы города.
+
+        Под флагом redesign_s1 (TASK-445) блок дополняется ``name_in``, ``ice_rail``
+        (сеансы по окнам сегодня/завтра/выходные, сгруппированные по катку) и
+        ``place_photos`` (фото катков города — билету нужен каток записи).
+        """
+        from src.application.catalog_home_page import _USER_UPCOMING_SQL
+        from src.application.city_hub_page import _WINDOW_KEYS, load_city_hub_view
+        from src.application.hub_home import _ice_href, _photo, city_block, ice_rail_window
+        from src.application.ice_session_use_cases import STATUS_ACTIVE
+        from src.application.ice_time_windows import resolve_hub_window
         from src.application.place_links import place_start_param, public_telegram_entry_link
+        from src.shared.ice_discovery_scope import public_scope_params
 
         try:
             async with async_session_factory() as s:
@@ -3378,10 +3393,188 @@ async def get_client_hub_bootstrap(
                     # «Позвать» уходит друзьям без чата с ботом — публичный вход.
                     return public_telegram_entry_link(settings, start_param=place_start_param(arena_id, session_id))
 
-                return city_block(await load_city_hub_view(s, city=city), invite_link=invite)
+                view = await load_city_hub_view(s, city=city)
+                block = city_block(view, invite_link=invite)
+                if not redesign:
+                    return {"city": block}
+
+                from src.shared.city_locative import city_locative
+
+                block["name_in"] = city_locative(str(city["name"]))
+                city_int = int(city_id)
+                rinks = [
+                    p for p in view.get("places") or []
+                    if str(p.get("venue_type") or "ice") in ("ice", "outdoor")
+                ]
+                place_photos = {
+                    str(int(p["id"])): {"thumb": _photo(p)["thumb"], "card": _photo(p)["card"]}
+                    for p in rinks
+                    if p.get("id") is not None
+                }
+                now = datetime.now(timezone.utc)
+                scope = public_scope_params()
+                rail_labels = {"today": "Сегодня", "tomorrow": "Завтра", "weekend": "Выходные"}
+                windows: list[dict[str, Any]] = []
+                for key in _WINDOW_KEYS:
+                    tw = resolve_hub_window(key, now)
+                    if tw is None:
+                        continue
+                    rail_rows = (
+                        (
+                            await s.execute(
+                                _USER_UPCOMING_SQL,
+                                {
+                                    "user_city_id": city_int,
+                                    "starts_at": max(now, tw.starts_at),
+                                    "ends_at": tw.ends_at,
+                                    "now": now,
+                                    "st": STATUS_ACTIVE,
+                                    "lim": 60,
+                                    **scope,
+                                },
+                            )
+                        )
+                        .mappings()
+                        .all()
+                    )
+                    windows.append(
+                        {
+                            "key": key,
+                            "label": rail_labels[key],
+                            "count": int((view.get("skate_counts") or {}).get(key) or 0),
+                            "href": _ice_href(city_int, intent="skate", when=key),
+                            "arenas": ice_rail_window(
+                                rail_rows, view.get("places") or [], now=now, invite_link=invite
+                            ),
+                        }
+                    )
+                return {"city": block, "ice_rail": {"windows": windows}, "place_photos": place_photos}
         except Exception:
             logger.exception("client hub city block failed")
             return None
+
+    async def _home_city_pick() -> list[dict[str, Any]] | None:
+        """TASK-445: города для выбора, когда у сессии города ещё нет (макет «без города»).
+
+        Те же города и порядок, что у ``/api/public/ice/cities``, до 6 штук, плюс за один
+        запрос — сегодняшние сеансы (день Europe/Minsk) и лучшее фото катка, как у hero
+        ``city_block``: крытый каток с самым крупным кадром.
+        """
+        from src.application.arena_public_use_cases import (
+            _CURRENT_SESSION_SQL,
+            list_ice_discovery_cities,
+        )
+        from src.application.hub_home import _photo
+        from src.application.ice_session_use_cases import STATUS_ACTIVE
+        from src.shared.ice_discovery_scope import (
+            PUBLIC_ARENA_VISIBLE_SQL,
+            public_scope_params,
+        )
+
+        if not redesign:
+            return None
+        try:
+            async with async_session_factory() as s:
+                row = await read_client_bot_session(telegram_id, s)
+                if (row or {}).get("city_id") is not None:
+                    return None
+                now = datetime.now(timezone.utc)
+                cities = (await list_ice_discovery_cities(s))[:6]
+                if not cities:
+                    return []
+                ids = [int(c["id"]) for c in cities]
+                stats_rows = (
+                    (
+                        await s.execute(
+                            text(
+                                f"""
+                                SELECT c.id AS city_id,
+                                       (
+                                           SELECT COUNT(*)::int
+                                           FROM ice_sessions s
+                                           JOIN arenas sa ON sa.id = s.arena_id
+                                           WHERE sa.city_id = c.id
+                                             AND s.local_date = (CAST(:now AS timestamptz) AT TIME ZONE 'Europe/Minsk')::date
+                                             AND {_CURRENT_SESSION_SQL}
+                                       ) AS today_sessions,
+                                       p.arena_id AS photo_arena_id,
+                                       COALESCE(p.vt, 'ice') AS photo_vt,
+                                       p.photo_width,
+                                       p.variants
+                                FROM cities c
+                                LEFT JOIN LATERAL (
+                                    SELECT a.id AS arena_id, a.venue_type AS vt,
+                                           m.width AS photo_width, m.variants
+                                    FROM arenas a
+                                    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                                    LEFT JOIN LATERAL (
+                                        SELECT m2.width, m2.variants
+                                        FROM media m2
+                                        WHERE m2.owner_type = 'arena' AND m2.owner_id = a.id
+                                          AND m2.status = 'published'
+                                        ORDER BY m2.sort_order, m2.id
+                                        LIMIT 1
+                                    ) m ON true
+                                    WHERE a.city_id = c.id
+                                      AND COALESCE(a.venue_type, 'ice') IN ('ice', 'outdoor')
+                                      AND {PUBLIC_ARENA_VISIBLE_SQL}
+                                    ORDER BY (COALESCE(a.venue_type, 'ice') <> 'ice'),
+                                             m.width DESC NULLS LAST, a.id
+                                    LIMIT 8
+                                ) p ON true
+                                WHERE c.id = ANY(:ids)
+                                """
+                            ),
+                            {
+                                "ids": ids,
+                                "now": now,
+                                "st": STATUS_ACTIVE,
+                                **public_scope_params(),
+                            },
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+        except Exception:
+            logger.exception("client hub city pick failed")
+            return None
+
+        sessions_by_city: dict[int, int] = {}
+        photos_by_city: dict[int, list[dict[str, Any]]] = {}
+        for r in stats_rows:
+            cid = int(r["city_id"])
+            sessions_by_city[cid] = int(r.get("today_sessions") or 0)
+            if r.get("variants") is not None:
+                photos_by_city.setdefault(cid, []).append(
+                    {
+                        "vt": str(r.get("photo_vt") or "ice"),
+                        "w": int(r.get("photo_width") or 0),
+                        "variants": r.get("variants"),
+                    }
+                )
+
+        out: list[dict[str, Any]] = []
+        for c in cities:
+            cid = int(c["id"])
+            cands = photos_by_city.get(cid) or []
+            cands.sort(key=lambda x: (x["vt"] != "ice", -x["w"]))
+            photo = None
+            if cands:
+                variants = cands[0]["variants"]
+                if isinstance(variants, str):
+                    variants = json.loads(variants)
+                photo = _photo({"photo_variants": variants if isinstance(variants, Mapping) else {}})
+            out.append(
+                {
+                    "id": cid,
+                    "name": c["name"],
+                    "today_sessions": sessions_by_city.get(cid, 0),
+                    "trainer_count": int(c.get("trainer_count") or 0),
+                    "photo": photo,
+                }
+            )
+        return out
 
     async def _home_hockey() -> dict[str, Any] | None:
         """TASK-303: «Кто кого» в слоте «сейчас». Сбой игры не трогает главную."""
@@ -3417,10 +3610,10 @@ async def get_client_hub_bootstrap(
             return None
 
     (
-        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga
+        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick
     ) = await asyncio.gather(
         _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(),
-        _home_hockey(), _home_extraliga(),
+        _home_hockey(), _home_extraliga(), _home_city_pick(),
     )
     ice_teaser = None
     try:
@@ -3453,17 +3646,30 @@ async def get_client_hub_bootstrap(
         "mini_app_server_place_card": mini_app_server_place_card_enabled(telegram_id),
         "pending_referral": await _pending_referral_payload(telegram_id, session),
         "home": {
-            "city": home_city,
+            "city": (home_city or {}).get("city") if isinstance(home_city, Mapping) else None,
             # TASK-445: лента матчей города для блока «Матчи» новой главной — те же
             # данные, что now_slot уже собрал (home_extraliga), без лишнего запроса.
             "matches": home_extraliga,
             "now": now_slot(
                 bookings=bookings,
                 hockey=home_hockey,
-                upcoming=(home_city or {}).get("upcoming") or [],
+                upcoming=(((home_city or {}).get("city") or {}) if isinstance(home_city, Mapping) else {}).get("upcoming") or [],
                 now=datetime.now(timezone.utc),
-                has_city=home_city is not None,
+                has_city=isinstance(home_city, Mapping) and home_city.get("city") is not None,
                 extraliga=home_extraliga,
+            ),
+            **(
+                {
+                    "ice_rail": home_city.get("ice_rail"),
+                    "place_photos": home_city.get("place_photos"),
+                }
+                if redesign and isinstance(home_city, Mapping)
+                else {}
+            ),
+            **(
+                {"city_pick": home_city_pick}
+                if redesign and home_city_pick is not None
+                else {}
             ),
         },
         "platform": {

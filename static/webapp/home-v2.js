@@ -1,15 +1,17 @@
 /*
  * Главная v2 (TASK-445, эпик glide-home-v1, флаг redesign_s1).
- * Один запрос /client/hub/bootstrap → состояние по приоритету:
- * запись → абонемент → тренер → ближайший сеанс → выбор города.
- * Ниже всегда: «Лёд в городе», «Матчи», «Ещё».
+ * Один запрос /client/hub/bootstrap → одна верхняя карточка по приоритету:
+ * запись сегодня → ближайшая запись → абонемент → тренер → лёд города → выбор города.
+ * Ниже: «Лёд в {городе}» с днями-вкладками, «Матчи», «Ещё в городе».
+ * Golos везде; Dela Gothic только на крупном времени верхней карточки.
  */
 (function () {
   'use strict';
 
   var DEAD = { cancelled: 1, canceled: 1, declined: 1, rejected: 1, no_show: 1, completed: 1, expired: 1 };
+  var TZ = 'Europe/Minsk';
   var els = {};
-  var state = { data: null, cityId: null, cities: null };
+  var state = { data: null, cities: null, railTab: null, slots: {}, yellowUsed: false };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -22,9 +24,9 @@
     var w = tg();
     try {
       if (w && w.HapticFeedback) {
-        if (kind === 'success' && w.HapticFeedback.notificationOccurred) w.HapticFeedback.notificationOccurred('success');
-        else if (w.HapticFeedback.impactOccurred) w.HapticFeedback.impactOccurred(kind === 'light' ? 'light' : 'medium');
-        else if (w.HapticFeedback.selectionChanged) w.HapticFeedback.selectionChanged();
+        if (kind === 'select') w.HapticFeedback.selectionChanged && w.HapticFeedback.selectionChanged();
+        else if (kind === 'success' || kind === 'error') w.HapticFeedback.notificationOccurred && w.HapticFeedback.notificationOccurred(kind);
+        else w.HapticFeedback.impactOccurred && w.HapticFeedback.impactOccurred(kind === 'light' ? 'light' : 'medium');
       }
     } catch (e) {}
   }
@@ -34,14 +36,9 @@
     var w = tg();
     return w && w.initData ? String(w.initData) : '';
   }
-  function headersJson(extra) {
-    var h = { 'Content-Type': 'application/json' };
-    var init = initData();
-    if (init) h['X-Telegram-Init-Data'] = init;
-    var pid = profileId();
-    if (pid) h['X-Profile-Id'] = String(pid);
-    if (extra) for (var k in extra) h[k] = extra[k];
-    return h;
+  function tgUser() {
+    var w = tg();
+    return (w && w.initDataUnsafe && w.initDataUnsafe.user) || null;
   }
   function profileId() {
     try {
@@ -56,6 +53,14 @@
       return pid && pid > 0 ? pid : null;
     } catch (e) { return null; }
   }
+  function headersJson() {
+    var h = { 'Content-Type': 'application/json' };
+    var init = initData();
+    if (init) h['X-Telegram-Init-Data'] = init;
+    var pid = profileId();
+    if (pid) h['X-Profile-Id'] = String(pid);
+    return h;
+  }
   function navigate(path) {
     if (window.ClientShell && typeof window.ClientShell.navigate === 'function') window.ClientShell.navigate(path);
     else window.location.href = '/webapp/' + path;
@@ -68,34 +73,87 @@
     } catch (e) {}
     window.open(url, '_blank');
   }
-
-  /* ── Даты (локальные, Europe/Minsk — как сервер) ─────────── */
-  function todayStr() {
+  function shareUrl(url) {
+    var w = tg();
     try {
-      return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Minsk', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      if (w && w.shareURL) { w.shareURL(url); return; }
+      if (w && w.openTelegramLink) { w.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url)); return; }
+    } catch (e) {}
+    openExternal('https://t.me/share/url?url=' + encodeURIComponent(url));
+  }
+
+  /* ── Время и слова (Europe/Minsk — как у сервера) ─────────── */
+  function minskDate() {
+    try {
+      var f = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+      return f.format(new Date());
     } catch (e) {
       var d = new Date();
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
   }
-  var DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
-  function dayLabel(dateStr) {
-    var t = todayStr();
-    if (dateStr === t) return 'сегодня';
-    var d = new Date(dateStr + 'T12:00:00');
-    if (isNaN(d)) return dateStr;
-    var diff = Math.round((d - new Date(t + 'T12:00:00')) / 86400000);
-    if (diff === 1) return 'завтра';
-    if (diff > 1 && diff < 7) return DOW[d.getDay()];
-    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  function minskHour() {
+    try {
+      return parseInt(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }).format(new Date()), 10);
+    } catch (e) { return new Date().getHours(); }
+  }
+  function dateLine() {
+    try {
+      var s = new Intl.DateTimeFormat('ru-RU', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    } catch (e) { return ''; }
+  }
+  function greeting() {
+    var h = minskHour();
+    if (h >= 5 && h < 12) return 'Доброе утро';
+    if (h >= 12 && h < 18) return 'Добрый день';
+    if (h >= 18 && h < 23) return 'Добрый вечер';
+    return 'Доброй ночи';
   }
   function hhmm(t) { return String(t || '').slice(0, 5); }
-  /* Цена сеанса из minor-единиц — как IceTeaserModel.formatPrice («взр. 12 BYN»). */
+  function plural(n, one, few, many) {
+    n = Math.abs(Number(n) || 0) % 100;
+    var d = n % 10;
+    if (n > 10 && n < 20) return many;
+    if (d > 1 && d < 5) return few;
+    if (d === 1) return one;
+    return many;
+  }
+  var DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  var MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  function dayWord(dateStr) {
+    var today = minskDate();
+    if (dateStr === today) return 'today';
+    var d = new Date(dateStr + 'T12:00:00');
+    if (isNaN(d)) return 'other';
+    var diff = Math.round((d - new Date(today + 'T12:00:00')) / 86400000);
+    return diff === 1 ? 'tomorrow' : 'other';
+  }
+  function shortDay(dateStr) {
+    var d = new Date(dateStr + 'T12:00:00');
+    if (isNaN(d)) return dateStr;
+    return DOW[d.getDay()].charAt(0).toUpperCase() + DOW[d.getDay()].slice(1) + ', ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+  }
+  function minutesUntil(dateStr, hhmmStr) {
+    try {
+      var today = minskDate();
+      var nowM = new Date();
+      var parts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(nowM).split(':');
+      var nowMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+      var sp = String(hhmmStr || '').split(':');
+      var startMin = parseInt(sp[0], 10) * 60 + parseInt(sp[1] || '0', 10);
+      var dayDiff = Math.round((new Date(dateStr + 'T12:00:00') - new Date(today + 'T12:00:00')) / 86400000);
+      return dayDiff * 1440 + (startMin - nowMin);
+    } catch (e) { return null; }
+  }
   function formatPrice(minor, currency) {
     if (minor == null || minor === '' || isNaN(Number(minor))) return '';
     var major = Number(minor) / 100;
-    var num = Number.isInteger(major) ? String(major) : major.toFixed(2);
-    return 'взр. ' + num + ' ' + (currency || 'BYN');
+    var num = Number.isInteger(major) ? String(major) : major.toFixed(2).replace('.', ',');
+    return num + ' ' + (currency || 'BYN');
+  }
+  function trainerPhotoUrl(key) {
+    return key ? '/api/public/photos/' + encodeURIComponent(key) : '';
   }
 
   /* ── Данные ──────────────────────────────────────────────── */
@@ -109,10 +167,23 @@
     }).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('bootstrap ' + r.status)); });
   }
 
-  function upcomingBooking(data) {
+  function home() { return (state.data && state.data.home) || {}; }
+  function city() { return home().city || null; }
+  function cityId() {
+    var cs = (state.data && state.data.client_session) || {};
+    return cs.city_id != null ? cs.city_id : (city() && city().id) || null;
+  }
+
+  /* Живая запись сегодня (не закончилась) → ближайшая будущая. */
+  function topBooking(data) {
     var days = (data.bookings && data.bookings.days) || [];
-    var today = todayStr();
-    var best = null;
+    var today = minskDate();
+    var nowMin = null;
+    try {
+      var parts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()).split(':');
+      nowMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    } catch (e) {}
+    var todayRec = null, futureRec = null;
     for (var i = 0; i < days.length; i++) {
       var day = days[i];
       var list = day.bookings || [];
@@ -120,12 +191,19 @@
         var b = list[j];
         if (DEAD[String(b.status || '').toLowerCase()]) continue;
         if (day.date < today) continue;
-        if (!best || day.date < best.date || (day.date === best.date && hhmm(b.start_time) < hhmm(best.b.start_time))) {
-          best = { date: day.date, b: b, dayLabel: dayLabel(day.date) };
+        if (day.date === today) {
+          var ep = String(b.end_time || '23:59').split(':');
+          var endMin = parseInt(ep[0], 10) * 60 + parseInt(ep[1] || '0', 10);
+          if (!todayRec && (nowMin === null || endMin > nowMin)) todayRec = { date: day.date, b: b };
+          continue; // «ближайшая будущая» — другой день, сегодняшние уже прошли или выиграли
+        }
+        if (!futureRec || day.date < futureRec.date ||
+            (day.date === futureRec.date && hhmm(b.start_time) < hhmm(futureRec.b.start_time))) {
+          futureRec = { date: day.date, b: b };
         }
       }
     }
-    return best;
+    return todayRec || futureRec;
   }
 
   function activePass(data) {
@@ -144,352 +222,589 @@
     }
     return null;
   }
-  function nearestSession(data) {
-    var city = (data.home && data.home.city) || null;
-    var ups = (city && city.upcoming) || [];
-    if (ups.length) return { session: ups[0], cityId: city.id, cityName: city.name, fromCity: true };
+
+  /* Ближайший сеанс льда: rail → city.upcoming → ice_teaser. */
+  function nearestIce(data) {
+    var rail = home().ice_rail;
+    if (rail && rail.windows) {
+      for (var i = 0; i < rail.windows.length; i++) {
+        var w = rail.windows[i];
+        for (var j = 0; j < (w.arenas || []).length; j++) {
+          var a = w.arenas[j];
+          var t0 = (a.times || [])[0];
+          if (t0) {
+            return {
+              arena_id: a.arena_id, name: a.name, photo: a.photo,
+              time: t0.time, end: t0.end, session_id: t0.session_id,
+              minutes_until: t0.minutes_until, href: t0.href || a.href,
+              price: a.price, window: w.key, invite_url: t0.invite_url,
+            };
+          }
+        }
+      }
+    }
+    var c = city();
+    var ups = (c && c.upcoming) || [];
+    if (ups.length) {
+      var u = ups[0];
+      return {
+        arena_id: u.arena_id, name: u.place, photo: u.photo, time: u.time, end: '',
+        session_id: u.session_id, minutes_until: u.minutes_until, href: u.href,
+        price: u.price, window: u.day === 'завтра' ? 'tomorrow' : 'today', invite_url: u.invite_url,
+      };
+    }
     var ice = data.ice_teaser;
     if (ice && ice.sessions && ice.sessions.length) {
       var s = ice.sessions[0];
-      return { session: s, cityId: ice.city_id, cityName: ice.city_name, fromCity: false, teaser: ice };
+      return {
+        arena_id: s.arena_id, name: s.arena_name,
+        photo: { card: ice.card || ice.thumb || null, thumb: ice.thumb || null },
+        time: hhmm(s.starts_at_local), end: '',
+        session_id: s.session_id, minutes_until: null,
+        href: 'arena?ref=' + s.arena_id + '&s=' + s.session_id,
+        price: formatPrice(s.price_adult_minor, s.currency_code), window: 'today',
+      };
     }
     return null;
   }
 
-  /* ── Рендер: верхняя карточка ────────────────────────────── */
+  /* ── Шапка ───────────────────────────────────────────────── */
+  var HERO_MAX_TRIES = 4;
+  function heroCache(photo, cityName) {
+    try {
+      localStorage.setItem('hv2_hero_' + (window.__hv2Uid || '0'), JSON.stringify({ photo: photo || '', city: cityName || '' }));
+    } catch (e) {}
+  }
+  function armHero(urls) {
+    var img = els.heroImg;
+    urls = (urls || []).filter(Boolean).slice(0, HERO_MAX_TRIES);
+    if (!urls.length) { img.hidden = true; els.hero.classList.remove('hv2-hero--photo'); return; }
+    var i = 0;
+    function next() {
+      if (i >= urls.length) { img.hidden = true; els.hero.classList.remove('hv2-hero--photo'); heroCache('', (city() || {}).name || ''); return; }
+      var probe = new Image();
+      if (i === 0) probe.fetchPriority = 'high';
+      probe.onload = function () {
+        if (!probe.naturalWidth) { i++; next(); return; }
+        if (img.getAttribute('src') !== urls[i]) img.src = urls[i];
+        img.hidden = false;
+        els.hero.classList.add('hv2-hero--photo');
+        heroCache(urls[i], (city() || {}).name || '');
+      };
+      probe.onerror = function () { i++; next(); };
+      probe.src = urls[i];
+    }
+    next();
+  }
+  function renderHero(top) {
+    var c = city();
+    var u = tgUser();
+    if (c && c.name) els.cityLabel.textContent = c.name;
+    else els.cityLabel.textContent = 'Город';
+    var heroUrls = [];
+    if (c && c.hero_photos && c.hero_photos.length) heroUrls = c.hero_photos.map(function (p) { return p && (p.hero || p.card || p.thumb); });
+    if (!heroUrls.length && c && c.hero_photo) heroUrls = [c.hero_photo.hero || c.hero_photo.card || c.hero_photo.thumb];
+    if (!heroUrls.length) {
+      var pick = (home().city_pick || [])[0];
+      if (pick && pick.photo) heroUrls = [pick.photo.hero || pick.photo.card || pick.photo.thumb];
+    }
+    /* Герой и фото-карточка ниже не должны повторяться: тот же кадр — в конец очереди. */
+    var topPhoto = state.topPhoto;
+    if (topPhoto && heroUrls.length > 1 && heroUrls.indexOf(topPhoto) === 0) {
+      heroUrls = heroUrls.slice(1).concat(heroUrls[0]);
+    }
+    armHero(heroUrls);
+    els.dateEl.textContent = dateLine();
+    var title;
+    if (top === 'citypick') {
+      els.dateEl.textContent = 'Glide';
+      title = 'Где вы катаетесь?';
+    } else if (top === 'newbie') {
+      title = ((c && c.name) || 'Город') + ' на льду';
+    } else {
+      var name = u && u.first_name ? ', ' + u.first_name : '';
+      title = greeting() + name;
+    }
+    els.title.textContent = title;
+    /* Аватар: если переключатель профилей пуст (один профиль) — своё лицо или первая буква. */
+    var mount = $('clientProfileSwitcherMount');
+    var switcherEmpty = !mount || !mount.children.length;
+    if (switcherEmpty && u) {
+      var img = $('hv2AvaImg');
+      var letter = $('hv2AvaLetter');
+      letter.textContent = (u.first_name || 'Я').charAt(0).toUpperCase();
+      if (u.photo_url) {
+        letter.hidden = true;
+        img.onerror = function () { img.hidden = true; letter.hidden = false; };
+        img.src = u.photo_url; img.hidden = false;
+      } else { img.hidden = true; letter.hidden = false; }
+      els.ava.hidden = false;
+    }
+  }
+
+  /* ── Верхняя карточка ────────────────────────────────────── */
+  function chipStatus(rec) {
+    var b = rec.b;
+    if (String(b.status || '').toLowerCase() === 'pending') {
+      return { cls: 'hv2-chip--yellow', text: 'ждёт тренера', pending: true };
+    }
+    var mu = minutesUntil(rec.date, b.start_time);
+    var word = dayWord(rec.date);
+    if (word === 'today' && mu !== null && mu <= 180) {
+      return mu > 0
+        ? { cls: '', dot: true, text: 'Через ' + mu + ' мин' }
+        : { cls: '', dot: true, text: 'Идёт' };
+    }
+    if (word === 'today') return { cls: '', dot: true, text: 'Сегодня' };
+    if (word === 'tomorrow') return { cls: '', dot: true, text: 'Завтра' };
+    return { cls: 'hv2-chip--gray', text: shortDay(rec.date) };
+  }
+  var ICON_ROUTE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.4"/><circle cx="18" cy="5" r="2.4"/><path d="M8.4 19h5.1a3.5 3.5 0 0 0 0-7h-3a3.5 3.5 0 0 1 0-7h5.1"/></svg>';
+  var ICON_CHAT = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.35-4.1-1L3 20l1.1-5.1A8.5 8.5 0 1 1 21 11.5Z"/></svg>';
+
   function ticketHtml(rec) {
     var b = rec.b;
-    var isToday = rec.date === todayStr();
-    var pending = String(b.status || '').toLowerCase() === 'pending';
+    var st = chipStatus(rec);
     var pass = passForTrainer(state.data, b.trainer_id);
-    var passLine = '';
-    if (pass) {
-      passLine = '<div class="hv2-ticket__pass">Осталось занятий: <b>' + esc(pass.sessions_remaining) + '</b> из ' + esc(pass.sessions_total) + '</div>';
+    var pp = (home().place_photos || {})[String(b.arena_id)] || {};
+    var thumb = pp.card || pp.thumb;
+    var face = b.trainer_list_photo_key
+      ? '<img class="hv2-ticket__face" src="' + esc(trainerPhotoUrl(b.trainer_list_photo_key)) + '" alt="">'
+      : '<span class="hv2-ticket__face">' + esc(((b.trainer_name || 'Т').charAt(0)).toUpperCase()) + '</span>';
+    var acts = '';
+    if (b.trainer_telegram_username) {
+      acts += '<button type="button" class="hv2-rbtn ga-press" data-act="map" data-href="https://t.me/' + esc(b.trainer_telegram_username) + '" aria-label="Написать тренеру">' + ICON_CHAT + '</button>';
     }
-    var route = b.map_link
-      ? '<button type="button" class="hv2-btn hv2-btn--dark" data-act="map" data-href="' + esc(b.map_link) + '">Маршрут</button>'
-      : (b.arena_id ? '<button type="button" class="hv2-btn hv2-btn--dark" data-act="nav" data-path="arena?ref=' + encodeURIComponent(b.arena_id) + '">Маршрут</button>' : '');
-    return '<article class="hv2-card hv2-ticket hv2-fade-in">' +
-      '<div class="hv2-ticket__top">' +
-        '<div><div class="hv2-ticket__time">' + esc(hhmm(b.start_time)) + '</div>' +
-        '<div class="hv2-ticket__when">' + esc(isToday ? 'сегодня' : dayLabel(rec.date)) + ' · ' + esc(hhmm(b.end_time)) + '</div></div>' +
-        (pending ? '<span class="hv2-ticket__status">ждёт тренера</span>' : '<span class="hv2-ticket__status hv2-ticket__status--ok">запись</span>') +
+    if (!st.pending) {
+      if (b.map_link) acts += '<button type="button" class="hv2-rbtn hv2-rbtn--ink ga-press" data-act="map" data-href="' + esc(b.map_link) + '" aria-label="Маршрут">' + ICON_ROUTE + '</button>';
+      else if (b.arena_id) acts += '<button type="button" class="hv2-rbtn hv2-rbtn--ink ga-press" data-act="nav" data-path="arena?ref=' + encodeURIComponent(b.arena_id) + '" aria-label="Маршрут">' + ICON_ROUTE + '</button>';
+    }
+    var passLine = '';
+    if (pass && Number(pass.sessions_total) <= 12) {
+      var dots = '';
+      for (var i = 0; i < Number(pass.sessions_total); i++) dots += '<i class="' + (i < Number(pass.sessions_remaining) ? 'on' : '') + '"></i>';
+      passLine = '<div class="hv2-ticket__passline"><span>Абонемент · осталось ' + esc(pass.sessions_remaining) + ' из ' + esc(pass.sessions_total) + '</span><span class="hv2-dots">' + dots + '</span></div>';
+    } else if (pass) {
+      passLine = '<div class="hv2-ticket__passline"><span>Абонемент · осталось ' + esc(pass.sessions_remaining) + ' из ' + esc(pass.sessions_total) + '</span></div>';
+    }
+    return '<article class="hv2-card hv2-ticket" data-act="nav" data-path="client-bookings">' +
+      '<div class="hv2-ticket__head">' +
+        '<span class="hv2-chip ' + (st.cls || '') + '">' + (st.dot ? '<span class="hv2-chip__dot"></span>' : '') + esc(st.text) + '</span>' +
+        (thumb ? '<img class="hv2-ticket__thumb" src="' + esc(thumb) + '" alt="">' : '') +
       '</div>' +
-      '<div><div class="hv2-ticket__place">' + esc(b.arena_name || b.place_display || 'Каток') + '</div>' +
-      '<div class="hv2-ticket__meta"><span>' + esc(b.trainer_name || 'Тренер') + (b.service_name ? ' · ' + esc(b.service_name) : '') + '</span></div></div>' +
-      passLine +
-      '<div class="hv2-ticket__actions">' + route +
-      '<button type="button" class="hv2-btn hv2-btn--soft" data-act="nav" data-path="client-bookings">Все записи</button></div>' +
+      '<div class="hv2-ticket__time">' + esc(hhmm(b.start_time)) + '</div>' +
+      '<div class="hv2-ticket__name">' + esc(b.service_name || 'Занятие') + '</div>' +
+      '<div class="hv2-ticket__sub">до ' + esc(hhmm(b.end_time)) + ' · ' + esc(b.arena_name || b.place_display || 'Каток') + '</div>' +
+      '<div class="hv2-ticket__perf"></div>' +
+      '<div class="hv2-ticket__trainer">' + face +
+        '<div><div class="hv2-ticket__tname">' + esc(b.trainer_name || 'Тренер') + '</div>' +
+        '<div class="hv2-ticket__trole">ваш тренер</div></div>' +
+        '<div class="hv2-ticket__acts">' + acts + '</div>' +
+      '</div>' + passLine +
     '</article>';
+  }
+
+  function slotsInner(trainerId) {
+    var list = state.slots[trainerId];
+    if (list == null) {
+      return '<span class="hv2-slot hv2-slot--skel"></span><span class="hv2-slot hv2-slot--skel"></span>';
+    }
+    return list.slice(0, 4).map(function (s) {
+      var d = s.slot_date ? new Date(String(s.slot_date).slice(0, 10) + 'T12:00:00') : null;
+      var day = d && !isNaN(d) ? DOW[d.getDay()].toUpperCase() + ' ' + d.getDate() : '';
+      return '<a class="hv2-slot ga-press" href="' + esc(slotHref(trainerId, s)) + '">' +
+        '<span class="hv2-slot__day">' + esc(day) + '</span><span class="hv2-slot__time">' + esc(hhmm(s.start_time)) + '</span></a>';
+    }).join('') + '<a class="hv2-slot hv2-slot--all ga-press" href="' + esc(allSlotsHref(trainerId)) + '">Все</a>';
+  }
+  function slotsBlockHtml(trainerId) {
+    return '<div id="hv2SlotsWrap"><div class="hv2-slots__title">Свободные окна</div>' +
+      '<div class="hv2-slots" id="hv2Slots">' + slotsInner(trainerId) + '</div></div>';
+  }
+  function catalogSvcQuery() {
+    var cs = (state.data && state.data.client_session) || {};
+    return cs.primary_catalog_service_id ? '&service_id=' + encodeURIComponent(cs.primary_catalog_service_id) : '';
+  }
+  function allSlotsHref(trainerId) {
+    return 'catalog?trainer_id=' + encodeURIComponent(trainerId) + '&action=book&from=hub' + catalogSvcQuery();
+  }
+  function slotHref(trainerId, s) {
+    var parts = ['catalog?trainer_id=' + encodeURIComponent(trainerId), 'slot_id=' + encodeURIComponent(s.id), 'from=hub'];
+    if (s.service_id) parts.splice(1, 0, 'service_id=' + encodeURIComponent(s.service_id));
+    else if (catalogSvcQuery()) parts.splice(1, 0, catalogSvcQuery().slice(1));
+    if (s.arena_id) parts.splice(parts.length - 1, 0, 'arena_id=' + encodeURIComponent(s.arena_id));
+    return parts.join('&');
   }
 
   function passCardHtml(p) {
     var total = Math.max(1, Number(p.sessions_total) || 1);
     var left = Number(p.sessions_remaining) || 0;
+    var C = 2 * Math.PI * 34;
     var pct = Math.max(0, Math.min(1, left / total));
-    var R = 30, C = 2 * Math.PI * R;
-    var ring =
-      '<svg width="76" height="76" viewBox="0 0 76 76">' +
-      '<circle cx="38" cy="38" r="' + R + '" fill="none" stroke="#eef1f3" stroke-width="8"/>' +
-      '<circle cx="38" cy="38" r="' + R + '" fill="none" stroke="#0a6f73" stroke-width="8" stroke-linecap="round" ' +
-      'stroke-dasharray="' + (pct * C).toFixed(1) + ' ' + C.toFixed(1) + '"/>' +
-      '</svg>';
-    var exp = p.expires_at ? ' до ' + esc(String(p.expires_at).slice(0, 10).split('-').reverse().join('.')) : '';
-    return '<article class="hv2-card hv2-pass hv2-fade-in">' +
-      '<div class="hv2-pass__ring"><div class="hv2-pass__ring-num">' + esc(left) + '<small>из ' + esc(p.sessions_total) + '</small></div>' + ring + '</div>' +
-      '<div class="hv2-pass__body">' +
-        '<div class="hv2-pass__title">' + esc(p.product_name || 'Абонемент') + '</div>' +
-        '<div class="hv2-pass__sub">' + esc(p.trainer_name || 'Тренер') + (p.service_name ? ' · ' + esc(p.service_name) : '') + exp + '</div>' +
-      '</div></article>' +
-      '<div class="hv2-ticket__actions" style="padding:0 4px">' +
-      (p.trainer_id ? '<button type="button" class="hv2-btn hv2-btn--dark hv2-btn--block" data-act="nav" data-path="catalog?trainer_id=' + encodeURIComponent(p.trainer_id) + '">Записаться</button>' : '') +
-      '</div>';
+    var exp = '';
+    if (p.expires_at) {
+      var d = new Date(p.expires_at);
+      if (!isNaN(d)) exp = ' · действует до ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+    }
+    state.yellowUsed = true;
+    return '<article class="hv2-card hv2-pass">' +
+      '<div class="hv2-pass__head"><div class="hv2-pass__body">' +
+        '<span class="hv2-chip hv2-chip--gray">Абонемент</span>' +
+        '<div class="hv2-pass__title">Осталось ' + left + ' ' + plural(left, 'занятие', 'занятия', 'занятий') + '</div>' +
+        '<div class="hv2-pass__sub">' + esc(p.trainer_name || 'Тренер') + esc(exp) + '</div>' +
+      '</div>' +
+      '<div class="hv2-ring"><svg width="76" height="76" viewBox="0 0 76 76">' +
+        '<circle cx="38" cy="38" r="34" fill="none" stroke="#e7ebee" stroke-width="8"/>' +
+        '<circle cx="38" cy="38" r="34" fill="none" stroke="#0a6f73" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (pct * C).toFixed(1) + ' ' + C.toFixed(1) + '"/>' +
+      '</svg><div class="hv2-ring__num"><b>' + left + '</b><span>из ' + total + '</span></div></div>' +
+      '</div>' +
+      slotsBlockHtml(p.trainer_id) +
+      '<button type="button" class="hv2-btn hv2-btn--yellow ga-press" data-act="book" data-path="' + esc(allSlotsHref(p.trainer_id)) + '">Записаться</button>' +
+    '</article>';
   }
 
   function coachCardHtml(cs) {
-    var t = cs.primary_trainer_id;
+    var tid = cs.primary_trainer_id;
     var name = cs.primary_trainer_name || 'Тренер';
-    var photo = cs.primary_trainer_list_photo_key
-      ? '<img class="hv2-coach__photo" src="/api/public/photos/' + encodeURIComponent(cs.primary_trainer_list_photo_key) + '" alt="" loading="lazy">'
-      : '<div class="hv2-coach__photo hv2-coach__photo--empty">' + esc(name.charAt(0).toUpperCase()) + '</div>';
-    return '<article class="hv2-card hv2-coach hv2-fade-in" data-act="nav" data-path="catalog?trainer_id=' + encodeURIComponent(t || '') + '" role="link" tabindex="0">' +
-      photo +
-      '<div class="hv2-coach__body"><div class="hv2-coach__name">' + esc(name) + '</div>' +
-      '<div class="hv2-coach__sub">Ваш тренер · записаться</div></div>' +
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hv2-row__chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>' +
+    var face = cs.primary_trainer_list_photo_key
+      ? '<img class="hv2-coach__face" src="' + esc(trainerPhotoUrl(cs.primary_trainer_list_photo_key)) + '" alt="">'
+      : '<span class="hv2-coach__face">' + esc(name.charAt(0).toUpperCase()) + '</span>';
+    state.yellowUsed = true;
+    return '<article class="hv2-card hv2-coach">' +
+      '<div class="hv2-coach__head">' + face +
+        '<div><div class="hv2-coach__name">' + esc(name) + '</div><div class="hv2-coach__role">ваш тренер</div></div>' +
+      '</div>' +
+      slotsBlockHtml(tid) +
+      '<button type="button" class="hv2-btn hv2-btn--yellow ga-press" data-act="book" data-path="' + esc(allSlotsHref(tid)) + '">Записаться</button>' +
     '</article>';
   }
 
   function photoCardHtml(found) {
-    var s = found.session;
-    var isTeaser = !found.fromCity;
-    var time = hhmm(s.starts_at_local || s.time || s.badge) || '';
-    var badge = s.badge || time;
-    var place = s.place || s.arena_name || '';
-    var href = s.href || (s.arena_id ? 'arena?ref=' + s.arena_id + (s.session_id ? '&s=' + s.session_id : '') : 'ice');
-    var img = s.photo && (s.photo.card || s.photo.hero || s.photo.thumb);
-    if (!img && found.teaser && (found.teaser.card || found.teaser.thumb)) img = found.teaser.card || found.teaser.thumb;
-    var price = s.price || formatPrice(s.price_adult_minor, s.currency_code);
-    var geo = '';
-    if (s.map_link) {
-      geo = '<button type="button" class="hv2-btn hv2-btn--soft" data-act="map" data-href="' + esc(s.map_link) + '">Маршрут</button>';
-    } else if (s.arena_id) {
-      geo = '<button type="button" class="hv2-btn hv2-btn--soft" data-act="nav" data-path="arena?ref=' + encodeURIComponent(s.arena_id) + (s.session_id ? '&s=' + encodeURIComponent(s.session_id) : '') + '">Маршрут</button>';
-    }
-    var invite = s.invite_url
-      ? '<button type="button" class="hv2-btn hv2-btn--yellow" data-act="share" data-url="' + esc(s.invite_url) + '">Позвать друзей</button>'
+    var img = found.photo && (found.photo.card || found.photo.hero || found.photo.thumb);
+    var mu = found.minutes_until;
+    var chip;
+    if (mu != null && mu <= 90) chip = 'Ближайший · через ' + mu + ' мин';
+    else chip = found.window === 'tomorrow' ? 'Ближайший · завтра' : 'Ближайший · сегодня';
+    var bits = [];
+    if (found.end) bits.push('до ' + found.end);
+    if (found.price) bits.push(found.price);
+    var share = found.invite_url
+      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="share" data-url="' + esc(found.invite_url) + '">Позвать друзей</button>'
       : '';
-    return '<article class="hv2-photo hv2-fade-in" data-act="nav" data-path="' + esc(href) + '">' +
-      (img ? '<img class="hv2-photo__img" src="' + esc(img) + '" alt="" loading="lazy">' : '') +
-      '<span class="hv2-photo__shade"></span>' +
-      '<span class="hv2-photo__in">' +
-        '<span class="hv2-photo__badge">' + esc(badge) + (price ? ' · ' + esc(price) : '') + '</span>' +
-        '<span class="hv2-photo__title">' + esc(place) + '</span>' +
-        (isTeaser && found.cityName ? '<span class="hv2-photo__sub">Ближайший сеанс · ' + esc(found.cityName) + '</span>' : '') +
-        ((geo || invite) ? '<span class="hv2-photo__actions">' + geo + invite + '</span>' : '') +
-      '</span></article>';
+    var route = '<button type="button" class="hv2-btn hv2-btn--ink ga-press" data-act="nav" data-path="' + esc(found.href || 'ice') + '">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.4"/><circle cx="18" cy="5" r="2.4"/><path d="M8.4 19h5.1a3.5 3.5 0 0 0 0-7h-3a3.5 3.5 0 0 1 0-7h5.1"/></svg> Маршрут</button>';
+    return '<article class="hv2-pcard" data-act="nav" data-path="' + esc(found.href || 'ice') + '">' +
+      (img ? '<img class="hv2-pcard__img" src="' + esc(img) + '" alt="">' : '') +
+      '<span class="hv2-pcard__shade"></span>' +
+      '<span class="hv2-pcard__chip"><span class="hv2-chip__dot"></span>' + esc(chip) + '</span>' +
+      '<span class="hv2-pcard__in">' +
+        '<span class="hv2-pcard__time">' + esc(found.time || '') + '</span>' +
+        '<span class="hv2-pcard__place">' + esc(found.name || '') + '</span>' +
+        (bits.length ? '<span class="hv2-pcard__sub">' + esc(bits.join(' · ')) + '</span>' : '') +
+      '</span></article>' +
+      '<div class="hv2-pcard__btns">' + route + share + '</div>';
   }
 
   function cityPickHtml() {
-    return '<article class="hv2-card hv2-citypick hv2-fade-in">' +
-      '<h2 class="hv2-citypick__title">Выберите город</h2>' +
-      '<p class="hv2-citypick__sub">Покажем расписание катков и тренеров вашего города.</p>' +
-      '<div class="hv2-cityopts" id="hv2CityOpts"><div class="hv2-empty__text">Загрузка…</div></div>' +
+    return '<article class="hv2-card hv2-citypick" id="hv2CityPick">' +
+      '<div id="hv2CityPickList"><div style="padding:20px;color:var(--muted);font-size:15px">Загрузка городов…</div></div>' +
+      '<button type="button" class="hv2-cprow hv2-cprow--geo ga-press" id="hv2CityPickGeo">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/></svg>' +
+        'Определить по геолокации</button>' +
     '</article>';
   }
-
-  function renderTop() {
-    var host = els.top;
-    if (!state.data) return;
-    var data = state.data;
-    var cityId = data.client_session && data.client_session.city_id;
-    var html = '';
-    if (!cityId) {
-      html = cityPickHtml();
-      loadCitiesInto('hv2CityOpts');
-    } else {
-      var rec = upcomingBooking(data);
-      if (rec) html = ticketHtml(rec);
-      else {
-        var p = activePass(data);
-        if (p) html = passCardHtml(p);
-        else {
-          var cs = data.client_session || {};
-          if (cs.primary_trainer_id) html = coachCardHtml(cs);
-          else {
-            var found = nearestSession(data);
-            if (found) html = photoCardHtml(found);
-          }
-        }
-      }
+  function cityPickRows(items) {
+    return items.slice(0, 6).map(function (c) {
+      var sub = [];
+      var ts = Number(c.today_sessions != null ? c.today_sessions : c.skate_count) || 0;
+      var tr = Number(c.trainer_count) || 0;
+      if (ts) sub.push(ts + ' ' + plural(ts, 'сеанс', 'сеанса', 'сеансов') + ' сегодня');
+      if (tr) sub.push(tr + ' ' + plural(tr, 'тренер', 'тренера', 'тренеров'));
+      var photo = c.photo && (c.photo.card || c.photo.thumb);
+      var img = photo
+        ? '<img class="hv2-cprow__img" src="' + esc(photo) + '" alt="">'
+        : '<span class="hv2-cprow__img">' + esc(String(c.name || '?').charAt(0).toUpperCase()) + '</span>';
+      return '<button type="button" class="hv2-cprow ga-press" data-city="' + c.id + '">' + img +
+        '<span><span class="hv2-cprow__name">' + esc(c.name) + '</span><br>' +
+        '<span class="hv2-cprow__sub">' + sub.map(function (p) { return '<span class="hv2-cprow__part">' + esc(p) + '</span>'; }).join(' · ') + '</span></span>' +
+        '<svg class="hv2-cprow__chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>' +
+      '</button>';
+    }).join('');
+  }
+  function bindCityPick() {
+    var geo = $('hv2CityPickGeo');
+    if (geo) geo.addEventListener('click', function () { haptic('select'); geoPick(); });
+    var host = $('hv2CityPickList');
+    if (!host) return;
+    var items = home().city_pick;
+    if (items && items.length) { host.innerHTML = cityPickRows(items); }
+    else {
+      fetch('/api/public/ice/cities', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : { items: [] }; })
+        .then(function (d) {
+          state.cities = (d && d.items) || [];
+          host.innerHTML = cityPickRows(state.cities);
+        })
+        .catch(function () { host.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:15px">Не удалось загрузить города.</div>'; });
     }
-    host.innerHTML = html || '';
-    bindTopActions(host);
-  }
-
-  function bindTopActions(host) {
-    host.querySelectorAll('[data-act]').forEach(function (el) {
-      el.addEventListener('click', function (ev) {
-        ev.preventDefault(); ev.stopPropagation();
-        var act = el.getAttribute('data-act');
-        if (act === 'nav') { haptic('light'); navigate(el.getAttribute('data-path')); }
-        else if (act === 'map') { haptic('light'); openExternal(el.getAttribute('data-href')); }
-        else if (act === 'share') { haptic('light'); shareUrl(el.getAttribute('data-url')); }
-      });
-    });
-  }
-
-  function shareUrl(url) {
-    var w = tg();
-    try {
-      if (w && w.shareURL) { w.shareURL(url); return; }
-      if (w && w.openTelegramLink) { w.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url)); return; }
-    } catch (e) {}
-    openExternal('https://t.me/share/url?url=' + encodeURIComponent(url));
   }
 
   /* ── «Лёд в городе» ──────────────────────────────────────── */
-  function renderIce() {
-    var data = state.data;
-    var city = data.home && data.home.city;
-    var rows = [];
-    var moreHref = 'ice';
-    var moreLabel = 'Все';
-    if (city && city.upcoming && city.upcoming.length) {
-      rows = city.upcoming.slice(0, 4);
-      moreHref = city.upcoming_href || 'ice';
-      moreLabel = city.upcoming_more || 'Все';
-    } else {
-      var ice = data.ice_teaser;
-      if (ice && ice.sessions && ice.sessions.length) {
-        rows = ice.sessions.slice(0, 4).map(function (s) {
-          return {
-            time: hhmm(s.starts_at_local), day: '', badge: hhmm(s.starts_at_local),
-            place: s.arena_name, price: formatPrice(s.price_adult_minor, s.currency_code),
-            arena_id: s.arena_id, session_id: s.session_id,
-            href: 'arena?ref=' + s.arena_id + '&s=' + s.session_id,
-          };
-        });
-        moreHref = 'ice';
-      }
+  function railWindows() {
+    var rail = home().ice_rail;
+    if (rail && rail.windows) return rail.windows;
+    var c = city();
+    if (c && c.upcoming && c.upcoming.length) {
+      /* Старый ответ без rail: строим одно окно из upcoming. */
+      var arenas = c.upcoming.map(function (u) {
+        return {
+          arena_id: u.arena_id, name: u.place, href: u.href, photo: u.photo, price: u.price || '',
+          times: [{ time: u.badge || u.time, session_id: u.session_id, minutes_until: u.minutes_until, href: u.href }],
+        };
+      });
+      return [{ key: 'today', label: 'Сегодня', count: arenas.length, href: c.upcoming_href || 'ice', arenas: arenas }];
     }
-    if (!rows.length) { els.iceSec.hidden = true; return; }
+    return null;
+  }
+  function railArenaHtml(a) {
+    var photo = a.photo && (a.photo.card || a.photo.thumb);
+    var t0 = (a.times || [])[0] || {};
+    var chip = (t0.minutes_until != null && t0.minutes_until <= 90) ? 'Через ' + t0.minutes_until + ' мин' : (t0.time || '');
+    var chips = (a.times || []).slice(0, 3).map(function (t) {
+      return '<a class="hv2-rcard__tchip ga-press" href="' + esc(t.href || a.href || 'ice') + '" data-act="nav" data-path="' + esc(t.href || a.href || 'ice') + '">' + esc(t.time) + '</a>';
+    }).join('');
+    return '<div class="hv2-rcard ga-press" role="link" tabindex="0" data-act="nav" data-path="' + esc(a.href || 'ice') + '">' +
+      '<span class="hv2-rcard__imgwrap">' +
+        (photo ? '<img class="hv2-rcard__img" src="' + esc(photo) + '" alt="" loading="lazy">' : '') +
+        (chip ? '<span class="hv2-rcard__chip">' + esc(chip) + '</span>' : '') +
+      '</span>' +
+      '<span class="hv2-rcard__name">' + esc(a.name) + '</span>' +
+      (chips ? '<span class="hv2-rcard__chips">' + chips + '</span>' : '') +
+      (a.price ? '<span class="hv2-rcard__sub">' + esc(a.price) + '</span>' : '') +
+    '</div>';
+  }
+  var EMPTY_LINES = { today: 'Сегодня лёд закончился', tomorrow: 'Завтра пока пусто', weekend: 'На выходных пока пусто' };
+  function renderRail(w) {
+    var host = els.rail;
+    var arenas = (w.arenas || []);
+    if (state.dedupSession) {
+      arenas = arenas.map(function (a) {
+        var ts = (a.times || []).filter(function (t) { return String(t.session_id) !== String(state.dedupSession); });
+        return ts.length ? Object.assign({}, a, { times: ts }) : null;
+      }).filter(Boolean);
+    }
+    if (!arenas.length) {
+      host.innerHTML = '<div class="hv2-rail__empty">' + esc(EMPTY_LINES[w.key] || 'Пока пусто') +
+        (w.href ? ' · <a href="' + esc(w.href) + '" data-hv2-nav>Весь день</a>' : '') + '</div>';
+      return;
+    }
+    host.innerHTML = arenas.map(railArenaHtml).join('');
+  }
+  function renderIce() {
+    var windows = railWindows();
+    var c = city();
+    if (!windows || !cityId()) { els.iceSec.hidden = true; return; }
+    var title = 'Лёд в ' + (c && c.name_in ? c.name_in : 'городе');
+    if (c && c.name_in == null) title = 'Лёд в городе';
+    els.iceTitle.textContent = title;
+    var defIdx = windows.findIndex(function (w) { return (w.arenas || []).length; });
+    if (defIdx < 0) defIdx = 0;
+    if (state.railTab == null) state.railTab = windows[defIdx].key;
+    setIceMore(windows.find(function (w) { return w.key === state.railTab; }) || windows[0]);
+    els.tabs.innerHTML = windows.map(function (w) {
+      return '<button type="button" role="tab" class="hv2-tab ga-press' +
+        (w.key === state.railTab ? ' hv2-tab--on' : '') + (w.count ? '' : ' hv2-tab--empty') +
+        '" data-wkey="' + esc(w.key) + '">' + esc(w.label) + '<sup>' + esc(w.count) + '</sup></button>';
+    }).join('') + '<span class="hv2-tabs__ink" id="hv2TabsInk"></span>';
     els.iceSec.hidden = false;
-    els.iceMore.setAttribute('href', moreHref);
-    els.iceMore.textContent = moreLabel;
-    els.ice.innerHTML = '<div class="hv2-rows hv2-fade-in">' + rows.map(function (r) {
-      var when = r.badge || r.time;
-      var sub = [r.day, r.price].filter(Boolean).join(' · ');
-      return '<a class="hv2-row" href="' + esc(r.href || 'ice') + '">' +
-        '<span class="hv2-row__time">' + esc(when) + '</span>' +
-        '<span class="hv2-row__body"><span class="hv2-row__title">' + esc(r.place) + '</span>' +
-        (sub ? '<span class="hv2-row__sub">' + esc(sub) + '</span>' : '') + '</span>' +
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hv2-row__chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>';
-    }).join('') + '</div>';
+    positionInk();
+    var w = windows.find(function (x) { return x.key === state.railTab; }) || windows[0];
+    renderRail(w);
+    els.tabs.querySelectorAll('.hv2-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (btn.getAttribute('data-wkey') === state.railTab) return;
+        state.railTab = btn.getAttribute('data-wkey');
+        haptic('select');
+        els.tabs.querySelectorAll('.hv2-tab').forEach(function (b2) { b2.classList.toggle('hv2-tab--on', b2 === btn); });
+        positionInk();
+        els.rail.classList.add('hv2-rail--fade');
+        setTimeout(function () {
+          var cur = railWindows().find(function (x) { return x.key === state.railTab; });
+          if (cur) { renderRail(cur); setIceMore(cur); }
+          els.rail.classList.remove('hv2-rail--fade');
+        }, 180);
+      });
+    });
+  }
+  /* «Все {count}» ведёт на окно активной вкладки, а не всегда на «сегодня». */
+  function setIceMore(w) {
+    els.iceMore.setAttribute('href', (w && w.href) || 'ice');
+    els.iceMore.textContent = 'Все' + (w && w.count ? ' ' + w.count : '');
+  }
+  function positionInk() {
+    var ink = $('hv2TabsInk');
+    var on = els.tabs && els.tabs.querySelector('.hv2-tab--on');
+    if (!ink || !on) return;
+    ink.style.width = on.offsetWidth + 'px';
+    ink.style.transform = 'translateX(' + on.offsetLeft + 'px)';
   }
 
   /* ── «Матчи» ─────────────────────────────────────────────── */
+  function teamLogo(t, dark) {
+    if (t && t.logo) return '<img class="hv2-mcard__logo" src="' + esc(t.logo) + '" alt="" loading="lazy">';
+    var bg = (t && t.color) || (dark ? 'rgba(255,255,255,.25)' : '#6b7a86');
+    return '<span class="hv2-mcard__logo" style="background:' + esc(bg) + '">' + esc(((t && (t.short || t.name)) || '?').slice(0, 3)) + '</span>';
+  }
+  function matchKicker(startsAt, live, sticker) {
+    if (live) return 'ИДЁТ';
+    var w = '';
+    try {
+      var d = new Date(startsAt);
+      var day = dayWord(d.toISOString().slice(0, 10));
+      var datePart = day === 'today' ? 'сегодня' : day === 'tomorrow' ? 'завтра'
+        : new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'long', timeZone: TZ }).format(d);
+      w = datePart + ' · ' + new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: TZ }).format(d);
+    } catch (e) { w = sticker || ''; }
+    return (w || '').toUpperCase();
+  }
+  function kkCardHtml(item, yellowFree) {
+    var h = item.hockey || {};
+    var m = h.match || {};
+    var href = h.event_href || 'kto-kogo';
+    var kick = 'КТО КОГО' + (m.starts_at ? ' · ' + matchKicker(m.starts_at, false, '') : '');
+    return '<a class="hv2-mcard hv2-mcard--kk ga-press" href="' + esc(href) + '">' +
+      '<span class="hv2-mcard__kick">' + esc(kick) + '</span>' +
+      '<span class="hv2-mcard__team">' + teamLogo(m.home, true) + '<span class="hv2-mcard__tname">' + esc((m.home && m.home.name) || '') + '</span></span>' +
+      '<span class="hv2-mcard__team">' + teamLogo(m.away, true) + '<span class="hv2-mcard__tname">' + esc((m.away && m.away.name) || '') + '</span></span>' +
+      '<span class="hv2-mcard__place">' + esc(m.arena || m.city || '') + '</span>' +
+      '<span class="hv2-mcard__play' + (yellowFree ? ' hv2-mcard__play--yellow' : '') + '">Играть</span>' +
+    '</a>';
+  }
+  function matchCardHtml(m) {
+    var r = m.result;
+    var kick = matchKicker(m.starts_at, m.live, m.sticker);
+    if (r) kick = 'ИТОГ ' + r.home_score + ':' + r.away_score;
+    return '<a class="hv2-mcard ga-press" href="' + esc(m.href || 'client-matches') + '">' +
+      '<span class="hv2-mcard__kick">' + esc(kick) + '</span>' +
+      '<span class="hv2-mcard__team">' + teamLogo(m.home) + '<span class="hv2-mcard__tname">' + esc((m.home && (m.home.name || m.home.short)) || '') + '</span></span>' +
+      '<span class="hv2-mcard__team">' + teamLogo(m.away) + '<span class="hv2-mcard__tname">' + esc((m.away && (m.away.name || m.away.short)) || '') + '</span></span>' +
+      '<span class="hv2-mcard__place">' + esc(m.arena || m.city || '') + '</span>' +
+    '</a>';
+  }
   function renderMatches() {
-    var feed = (state.data.home && state.data.home.matches) || null;
-    var items = (feed && feed.matches) || [];
+    var now = home().now;
+    var feed = home().matches;
+    var items = [], allHref = (feed && feed.all_href) || 'client-matches', count = (feed && feed.week_count) || 0;
+    if (now && now.kind === 'feed') {
+      items = (now.items || []).filter(function (it) { return it && it.kind !== 'more'; });
+      var more = (now.items || []).find(function (it) { return it && it.kind === 'more'; });
+      if (more) { allHref = more.href || allHref; count = more.count || count; }
+    } else if (now && (now.kind === 'kk_before' || now.kind === 'kk_result' || now.kind === 'kk_month')) {
+      items = [now];
+    } else if (feed && feed.matches && feed.matches.length) {
+      items = feed.matches;
+    }
     if (!items.length) { els.matchSec.hidden = true; return; }
     els.matchSec.hidden = false;
-    if (feed.all_href) { els.matchMore.setAttribute('href', feed.all_href); }
-    els.matches.innerHTML = '<div class="hv2-rows hv2-fade-in">' + items.slice(0, 4).map(function (m) {
-      var logo = function (t) {
-        return t && t.logo
-          ? '<img class="hv2-match__logo" src="' + esc(t.logo) + '" alt="" loading="lazy">'
-          : '<span class="hv2-match__logo hv2-match__logo--empty"></span>';
-      };
-      var when = '';
-      try { when = new Date(m.starts_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) {}
-      var score = m.result ? '<span style="font-weight:700">' + m.result.home_score + ' : ' + m.result.away_score + '</span> ' : '';
-      return '<a class="hv2-match" href="' + esc(m.href || 'client-matches') + '">' +
-        (m.sticker ? '<span class="hv2-match__sticker">' + esc(m.sticker) + '</span>' : '') +
-        '<span class="hv2-match__time">' + esc(when) + '</span>' +
-        '<span class="hv2-match__teams">' + logo(m.home) + esc(m.home && m.home.short || m.home && m.home.name || '') + ' ' + score + esc(m.away && m.away.short || m.away && m.away.name || '') + logo(m.away) + '</span>' +
-        (m.city || m.arena ? '<span class="hv2-match__place">' + esc(m.city || m.arena) + '</span>' : '') +
-      '</a>';
-    }).join('') + '</div>';
+    els.matchMore.setAttribute('href', allHref);
+    els.matchMore.textContent = 'Все' + (count ? ' ' + count : '');
+    var yellowFree = !state.yellowUsed;
+    els.matches.innerHTML = items.map(function (it) {
+      if (it.kind === 'kk_before' || it.kind === 'kk_result' || it.kind === 'kk_month') return kkCardHtml(it, yellowFree);
+      return matchCardHtml(it);
+    }).join('');
   }
 
-  /* ── «Ещё» ───────────────────────────────────────────────── */
+  /* ── «Ещё в городе» ──────────────────────────────────────── */
+  var TILE_ICONS = {
+    ohm: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 17 7l2-2.5a1.2 1.2 0 0 1 1.7 0l.8.8a1.2 1.2 0 0 1 0 1.7L19 9.5 6 22l-4-4Z"/><path d="m14 10 2 2"/></svg>',
+    coach: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c1.5-4 4.5-6 7.5-6s6 2 7.5 6"/></svg>',
+    service: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="2.5"/></svg>',
+    shop: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.2 12a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8Z"/><path d="M8.5 10V6.5a3.5 3.5 0 0 1 7 0V10"/></svg>',
+  };
+  var TILE_TITLES = { ohm: 'С клюшкой', coach: 'Тренеры', service: 'Заточка', shop: 'Магазины' };
+  var TILE_ORDER = ['ohm', 'coach', 'service', 'shop'];
+  function tileSub(n) {
+    var line = String(n.line || '');
+    var parts = line.split(' · ');
+    if (n.key === 'ohm') {
+      var tail = parts.length > 1 ? parts.slice(1).join(' · ') : parts[0];
+      return tail.charAt(0).toUpperCase() + tail.slice(1);
+    }
+    if (n.key === 'service' || n.key === 'shop') {
+      var open = parts.find(function (p) { return /открыт/i.test(p); });
+      if (open) return open.charAt(0).toUpperCase() + open.slice(1);
+      return parts[0];
+    }
+    return parts[0];
+  }
   function renderMore() {
-    var needs = (state.data.home && state.data.home.city && state.data.home.city.needs) || [];
-    var coachRow = null;
-    var cs = state.data.client_session || {};
-    if (!cs.primary_trainer_id && cs.saved_trainers && cs.saved_trainers.length) {
-      coachRow = { key: 'coach', title: 'Учиться с тренером', line: cs.saved_trainers.length + ' в избранном', href: 'client-saved-trainers' };
-    }
-    var rows = needs.slice(0, 5).map(function (n) {
-      return { key: n.key, title: n.title, line: n.line, href: n.href };
-    });
-    if (coachRow) rows.push(coachRow);
-    if (!rows.length) { els.moreSec.hidden = true; return; }
+    var needs = (city() && city().needs) || [];
+    var tiles = TILE_ORDER.map(function (k) {
+      var n = needs.find(function (x) { return x.key === k; });
+      return n ? '<a class="hv2-tile ga-press" href="' + esc(n.href || 'ice') + '">' +
+        '<span class="hv2-tile__icon">' + TILE_ICONS[k] + '</span>' +
+        '<span class="hv2-tile__title">' + esc(TILE_TITLES[k]) + '</span>' +
+        '<span class="hv2-tile__sub">' + esc(tileSub(n)) + '</span></a>' : '';
+    }).filter(Boolean);
+    if (!tiles.length) { els.moreSec.hidden = true; return; }
     els.moreSec.hidden = false;
-    els.more.innerHTML = '<div class="hv2-rows">' + rows.map(function (r) {
-      return '<a class="hv2-row" href="' + esc(r.href || 'ice') + '">' +
-        '<span class="hv2-row__body"><span class="hv2-row__title">' + esc(r.title) + '</span>' +
-        '<span class="hv2-row__sub">' + esc(r.line || '') + '</span></span>' +
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hv2-row__chev" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>';
-    }).join('') + '</div>';
+    els.more.innerHTML = tiles.join('');
   }
 
-  /* ── Шапка ───────────────────────────────────────────────── */
-  function renderHead() {
-    var data = state.data;
-    var city = data.home && data.home.city;
-    var hour = new Date().getHours();
-    var hello = hour < 5 ? 'Доброй ночи' : hour < 12 ? 'Доброе утро' : hour < 18 ? 'Добрый день' : 'Добрый вечер';
-    els.kicker.textContent = hello;
-    if (city && city.name) {
-      els.cityLabel.textContent = city.name;
-      els.title.textContent = city.kicker || ('Лёд в ' + city.name);
-    } else {
-      els.cityLabel.textContent = 'Город';
-      els.title.textContent = 'Лёд рядом';
-    }
+  /* ── Слоты тренера (после первого кадра) ─────────────────── */
+  function fetchSlots(trainerId) {
+    if (!trainerId) return;
+    fetch('/api/webapp/client/slots?trainer_id=' + encodeURIComponent(String(trainerId)), { headers: headersJson(), cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : { slots: [] }; })
+      .then(function (d) {
+        var list = (d.slots || []).filter(function (s) { return s && String(s.start_time || '').trim(); });
+        list.sort(function (a, b) { return String(a.slot_date) + String(a.start_time) < String(b.slot_date) + String(b.start_time) ? -1 : 1; });
+        state.slots[trainerId] = list;
+        var wrap = $('hv2SlotsWrap');
+        if (wrap) {
+          if (!list.length) wrap.parentNode.removeChild(wrap);
+          else $('hv2Slots').innerHTML = slotsInner(trainerId);
+        }
+      })
+      .catch(function () { state.slots[trainerId] = []; });
   }
 
-  /* ── Город: лист, геолокация ─────────────────────────────── */
+  /* ── Город: лист + геолокация ─────────────────────────────── */
   function openSheet() { els.sheet.hidden = false; loadCities(); }
   function closeSheet() { els.sheet.hidden = true; }
-
   function loadCities() {
     if (state.cities) { renderCityOpts(state.cities); return; }
     fetch('/api/public/ice/cities', { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : { items: [] }; })
-      .then(function (d) {
-        state.cities = (d && d.items) || [];
-        renderCityOpts(state.cities);
-      })
+      .then(function (d) { state.cities = (d && d.items) || []; renderCityOpts(state.cities); })
       .catch(function () { renderCityOpts([]); });
   }
-
-  function cityCountLabel(c) {
+  function citySheetLine(c) {
     var n = Number(c.skate_count) || 0;
-    if (n > 0) return n + ' ' + (n === 1 ? 'каток' : n < 5 ? 'катка' : 'катков');
+    if (n > 0) return n + ' ' + plural(n, 'каток', 'катка', 'катков');
     var tr = Number(c.trainer_count) || 0;
-    return tr > 0 ? tr + ' ' + (tr === 1 ? 'тренер' : tr < 5 ? 'тренера' : 'тренеров') : '';
+    return tr > 0 ? tr + ' ' + plural(tr, 'тренер', 'тренера', 'тренеров') : '';
   }
-
   function renderCityOpts(cities) {
-    var host = $('hv2CityOpts') || $('hv2CityList');
-    if (!host) return;
-    if (!cities.length) { host.innerHTML = '<div class="hv2-empty__text">Не удалось загрузить города.</div>'; return; }
+    var host = els.cityList;
+    if (!cities.length) { host.innerHTML = '<div style="padding:16px 20px;color:var(--muted);font-size:15px">Не удалось загрузить города.</div>'; return; }
     host.innerHTML = cities.map(function (c) {
-      return '<button type="button" class="hv2-cityopt" data-city-id="' + c.id + '">' +
-        '<span>' + esc(c.name) + '</span><span class="hv2-cityopt__count">' + esc(cityCountLabel(c)) + '</span></button>';
-    }).join('');
-    host.querySelectorAll('.hv2-cityopt').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        haptic('light');
-        pickCity(Number(btn.getAttribute('data-city-id')));
-      });
-    });
-  }
-
-  function loadCitiesInto(hostId) {
-    var host = $(hostId);
-    if (!host) return;
-    if (state.cities) { host.innerHTML = cityOptsHtml(state.cities); bindCityOpts(host); return; }
-    fetch('/api/public/ice/cities', { cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : { items: [] }; })
-      .then(function (d) {
-        state.cities = (d && d.items) || [];
-        host.innerHTML = cityOptsHtml(state.cities);
-        bindCityOpts(host);
-      })
-      .catch(function () { host.innerHTML = '<div class="hv2-empty__text">Не удалось загрузить города.</div>'; });
-  }
-  function cityOptsHtml(cities) {
-    if (!cities.length) return '<div class="hv2-empty__text">Города не найдены.</div>';
-    return cities.map(function (c) {
-      return '<button type="button" class="hv2-cityopt" data-city-id="' + c.id + '">' +
-        '<span>' + esc(c.name) + '</span><span class="hv2-cityopt__count">' + esc(cityCountLabel(c)) + '</span></button>';
+      return '<button type="button" class="hv2-cprow ga-press" data-city="' + c.id + '">' +
+        '<span><span class="hv2-cprow__name">' + esc(c.name) + '</span><br>' +
+        '<span class="hv2-cprow__sub">' + esc(citySheetLine(c)) + '</span></span>' +
+        '<svg class="hv2-cprow__chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>';
     }).join('');
   }
-  function bindCityOpts(host) {
-    host.querySelectorAll('.hv2-cityopt').forEach(function (btn) {
-      btn.addEventListener('click', function () { haptic('light'); pickCity(Number(btn.getAttribute('data-city-id'))); });
-    });
-  }
-
-  function pickCity(cityId) {
+  function pickCity(id) {
     fetch('/api/webapp/client/session/catalog-filters', {
-      method: 'PATCH',
-      headers: headersJson(),
-      body: JSON.stringify({ city_id: cityId }),
+      method: 'PATCH', headers: headersJson(), body: JSON.stringify({ city_id: id }),
     }).then(function (r) {
       if (!r.ok) throw new Error('city ' + r.status);
       haptic('success');
+      closeSheet();
       boot();
-    }).catch(function () {
-      var w = tg();
-      try { if (w && w.HapticFeedback && w.HapticFeedback.notificationOccurred) w.HapticFeedback.notificationOccurred('error'); } catch (e) {}
-    });
+    }).catch(function () { haptic('error'); });
   }
-
   function geoPick() {
     var nav = navigator.geolocation;
     if (!nav) return;
@@ -507,46 +822,115 @@
     }, function () {}, { timeout: 8000, maximumAge: 300000 });
   }
 
-  /* ── Загрузка ────────────────────────────────────────────── */
-  function boot() {
-    els.skel.style.display = '';
-    fetchBootstrap().then(function (data) {
-      state.data = data;
-      renderHead();
-      renderTop();
+  /* ── Сборка ──────────────────────────────────────────────── */
+  function renderAll() {
+    var data = state.data;
+    var top = 'citypick';
+    var html = '';
+    if (cityId()) {
+      var rec = topBooking(data);
+      var p = rec ? null : activePass(data);
+      var cs = data.client_session || {};
+      if (rec) { top = 'ticket'; html = ticketHtml(rec); }
+      else if (p) { top = 'pass'; html = passCardHtml(p); }
+      else if (cs.primary_trainer_id) { top = 'coach'; html = coachCardHtml(cs); }
+      else {
+        var found = nearestIce(data);
+        if (found) {
+          top = 'newbie';
+          state.dedupSession = found.session_id;
+          state.topPhoto = found.photo && (found.photo.card || found.photo.hero || found.photo.thumb);
+          html = photoCardHtml(found);
+        } else top = 'ice-empty';
+      }
+    } else {
+      html = cityPickHtml();
+    }
+    renderHero(top);
+    els.top.innerHTML = html;
+    if (top === 'citypick') {
+      els.iceSec.hidden = true; els.matchSec.hidden = true; els.moreSec.hidden = true;
+      bindCityPick();
+    } else {
       renderIce();
       renderMatches();
       renderMore();
-      els.skel.style.display = 'none';
-      els.top.classList.add('hv2-fade-in');
-    }).catch(function () {
-      els.skel.innerHTML = '<div class="hv2-empty"><div class="hv2-empty__title">Нет сети</div><div class="hv2-empty__text">Проверьте подключение и попробуйте ещё раз.</div><button type="button" class="hv2-btn hv2-btn--dark" id="hv2Retry" style="max-width:220px">Повторить</button></div>';
-      var b = $('hv2Retry');
-      if (b) b.addEventListener('click', function () { els.skel.innerHTML = '<div class="hv2-skel__card"></div><div class="hv2-skel__row"></div>'; boot(); });
+    }
+    if (top === 'pass') fetchSlots(activePass(data).trainer_id);
+    if (top === 'coach') fetchSlots((data.client_session || {}).primary_trainer_id);
+    /* появление блоков со сдвигом по очереди (≤6) */
+    var kids = els.main.querySelectorAll('.hv2-card, .hv2-pcard, .hv2-pcard__btns, .hv2-sec');
+    kids.forEach(function (el, i) {
+      if (i < 6) { el.classList.add('hv2-up'); el.style.animationDelay = (i * 30) + 'ms'; }
     });
   }
 
+  function showError() {
+    els.skel.style.display = 'none';
+    els.top.innerHTML = '<div class="hv2-card hv2-error hv2-fade">' +
+      '<div class="hv2-error__t">Нет сети · Проверьте подключение</div>' +
+      '<div class="hv2-error__s">Покажем расписание, как только интернет вернётся.</div>' +
+      '<button type="button" class="hv2-btn hv2-btn--ink ga-press" id="hv2Retry">Повторить</button></div>';
+    $('hv2Retry').addEventListener('click', function () { boot(); });
+  }
+
+  function boot() {
+    els.skel.style.display = '';
+    state.railTab = null; state.yellowUsed = false; state.dedupSession = null; state.topPhoto = null;
+    fetchBootstrap().then(function (data) {
+      state.data = data;
+      renderAll();
+      els.skel.style.display = 'none';
+      els.top.classList.add('hv2-fade');
+    }).catch(function () { showError(); });
+  }
+
   function init() {
-    els.top = $('hv2Top'); els.ice = $('hv2Ice'); els.iceSec = $('hv2IceSec'); els.iceMore = $('hv2IceMore');
+    els.main = $('hv2Main'); els.top = $('hv2Top'); els.skel = $('hv2Skel');
+    els.hero = $('hv2Hero'); els.heroImg = $('hv2HeroImg'); els.dateEl = $('hv2Date'); els.title = $('hv2Title');
+    els.cityLabel = $('hv2CityLabel'); els.ava = $('hv2Ava');
+    els.iceSec = $('hv2IceSec'); els.iceTitle = $('hv2IceTitle'); els.iceMore = $('hv2IceMore'); els.tabs = $('hv2Tabs'); els.rail = $('hv2Rail');
     els.matchSec = $('hv2MatchSec'); els.matchMore = $('hv2MatchMore'); els.matches = $('hv2Matches');
-    els.moreSec = $('hv2MoreSec'); els.more = $('hv2More'); els.skel = $('hv2Skel');
-    els.cityLabel = $('hv2CityLabel'); els.hello = $('hv2Hello'); els.kicker = $('hv2Kicker'); els.title = $('hv2Title');
+    els.moreSec = $('hv2MoreSec'); els.more = $('hv2More');
     els.sheet = $('hv2Sheet'); els.cityList = $('hv2CityList');
-    $('hv2City').addEventListener('click', function () { haptic('light'); openSheet(); });
-    $('hv2Geo').addEventListener('click', function () { haptic('light'); geoPick(); });
-    $('hv2Sheet').addEventListener('click', function (ev) { if (ev.target === els.sheet) closeSheet(); });
+    $('hv2City').addEventListener('click', function () { haptic('select'); openSheet(); });
+    $('hv2Geo').addEventListener('click', function () { haptic('select'); geoPick(); });
+    els.ava.addEventListener('click', function () { haptic('light'); navigate('client-me'); });
+    els.sheet.addEventListener('click', function (ev) { if (ev.target === els.sheet) closeSheet(); });
     els.sheet.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeSheet); });
-    // Тап по строкам/карточкам — навигация через ClientShell (плавный переход оболочки).
+    /* Делегированные переходы и действия: ссылки, кнопки data-act, города.
+       Центральный обработчик — перерисовка рейлов не теряет слушателей. */
     document.addEventListener('click', function (ev) {
-      var a = ev.target.closest && ev.target.closest('a.hv2-row, a.hv2-match, a.hv2-sec__more');
+      var t = ev.target;
+      var closest = function (sel) { return t && t.closest ? t.closest(sel) : null; };
+      var cityBtn = closest('[data-city]');
+      if (cityBtn) { haptic('select'); pickCity(Number(cityBtn.getAttribute('data-city'))); return; }
+      var actEl = closest('[data-act]');
+      if (actEl) {
+        var act = actEl.getAttribute('data-act');
+        if (act === 'share') { ev.preventDefault(); haptic('light'); shareUrl(actEl.getAttribute('data-url')); return; }
+        if (act === 'map') { ev.preventDefault(); haptic('light'); openExternal(actEl.getAttribute('data-href')); return; }
+        if (act === 'book' || act === 'nav') {
+          ev.preventDefault();
+          if (act === 'book') haptic('light');
+          var path = actEl.getAttribute('data-path') || actEl.getAttribute('href');
+          if (path) navigate(path);
+          return;
+        }
+      }
+      var a = closest('a[href]');
       if (!a) return;
-      var path = a.getAttribute('href');
-      if (!path || path.indexOf('http') === 0 || path.indexOf('#') === 0) return;
+      var href = a.getAttribute('href');
+      if (!href || href.indexOf('http') === 0 || href.indexOf('#') === 0) return;
       if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
         ev.preventDefault();
-        navigate(path);
+        navigate(href);
       }
     });
+    /* Фон <body> под листом и при overscroll — #f5f6f8. Перебивает старые !important
+       правила темы (mini-app-components / mini-app-client-theme) инлайном — надёжнее,
+       чем гонка специфичности между стилями. */
+    document.body.style.setProperty('background-color', '#f5f6f8', 'important');
     boot();
   }
 
