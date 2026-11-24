@@ -2152,6 +2152,16 @@ async def _cleanup_committed_seed(*, city_id: int, arena_id: int, tg_id: int) ->
         await engine.dispose()
 
 
+def _enable_redesign_s2(monkeypatch, tg_id: int) -> None:
+    """TASK-447: s2 поверх s1 (городской вид + состояния главной)."""
+    _enable_redesign(monkeypatch, tg_id)
+    monkeypatch.setenv("CLIENT_REDESIGN_S2_TELEGRAM_IDS", str(tg_id))
+    monkeypatch.setenv("CLIENT_REDESIGN_S2_PERCENT", "0")
+    from src.shared.config import get_settings
+
+    get_settings.cache_clear()
+
+
 def _enable_redesign(monkeypatch, tg_id: int) -> None:
     monkeypatch.setenv("CLIENT_REDESIGN_S1_TELEGRAM_IDS", str(tg_id))
     monkeypatch.setenv("CLIENT_REDESIGN_S1_PERCENT", "0")
@@ -2263,3 +2273,80 @@ async def test_client_booking_post_response_shape_smoke(app_use_test_db, db_sess
     assert data.get("success") is True
     assert isinstance(data.get("booking_id"), int)
     assert "detail" not in data
+
+
+@pytest.mark.asyncio
+async def test_client_hub_bootstrap_s2_keys_with_flag(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """TASK-447: variant/week/one_rink/profile/kk_player — только под redesign_s2."""
+    ctg = _fresh_client_telegram_id()
+    # Профиль и город читаются фан-аут сессиями вне откатываемой транзакции —
+    # клиента сидируем настоящим коммитом, как город/каток/сеансы.
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("INSERT INTO clients (telegram_id, first_name, is_sandbox) VALUES (:t, 'Клиент', false)"),
+                {"t": ctg},
+            )
+    finally:
+        await engine.dispose()
+    city_id, arena_id = await _seed_public_rink_city_committed(
+        name=f"s2-{uuid.uuid4().hex[:8]}", tg_id=ctg, city_for_tg=True
+    )
+    try:
+        # s1 есть, s2 нет — ключей этапа 2 в home быть не должно.
+        _enable_redesign(monkeypatch, ctg)
+        monkeypatch.setenv("CLIENT_REDESIGN_S2_TELEGRAM_IDS", "")
+        monkeypatch.setenv("CLIENT_REDESIGN_S2_PERCENT", "0")
+        from src.shared.config import get_settings
+
+        get_settings.cache_clear()
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/webapp/client/hub/bootstrap",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+        assert resp.status_code == 200, resp.text
+        home = resp.json().get("home") or {}
+        for key in ("variant", "week", "next_ice", "one_rink", "nearby", "profile", "kk_player"):
+            assert key not in home, key
+
+        # s2 включён — один каток в городе → variant one, неделя, билет, профиль.
+        _enable_redesign_s2(monkeypatch, ctg)
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/webapp/client/hub/bootstrap",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+        assert resp.status_code == 200, resp.text
+        home = resp.json().get("home") or {}
+        assert home.get("variant") == "one", home.keys()
+        week = home.get("week")
+        assert isinstance(week, list) and len(week) == 7, week
+        assert week[0]["label"] == "Сегодня" and week[0]["times"], week[0]
+        one = home.get("one_rink")
+        assert one is not None, home
+        assert one["arena_id"] == arena_id and one["time"], one
+        assert isinstance(one["prices"], list)  # у тестового сеанса цен нет — только известные
+        profile = home.get("profile")
+        assert profile and profile["is_own"] is True and profile["name"] == "Клиент", profile
+        assert home.get("kk_player") is False
+        # Сегодня сеанс ещё впереди → ключа next_ice нет.
+        assert "next_ice" not in home
+    finally:
+        from src.shared.config import get_settings
+
+        get_settings.cache_clear()
+        await _cleanup_committed_seed(city_id=city_id, arena_id=arena_id, tg_id=ctg)
+        engine = create_async_engine(Settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DELETE FROM clients WHERE telegram_id = :t"), {"t": ctg})
+        finally:
+            await engine.dispose()

@@ -123,7 +123,7 @@
   var UI_FLAGS_TTL_MS = 24 * 60 * 60 * 1000;
   /* Метка «флаги уже спрошены в этой сессии» (sessionStorage): один запрос на сессию, а не на страницу. */
   var UI_FLAGS_SYNC_KEY = 'cw_ui_flags_sync_v1';
-  var uiFlags = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false };
+  var uiFlags = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false, redesign_s2: false };
   var uiFlagsRefreshed = false;
 
   function normalizeUiFlags(raw) {
@@ -137,6 +137,8 @@
       redesign_s1: redesign,
       /* TASK-446: redesign_s5 («Я здесь») — не включает season-режим, только ассеты листа. */
       redesign_s5: !!raw && raw.redesign_s5 === true,
+      /* TASK-447: redesign_s2 — состояния главной: серверу нужен только флаг в ответе. */
+      redesign_s2: !!raw && raw.redesign_s2 === true,
     };
   }
 
@@ -155,7 +157,7 @@
     }
   }
 
-  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false };
+  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false, redesign_s2: false };
 
   function readUiFlags() {
     var uid = initDataUserId();
@@ -167,7 +169,7 @@
       if (typeof cached.at !== 'number' || !(age >= 0 && age < UI_FLAGS_TTL_MS)) return UI_FLAGS_DEFAULT;
       /* Явный свежий false гасит флаг; всё остальное (true, мусор, отсутствие поля) — включено,
          как и раньше. redesign_s1 в кэше всегда идёт с season-режимом. */
-      if (cached.season_ui === false && cached.redesign_s1 !== true && cached.redesign_s5 !== true) return normalizeUiFlags(null);
+      if (cached.season_ui === false && cached.redesign_s1 !== true && cached.redesign_s5 !== true && cached.redesign_s2 !== true) return normalizeUiFlags(null);
       /* s5 сам по себе season-режим не включает — возвращаем его честно. */
       var seasonOn = cached.season_ui !== false || cached.redesign_s1 === true;
       return {
@@ -175,6 +177,7 @@
         bookings_tab: seasonOn && cached.bookings_tab === true,
         redesign_s1: cached.redesign_s1 === true,
         redesign_s5: cached.redesign_s5 === true,
+        redesign_s2: cached.redesign_s2 === true,
       };
     } catch (e) {
       return UI_FLAGS_DEFAULT;
@@ -193,6 +196,7 @@
           bookings_tab: flags.bookings_tab,
           redesign_s1: flags.redesign_s1 === true,
           redesign_s5: flags.redesign_s5 === true,
+          redesign_s2: flags.redesign_s2 === true,
           at: Date.now(),
         })
       );
@@ -218,7 +222,8 @@
       next.season_ui !== uiFlags.season_ui ||
       next.bookings_tab !== uiFlags.bookings_tab ||
       next.redesign_s1 !== uiFlags.redesign_s1 ||
-      next.redesign_s5 !== uiFlags.redesign_s5;
+      next.redesign_s5 !== uiFlags.redesign_s5 ||
+      next.redesign_s2 !== uiFlags.redesign_s2;
     uiFlags = next;
     if (changed && typeof global.CustomEvent === 'function') {
       global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
@@ -255,7 +260,7 @@
   }
 
   function getUiFlags() {
-    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab, redesign_s1: uiFlags.redesign_s1 === true, redesign_s5: uiFlags.redesign_s5 === true };
+    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab, redesign_s1: uiFlags.redesign_s1 === true, redesign_s5: uiFlags.redesign_s5 === true, redesign_s2: uiFlags.redesign_s2 === true };
   }
 
   function getTg() {

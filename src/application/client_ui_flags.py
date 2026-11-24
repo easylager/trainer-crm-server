@@ -76,6 +76,19 @@ def redesign_s5_enabled(account_key: int, settings: Settings) -> bool:
     return redesign_s5_bucket(account_key) < settings.client_redesign_s5_percent
 
 
+def redesign_s2_bucket(account_key: int) -> int:
+    """Своя корзина: процент redesign_s2 не повторяет выборки остальных флагов."""
+    digest = hashlib.sha256(f"redesign-s2:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def redesign_s2_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-447: этап 2 редизайна — остальные состояния главной и правила городов."""
+    if int(account_key) in (settings.client_redesign_s2_telegram_ids or ()):
+        return True
+    return redesign_s2_bucket(account_key) < settings.client_redesign_s2_percent
+
+
 # Профили аккаунта — как у GET /client/passes и /client/bookings/history: своя строка,
 # семейный доступ (resolve_acting_client_id) и профили из client_profile_links.
 # Любой статус и любая давность: вкладка, появившись, не исчезает.

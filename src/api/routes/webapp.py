@@ -39,7 +39,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from src.api.client_bootstrap import ensure_acting_client_id
 from src.api.deps import get_session
 from src.application.arena_visit_info import VisitInfoError, normalize_visit_info
-from src.application.client_ui_flags import redesign_s1_enabled, redesign_s5_enabled
+from src.application.client_ui_flags import redesign_s1_enabled, redesign_s2_enabled, redesign_s5_enabled
 from src.application.hub_home import now_slot
 from src.application.trainer_custom_service_use_cases import MAX_CUSTOM_SERVICES_PER_TRAINER
 from src.shared.byr_currency_display import BYR_SIGN
@@ -3142,6 +3142,7 @@ async def get_client_hub_bootstrap(
     # TASK-445: новая главная v2 — доп. ключи в ``home`` только под флагом;
     # для остальных форма ответа как раньше (ключей просто нет).
     redesign = redesign_s1_enabled(telegram_id, Settings())
+    redesign_s2 = redesign_s2_enabled(telegram_id, Settings())
     # Personalized, and it decides whether the invite gate covers the hub.
     # A cached copy would keep «Вас пригласил тренер» after registration.
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -3448,7 +3449,16 @@ async def get_client_hub_bootstrap(
                             ),
                         }
                     )
-                return {"city": block, "ice_rail": {"windows": windows}, "place_photos": place_photos}
+                out = {"city": block, "ice_rail": {"windows": windows}, "place_photos": place_photos}
+                if redesign_s2:
+                    # TASK-447: правила города (один каток/маленький), «На неделе»,
+                    # «следующий лёд», соседние катки — по тому же view.
+                    from src.application.home_s2 import load_home_s2
+
+                    out["s2"] = await load_home_s2(
+                        s, view=view, city_id=city_int, now=now, invite_link=invite
+                    )
+                return out
         except Exception:
             logger.exception("client hub city block failed")
             return None
@@ -3674,11 +3684,26 @@ async def get_client_hub_bootstrap(
             logger.exception("client hub on-ice card failed")
             return None
 
+    async def _home_profile_s2() -> dict[str, Any] | None:
+        """TASK-447: действующий профиль и игрок «Кто кого» — только под redesign_s2."""
+        if not redesign_s2:
+            return None
+        try:
+            async with async_session_factory() as s:
+                from src.application.home_s2 import load_profile_s2
+
+                return await load_profile_s2(
+                    s, telegram_id=telegram_id, requested_profile_id=requested_profile_id
+                )
+        except Exception:
+            logger.exception("client hub s2 profile failed")
+            return None
+
     (
-        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick, home_on_ice
+        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick, home_on_ice, home_profile_s2
     ) = await asyncio.gather(
         _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(),
-        _home_hockey(), _home_extraliga(), _home_city_pick(), _home_on_ice(),
+        _home_hockey(), _home_extraliga(), _home_city_pick(), _home_on_ice(), _home_profile_s2(),
     )
     ice_teaser = None
     try:
@@ -3722,6 +3747,16 @@ async def get_client_hub_bootstrap(
                 now=datetime.now(timezone.utc),
                 has_city=isinstance(home_city, Mapping) and home_city.get("city") is not None,
                 extraliga=home_extraliga,
+            ),
+            **(
+                home_city.get("s2") or {}
+                if redesign_s2 and isinstance(home_city, Mapping)
+                else {}
+            ),
+            **(
+                home_profile_s2
+                if redesign_s2 and isinstance(home_profile_s2, Mapping)
+                else {}
             ),
             **(
                 {

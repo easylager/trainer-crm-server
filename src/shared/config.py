@@ -390,6 +390,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # CLIENT_REDESIGN_S5_TELEGRAM_IDS=1,2; CLIENT_REDESIGN_S5_PERCENT=0…100.
     client_redesign_s5_telegram_ids: EnvIntList = None
     client_redesign_s5_percent: int = Field(default=0, ge=0, le=100)
+    # TASK-447 (этап 2): остальные состояния главной и правила для городов.
+    # CLIENT_REDESIGN_S2_TELEGRAM_IDS=1,2; CLIENT_REDESIGN_S2_PERCENT=0…100.
+    client_redesign_s2_telegram_ids: EnvIntList = None
+    client_redesign_s2_percent: int = Field(default=0, ge=0, le=100)
 
     # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
     # Full log: every update + inner gate/menu DB phase timings.

@@ -267,6 +267,8 @@ html body.hv2 { padding: 0; margin: 0; }
   margin-top: 16px;
   border: 0; border-radius: 16px;
   font: 700 17px/1 var(--g-font);
+  text-decoration: none;
+  cursor: pointer;
 }
 .hv2-btn--yellow { background: var(--yellow); color: var(--ink); }
 .hv2-btn--ink { background: var(--ink); color: #fff; }
@@ -565,3 +567,130 @@ html body.hv2 { padding: 0; margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   .hv2-chip__dot--pulse { animation: none; }
 }
+
+/* ── TASK-447: этап 2 — стопка записей, матч дня, неделя, один каток, лёд закончился ── */
+.hv2-chip--orange { background: #fff1e0; color: #b45309; }
+.hv2-chip--orange .hv2-chip__dot { background: #f59e0b; }
+
+/* Верхние карточки этапа 2 — тот же паддинг, что у билета/абонемента. */
+.hv2-kk, .hv2-ret, .hv2-end, .hv2-one { padding: 20px; }
+
+/* Стопка записей (макет 2): два призрачных слоя за верхним билетом. */
+.hv2-stack { position: relative; margin-bottom: 30px; }
+.hv2-stack .hv2-ticket { position: relative; z-index: 2; margin-bottom: 0; }
+.hv2-stack__g {
+  position: absolute; left: 10px; right: 10px; top: 0; bottom: -8px;
+  background: var(--card); border-radius: 22px;
+  box-shadow: 0 6px 16px rgba(15, 23, 32, .10); z-index: 1;
+}
+.hv2-stack__g2 { left: 20px; right: 20px; bottom: -16px; opacity: .55; z-index: 0; }
+
+/* «Дальше» — ряды записей в одной карточке. */
+.hv2-brows { padding: 4px 0; }
+.hv2-brow { display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: var(--ink); text-decoration: none; }
+.hv2-brow + .hv2-brow { border-top: 1px solid var(--line); }
+.hv2-brow__tile {
+  flex: 0 0 56px; width: 56px; height: 56px; border-radius: 16px;
+  background: #f5f6f8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+}
+.hv2-brow__day { font: 700 20px/1 var(--g-font); }
+.hv2-brow__dow { font: 700 11px/1.1 var(--g-font); text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.hv2-brow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hv2-brow__title {
+  font: 700 17px/1.3 var(--g-font);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.hv2-brow__pend {
+  display: inline-block; align-self: flex-start; margin-top: 5px;
+  font: 600 12px/1 var(--g-font); color: var(--chip-yellow-text);
+  background: var(--chip-yellow-bg); border-radius: 8px; padding: 4px 8px;
+}
+.hv2-brow__sub { margin-top: 2px; font: 400 15px/1.3 var(--g-font); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hv2-brow__chev { flex: 0 0 auto; color: var(--muted); }
+
+/* Матч «Кто кого» сегодня (макет 5): синяя карточка. */
+.hv2-kk {
+  position: relative; overflow: hidden;
+  background: #2c4dd0; color: #fff; text-align: center;
+}
+.hv2-kk::before {
+  content: ''; position: absolute; inset: -40% -20%;
+  background: radial-gradient(closest-side, rgba(255,255,255,.07), transparent 70%);
+  pointer-events: none;
+}
+.hv2-kk__kick { position: relative; font: 700 13px/1 var(--g-font); letter-spacing: .12em; opacity: .7; }
+.hv2-kk__teams {
+  position: relative; display: grid;
+  grid-template-columns: 80px 1fr 80px; align-items: start; gap: 8px; margin-top: 18px;
+}
+.hv2-kk__team { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.hv2-kk__team .hv2-mcard__logo { width: 56px; height: 56px; border-radius: 50%; }
+.hv2-kk__tname { font: 700 15px/1.25 var(--g-font); }
+.hv2-kk__mid { min-width: 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+.hv2-kk__time { display: block; font: 400 40px/1 var(--g-font-display); white-space: nowrap; }
+.hv2-kk__till { display: block; margin-top: 4px; font: 400 13px/1.3 var(--g-font); opacity: .8; white-space: nowrap; }
+.hv2-kk__play { position: relative; margin-top: 18px; width: 100%; }
+.hv2-kk__pick { position: relative; margin-top: 12px; font: 400 13px/1.3 var(--g-font); opacity: .85; }
+
+/* «С возвращением» (макет 7). */
+.hv2-ret__head { display: flex; gap: 14px; align-items: center; }
+.hv2-ret__face { flex: 0 0 64px; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: var(--soft); display: flex; align-items: center; justify-content: center; font: 700 24px/1 var(--g-font); color: var(--muted); }
+.hv2-ret__col { min-width: 0; }
+.hv2-ret__kick { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-ret__name { margin-top: 2px; font: 700 20px/1.25 var(--g-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hv2-ret__sub { margin-top: 2px; font: 400 14px/1.3 var(--g-font); color: var(--muted); }
+.hv2-ret__btns { display: flex; gap: 10px; margin-top: 14px; }
+.hv2-ret__btns .hv2-btn { margin-top: 0; flex: 1; font-size: 15px; padding: 0 8px; }
+
+/* Один каток (макет 9): белый билет. */
+.hv2-one__time { margin-top: 12px; font: 400 52px/1 var(--g-font-display); }
+.hv2-one__title { margin-top: 6px; font: 700 17px/1.3 var(--g-font); }
+.hv2-one__sub { margin-top: 2px; font: 400 15px/1.35 var(--g-font); color: var(--muted); }
+.hv2-one__prices { display: flex; gap: 18px; margin-top: 12px; }
+.hv2-one__price { display: flex; flex-direction: column; }
+.hv2-one__price b { font: 700 17px/1.25 var(--g-font); }
+.hv2-one__price span { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-one__btns { display: flex; gap: 10px; margin-top: 14px; }
+.hv2-one__btns .hv2-btn { margin-top: 0; flex: 1; }
+
+/* «На неделе»: строки дней + чипы времени. */
+.hv2-week { padding: 4px 0; }
+.hv2-wrow { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; }
+.hv2-wrow + .hv2-wrow { border-top: 1px solid var(--line); }
+.hv2-wrow__day { flex: 0 0 84px; display: flex; flex-direction: column; }
+.hv2-wrow__day b { font: 700 17px/1.25 var(--g-font); }
+.hv2-wrow__sub { margin-top: 2px; font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-wrow__chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.hv2-wchip {
+  padding: 6px 12px; border-radius: 999px; background: var(--card);
+  border: 1px solid var(--line); font: 700 15px/1 var(--g-font); color: var(--ink); text-decoration: none;
+}
+.hv2-wchip--past { color: var(--muted); text-decoration: line-through; }
+.hv2-wrow--empty { align-items: center; }
+.hv2-wrow__note { font: 400 13px/1.35 var(--g-font); color: var(--muted); }
+
+/* «Лёд закончился» / «Межсезонье» (макет 10). */
+.hv2-end__row { display: flex; gap: 12px; align-items: flex-start; margin-top: 12px; }
+.hv2-end__col { flex: 1; min-width: 0; }
+.hv2-end__title { margin-top: 12px; font: 700 22px/1.25 var(--g-font); }
+.hv2-end__row .hv2-end__title { margin-top: 0; }
+.hv2-end__sub { margin-top: 4px; font: 400 15px/1.35 var(--g-font); color: var(--muted); }
+.hv2-end__thumb { flex: 0 0 84px; width: 84px; height: 84px; border-radius: 18px; object-fit: cover; background: var(--soft); }
+.hv2-end .hv2-btn { margin-top: 16px; }
+.hv2-watch-ok {
+  margin-top: 16px; padding: 13px 16px; border-radius: 16px;
+  background: var(--soft); color: var(--ink); font: 600 15px/1.3 var(--g-font); text-align: center;
+}
+
+/* Rail-правило: 2 катка — сетка, 1 — широкая карточка. */
+.hv2-rail--grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; overflow: visible; }
+.hv2-rail--grid2 .hv2-rcard__imgwrap { width: 100%; height: auto; aspect-ratio: 1 / 1; }
+.hv2-rail--one .hv2-rcard__imgwrap { width: 100%; height: auto; aspect-ratio: 16 / 10; }
+
+/* Переключатель профилей в шапке — стеклянный чип (макет 6). */
+.hv2-hero #clientProfileSwitcherMount .cps-chip {
+  background: rgba(255, 255, 255, .14); color: #fff;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.hv2-hero #clientProfileSwitcherMount .cps-chip__avatar { background: #fff; color: var(--ink); }
+.hv2-hero #clientProfileSwitcherMount .cps-chip__chevron { opacity: .8; }

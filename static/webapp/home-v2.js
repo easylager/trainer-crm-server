@@ -111,6 +111,17 @@
     return 'Доброй ночи';
   }
   function hhmm(t) { return String(t || '').slice(0, 5); }
+  /* TASK-447: единый обратный отсчёт — «через 25 мин» / «через 1 ч 40 мин». */
+  function fmtUntil(min) {
+    if (min == null || min <= 0) return null;
+    if (min < 60) return 'через ' + Math.round(min) + ' мин';
+    var h = Math.floor(min / 60), m = Math.round(min % 60);
+    return 'через ' + h + ' ч' + (m ? ' ' + m + ' мин' : '');
+  }
+  function fmtUntilCap(min) {
+    var s = fmtUntil(min);
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : null;
+  }
   function plural(n, one, few, many) {
     n = Math.abs(Number(n) || 0) % 100;
     var d = n % 10;
@@ -328,6 +339,32 @@
       } catch (e) {}
     } else if (top === 'newbie') {
       title = ((c && c.name) || 'Город') + ' на льду';
+    } else if (top === 'onerink') {
+      /* TASK-447: «Пинск · один каток». */
+      els.dateEl.textContent = ((c && c.name) || 'Город') + ' · один каток';
+      var u2 = tgUser();
+      title = greeting() + (u2 && u2.first_name ? ', ' + u2.first_name : '');
+    } else if (top === 'iceend') {
+      /* TASK-447: «Гомель · 23:10» — время города рядом с именем. */
+      try {
+        var hm2 = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+        els.dateEl.textContent = ((c && c.name) || 'Город') + ' · ' + hm2;
+      } catch (e) {}
+      var u3 = tgUser();
+      title = greeting() + (u3 && u3.first_name ? ', ' + u3.first_name : '');
+    } else if (top === 'return') {
+      var u4 = tgUser();
+      title = 'С возвращением' + (u4 && u4.first_name ? ', ' + u4.first_name : '');
+    } else if (top === 'kkmatch') {
+      var kit = kkTodayItem();
+      var km = (kit && kit.hockey && kit.hockey.match) || {};
+      var hn = (km.home && (km.home.name || km.home.short)) || '';
+      var an = (km.away && (km.away.name || km.away.short)) || '';
+      title = hn && an ? hn + ' — ' + an : 'Кто кого';
+      try {
+        var tm2 = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(km.starts_at));
+        els.dateEl.textContent = 'Сегодня · ' + tm2 + (km.arena ? ' · ' + km.arena : '');
+      } catch (e) {}
     } else {
       var name = u && u.first_name ? ', ' + u.first_name : '';
       title = greeting() + name;
@@ -358,8 +395,9 @@
     var mu = minutesUntil(rec.date, b.start_time);
     var word = dayWord(rec.date);
     if (word === 'today' && mu !== null && mu <= 180) {
-      return mu > 0
-        ? { cls: '', dot: true, text: 'Через ' + mu + ' мин' }
+      var u = fmtUntilCap(mu);
+      return u
+        ? { cls: '', dot: true, text: u }
         : { cls: '', dot: true, text: 'Идёт' };
     }
     if (word === 'today') return { cls: '', dot: true, text: 'Сегодня' };
@@ -372,6 +410,13 @@
   function ticketHtml(rec) {
     var b = rec.b;
     var st = chipStatus(rec);
+    var cp = childProfile();
+    if (cp && cp.name) {
+      /* TASK-447: профиль ребёнка — оранжевый чип «Миша · завтра». */
+      var word = dayWord(rec.date);
+      var wd = word === 'today' ? 'сегодня' : word === 'tomorrow' ? 'завтра' : shortDay(rec.date);
+      st = { cls: 'hv2-chip--orange', dot: true, text: cp.name + ' · ' + wd };
+    }
     var pass = passForTrainer(state.data, b.trainer_id);
     var pp = (home().place_photos || {})[String(b.arena_id)] || {};
     var thumb = pp.card || pp.thumb;
@@ -390,9 +435,9 @@
     if (pass && Number(pass.sessions_total) <= 12) {
       var dots = '';
       for (var i = 0; i < Number(pass.sessions_total); i++) dots += '<i class="' + (i < Number(pass.sessions_remaining) ? 'on' : '') + '"></i>';
-      passLine = '<div class="hv2-ticket__passline"><span>Абонемент · осталось ' + esc(pass.sessions_remaining) + ' из ' + esc(pass.sessions_total) + '</span><span class="hv2-dots">' + dots + '</span></div>';
+      passLine = '<div class="hv2-ticket__passline"><span>Абонемент' + (cp && cp.name ? ' ' + esc(childGen(cp.name)) : '') + ' · осталось ' + esc(pass.sessions_remaining) + ' из ' + esc(pass.sessions_total) + '</span><span class="hv2-dots">' + dots + '</span></div>';
     } else if (pass) {
-      passLine = '<div class="hv2-ticket__passline"><span>Абонемент · осталось ' + esc(pass.sessions_remaining) + ' из ' + esc(pass.sessions_total) + '</span></div>';
+      passLine = '<div class="hv2-ticket__passline"><span>Абонемент' + (cp && cp.name ? ' ' + esc(childGen(cp.name)) : '') + ' · осталось ' + esc(pass.sessions_remaining) + ' из ' + esc(pass.sessions_total) + '</span></div>';
     }
     return '<article class="hv2-card hv2-ticket" data-act="nav" data-path="client-bookings">' +
       '<div class="hv2-ticket__head">' +
@@ -405,7 +450,7 @@
       '<div class="hv2-ticket__perf"></div>' +
       '<div class="hv2-ticket__trainer">' + face +
         '<div><div class="hv2-ticket__tname">' + esc(b.trainer_name || 'Тренер') + '</div>' +
-        '<div class="hv2-ticket__trole">ваш тренер</div></div>' +
+        '<div class="hv2-ticket__trole">' + esc(cp && cp.name ? 'тренер ' + childGen(cp.name) : 'ваш тренер') + '</div></div>' +
         '<div class="hv2-ticket__acts">' + acts + '</div>' +
       '</div>' + passLine +
     '</article>';
@@ -489,7 +534,8 @@
     var img = found.photo && (found.photo.card || found.photo.hero || found.photo.thumb);
     var mu = found.minutes_until;
     var chip;
-    if (mu != null && mu <= 90) chip = 'Ближайший · через ' + mu + ' мин';
+    var unt = fmtUntil(mu);
+    if (unt) chip = 'Ближайший · ' + unt;
     else chip = found.window === 'tomorrow' ? 'Ближайший · завтра' : 'Ближайший · сегодня';
     var bits = [];
     if (found.end) bits.push('до ' + found.end);
@@ -680,10 +726,10 @@
     }
     return null;
   }
-  function railArenaHtml(a) {
+  function railArenaHtml(a, wkey) {
     var photo = a.photo && (a.photo.card || a.photo.thumb);
     var t0 = (a.times || [])[0] || {};
-    var chip = (t0.minutes_until != null && t0.minutes_until <= 90) ? 'Через ' + t0.minutes_until + ' мин' : (t0.time || '');
+    var chip = fmtUntilCap(t0.minutes_until) || (wkey === 'tomorrow' ? 'Завтра' : wkey === 'weekend' ? 'На выходных' : 'Сегодня');
     var chips = (a.times || []).slice(0, 3).map(function (t) {
       return '<a class="hv2-rcard__tchip ga-press" href="' + esc(t.href || a.href || 'ice') + '" data-act="nav" data-path="' + esc(t.href || a.href || 'ice') + '">' + esc(t.time) + '</a>';
     }).join('');
@@ -712,11 +758,18 @@
         (w.href ? ' · <a href="' + esc(w.href) + '" data-hv2-nav>Весь день</a>' : '') + '</div>';
       return;
     }
-    host.innerHTML = arenas.map(railArenaHtml).join('');
+    /* TASK-447: ≥3 — rail, 2 — две колонки, 1 — широкая карточка. */
+    host.classList.toggle('hv2-rail--grid2', arenas.length === 2);
+    host.classList.toggle('hv2-rail--one', arenas.length === 1);
+    host.innerHTML = arenas.map(function (a) { return railArenaHtml(a, w.key); }).join('');
   }
   function renderIce() {
     var windows = railWindows();
     var c = city();
+    /* TASK-447: «На неделе» внутри top заменяет rail (один каток / лёд закончился с данными /
+       межсезонье) — секцию скрываем. */
+    if (state.topState === 'onerink' || state.topState === 'offseason' ||
+        (state.topState === 'iceend' && home().week)) { els.iceSec.hidden = true; return; }
     if (!windows || !cityId()) { els.iceSec.hidden = true; return; }
     var title = 'Лёд в ' + (c && c.name_in ? c.name_in : 'городе');
     if (c && c.name_in == null) title = 'Лёд в городе';
@@ -806,6 +859,7 @@
     '</a>';
   }
   function renderMatches() {
+    if (state.topState === 'kkmatch') { els.matchSec.hidden = true; return; }
     var now = home().now;
     var feed = home().matches;
     var items = [], allHref = (feed && feed.all_href) || 'client-matches', count = (feed && feed.week_count) || 0;
@@ -838,6 +892,9 @@
   };
   var TILE_TITLES = { ohm: 'С клюшкой', coach: 'Тренеры', service: 'Заточка', shop: 'Магазины' };
   var TILE_ORDER = ['ohm', 'coach', 'service', 'shop'];
+  function tileOrder() {
+    return state.coachFirst ? ['coach', 'ohm', 'service', 'shop'] : TILE_ORDER;
+  }
   function tileSub(n) {
     var line = String(n.line || '');
     var parts = line.split(' · ');
@@ -854,7 +911,7 @@
   }
   function renderMore() {
     var needs = (city() && city().needs) || [];
-    var tiles = TILE_ORDER.map(function (k) {
+    var tiles = tileOrder().map(function (k) {
       var n = needs.find(function (x) { return x.key === k; });
       return n ? '<a class="hv2-tile ga-press" href="' + esc(n.href || 'ice') + '">' +
         '<span class="hv2-tile__icon">' + TILE_ICONS[k] + '</span>' +
@@ -937,6 +994,310 @@
     }, function () {}, { timeout: 8000, maximumAge: 300000 });
   }
 
+
+  /* ── TASK-447: этап 2 — состояния главной и правила городов (флаг redesign_s2) ──── */
+  function s2On() {
+    var h = home();
+    return h && ('variant' in h || 'profile' in h || 'kk_player' in h);
+  }
+  function childProfile() {
+    var p = home().profile;
+    return p && p.is_own === false ? p : null;
+  }
+  function childGen(name) {
+    try {
+      var g = window.RuPersonName && window.RuPersonName.inflectPersonName(name, '', 'gen');
+      return g && g !== name ? g : name;
+    } catch (e) { return name; }
+  }
+  function localMin() {
+    try {
+      var parts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()).split(':');
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    } catch (e) { return null; }
+  }
+
+  /* Все не-мертвые записи от сегодня вперёд, по дате и времени. */
+  function futureBookings(data) {
+    var days = (data.bookings && data.bookings.days) || [];
+    var today = minskDate();
+    var nowMin = localMin();
+    var out = [];
+    for (var i = 0; i < days.length; i++) {
+      var day = days[i];
+      if (String(day.date) < today) continue;
+      for (var j = 0; j < (day.bookings || []).length; j++) {
+        var b = day.bookings[j];
+        if (DEAD[String(b.status || '').toLowerCase()]) continue;
+        if (String(day.date) === today && nowMin !== null) {
+          var ep = String(b.end_time || '23:59').split(':');
+          if (parseInt(ep[0], 10) * 60 + parseInt(ep[1] || '0', 10) <= nowMin) continue;
+        }
+        out.push({ date: String(day.date), b: b });
+      }
+    }
+    out.sort(function (x, y) {
+      return (x.date + hhmm(x.b.start_time)) < (y.date + hhmm(y.b.start_time)) ? -1 : 1;
+    });
+    return out;
+  }
+
+  /* Несколько записей (макет 2): верхний билет как стопка + секция «Дальше». */
+  function stackTicketHtml(rec) {
+    return '<div class="hv2-stack">' +
+      '<i class="hv2-stack__g hv2-stack__g2" aria-hidden="true"></i>' +
+      '<i class="hv2-stack__g hv2-stack__g1" aria-hidden="true"></i>' +
+      ticketHtml(rec) + '</div>';
+  }
+  function bookingRowHtml(rec) {
+    var b = rec.b;
+    var d = new Date(rec.date + 'T12:00:00');
+    var pend = String(b.status || '').toLowerCase() === 'pending';
+    return '<a class="hv2-brow ga-press" href="client-bookings" data-act="nav" data-path="client-bookings">' +
+      '<span class="hv2-brow__tile"><span class="hv2-brow__day">' + d.getDate() + '</span>' +
+        '<span class="hv2-brow__dow">' + esc(DOW[d.getDay()]) + '</span></span>' +
+      '<span class="hv2-brow__body">' +
+        '<span class="hv2-brow__title">' + esc(hhmm(b.start_time)) + ' · ' + esc(b.service_name || 'Занятие') + '</span>' +
+        (pend ? '<span class="hv2-brow__pend">ждёт тренера</span>' : '') +
+        '<span class="hv2-brow__sub">' + esc(b.arena_name || b.place_display || 'Каток') +
+          (b.trainer_name ? ' · ' + esc(b.trainer_name) : '') + '</span>' +
+      '</span>' +
+      '<svg class="hv2-brow__chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>';
+  }
+  function nextBookingsSecHtml(list, skipId) {
+    var rows = list.filter(function (r) { return String(r.b.id) !== String(skipId); });
+    if (!rows.length) return '';
+    var total = rows.length + 1;
+    return '<section class="hv2-sec">' +
+      '<div class="hv2-sec__head"><h2 class="hv2-sec__title">Дальше</h2>' +
+      '<a class="hv2-sec__more" href="client-bookings" data-act="nav" data-path="client-bookings">Все записи · ' + total + '</a></div>' +
+      '<div class="hv2-card hv2-brows">' + rows.slice(0, 3).map(bookingRowHtml).join('') + '</div></section>';
+  }
+
+  /* Матч «Кто кого» сегодня (макет 5): у игрока без записи — большая синяя карточка. */
+  function kkTodayItem() {
+    if (!home().kk_player) return null;
+    var now = home().now;
+    if (!now) return null;
+    var items = now.kind === 'feed' ? (now.items || []) : [now];
+    var today = minskDate();
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || it.kind !== 'kk_before' && it.kind !== 'kk_live' && it.kind !== 'kk_waiting') continue;
+      var m = (it.hockey || {}).match || {};
+      if (!m.starts_at) continue;
+      var d = new Date(m.starts_at);
+      try {
+        var local = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+        if (local === today) return it;
+      } catch (e) {}
+    }
+    return null;
+  }
+  function kkMatchCardHtml(item) {
+    var h = item.hockey || {};
+    var m = h.match || {};
+    var href = h.event_href || 'kto-kogo';
+    var d = new Date(m.starts_at);
+    var tm = '';
+    try { tm = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d); } catch (e) {}
+    var mu = Math.max(0, Math.round((d.getTime() - Date.now()) / 60000));
+    var till = fmtUntil(mu) || 'скоро';
+    var pick = h.my_pick;
+    var pickLine = pick && pick.home_score != null
+      ? 'Твой прогноз ' + esc(pick.home_score) + ':' + esc(pick.away_score)
+      : 'Угадай счёт до начала';
+    state.yellowUsed = true;
+    return '<article class="hv2-card hv2-kk">' +
+      '<div class="hv2-kk__kick">КТО КОГО</div>' +
+      '<div class="hv2-kk__teams">' +
+        '<span class="hv2-kk__team">' + teamLogo(m.home, true) + '<span class="hv2-kk__tname">' + esc((m.home && (m.home.name || m.home.short)) || '') + '</span></span>' +
+        '<span class="hv2-kk__mid"><span class="hv2-kk__time">' + esc(tm) + '</span><span class="hv2-kk__till">' + esc(till) + '</span></span>' +
+        '<span class="hv2-kk__team">' + teamLogo(m.away, true) + '<span class="hv2-kk__tname">' + esc((m.away && (m.away.name || m.away.short)) || '') + '</span></span>' +
+      '</div>' +
+      '<a class="hv2-btn hv2-btn--yellow hv2-kk__play ga-press" href="' + esc(href) + '" data-act="nav" data-path="' + esc(href) + '">Играть</a>' +
+      '<div class="hv2-kk__pick">' + pickLine + '</div>' +
+    '</article>';
+  }
+
+  /* «С возвращением» (макет 7): основной тренер, последнее занятие ≥21 дня. */
+  var RETURN_AFTER_DAYS = 21;
+  function returnInfo(cs) {
+    var hist = cs.primary_history;
+    if (!hist || !hist.last_completed_at) return null;
+    var last = new Date(hist.last_completed_at);
+    if (isNaN(last)) return null;
+    var days = Math.floor((Date.now() - last.getTime()) / 86400000);
+    if (days < RETURN_AFTER_DAYS) return null;
+    var ago;
+    if (days >= 60) { var m = Math.round(days / 30); ago = m + ' ' + plural(m, 'месяц', 'месяца', 'месяцев') + ' назад'; }
+    else if (days >= 14) { var w = Math.floor(days / 7); ago = w + ' ' + plural(w, 'неделю', 'недели', 'недель') + ' назад'; }
+    else ago = days + ' ' + plural(days, 'день', 'дня', 'дней') + ' назад';
+    return { days: days, ago: ago, count: Number(hist.completed_count) || 0 };
+  }
+  function trainersHref() {
+    return 'trainers' + (cityId() ? '?city_id=' + encodeURIComponent(cityId()) : '');
+  }
+  function returnCardHtml(cs, info) {
+    var tid = cs.primary_trainer_id;
+    var name = cs.primary_trainer_name || 'Тренер';
+    var face = cs.primary_trainer_list_photo_key
+      ? '<img class="hv2-ret__face" src="' + esc(trainerPhotoUrl(cs.primary_trainer_list_photo_key)) + '" alt="">'
+      : '<span class="hv2-ret__face">' + esc(name.charAt(0).toUpperCase()) + '</span>';
+    var cnt = info.count;
+    var sub = (cnt ? cnt + ' ' + plural(cnt, 'занятие', 'занятия', 'занятий') + ' вместе · ' : '') +
+      'последнее ' + info.ago;
+    state.yellowUsed = true;
+    return '<article class="hv2-card hv2-ret">' +
+      '<div class="hv2-ret__head">' + face +
+        '<div class="hv2-ret__col"><div class="hv2-ret__kick">Давно не виделись</div>' +
+        '<div class="hv2-ret__name">' + esc(name) + '</div>' +
+        '<div class="hv2-ret__sub">' + esc(sub) + '</div></div>' +
+      '</div>' +
+      slotsBlockHtml(tid) +
+      '<div class="hv2-ret__btns">' +
+        '<button type="button" class="hv2-btn hv2-btn--yellow ga-press" data-act="book" data-path="' + esc(allSlotsHref(tid)) + '">Записаться</button>' +
+        '<a class="hv2-btn hv2-btn--soft ga-press" href="' + esc(trainersHref()) + '" data-act="nav" data-path="' + esc(trainersHref()) + '">Другие тренеры</a>' +
+      '</div></article>';
+  }
+
+  /* Один каток в городе (макет 9): белый билет вместо фото-карточки. */
+  var ICON_BELL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
+  function oneRinkCardHtml(o) {
+    var chip = (o.day_label === 'Сегодня' ? fmtUntilCap(o.minutes_until) : null) ||
+      (o.day_label || 'Скоро');
+    var bits = [];
+    if (o.end) bits.push('до ' + o.end);
+    if (o.arena_name) bits.push(o.arena_name);
+    if (o.later_today) bits.push('ещё сегодня ' + o.later_today);
+    var prices = (o.prices || []).slice(0, 3).map(function (p) {
+      return '<span class="hv2-one__price"><b>' + esc(p.value) + '</b><span>' + esc(p.label) + '</span></span>';
+    }).join('');
+    var route = o.map_link
+      ? '<button type="button" class="hv2-btn hv2-btn--ink ga-press" data-act="map" data-href="' + esc(o.map_link) + '">' + ICON_ROUTE + ' Маршрут</button>'
+      : '<button type="button" class="hv2-btn hv2-btn--ink ga-press" data-act="nav" data-path="' + esc(o.href || 'ice') + '">' + ICON_ROUTE + ' Маршрут</button>';
+    var share = o.invite_url
+      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="share" data-url="' + esc(o.invite_url) + '">Позвать друзей</button>'
+      : '';
+    return '<article class="hv2-card hv2-one" data-act="nav" data-path="' + esc(o.href || 'ice') + '">' +
+      '<span class="hv2-chip">' + '<span class="hv2-chip__dot"></span>' + esc(chip) + '</span>' +
+      '<div class="hv2-one__time">' + esc(o.time || '') + '</div>' +
+      '<div class="hv2-one__title">' + esc(o.title || 'Массовое катание') + '</div>' +
+      (bits.length ? '<div class="hv2-one__sub">' + esc(bits.join(' · ')) + '</div>' : '') +
+      '<div class="hv2-ticket__perf"></div>' +
+      (prices ? '<div class="hv2-one__prices">' + prices + '</div>' : '') +
+      '<div class="hv2-one__btns">' + route + share + '</div></article>';
+  }
+
+  /* «На неделе» / «Неделя в городе»: строки по дням, пустые схлопнуты. */
+  function weekSecHtml(title) {
+    var week = home().week;
+    if (!week || !week.length) return '';
+    var allHref = 'ice' + (cityId() ? '?city_id=' + encodeURIComponent(cityId()) : '');
+    var total = week.reduce(function (n, d) { return n + (d.times || []).length; }, 0);
+    var rows = '';
+    var i = 0;
+    while (i < week.length) {
+      var d = week[i];
+      if ((d.times || []).length) {
+        var chips = (d.times || []).map(function (t) {
+          return '<a class="hv2-wchip ga-press' + (t.past ? ' hv2-wchip--past' : '') + '" href="' + esc(t.href || allHref) + '" data-act="nav" data-path="' + esc(t.href || allHref) + '"' +
+            (t.arena_name ? ' title="' + esc(t.arena_name) + '"' : '') + '>' + esc(t.time) + '</a>';
+        }).join('');
+        rows += '<div class="hv2-wrow"><span class="hv2-wrow__day"><b>' + esc(d.label) + '</b>' +
+          '<span class="hv2-wrow__sub">' + esc(d.sub) + '</span></span>' +
+          '<span class="hv2-wrow__chips">' + chips + '</span></div>';
+        i++;
+        continue;
+      }
+      /* Серия пустых дней — одна строка «Пн–Пт · 23–27». */
+      var j = i;
+      while (j < week.length && !(week[j].times || []).length) j++;
+      var first = week[i], last = week[j - 1];
+      var range = first.label === last.label ? esc(first.label) : esc(first.label) + '–' + esc(last.label);
+      var rangeSub = first.sub === last.sub ? esc(first.sub) : esc(first.sub) + '–' + esc(last.sub);
+      rows += '<div class="hv2-wrow hv2-wrow--empty"><span class="hv2-wrow__day"><b>' + range + '</b>' +
+        '<span class="hv2-wrow__sub">' + rangeSub + '</span></span>' +
+        '<span class="hv2-wrow__note">Расписание ещё не вышло</span></div>';
+      i = j;
+    }
+    return '<section class="hv2-sec">' +
+      '<div class="hv2-sec__head"><h2 class="hv2-sec__title">' + esc(title || 'На неделе') + '</h2>' +
+      (total ? '<a class="hv2-sec__more" href="' + esc(allHref) + '" data-act="nav" data-path="' + esc(allHref) + '">Все ' + total + '</a>' : '') +
+      '</div><div class="hv2-card hv2-week">' + rows + '</div></section>';
+  }
+
+  function weekTitle() {
+    var c = city();
+    return c && c.name_in ? 'Неделя ' + c.name_in : 'На неделе';
+  }
+  function nearbySecHtml() {
+    var list = home().nearby;
+    if (!list || !list.length) return '';
+    var cards = list.map(function (n) {
+      var inner =
+        '<span class="hv2-rcard__imgwrap">' +
+          (n.photo ? '<img class="hv2-rcard__img" src="' + esc(n.photo) + '" alt="" loading="lazy">' : '') +
+          (n.rink_count ? '<span class="hv2-rcard__chip">' + esc(n.rink_count + ' ' + plural(n.rink_count, 'каток', 'катка', 'катков')) + '</span>' : '') +
+        '</span>' +
+        '<span class="hv2-rcard__name">' + esc(n.name) + '</span>' +
+        (n.sub ? '<span class="hv2-rcard__sub">' + esc(n.sub) + '</span>' : '');
+      return n.href
+        ? '<a class="hv2-rcard ga-press" href="' + esc(n.href) + '" data-act="nav" data-path="' + esc(n.href) + '">' + inner + '</a>'
+        : '<div class="hv2-rcard">' + inner + '</div>';
+    }).join('');
+    return '<section class="hv2-sec"><div class="hv2-sec__head"><h2 class="hv2-sec__title">Лёд рядом</h2></div>' +
+      '<div class="hv2-rail">' + cards + '</div></section>';
+  }
+
+  /* «Лёд закончился» (макет 10) и «Межсезонье»: колокольчик-подписка. */
+  function watchArenaId() {
+    var pp = home().place_photos || {};
+    var keys = Object.keys(pp);
+    return keys.length ? Number(keys[0]) : null;
+  }
+  function iceEndedCardHtml(n) {
+    var thumb = n.photo ? '<img class="hv2-end__thumb" src="' + esc(n.photo) + '" alt="">' : '';
+    var sub = [n.date_sub, n.time, n.arena_name].filter(Boolean).join(' · ');
+    return '<article class="hv2-card hv2-end">' +
+      '<span class="hv2-chip hv2-chip--gray">Сегодня лёд закончился</span>' +
+      '<div class="hv2-end__row"><div class="hv2-end__col">' +
+        '<div class="hv2-end__title">Следующий — ' + esc(n.date_label || '') + '</div>' +
+        (sub ? '<div class="hv2-end__sub">' + esc(sub) + '</div>' : '') +
+      '</div>' + thumb + '</div>' +
+      '<button type="button" class="hv2-btn hv2-btn--ink ga-press" id="hv2Watch" ' +
+        'data-act="watch" data-kind="schedule_fresh" data-arena="' + esc(n.arena_id || '') + '">' +
+        ICON_BELL + ' Сообщить о новом льде</button></article>';
+  }
+  function offseasonCardHtml() {
+    return '<article class="hv2-card hv2-end">' +
+      '<span class="hv2-chip hv2-chip--gray">Межсезонье</span>' +
+      '<div class="hv2-end__title">Лёд вернётся</div>' +
+      '<div class="hv2-end__sub">Расписания на ближайшие недели нет. Напишем, как только откроют сезон.</div>' +
+      '<button type="button" class="hv2-btn hv2-btn--ink ga-press" id="hv2Watch" ' +
+        'data-act="watch" data-kind="season_open" data-arena="' + esc(watchArenaId() || '') + '">' +
+        ICON_BELL + ' Сообщить, когда откроют</button></article>';
+  }
+  function watchSubscribe(btn) {
+    var kind = btn.getAttribute('data-kind') || 'schedule_fresh';
+    var arenaId = Number(btn.getAttribute('data-arena')) || null;
+    var body = { watch_kind: kind, city_id: cityId() };
+    if (arenaId) body.arena_id = arenaId;
+    btn.disabled = true;
+    fetch('/api/webapp/client/ice-watches', {
+      method: 'POST', headers: headersJson(), body: JSON.stringify(body),
+    }).then(function (r) {
+      if (r.status === 409) { btn.parentNode && btn.parentNode.removeChild(btn); return null; }
+      if (!r.ok) { btn.disabled = false; return null; }
+      haptic('success');
+      var soft = document.createElement('div');
+      soft.className = 'hv2-watch-ok';
+      soft.textContent = kind === 'season_open' ? 'Сообщим, когда откроют сезон' : 'Сообщим, когда появится лёд';
+      btn.parentNode.replaceChild(soft, btn);
+      return null;
+    }).catch(function () { btn.disabled = false; });
+  }
+
   /* ── Сборка ──────────────────────────────────────────────── */
   function renderAll() {
     var data = state.data;
@@ -950,24 +1311,53 @@
       html = onIceHtml(onIce);
       loadCheckinAssets();
     } else if (cityId()) {
+      var s2 = s2On();
       var rec = topBooking(data);
+      var todayRec = rec && rec.date === minskDate() ? rec : null;
+      var kk = s2 && !todayRec ? kkTodayItem() : null;
       var p = rec ? null : activePass(data);
       var cs = data.client_session || {};
-      if (rec) { top = 'ticket'; html = ticketHtml(rec); }
+      if (rec) {
+        top = 'ticket';
+        var futures = s2 ? futureBookings(data) : [];
+        if (futures.length >= 2) {
+          /* TASK-447: стопка записей + «Дальше» под билетом. */
+          html = stackTicketHtml(rec) + nextBookingsSecHtml(futures, rec.b.id);
+        } else {
+          html = ticketHtml(rec) + (futures.length > 1 ? nextBookingsSecHtml(futures, rec.b.id) : '');
+        }
+      }
+      else if (kk) { top = 'kkmatch'; html = kkMatchCardHtml(kk) + nextBookingsSecHtml(futureBookings(data), -1); }
       else if (p) { top = 'pass'; html = passCardHtml(p); }
-      else if (cs.primary_trainer_id) { top = 'coach'; html = coachCardHtml(cs); }
+      else if (cs.primary_trainer_id) {
+        var ret = s2 ? returnInfo(cs) : null;
+        if (ret) { top = 'return'; html = returnCardHtml(cs, ret); }
+        else { top = 'coach'; html = coachCardHtml(cs); }
+      }
       else {
-        var found = nearestIce(data);
-        if (found) {
-          top = 'newbie';
-          state.dedupSession = found.session_id;
-          state.topPhoto = found.photo && (found.photo.card || found.photo.hero || found.photo.thumb);
-          html = photoCardHtml(found);
-        } else top = 'ice-empty';
+        var one = s2 ? home().one_rink : null;
+        var nextIce = s2 && 'next_ice' in home() ? home().next_ice : undefined;
+        if (one) { top = 'onerink'; html = oneRinkCardHtml(one) + weekSecHtml('На неделе') + nearbySecHtml(); }
+        else if (nextIce) { top = 'iceend'; html = iceEndedCardHtml(nextIce) + weekSecHtml(weekTitle()); }
+        else if (nextIce === null && (home().place_photos && Object.keys(home().place_photos).length || railWindows())) {
+          top = 'offseason';
+          state.coachFirst = true;
+          html = offseasonCardHtml();
+        }
+        else {
+          var found = nearestIce(data);
+          if (found) {
+            top = 'newbie';
+            state.dedupSession = found.session_id;
+            state.topPhoto = found.photo && (found.photo.card || found.photo.hero || found.photo.thumb);
+            html = photoCardHtml(found);
+          } else top = 'ice-empty';
+        }
       }
     } else {
       html = cityPickHtml();
     }
+    state.topState = top;
     renderHero(top);
     els.top.innerHTML = html;
     if (top === 'citypick') {
@@ -979,7 +1369,7 @@
       renderMore();
     }
     if (top === 'pass') fetchSlots(activePass(data).trainer_id);
-    if (top === 'coach') fetchSlots((data.client_session || {}).primary_trainer_id);
+    if (top === 'coach' || top === 'return') fetchSlots((data.client_session || {}).primary_trainer_id);
     /* появление блоков со сдвигом по очереди (≤6) */
     var kids = els.main.querySelectorAll('.hv2-card, .hv2-pcard, .hv2-pcard__btns, .hv2-sec');
     kids.forEach(function (el, i) {
@@ -1033,6 +1423,7 @@
         if (act === 'checkin') { ev.preventDefault(); haptic('light'); openCheckinSheet(); return; }
         if (act === 'share') { ev.preventDefault(); haptic('light'); shareUrl(actEl.getAttribute('data-url')); return; }
         if (act === 'map') { ev.preventDefault(); haptic('light'); openExternal(actEl.getAttribute('data-href')); return; }
+        if (act === 'watch') { ev.preventDefault(); haptic('light'); watchSubscribe(actEl); return; }
         if (act === 'book' || act === 'nav') {
           ev.preventDefault();
           if (act === 'book') haptic('light');

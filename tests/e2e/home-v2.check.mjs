@@ -233,6 +233,7 @@ function bootstrap(over) {
 }
 
 const UI_FLAGS_ON = { season_ui: false, bookings_tab: true, fast_tabs: false, search_board: false, redesign_s1: true };
+const UI_FLAGS_S2 = { ...UI_FLAGS_ON, redesign_s2: true };
 const UI_FLAGS_OFF = { season_ui: false, bookings_tab: false, fast_tabs: false, search_board: false, redesign_s1: false };
 
 function tgMock(colorScheme, photoUrl) {
@@ -276,7 +277,8 @@ function assetMeter(page) {
   });
 }
 
-async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePath, now }) {
+const WATCH_CALLS = [];
+async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePath, now, profiles }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
   const page = await ctx.newPage();
   const errors = [];
@@ -292,7 +294,11 @@ async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePat
     const json = (body) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     if (p === '/api/webapp/client/ui-flags') return json(flags || UI_FLAGS_ON);
     if (p === '/api/webapp/client/hub/bootstrap') return json(boot);
-    if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
+    if (p === '/api/webapp/client/profiles') return json(profiles || { items: [], default_profile_id: null });
+    if (p === '/api/webapp/client/ice-watches' && r.request().method() === 'POST') {
+      WATCH_CALLS.push(JSON.parse(r.request().postData() || '{}'));
+      return json({ ok: true, watch_id: 1 });
+    }
     if (p === '/api/webapp/client/slots') {
       return url.searchParams.get('trainer_id') === '7' ? json(SLOTS_7) : json({ slots: [] });
     }
@@ -637,6 +643,298 @@ try {
     check('15: нет жёлтой кнопки', await page.locator('.hv2-btn--yellow').count() === 0);
     check('15: «Сегодня будет» сменилось на «Отметка засчитана»', (await page.locator('.hv2-onice__stats').textContent() || '').includes('Отметка засчитана'));
     check('15: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* ── TASK-447: этап 2 (флаг redesign_s2 → ключи home.*) ── */
+  const BOOKINGS_3 = { days: [
+    { date: TOMORROW, day_label: 'пн', bookings: [{
+      id: 601, status: 'confirmed', start_time: '18:00', end_time: '18:50', duration_minutes: 50,
+      trainer_id: 7, trainer_name: 'Максим', trainer_telegram_username: 'maxim_coach',
+      service_name: 'Индивидуальное', arena_name: 'Ледовый дворец', arena_id: 12,
+      map_link: 'https://yandex.ru/maps/?x', slot_date: TOMORROW }] },
+    { date: '2026-11-24', day_label: 'вт', bookings: [{
+      id: 602, status: 'pending', start_time: '19:30', end_time: '20:20', duration_minutes: 50,
+      trainer_id: 7, trainer_name: 'Максим', service_name: 'Индивидуальное',
+      arena_name: 'Ледовый дворец', arena_id: 12, slot_date: '2026-11-24' }] },
+    { date: '2026-11-27', day_label: 'пт', bookings: [{
+      id: 603, status: 'confirmed', start_time: '09:00', end_time: '09:50', duration_minutes: 50,
+      trainer_id: 7, trainer_name: 'Максим', service_name: 'Групповое',
+      arena_name: 'Чижовка-арена', arena_id: 14, slot_date: '2026-11-27' }] },
+  ] };
+  const CITY_PINSK = { ...CITY_MINSK, id: 5, name: 'Пинск', name_in: 'Пинске',
+    kicker: '1 каток', counts_line: '1 каток', hero_photo: { thumb: PHOTO.mozyr, card: PHOTO.mozyr, hero: PHOTO.mozyr },
+    hero_photos: [{ thumb: PHOTO.mozyr, card: PHOTO.mozyr, hero: PHOTO.mozyr }] };
+  const ONE_RINK = {
+    time: '19:10', end: '20:30', minutes_until: 100, day_label: 'Сегодня',
+    title: 'Массовое катание', arena_id: 11, arena_name: 'УСК «Волна»',
+    later_today: '21:00', session_id: 301, href: 'arena?ref=11&s=301',
+    prices: [{ value: '4,40 BYN', label: 'взрослый' }, { value: '8,60 BYN', label: 'с прокатом' }],
+    invite_url: 'https://t.me/glidebot?start=arena_11_s_301', map_link: 'https://yandex.ru/maps/?volna',
+  };
+  const WEEK_7 = [
+    { date: TODAY, label: 'Сегодня', sub: '22', times: [
+      { time: '18:00', end: '19:00', session_id: 290, arena_id: 11, href: 'arena?ref=11&s=290', past: true },
+      { time: '21:00', end: '22:00', session_id: 292, arena_id: 11, href: 'arena?ref=11&s=292', past: false }] },
+    { date: TOMORROW, label: 'Завтра', sub: '23', times: [
+      { time: '12:00', end: '13:00', session_id: 293, arena_id: 11, href: 'arena?ref=11&s=293', past: false }] },
+    { date: '2026-11-24', label: 'Вт', sub: '24', times: [] },
+    { date: '2026-11-25', label: 'Ср', sub: '25', times: [] },
+    { date: '2026-11-26', label: 'Чт', sub: '26', times: [] },
+    { date: '2026-11-27', label: 'Пт', sub: '27', times: [] },
+    { date: '2026-11-28', label: 'Сб', sub: '28', times: [
+      { time: '20:15', end: '21:30', session_id: 299, arena_id: 11, href: 'arena?ref=11&s=299', past: false }] },
+  ];
+  const NEARBY_2 = [
+    { name: 'Слуцк', photo: PHOTO.gorky, sub: 'завтра · 12:00 · 96 км', rink_count: 1, href: null },
+    { name: 'Мозырь', photo: PHOTO.mozyr, sub: 'сегодня · 19:00 · 140 км', rink_count: 2, href: null },
+  ];
+  const KK_TODAY = {
+    kind: 'kk_before',
+    hockey: {
+      mode: 'before', event_href: 'kto-kogo',
+      match: {
+        id: 501, status: 'scheduled', starts_at: '2026-11-22T18:00:00+00:00',
+        home: { name: 'Динамо', short: 'ДИН', color: '#2c4dd0', logo: LOGO_DIN },
+        away: { name: 'Барыс', short: 'БАР', color: '#0aa', logo: LOGO_BAR },
+        arena: 'Минск-Арена', city: 'Минск', result: null,
+      },
+      my_pick: { home_score: 3, away_score: 2 },
+    },
+  };
+
+  /* 16. Несколько записей: билет-стопка + «Дальше» с pending-рядом */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ bookings: BOOKINGS_3, home: { variant: 'many' } }),
+      flags: UI_FLAGS_S2,
+    });
+    await shot(page, '16-bookings-stack');
+    await systemCheck(page, '16');
+    check('16: стопка — два призрачных слоя', await page.locator('.hv2-stack .hv2-stack__g').count() === 2);
+    check('16: верхний билет — ближайшая запись', (await page.locator('.hv2-ticket__time').textContent() || '').trim() === '18:00');
+    check('16: секция «Дальше»', (await page.locator('.hv2-sec__title', { hasText: 'Дальше' }).count()) === 1);
+    check('16: «Все записи · 3»', (await page.locator('.hv2-sec__more', { hasText: 'Все записи · 3' }).count()) === 1);
+    check('16: два ряда дальше', await page.locator('.hv2-brow').count() === 2);
+    check('16: жёлтый «ждёт тренера» в ряду', await page.locator('.hv2-brow__pend', { hasText: 'ждёт тренера' }).count() === 1);
+    check('16: дата-тайл 24 вт', (await page.locator('.hv2-brow__tile').first().textContent() || '').includes('24'));
+    check('16: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 17. Матч «Кто кого» сегодня (игрок, без записи сегодня) */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { now: KK_TODAY, kk_player: true, variant: 'many' } }),
+      flags: UI_FLAGS_S2,
+    });
+    await shot(page, '17-kk-today');
+    await systemCheck(page, '17');
+    check('17: синяя карточка матча', await page.locator('.hv2-kk').count() === 1);
+    check('17: заголовок «Динамо — Барыс»', (await page.locator('#hv2Title').textContent() || '') === 'Динамо — Барыс');
+    check('17: строка «Сегодня · 21:00 · Минск-Арена»', (await page.locator('#hv2Date').textContent() || '') === 'Сегодня · 21:00 · Минск-Арена');
+    check('17: кикер «КТО КОГО»', (await page.locator('.hv2-kk__kick').textContent() || '') === 'КТО КОГО');
+    check('17: Dela-время 21:00', (await page.locator('.hv2-kk__time').textContent() || '').trim() === '21:00');
+    check('17: жёлтая «Играть»', await page.locator('.hv2-kk__play', { hasText: 'Играть' }).count() === 1);
+    check('17: «Твой прогноз 3:2»', (await page.locator('.hv2-kk__pick').textContent() || '') === 'Твой прогноз 3:2');
+    check('17: секция «Матчи» скрыта', await page.locator('#hv2MatchSec').isHidden());
+    check('17: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 18. Профиль ребёнка: переключатель в шапке + «Миша · завтра» */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({
+        bookings: { days: [{ date: TOMORROW, day_label: 'пн', bookings: [BOOKINGS_3.days[0].bookings[0]] }] },
+        home: { profile: { id: 5, name: 'Миша', is_own: false }, variant: 'many' },
+        passes: PASS_ACTIVE,
+      }),
+      flags: UI_FLAGS_S2,
+      profiles: { items: [
+        { client_id: 1, first_name: 'Максим', role: 'self' },
+        { client_id: 5, first_name: 'Миша', role: 'guardian' },
+      ], default_profile_id: 5 },
+    });
+    await shot(page, '18-child-profile');
+    await systemCheck(page, '18');
+    check('18: стеклянный чип «Миша» в шапке', (await page.locator('#clientProfileSwitcherMount .cps-chip__name').textContent() || '') === 'Миша');
+    check('18: чип «Миша · завтра» оранжевый', await page.locator('.hv2-chip--orange', { hasText: 'Миша · завтра' }).count() === 1);
+    check('18: «тренер Миши»', (await page.locator('.hv2-ticket__trole').textContent() || '') === 'тренер Миши');
+    check('18: «Абонемент Миши»', (await page.locator('.hv2-ticket__passline').textContent() || '').includes('Абонемент Миши'));
+    check('18: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 19. «С возвращением»: последнее занятие 25 дней назад */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({
+        client_session: { ...COACH_SESSION, primary_history: { completed_count: 12, last_completed_at: '2026-10-28T10:00:00Z' } },
+        home: { variant: 'many' },
+      }),
+      flags: UI_FLAGS_S2,
+    });
+    await shot(page, '19-return');
+    await systemCheck(page, '19');
+    check('19: «С возвращением»', (await page.locator('#hv2Title').textContent() || '').startsWith('С возвращением'));
+    check('19: кикер «Давно не виделись»', (await page.locator('.hv2-ret__kick').textContent() || '') === 'Давно не виделись');
+    check('19: «12 занятий вместе · последнее 3 недели назад»',
+      (await page.locator('.hv2-ret__sub').textContent() || '') === '12 занятий вместе · последнее 3 недели назад');
+    check('19: жёлтая «Записаться» + мягкая «Другие тренеры»',
+      await page.locator('.hv2-ret .hv2-btn--yellow', { hasText: 'Записаться' }).count() === 1 &&
+      await page.locator('.hv2-ret .hv2-btn--soft', { hasText: 'Другие тренеры' }).count() === 1);
+    check('19: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 20. Один каток (Пинск): белый билет + «На неделе» + «Лёд рядом» */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({
+        client_session: { city_id: 5, saved_trainers: [] },
+        home: { city: CITY_PINSK, variant: 'one', one_rink: ONE_RINK, week: WEEK_7, nearby: NEARBY_2 },
+      }),
+      flags: UI_FLAGS_S2,
+    });
+    await shot(page, '20-one-rink');
+    await shot(page, '20-one-rink-full', true);
+    await systemCheck(page, '20');
+    check('20: «Пинск · один каток»', (await page.locator('#hv2Date').textContent() || '') === 'Пинск · один каток');
+    check('20: белый билет (не фото)', await page.locator('.hv2-one').count() === 1 && await page.locator('.hv2-pcard').count() === 0);
+    check('20: чип «Через 1 ч 40 мин»', (await page.locator('.hv2-one .hv2-chip').textContent() || '').includes('Через 1 ч 40 мин'));
+    check('20: «ещё сегодня 21:00»', (await page.locator('.hv2-one__sub').textContent() || '').includes('ещё сегодня 21:00'));
+    check('20: цены взрослый+прокат', (await page.locator('.hv2-one__prices').textContent() || '').includes('4,40 BYN'));
+    check('20: «Маршрут» + «Позвать друзей»',
+      await page.locator('.hv2-one__btns .hv2-btn--ink', { hasText: 'Маршрут' }).count() === 1 &&
+      await page.locator('.hv2-one__btns .hv2-btn--soft', { hasText: 'Позвать друзей' }).count() === 1);
+    check('20: «На неделе» вместо рейла', (await page.locator('.hv2-sec__title', { hasText: 'На неделе' }).count()) === 1 &&
+      await page.locator('#hv2IceSec').isHidden());
+    check('20: пустые дни схлопнуты «Вт–Пт»/«24–27»',
+      (await page.locator('.hv2-wrow--empty .hv2-wrow__day').textContent() || '').replace(/\s+/g, ' ').includes('Вт–Пт') &&
+      (await page.locator('.hv2-wrow--empty .hv2-wrow__sub').textContent() || '') === '24–27');
+    check('20: прошедший чип зачёркнут', await page.locator('.hv2-wchip--past').count() === 1);
+    check('20: «Лёд рядом» — 2 карточки', await page.locator('.hv2-sec:has(.hv2-sec__title:text("Лёд рядом")) .hv2-rcard').count() === 2 ||
+      await page.locator('.hv2-sec__title', { hasText: 'Лёд рядом' }).count() === 1);
+    check('20: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 21. Лёд сегодня закончился (Гомель 23:10): следующий + «Неделя в Гомеле» */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      now: new Date('2026-11-22T20:10:00Z'),
+      boot: bootstrap({
+        client_session: { city_id: 3, saved_trainers: [] },
+        home: {
+          city: { ...CITY_PINSK, id: 3, name: 'Гомель', name_in: 'в Гомеле' },
+          variant: 'many', next_ice: {
+            date_label: 'сб, 28', date_sub: 'сб 28', time: '20:15',
+            arena_id: 12, arena_name: 'Гомельский ледовый дворец',
+            photo: PHOTO.ledoviy, href: 'arena?ref=12&s=901',
+          },
+          week: WEEK_7,
+        },
+      }),
+      flags: UI_FLAGS_S2,
+    });
+    await shot(page, '21-ice-ended');
+    await shot(page, '21-ice-ended-full', true);
+    await systemCheck(page, '21');
+    check('21: «Гомель · 23:10»', (await page.locator('#hv2Date').textContent() || '') === 'Гомель · 23:10');
+    check('21: чип «Сегодня лёд закончился»', (await page.locator('.hv2-end .hv2-chip').textContent() || '').includes('Сегодня лёд закончился'));
+    check('21: «Следующий — сб, 28»', (await page.locator('.hv2-end__title').textContent() || '') === 'Следующий — сб, 28');
+    check('21: sub «сб 28 · 20:15 · Гомельский…»', (await page.locator('.hv2-end__sub').textContent() || '') === 'сб 28 · 20:15 · Гомельский ледовый дворец');
+    check('21: фото справа', await page.locator('.hv2-end__thumb').count() === 1);
+    check('21: чернильная «Сообщить о новом льде»', await page.locator('#hv2Watch', { hasText: 'Сообщить о новом льде' }).count() === 1);
+    check('21: «Неделя в Гомеле»', (await page.locator('.hv2-sec__title', { hasText: 'Неделя в Гомеле' }).count()) === 1);
+    check('21: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 22. Межсезонье: «Лёд вернётся» + матчи первыми, тренер в «Ещё» первый */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({
+        home: { variant: 'many', next_ice: null },
+      }),
+      flags: UI_FLAGS_S2,
+    });
+    await shot(page, '22-offseason');
+    await systemCheck(page, '22');
+    check('22: чип «Межсезонье»', (await page.locator('.hv2-end .hv2-chip').textContent() || '').includes('Межсезонье'));
+    check('22: «Лёд вернётся»', (await page.locator('.hv2-end__title').textContent() || '') === 'Лёд вернётся');
+    check('22: «Сообщить, когда откроют»', await page.locator('#hv2Watch', { hasText: 'Сообщить, когда откроют' }).count() === 1);
+    check('22: рейл скрыт, матчи первыми', await page.locator('#hv2IceSec').isHidden());
+    check('22: тренер — первая плитка «Ещё»', (await page.locator('#hv2More .hv2-tile').first().textContent() || '').includes('Тренеры'));
+    check('22: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 23. Окно с двумя катками — сетка 2×, не rail */
+  {
+    const two = rail([
+      arena(11, 'Каток на Немиге', PHOTO.nemiga, '12 BYN', [['19:30', '20:45', 104, 115], ['21:00', '22:00', 105, 205]]),
+      arena(12, 'Ледовый дворец', PHOTO.ledoviy, '10 BYN', [['20:15', '21:30', 106, 160]]),
+    ]);
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { ice_rail: two } }),
+    });
+    await shot(page, '23-two-arenas');
+    await shot(page, '23-two-arenas-full', true);
+    await systemCheck(page, '23');
+    check('23: rail в режиме сетки', await page.locator('#hv2Rail.hv2-rail--grid2').count() === 1);
+    check('23: две карточки', await page.locator('#hv2Rail .hv2-rcard').count() === 2);
+    check('23: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 24. Подписка «Сообщить о новом льде»: POST → мягкое подтверждение */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({
+        client_session: { city_id: 3, saved_trainers: [] },
+        home: {
+          city: { ...CITY_PINSK, id: 3, name: 'Гомель', name_in: 'в Гомеле' },
+          variant: 'many', next_ice: {
+            date_label: 'сб, 28', date_sub: 'сб 28', time: '20:15',
+            arena_id: 12, arena_name: 'Гомельский ледовый дворец',
+            photo: PHOTO.ledoviy, href: 'arena?ref=12&s=901',
+          },
+        },
+      }),
+      flags: UI_FLAGS_S2,
+    });
+    await page.click('#hv2Watch');
+    await page.waitForSelector('.hv2-watch-ok', { timeout: 5000 });
+    await shot(page, '24-watch-subscribed');
+    check('24: POST ice-watches {arena_id, schedule_fresh, city}',
+      WATCH_CALLS.length === 1 && WATCH_CALLS[0].arena_id === 12 && WATCH_CALLS[0].watch_kind === 'schedule_fresh' && WATCH_CALLS[0].city_id === 3,
+      JSON.stringify(WATCH_CALLS));
+    check('24: «Сообщим, когда появится лёд»', (await page.locator('.hv2-watch-ok').textContent() || '') === 'Сообщим, когда появится лёд');
+    check('24: кнопка ушла', await page.locator('#hv2Watch').count() === 0);
+    check('24: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* S2-off: те же данные без флага → состояния этапа 1 (регрессия гейта). */
+  {
+    const { page, ctx } = await openHome(browser, { boot: bootstrap({ bookings: BOOKINGS_3 }) });
+    check('s2-off: стопки нет — один билет', await page.locator('.hv2-stack').count() === 0 &&
+      await page.locator('.hv2-ticket').count() === 1);
+    check('s2-off: «Дальше» нет', await page.locator('.hv2-brow').count() === 0);
+    await shot(page, '25-s2-off-booking');
+    await ctx.close();
+  }
+  {
+    const { page, ctx } = await openHome(browser, {
+      boot: bootstrap({
+        client_session: { ...COACH_SESSION, primary_history: { completed_count: 12, last_completed_at: '2026-10-28T10:00:00Z' } },
+      }),
+    });
+    check('s2-off: coach-карточка вместо «С возвращением»', await page.locator('.hv2-coach').count() === 1 &&
+      await page.locator('.hv2-ret').count() === 0);
+    await shot(page, '26-s2-off-coach');
     await ctx.close();
   }
 } finally {
