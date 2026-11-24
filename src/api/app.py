@@ -2481,6 +2481,45 @@ def webapp_checkin_sheet_css(request: Request):
     )
 
 
+@app.get("/webapp/badge-art.js")
+def webapp_badge_art_js(request: Request):
+    """TASK-451: арт значков волны 1. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "badge-art.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/badge-award.js")
+def webapp_badge_award_js(request: Request):
+    """TASK-451: лист вручения значка. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "badge-award.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/badge-award.css")
+def webapp_badge_award_css(request: Request):
+    """TASK-451: стили листа вручения. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "badge-award.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/checkin-live.js")
 def webapp_checkin_live_js(request: Request):
     """TASK-446 (5.2): живые строки загрузки на страницах Лёд/каток/«Я». Use ``?v=…``."""

@@ -204,9 +204,19 @@
     dim.classList.remove('cis-on');
     sheet.classList.remove('cis-on');
     var done = state && state.onDone;
+    var earned = state && state.earned_badges;
     state = null;
     setTimeout(function () { dim.hidden = true; sheet.hidden = true; }, 260);
     if (typeof done === 'function') done();
+    /* TASK-451: лист вручения значка — сразу после листа отметки. */
+    if (earned && earned.length && window.GlideBadgeAward) {
+      window.GlideBadgeAward.open({
+        badges: earned,
+        onClose: function (keys) {
+          api('POST', '/client/badges/seen', { keys: keys }).catch(function () {});
+        },
+      });
+    }
   }
 
   function open(opts) {
@@ -241,6 +251,7 @@
           state.season_days = r.json.season_days;
           state.streak_weeks = r.json.streak_weeks;
           state.load_level = r.json.load_level || state.load_level;
+          state.earned_badges = Array.isArray(r.json.earned_badges) ? r.json.earned_badges : [];
           haptic('ok');
           render();
           try {

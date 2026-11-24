@@ -106,11 +106,35 @@ const ME_PARENT = {
 const SEASON = { sessions: {}, me: { season_days: 14, streak_weeks: 3, has_this_week: true, helped: 0 } };
 const SEASON_ZERO = { sessions: {}, me: { season_days: 0, streak_weeks: 0, has_this_week: false, helped: 0 } };
 
-let ME_BODY = ME_SOLO, SEASON_BODY = SEASON, REMIND = true, REMIND_PUTS = [], PROFILE_ID = null;
+/* TASK-451: значки волны 1 — полка/коллекция/лист вручения в «Я». */
+const BADGES_FULL = [
+  { key: 'first_ice', name: 'Вышел на лёд', name_gen: 'Выхода на лёд', family: 'intro', total: 1, earned: true,
+    earned_at: '2026-09-12T15:00:00+00:00', progress: { done: 1, total: 1 } },
+  { key: 'streak_3', name: 'Не растаял', name_gen: 'Не растаял', family: 'streak', total: 3, earned: true,
+    earned_at: '2026-11-03T15:00:00+00:00', progress: { done: 3, total: 3 } },
+  { key: 'streak_5', name: 'Крепкий лёд', name_gen: 'Крепкого льда', family: 'streak', total: 5, earned: false,
+    earned_at: null, progress: { done: 3, total: 5 } },
+  { key: 'streak_10', name: 'Вечная мерзлота', name_gen: 'Вечной мерзлоты', family: 'streak', total: 10, earned: false,
+    earned_at: null, progress: { done: 3, total: 10 } },
+  { key: 'days_10', name: 'Разогрелся', name_gen: 'Разогрелся', family: 'season', total: 10, earned: false,
+    earned_at: null, progress: { done: 8, total: 10 } },
+  { key: 'days_25', name: 'Завсегдатай', name_gen: 'Завсегдатая', family: 'season', total: 25, earned: false,
+    earned_at: null, progress: { done: 8, total: 25 } },
+];
+const ME_BADGES = { ...ME_SOLO, badges: BADGES_FULL };
+const ME_BADGES_BROKEN = {
+  ...ME_SOLO,
+  badges: BADGES_FULL.map((b) => ({ ...b,
+    progress: { ...b.progress, done: 0 },
+    earned: b.key === 'first_ice' ? b.earned : false })),
+};
+const SEASON_BROKEN = { sessions: {}, me: { season_days: 7, streak_weeks: 0, has_this_week: false, helped: 0 } };
+
+let ME_BODY = ME_SOLO, SEASON_BODY = SEASON, REMIND = true, REMIND_PUTS = [], PROFILE_ID = null, SEEN_POSTS = [];
 
 async function openMe(browser, { me, season, flags, url, flagsCache } = {}) {
   ME_BODY = me || ME_SOLO; SEASON_BODY = season === undefined ? SEASON : season;
-  REMIND_PUTS = [];
+  REMIND_PUTS = []; SEEN_POSTS = [];
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
   const page = await ctx.newPage();
   const errors = [];
@@ -133,6 +157,11 @@ async function openMe(browser, { me, season, flags, url, flagsCache } = {}) {
       return json({ on: REMIND });
     }
     if (p === '/api/webapp/client/slots') return json({ next: { label: 'ср, 25 · 07:30' }, slots: [] });
+    if (p === '/api/webapp/client/badges/seen') { SEEN_POSTS.push(JSON.parse(r.request().postData() || '{}')); return json({ shown: 1 }); }
+    if (p.startsWith('/api/webapp/client/badges/') && p.endsWith('/share')) {
+      return json({ share_url: 'https://t.me/glidebot/app?startapp=badge_streak_3',
+        share_body: 'x', share_text: 'Максим получил значок «Не растаял» в Glide' });
+    }
     if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
     if (p === '/api/webapp/client/session' && r.request().method() === 'GET') return json({ city_id: 1 });
     return json({});
@@ -215,6 +244,7 @@ const browser = await chromium.launch();
   check('03: «Выбрать каток»', (await page.locator('#mv2RinkPick').textContent()).includes('Выбрать каток'));
   check('03: без «Болею за»', !(await page.locator('.mv2__page').textContent()).includes('Болею за'));
   check('03: «Добавить ребёнка»', (await page.locator('.mv2-tiles').textContent()).includes('Добавить ребёнка'));
+  check('03: полки значков нет', await page.locator('.mv2-badges').count() === 0);
   check('03: без JS-ошибок', errors.length === 0, errors.join('; '));
   await ctx.close();
 }
@@ -267,6 +297,53 @@ const browser = await chromium.launch();
   check('08: «ты идёшь»', (await page.locator('[data-company]').first().textContent()).includes('ты идёшь'));
   check('08: «организатор»', (await page.locator('[data-company]').nth(1).textContent()).includes('организатор'));
   check('08: без JS-ошибок', errors.length === 0, errors.join('; '));
+  await ctx.close();
+}
+
+/* 09 полка значков + «Первый шаг» + коллекция (s4+s5) */
+{
+  const { page, ctx, errors } = await openMe(browser, { me: ME_BADGES });
+  await shot(page, '09-badges-shelf');
+  await shot(page, '09b-badges-full', true);
+  const sec = page.locator('.mv2-badges');
+  check('09: секция «Значки»', await sec.count() === 1);
+  check('09: «Первый шаг» строкой', (await sec.locator('.mv2-bfirst').textContent()).includes('Первый шаг'));
+  check('09: плиток 5 (без вводного)', await sec.locator('.mv2-btile').count() === 5);
+  check('09: первая плитка открыта с датой',
+    (await sec.locator('.mv2-btile.is-earned').first().textContent()).includes('03.11'));
+  check('09: закрытая «3 из 5»',
+    (await sec.locator('.mv2-btile.is-locked[data-badge="streak_5"]').textContent()).includes('3 из 5'));
+  check('09: «до «Крепкого льда»» в сезоне',
+    (await page.locator('.mv2-season').textContent()).includes('Крепкого льда'));
+  /* коллекция */
+  await page.locator('#mv2BadgesAll').click();
+  await page.waitForTimeout(300);
+  const col = page.locator('#mv2Collection');
+  check('09: коллекция открылась', await col.isVisible());
+  check('09: «Ближе всего»', (await col.textContent()).includes('Ближе всего'));
+  check('09: сетки Серии/Сезон', (await col.textContent()).includes('Серии') && (await col.textContent()).includes('Сезон'));
+  check('09: в коллекции 5 трофейных + ближайший', await col.locator('.mv2-btile').count() === 6);
+  await shot(page, '09c-collection');
+  /* тап по открытому значку → лист вручения */
+  await col.locator('.mv2-btile.is-earned').first().click();
+  await page.waitForTimeout(400);
+  check('09: лист вручения из коллекции', await page.locator('.baw').isVisible());
+  check('09: имя значка в листе', (await page.locator('.baw__name').textContent()).includes('Не растаял'));
+  await shot(page, '09d-award');
+  await page.locator('.baw__later').click();
+  await ctx.close();
+}
+
+/* 10 полки нет, когда ни одного значка (серия оборвалась) */
+{
+  const { page, ctx, errors } = await openMe(browser, { me: ME_BADGES_BROKEN, season: SEASON_BROKEN });
+  await shot(page, '10-broken-streak');
+  check('10: «Первый шаг» открыт, трофеи серые',
+    (await page.locator('.mv2-bfirst').textContent()).includes('Первый шаг') &&
+    await page.locator('.mv2-btile.is-earned').count() === 0);
+  check('10: «Серия оборвалась · начни новую»',
+    (await page.locator('.mv2-season').textContent()).includes('Серия оборвалась'));
+  check('10: без JS-ошибок', errors.length === 0, errors.join('; '));
   await ctx.close();
 }
 

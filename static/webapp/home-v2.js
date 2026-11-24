@@ -575,6 +575,60 @@
     js.src = 'checkin-sheet.js' + q;
     js.defer = true;
     document.head.appendChild(js);
+    loadBadgeAssets(q);
+  }
+
+  /* ── TASK-451: лист вручения значка (арт + шит) — лениво, как checkin-sheet. ── */
+  function loadBadgeAssets(q) {
+    if (state.badgeAssets) return;
+    state.badgeAssets = true;
+    if (q === undefined) {
+      var v = (document.querySelector('link[href*="home-v2.css"]') || {}).href || '';
+      var m = v.match(/[?&]v=([^&]+)/);
+      q = m ? '?v=' + m[1] : '';
+    }
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'badge-award.css' + q;
+    document.head.appendChild(css);
+    ['badge-art.js', 'badge-award.js'].forEach(function (src) {
+      var js = document.createElement('script');
+      js.src = src + q;
+      js.defer = true;
+      document.head.appendChild(js);
+    });
+  }
+
+  /* pending_badges из bootstrap: лист при открытии, затем POST seen. */
+  function maybeOpenBadgeAward() {
+    var p = home().pending_badges;
+    if (!s5On() || !Array.isArray(p) || !p.length || state.badgeShown) return;
+    state.badgeShown = true;
+    home().pending_badges = null;
+    var go = function () {
+      if (!window.GlideBadgeAward) return;
+      window.GlideBadgeAward.open({
+        badges: p,
+        onClose: function (keys) {
+          var t = window.Telegram && window.Telegram.WebApp;
+          fetch('/api/webapp/client/badges/seen', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Telegram-Init-Data': (t && t.initData) || '',
+            },
+            body: JSON.stringify({ keys: keys }),
+          }).catch(function () {});
+        },
+      });
+    };
+    loadBadgeAssets();
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      if (window.GlideBadgeAward && window.GlideBadgeArt) { clearInterval(iv); go(); }
+      else if (tries > 40) clearInterval(iv);
+    }, 50);
   }
 
   function fmtLeft(min) {
@@ -619,7 +673,9 @@
         '<div class="hv2-onice__row">' +
           '<svg class="hv2-onice__ic" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3c2 4-3 5-3 9a3 3 0 006 0c0-2-1-3-1-3s4 2 4 6a6 6 0 11-12 0c0-6 6-8 6-12z" fill="currentColor"/></svg>' +
           '<div><div class="hv2-onice__t">Серия: ' + o.streak_weeks + ' ' + plural(o.streak_weeks, 'неделя', 'недели', 'недель') + ' подряд</div>' +
-          '<div class="hv2-onice__s">' + (o.has_this_week ? 'Отметка этой недели засчитана' : 'Отметься сегодня — будет ' + (o.streak_weeks + 1) + '-я') + '</div></div>' +
+          '<div class="hv2-onice__s">' + (o.has_this_week ? 'Отметка этой недели засчитана' : 'Отметься сегодня — будет ' + (o.streak_weeks + 1) + '-я') +
+          (o.next_badge ? ' · до «' + esc(o.next_badge.name_gen || o.next_badge.name) + '» — ' + o.next_badge.remaining + ' ' + plural(o.next_badge.remaining, 'неделя', 'недели', 'недель') : '') +
+          '</div></div>' +
           weekPillsHtml(o.streak_weeks) +
         '</div>' +
         '<div class="hv2-onice__row">' +
@@ -1684,6 +1740,7 @@
     els.skel.style.display = 'none';
     if (!quiet) els.top.classList.add('hv2-fade');
     if (s3On()) screenCacheWrite(data);
+    maybeOpenBadgeAward();
   }
 
   function boot() {

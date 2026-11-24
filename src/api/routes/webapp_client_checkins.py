@@ -24,6 +24,7 @@ from src.api.miniapp_auth import (
     client_catalog_telegram_key,
     get_client_miniapp_principal,
 )
+from src.application import ice_badges as ib
 from src.application import ice_checkins as ic
 from src.application.client_profile_use_cases import resolve_acting_client_id
 from src.application.client_ui_flags import redesign_s5_enabled
@@ -127,6 +128,15 @@ async def post_client_checkin(
     except ic.CheckinError as err:
         await session.rollback()
         _raise(err)
+    # TASK-451: значки волны 1 — вручение в момент отметки, в той же транзакции
+    # видна и свежая отметка. Сбой значков отметку не ломает.
+    earned: list[dict] = []
+    try:
+        earned = await ib.evaluate_and_award(
+            session, telegram_id, profile_id, now.astimezone(ic.MINSK).date()
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("checkin badge award failed")
     await session.commit()
     payload = await _answer_payload(session, telegram_id, profile_id, body.session_id, now)
     checkin = (
@@ -143,8 +153,71 @@ async def post_client_checkin(
         "checkin_id": res["checkin_id"],
         "session_id": res["session_id"],
         "load_level": (checkin or {}).get("load_level") if checkin else body.load_level,
+        "earned_badges": earned,
         **payload,
     }
+
+
+class BadgesSeenBody(BaseModel):
+    keys: list[str] = Field(default_factory=list, max_length=6)
+
+
+@router.post("/client/badges/seen")
+async def post_client_badges_seen(
+    body: BadgesSeenBody,
+    x_profile_id: str | None = Header(None),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Лист вручения показан — ``shown_at`` вручённым значкам этого профиля."""
+    telegram_id = _flag_or_404(principal)
+    profile_id = await _profile_id(session, telegram_id, _parse_profile_header(x_profile_id))
+    shown = await ib.mark_shown(session, telegram_id, profile_id, body.keys)
+    await session.commit()
+    return {"shown": shown}
+
+
+_BADGE_SUBS = {
+    "intro": "Первая отметка за сезон",
+    "streak": "{total} недель подряд на льду",
+    "season": "{total} дней на льду за сезон",
+}
+
+
+def _badge_share_caption(first_name: str | None, badge: dict) -> str:
+    name = (first_name or "Я").strip() or "Я"
+    sub = _BADGE_SUBS[badge["family"]].format(total=badge["total"])
+    return f"{name} получил значок «{badge['name']}» в Glide\n{sub} — присоединяйся!"
+
+
+@router.get("/client/badges/{badge_key}/share")
+async def get_client_badge_share(
+    badge_key: str,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Текст «Отправить другу» листа вручения: ссылка на Mini App + подпись.
+
+    Контракт ``share_url``/``share_body``/``share_text`` — как у
+    ``/api/public/ice/share/{city_id}``: его умеет ``GlideShareSheet`` (endpoint-режим).
+    """
+    telegram_id = _flag_or_404(principal)
+    badge = ib.BY_KEY.get(badge_key)
+    if badge is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    settings = Settings()  # type: ignore[call-arg]
+    url = public_telegram_entry_link(settings, start_param=f"badge_{badge_key}")
+    if not url:
+        raise HTTPException(status_code=503, detail="Ссылка пока недоступна")
+    first_name = (
+        await session.execute(
+            text("SELECT first_name FROM clients WHERE telegram_id = :t LIMIT 1"),
+            {"t": telegram_id},
+        )
+    ).scalar()
+    share_text = _badge_share_caption(first_name, badge)
+    share_body = f"{share_text}\n{url}"
+    return {"share_url": url, "share_body": share_body, "share_text": share_text}
 
 
 @router.patch("/client/checkins/{checkin_id}")

@@ -104,6 +104,9 @@ async def test_checkins_flag_off_404(monkeypatch) -> None:
                     await client.get("/api/webapp/client/checkins/state?session_ids=1", headers=H),
                     await client.post("/api/webapp/client/checkins/intent", json={"session_id": 1, "kind": "view"}, headers=H),
                     await client.post("/api/webapp/client/checkins/1/share", headers=H),
+                    # TASK-451: значки — те же 404 без флага
+                    await client.post("/api/webapp/client/badges/seen", json={"keys": ["first_ice"]}, headers=H),
+                    await client.get("/api/webapp/client/badges/first_ice/share", headers=H),
                 ]:
                     assert resp.status_code == 404, (resp.request.url, resp.text)
     finally:
@@ -330,7 +333,73 @@ async def test_bootstrap_on_ice(monkeypatch) -> None:
         assert oi["checked_in"] is False and oi["arena_name"]
         assert isinstance(oi["minutes_left"], int) and oi["minutes_left"] > 0
         assert "invite_url" in oi and oi["invite_url"]
+        assert oi["next_badge"] and oi["next_badge"]["name"] == "Не растаял"
     finally:
         await engine.dispose()
         get_settings.cache_clear()
+        await _cleanup(city_id=city_id, arena_id=arena_id, tg_id=tg)
+
+
+@pytest.mark.asyncio
+async def test_checkin_badges_award_seen_share_and_me(monkeypatch) -> None:
+    """TASK-451: check-in вручает «Вышел на лёд»; pending в bootstrap; seen; share; badges в /client/me."""
+    tg = _tg()
+    city_id, arena_id, sids = await _seed_checkin_env(name=f"bd-{uuid.uuid4().hex[:8]}", tg_id=tg)
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("INSERT INTO client_sessions (telegram_id, state, city_id) VALUES (:t, 'city_selected', :c) "
+                     "ON CONFLICT (telegram_id) DO UPDATE SET city_id = :c"),
+                {"t": tg, "c": city_id})
+        _enable_s5(monkeypatch, tg)
+        monkeypatch.setenv("CLIENT_REDESIGN_S4_TELEGRAM_IDS", str(tg))
+        monkeypatch.setenv("CLIENT_REDESIGN_S4_PERCENT", "0")
+        get_settings.cache_clear()
+        with patch_client_init_auth(tg):
+            async with await _client() as client:
+                r = await client.post("/api/webapp/client/checkins",
+                                      json={"session_id": sids[0]}, headers=H)
+                assert r.status_code == 200, r.text
+                earned = r.json()["earned_badges"]
+                assert [b["key"] for b in earned] == ["first_ice"]
+                assert earned[0]["earned"] is True and earned[0]["progress"]["total"] == 1
+                # bootstrap: лист вручения ждёт показа
+                rb = await client.get("/api/webapp/client/hub/bootstrap", headers=H)
+                pend = (rb.json().get("home") or {}).get("pending_badges")
+                assert pend and pend[0]["key"] == "first_ice" and pend[0]["earned"] is True
+                # /client/me под s4+s5: все 6 значков
+                rm = await client.get("/api/webapp/client/me", headers=H)
+                badges = rm.json().get("badges")
+                assert badges and len(badges) == 6
+                by_key = {b["key"]: b for b in badges}
+                assert by_key["first_ice"]["earned"] is True
+                assert by_key["first_ice"]["earned_at"]
+                assert by_key["streak_3"]["earned"] is False
+                assert by_key["streak_3"]["progress"] == {"done": 1, "total": 3}
+                # share endpoint
+                rh = await client.get("/api/webapp/client/badges/first_ice/share", headers=H)
+                assert rh.status_code == 200, rh.text
+                sj = rh.json()
+                assert sj["share_url"] and "badge_first_ice" in sj["share_url"]
+                assert "Вышел на лёд" in sj["share_text"] and "Максим" in sj["share_text"]
+                assert (await client.get("/api/webapp/client/badges/nope/share", headers=H)).status_code == 404
+                # seen → pending пуст
+                rs = await client.post("/api/webapp/client/badges/seen",
+                                       json={"keys": ["first_ice", "bogus"]}, headers=H)
+                assert rs.status_code == 200 and rs.json()["shown"] == 1
+                rb2 = await client.get("/api/webapp/client/hub/bootstrap", headers=H)
+                assert not (rb2.json().get("home") or {}).get("pending_badges")
+                # повторный seen — 0 (shown_at уже стоит)
+                rs2 = await client.post("/api/webapp/client/badges/seen",
+                                        json={"keys": ["first_ice"]}, headers=H)
+                assert rs2.json()["shown"] == 0
+    finally:
+        await engine.dispose()
+        get_settings.cache_clear()
+        eng = create_async_engine(Settings().database_url)
+        async with eng.begin() as conn:
+            await conn.execute(text("DELETE FROM ice_badges WHERE telegram_id = :t"), {"t": tg})
+            await conn.execute(text("DELETE FROM client_sessions WHERE telegram_id = :t"), {"t": tg})
+        await eng.dispose()
         await _cleanup(city_id=city_id, arena_id=arena_id, tg_id=tg)

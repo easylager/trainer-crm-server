@@ -140,6 +140,23 @@ class _CompanyV2(BaseModel):
     photo: _CompanyPhoto | None = None
 
 
+class _BadgeProgress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    done: int
+    total: int
+
+
+class _BadgeV2(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str
+    name: str
+    family: str
+    total: int
+    earned: bool
+    earned_at: str | None
+    progress: _BadgeProgress
+
+
 class _Person(BaseModel):
     model_config = ConfigDict(extra="forbid")
     profile_id: int | None
@@ -183,6 +200,7 @@ class ClientMeOut(BaseModel):
     pass_: _PassV2 | None = Field(None, alias="pass")
     saved_detail: _SavedV2 | None = None
     companies: list[_CompanyV2] | None = None
+    badges: list[_BadgeV2] | None = None
 
 
 class NameIn(BaseModel):
@@ -247,6 +265,8 @@ async def get_client_me(
         telegram_name=_player_name(None, _init_raw(init_data, x_telegram_init_data)),
         include_v2=redesign_s4_enabled(account_key, get_settings()),
         include_companies=redesign_s4_enabled(account_key, get_settings())
+        and redesign_s5_enabled(account_key, get_settings()),
+        include_badges=redesign_s4_enabled(account_key, get_settings())
         and redesign_s5_enabled(account_key, get_settings()),
     )
     body = ClientMeOut.model_validate(payload)

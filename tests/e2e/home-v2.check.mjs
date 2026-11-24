@@ -334,6 +334,7 @@ function assetMeter(page) {
 }
 
 const WATCH_CALLS = [];
+const SEEN_CALLS = [];
 async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePath, now, profiles, bootDelay, flagsCache, bundled, ctx: sharedCtx }) {
   const ctx = sharedCtx || await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
   const page = await ctx.newPage();
@@ -396,6 +397,14 @@ async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePat
     if (/^\/api\/public\/arenas\/[^/]+\/share$/.test(p)) {
       return json({ share_url: 'https://t.me/share/url?url=https%3A%2F%2Ft.me%2Fglidebot', share_text: '', sessions: [], slots: [],
         og_image_url: '/photos/arena-38/hero.webp' });
+    }
+    if (p === '/api/webapp/client/badges/seen' && r.request().method() === 'POST') {
+      SEEN_CALLS.push(JSON.parse(r.request().postData() || '{}'));
+      return json({ shown: 1 });
+    }
+    if (/^\/api\/webapp\/client\/badges\/[^/]+\/share$/.test(p)) {
+      return json({ share_url: 'https://t.me/glidebot/app?startapp=badge_streak_3',
+        share_text: 'Максим получил значок «Не растаял» в Glide', share_body: 'x' });
     }
     if (p.startsWith('/api/webapp/client/checkins')) return json({});
     if (p.startsWith('/api/public/photos')) {
@@ -652,6 +661,7 @@ try {
     live: { level: 2, count: 3, last_min: 4 },
     checked_in: false, checkin_id: null, load_level: null,
     season_days: 5, streak_weeks: 2, has_this_week: false,
+    next_badge: { name: 'Крепкий лёд', name_gen: 'Крепкого льда', remaining: 2 },
     invite_url: 'https://t.me/glidebot?start=arena_11_s_401',
   };
 
@@ -666,6 +676,7 @@ try {
     check('13: жёлтая «✓ Я здесь»', await page.locator('button[data-act="checkin"]', { hasText: 'Я здесь' }).count() === 1);
     check('13: чип «Идёт сеанс»', (await page.locator('.hv2-pcard__chip').textContent() || '').includes('Идёт сеанс'));
     check('13: карточка серии и сезона', await page.locator('.hv2-onice__stats .hv2-onice__row').count() === 2);
+    check('13: «до «Крепкого льда» — 2 недели»', (await page.locator('.hv2-onice__stats').textContent() || '').includes('Крепкого льда'));
     check('13: «Позвать сюда» мягкая', await page.locator('button[data-act="invite"],button[data-act="share"]', { hasText: 'Позвать сюда' }).count() === 1);
     check('13: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
@@ -1262,6 +1273,31 @@ try {
     });
     check('34b: карточки компании нет', await page.locator('.hv2-comp__plaque').count() === 0);
     check('34b: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 35. TASK-451: pending_badges — лист вручения при открытии + POST seen. */
+  {
+    const pending = [{
+      key: 'streak_3', name: 'Не растаял', family: 'streak', total: 3, earned: true,
+      earned_at: '2026-11-22T15:00:00+00:00', progress: { done: 3, total: 3 },
+      next: { key: 'streak_5', name: 'Крепкий лёд', family: 'streak', remaining: 2 },
+    }];
+    SEEN_CALLS.length = 0;
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { pending_badges: pending } }),
+      flags: UI_FLAGS_S5, flagsCache: UI_FLAGS_S5,
+    });
+    await page.waitForSelector('.baw', { state: 'visible', timeout: 8000 }).catch(() => {});
+    check('35: лист вручения открылся', await page.locator('.baw').isVisible());
+    check('35: имя значка', (await page.locator('.baw__name').textContent() || '').includes('Не растаял'));
+    check('35: «Дальше — Крепкий лёд»', (await page.locator('.baw__next').textContent() || '').includes('Крепкий лёд'));
+    check('35: жёлтая «Отправить другу»', await page.locator('.baw__share').count() === 1);
+    await shot(page, '35-badge-award');
+    await page.locator('.baw__later').click();
+    await page.waitForTimeout(500);
+    check('35: POST seen с ключом', SEEN_CALLS.length === 1 && SEEN_CALLS[0].keys && SEEN_CALLS[0].keys[0] === 'streak_3', JSON.stringify(SEEN_CALLS));
+    check('35: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
 } finally {

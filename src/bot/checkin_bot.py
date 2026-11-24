@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import html
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 
 from aiogram import Bot, F, Router
@@ -26,6 +26,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application import ice_badges as ib
 from src.application import ice_checkins as ic
 from src.application.client_ui_flags import redesign_s5_enabled
 from src.application.hockey_notices import mark_blocked
@@ -334,13 +335,249 @@ async def expire_prompts(session: AsyncSession, bot: Bot | None, now: datetime) 
     return len(rows)
 
 
+# ── «Серия под угрозой» (TASK-451) ───────────────────────────────────────
+
+RISK_WINDOW_START = time(11, 0)
+RISK_WINDOW_END = time(19, 0)
+RISK_MIN_STREAK = 2
+
+
+def risk_text(streak: int, arena_name: str, starts_local: str, badge_line: str | None, *, home: bool) -> str:
+    lines = [f"Серия {streak} {ic.plural_week(streak)} подряд под угрозой 🔥"]
+    if home:
+        lines.append(f"Сегодня на «{arena_name}» ближайший сеанс в {starts_local} — успей отметиться.")
+    else:
+        lines.append(f"Сегодня в городе ещё есть лёд: «{arena_name}», сеанс в {starts_local} — успей отметиться.")
+    if badge_line:
+        lines.append(badge_line)
+    return "\n".join(lines)
+
+
+async def _streak_risk_candidates(session: AsyncSession, today) -> dict[int, int]:
+    """{telegram_id: streak} — серия ≥2 недель, на этой неделе отметки нет."""
+    season_start, _end = ic.season_bounds(today)
+    monday = today - timedelta(days=today.weekday())
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT telegram_id, local_date FROM ice_checkins
+                WHERE COALESCE(profile_id, 0) = 0 AND local_date >= :s
+                  AND telegram_id IN (
+                    SELECT telegram_id FROM ice_checkins
+                    WHERE COALESCE(profile_id, 0) = 0
+                      AND local_date >= :w2 AND local_date < :m
+                  )
+                """
+            ),
+            {"s": season_start, "w2": monday - timedelta(days=14), "m": monday},
+        )
+    ).all()
+    by_tg: dict[int, list] = {}
+    for tg, d in rows:
+        by_tg.setdefault(int(tg), []).append(d)
+    out: dict[int, int] = {}
+    for tg, dates in by_tg.items():
+        if any(d >= monday for d in dates):
+            continue
+        streak = ic.streak_weeks(dates, today)
+        if streak >= RISK_MIN_STREAK:
+            out[tg] = streak
+    return out
+
+
+async def _risk_sessions_today(
+    session: AsyncSession, today, now: datetime, home_ids: list[int], city_ids: list[int]
+) -> list[dict]:
+    """Сеансы сегодня на «Моих катках» и в городах кандидатов — ещё не кончились."""
+    if not home_ids and not city_ids:
+        return []
+    kinds = tuple(ic.CHECKIN_KINDS)
+    rows = (
+        (
+            await session.execute(
+                text(
+                    """
+                    SELECT s.arena_id, a.city_id, a.name AS arena_name, s.starts_at_local
+                    FROM ice_sessions s
+                    JOIN arenas a ON a.id = s.arena_id
+                    LEFT JOIN arena_profiles p ON p.arena_id = a.id
+                    WHERE s.local_date = :d AND s.status = 'active'
+                      AND s.kind = ANY(:kinds) AND s.ends_at_utc > :now
+                      AND (p.status IS NULL OR p.status = 'published')
+                      AND a.is_active AND a.is_confirmed
+                      AND (a.id = ANY(:home) OR a.city_id = ANY(:cities))
+                    ORDER BY s.starts_at_local, s.id
+                    """
+                ),
+                {"d": today, "kinds": list(kinds), "now": now,
+                 "home": home_ids, "cities": city_ids},
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
+
+
+async def run_streak_risk_cycle(bot: Bot, session: AsyncSession, now: datetime, settings) -> int:
+    """Воскресенье днём (Минск): одно сообщение «Серия под угрозой» в неделю."""
+    local = now.astimezone(ic.MINSK)
+    today = local.date()
+    if local.weekday() != 6 or not (RISK_WINDOW_START <= local.time() <= RISK_WINDOW_END):
+        return 0
+    monday = today - timedelta(days=6)
+    streaks = await _streak_risk_candidates(session, today)
+    if not streaks:
+        return 0
+    tgs = sorted(streaks)
+    prefs = (
+        (
+            await session.execute(
+                text(
+                    """
+                    SELECT player_key, COALESCE(remind, true) AS remind, bot_blocked_at
+                    FROM hockey_player_prefs WHERE player_key = ANY(:ids)
+                    """
+                ),
+                {"ids": tgs},
+            )
+        )
+        .mappings()
+        .all()
+    )
+    prefs_by = {int(p["player_key"]): p for p in prefs}
+    sent_this_week = {
+        int(r[0])
+        for r in (
+            await session.execute(
+                text("SELECT telegram_id FROM ice_streak_risk_sends WHERE week_start = :w AND telegram_id = ANY(:ids)"),
+                {"w": monday, "ids": tgs},
+            )
+        ).all()
+    }
+    prompted_today = {
+        int(r[0])
+        for r in (
+            await session.execute(
+                text(
+                    """
+                    SELECT DISTINCT telegram_id FROM ice_checkin_prompts
+                    WHERE telegram_id = ANY(:ids) AND sent_at IS NOT NULL
+                      AND (sent_at AT TIME ZONE 'Europe/Minsk')::date = :d
+                    """
+                ),
+                {"ids": tgs, "d": today},
+            )
+        ).all()
+    }
+    home_arena = {
+        int(r["account_key"]): int(r["home_arena_id"])
+        for r in (
+            (
+                await session.execute(
+                    text("SELECT account_key, home_arena_id FROM client_account_prefs WHERE account_key = ANY(:ids) AND home_arena_id IS NOT NULL"),
+                    {"ids": tgs},
+                )
+            )
+            .mappings()
+            .all()
+        )
+    }
+    cities = {
+        int(r["telegram_id"]): int(r["city_id"])
+        for r in (
+            (
+                await session.execute(
+                    text("SELECT telegram_id, city_id FROM client_sessions WHERE telegram_id = ANY(:ids) AND city_id IS NOT NULL"),
+                    {"ids": tgs},
+                )
+            )
+            .mappings()
+            .all()
+        )
+    }
+    eligible = []
+    for tg in tgs:
+        p = prefs_by.get(tg)
+        if p is not None and (not p["remind"] or p["bot_blocked_at"] is not None):
+            continue
+        if not redesign_s5_enabled(tg, settings):
+            continue
+        if tg in sent_this_week or tg in prompted_today:
+            continue
+        eligible.append(tg)
+    if not eligible:
+        return 0
+    sess_rows = await _risk_sessions_today(
+        session, today, now,
+        home_ids=[home_arena[t] for t in eligible if t in home_arena],
+        city_ids=[cities[t] for t in eligible if t in cities],
+    )
+    # прогресс/вручённые для строки про ближайший значок
+    season_start, _end = ic.season_bounds(today)
+    sent = 0
+    for tg in eligible:
+        home_id = home_arena.get(tg)
+        city_id = cities.get(tg)
+        pick = next((r for r in sess_rows if home_id is not None and int(r["arena_id"]) == home_id), None)
+        is_home = pick is not None
+        if pick is None and city_id is not None:
+            pick = next((r for r in sess_rows if int(r["city_id"]) == city_id), None)
+        if pick is None:
+            continue  # в городе сегодня льда уже нет
+        dates_rows = (
+            await session.execute(
+                text(
+                    """
+                    SELECT DISTINCT local_date FROM ice_checkins
+                    WHERE telegram_id = :t AND COALESCE(profile_id, 0) = 0 AND local_date >= :s
+                    """
+                ),
+                {"t": tg, "s": season_start},
+            )
+        ).all()
+        prog = ib.progress_map([r[0] for r in dates_rows], today)
+        earned = set(await ib._earned_rows(session, tg, None, season_start))
+        badge_line = ib.nearest_line(prog, earned)
+        text_msg = risk_text(
+            streaks[tg], str(pick["arena_name"]), str(pick["starts_at_local"])[:5],
+            badge_line, home=is_home,
+        )
+        try:
+            await bot.send_message(tg, text_msg)
+        except TelegramForbiddenError:
+            await mark_blocked(session, tg, now=now)
+            await session.execute(
+                text("INSERT INTO ice_streak_risk_sends (telegram_id, week_start) VALUES (:t,:w) ON CONFLICT DO NOTHING"),
+                {"t": tg, "w": monday},
+            )
+            continue
+        except Exception:  # noqa: BLE001
+            logger.exception("streak risk send failed tg=%s", tg)
+            continue
+        await session.execute(
+            text("INSERT INTO ice_streak_risk_sends (telegram_id, week_start) VALUES (:t,:w) ON CONFLICT DO NOTHING"),
+            {"t": tg, "w": monday},
+        )
+        sent += 1
+    return sent
+
+
 async def run_checkin_cycle(bot: Bot, now: datetime | None = None) -> dict:
-    """Один тик: создать → отправить → погасить."""
+    """Один тик: создать → отправить → погасить; по воскресеньям — «Серия под угрозой»."""
     now = now or _now()
     settings = get_settings()
     async with async_session_factory() as session:
         created = await create_prompts(session, now, settings)
         await session.commit()
+    risk_sent = 0
+    try:
+        async with async_session_factory() as session:
+            risk_sent = await run_streak_risk_cycle(bot, session, now, settings)
+            await session.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception("checkin streak-risk tick failed")
     sent = 0
     try:
         async with async_session_factory() as session:
@@ -355,7 +592,7 @@ async def run_checkin_cycle(bot: Bot, now: datetime | None = None) -> dict:
             await session.commit()
     except Exception:  # noqa: BLE001
         logger.exception("checkin expire tick failed")
-    return {"created": len(created), "sent": sent, "expired": expired}
+    return {"created": len(created), "sent": sent, "expired": expired, "risk_sent": risk_sent}
 
 
 async def run_checkin_loop(client_bot: Bot) -> None:
@@ -423,6 +660,10 @@ async def _answer(
         raise
     today = now.astimezone(ic.MINSK).date()
     stats = await ic.me_stats(session, tg, None, today)
+    try:
+        await ib.evaluate_and_award(session, tg, None, today)
+    except Exception:  # noqa: BLE001 — значки не ломают ответ на кнопку
+        logger.exception("chat checkin badge award failed")
     await session.execute(
         text(
             """

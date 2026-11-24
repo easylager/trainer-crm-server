@@ -489,6 +489,7 @@ async def client_me(
     now: datetime | None = None,
     include_v2: bool = False,
     include_companies: bool = False,
+    include_badges: bool = False,
 ) -> dict:
     """Один экран «Я». Запросы идут по очереди: одна сессия не держит их параллельно."""
     moment = now or datetime.now(timezone.utc)
@@ -566,4 +567,12 @@ async def client_me(
         from src.application.ice_company.mine import my_open_companies
 
         out["companies"] = await my_open_companies(session, account_key, moment, limit=5)
+    # TASK-451 (5.4): значки волны 1 — те же (tg, профиль) ключи, что у отметок.
+    if include_badges:
+        from src.application import ice_badges as ib
+
+        badge_pid = acting if acting is not None and own is not None and acting != own else None
+        out["badges"] = await ib.badges_payload(
+            session, account_key, badge_pid, moment.astimezone(MINSK_TZ).date()
+        )
     return out

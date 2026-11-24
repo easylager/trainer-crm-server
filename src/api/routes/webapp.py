@@ -3644,8 +3644,19 @@ async def get_client_hub_bootstrap(
                 row = await ic.on_ice_for(s, telegram_id, pid, now)
                 if row is None:
                     return None
-                stats = await ic.me_stats(
-                    s, telegram_id, pid, now.astimezone(ic.MINSK).date()
+                today = now.astimezone(ic.MINSK).date()
+                stats = await ic.me_stats(s, telegram_id, pid, today)
+                from src.application import ice_badges as ib
+
+                badges_list = await ib.badges_payload(s, telegram_id, pid, today)
+                next_badge = next(
+                    (
+                        {"name": b["name"], "name_gen": b.get("name_gen") or b["name"],
+                         "remaining": int(b["progress"]["total"]) - int(b["progress"]["done"])}
+                        for b in badges_list
+                        if b["family"] == "streak" and not b["earned"]
+                    ),
+                    None,
                 )
                 variants = (
                     await s.execute(
@@ -3683,6 +3694,7 @@ async def get_client_hub_bootstrap(
                     "season_days": stats["season_days"],
                     "streak_weeks": stats["streak_weeks"],
                     "has_this_week": stats["has_this_week"],
+                    "next_badge": next_badge,
                 }
         except Exception:
             logger.exception("client hub on-ice card failed")
@@ -3722,11 +3734,34 @@ async def get_client_hub_bootstrap(
             logger.exception("client hub companies failed")
             return None
 
+    async def _home_pending_badges() -> list[dict] | None:
+        """TASK-451 (5.4): вручённые, но не показанные значки — лист при открытии (s5)."""
+        if not redesign_s5:
+            return None
+        try:
+            async with async_session_factory() as s:
+                from src.application import ice_badges as ib
+                from src.application.client_use_cases import get_client_id_by_telegram_id
+
+                pid = None
+                if requested_profile_id is not None:
+                    acting = await resolve_acting_client_id(s, telegram_id, requested_profile_id)
+                    own = await get_client_id_by_telegram_id(s, telegram_id)
+                    if acting is not None and acting != own:
+                        pid = int(acting)
+                return await ib.pending_badges(
+                    s, telegram_id, pid, datetime.now(timezone.utc).astimezone(ib.ic.MINSK).date()
+                )
+        except Exception:
+            logger.exception("client hub pending badges failed")
+            return None
+
     (
-        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick, home_on_ice, home_profile_s2, home_companies
+        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick, home_on_ice, home_profile_s2, home_companies, home_badges
     ) = await asyncio.gather(
         _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(),
         _home_hockey(), _home_extraliga(), _home_city_pick(), _home_on_ice(), _home_profile_s2(), _home_companies(),
+        _home_pending_badges(),
     )
     ice_teaser = None
     try:
@@ -3807,6 +3842,11 @@ async def get_client_hub_bootstrap(
                     "company_share": bool((home_companies or {}).get("enabled")),
                 }
                 if redesign_s5 and home_companies
+                else {}
+            ),
+            **(
+                {"pending_badges": home_badges}
+                if redesign_s5 and home_badges
                 else {}
             ),
         },
