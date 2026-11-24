@@ -101,6 +101,7 @@ ME_APP_JS = [
     "webapp/ga-press.js",
     "webapp/badge-art.js",
     "webapp/badge-award.js",
+    "webapp/badge-collection.js",
     "webapp/me-v2.js",
     "webapp/ga-touch.js",
 ]
@@ -111,6 +112,7 @@ ME_CSS = [
     "webapp/mini-app-client-theme.css",
     "webapp/mini-app-client-shell.css",
     "webapp/me-v2.css",
+    "webapp/badge-collection.css",
     "webapp/badge-award.css",
 ]
 

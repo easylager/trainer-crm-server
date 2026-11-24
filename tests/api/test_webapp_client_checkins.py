@@ -133,16 +133,48 @@ async def test_checkin_happy_and_idempotent_and_patch(monkeypatch) -> None:
                 r2 = await client.post("/api/webapp/client/checkins",
                                        json={"session_id": sids[0]}, headers=H)
                 assert r2.status_code == 200 and r2.json()["checkin_id"] == body["checkin_id"]
-                # PATCH после уже выставленной загрузки → 409
+                # PATCH пока сеанс идёт — переписывает оценку (фикс-пак ревью)
                 rp = await client.patch(f"/api/webapp/client/checkins/{body['checkin_id']}",
                                         json={"load_level": 3}, headers=H)
-                assert rp.status_code == 409, rp.text
-                # state видит отметку
+                assert rp.status_code == 200, rp.text
+                # state видит отметку с новой оценкой
                 rs = await client.get(f"/api/webapp/client/checkins/state?session_ids={sids[0]}", headers=H)
                 st = rs.json()["sessions"][str(sids[0])]
                 assert st["ongoing"] is True and st["checked_in"] is True
-                assert st["checkin_id"] == body["checkin_id"] and st["load_level"] == 2
+                assert st["checkin_id"] == body["checkin_id"] and st["load_level"] == 3
     finally:
+        get_settings.cache_clear()
+        await _cleanup(city_id=city_id, arena_id=arena_id, tg_id=tg)
+
+
+@pytest.mark.asyncio
+async def test_checkin_load_already_set_after_end(monkeypatch) -> None:
+    """Фикс-пак ревью: пока сеанс идёт — оценку можно переписать; после конца — 409 already_set."""
+    tg = _tg()
+    city_id, arena_id, sids = await _seed_checkin_env(name=f"ci-{uuid.uuid4().hex[:8]}", tg_id=tg)
+    engine = create_async_engine(Settings().database_url)
+    try:
+        _enable_s5(monkeypatch, tg)
+        with patch_client_init_auth(tg):
+            async with await _client() as client:
+                r = await client.post("/api/webapp/client/checkins",
+                                      json={"session_id": sids[0], "load_level": 1}, headers=H)
+                assert r.status_code == 200, r.text
+                cid = r.json()["checkin_id"]
+        # Сеанс только что закончился (внутри 40-мин запаса) — повтор всё равно уже нельзя.
+        # Сдвигаем обе границы: ck_ice_sessions_duration требует минимальную длину.
+        async with engine.begin() as conn:
+            now = datetime.now(timezone.utc)
+            await conn.execute(
+                text("UPDATE ice_sessions SET starts_at_utc = :s, ends_at_utc = :e WHERE id = :id"),
+                {"s": now - timedelta(minutes=100), "e": now - timedelta(minutes=10), "id": sids[0]})
+        with patch_client_init_auth(tg):
+            async with await _client() as client:
+                rp = await client.patch(f"/api/webapp/client/checkins/{cid}",
+                                        json={"load_level": 2}, headers=H)
+                assert rp.status_code == 409 and rp.json()["detail"]["code"] == "already_set", rp.text
+    finally:
+        await engine.dispose()
         get_settings.cache_clear()
         await _cleanup(city_id=city_id, arena_id=arena_id, tg_id=tg)
 

@@ -1399,23 +1399,69 @@
 
   /*
    * TASK-446 (5.2): «Я здесь» на старых страницах — лист + живые строки грузим
-   * только при включённом redesign_s5 и только на страницах Лёд/каток/«Я».
-   * Флаг выключен → ни одного тега, DOM не трогаем.
+   * только при включённом redesign_s5 и только на страницах Лёд/каток/«Я»/главная.
+   * PDEC-040 батч C: главная клиента (карточки «Ты на катке?»/«Твоя компания»),
+   * полка значков и лист вручения на «Я» — тот же ленивый пакет: значки
+   * (GlideBadgeArt/Award/Shelf) и заглушка шаринга (GlideShareSheet грузит
+   * настоящий лист сама). Флаг выключен → ни одного тега, DOM не трогаем.
    */
-  var CHECKIN_LIVE_PAGES = { ice: 1, arena: 1, 'client-me': 1 };
+  var CHECKIN_LIVE_PAGES = { ice: 1, arena: 1, 'client-me': 1, 'client-home': 1 };
+  var CHECKIN_LIVE_CSS = ['checkin-sheet.css', 'badge-collection.css', 'badge-award.css'];
+  var CHECKIN_LIVE_JS = [
+    'share-sheet-lazy.js', 'badge-art.js', 'badge-award.js', 'badge-collection.js',
+    'checkin-sheet.js', 'checkin-live.js',
+  ];
   var checkinLiveRequested = false;
+
+  /*
+   * PDEC-040 батч C (рескин): старые страницы под языком v2 при redesign_s4.
+   * На этих адресах под s4 всё ещё живут старые DOM/CSS: главная v2 — под s1,
+   * «Лёд» v2 — только без диплинков (?map=1, ref/…), арены v2 нет вовсе.
+   * Класс .gv2skin на <html>/<body> + gv2-skin.css перенаправляют токены на
+   * палитру v2; флаг выключен → ни класса, ни файла, страница как была.
+   * Ставим на <html> синхронно при загрузке (кэш флагов читается до первого
+   * кадра), на <body> — когда он появится; событие client-shell:ui-flags
+   * переприменяет.
+   */
+  var GV2_SKIN_PAGES = { ice: 1, arena: 1, 'client-me': 1, 'client-home': 1 };
+  var gv2SkinCssRequested = false;
+
+  /* Тело v2-страницы (s4 отдал client-ice-v2/client-me-v2 или s1 — home-v2) —
+     скин не нужен: она уже на языке v2. body появляется после eval — до
+     DOMContentLoaded проверки нет, класс на <html> с --gv2-* безвреден. */
+  function gv2SkinWanted() {
+    if (!uiFlags.redesign_s4 || !GV2_SKIN_PAGES[pathnameKey()]) return false;
+    var cls = (document.body && document.body.className) || '';
+    if (/\b(?:hv2|mv2|iv2|sv2)\b/.test(cls)) return false;
+    return true;
+  }
+  function applyGv2Skin() {
+    var on = gv2SkinWanted();
+    var root = document.documentElement;
+    if (root && root.classList) root.classList.toggle('gv2skin', on);
+    if (document.body && document.body.classList) document.body.classList.toggle('gv2skin', on);
+    if (!on || gv2SkinCssRequested) return;
+    gv2SkinCssRequested = true;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = assetUrl(webappBasePath(), 'gv2-skin.css');
+    link.setAttribute('data-gv2skin', 'css');
+    document.head.appendChild(link);
+  }
 
   function maybeLoadCheckinLive() {
     if (checkinLiveRequested || !uiFlags.redesign_s5) return;
     if (!CHECKIN_LIVE_PAGES[pathnameKey()]) return;
     checkinLiveRequested = true;
     var base = webappBasePath();
-    var link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = assetUrl(base, 'checkin-sheet.css');
-    link.setAttribute('data-checkin-live', 'css');
-    document.head.appendChild(link);
-    ['checkin-sheet.js', 'checkin-live.js'].forEach(function (file) {
+    CHECKIN_LIVE_CSS.forEach(function (file) {
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = assetUrl(base, file);
+      link.setAttribute('data-checkin-live', 'css');
+      document.head.appendChild(link);
+    });
+    CHECKIN_LIVE_JS.forEach(function (file) {
       var sc = document.createElement('script');
       sc.src = assetUrl(base, file);
       sc.async = false;
@@ -1433,6 +1479,7 @@
     if (!state.inited || !body) return;
     state.mode = computeMode(state.baseMode);
     maybeLoadCheckinLive();
+    applyGv2Skin();
     var old = document.getElementById('clientTabBar');
     var overlay = document.getElementById('clientMoreOverlay');
 
@@ -2373,6 +2420,7 @@
     init();
     if (typeof global.setTimeout === 'function') global.setTimeout(refreshUiFlags, 0);
     maybeLoadCheckinLive();
+    applyGv2Skin();
     if (isPublicPlaceRoute()) {
       if (state.mode === 'tabs') setForcedTab('catalog');
       return;
@@ -2410,6 +2458,7 @@
     if (getTg() && getInitData()) global.sessionStorage.setItem('glide_mini_app_active_v1', '1');
   } catch (e) { /* storage может быть запрещён */ }
   uiFlags = readUiFlags();
+  applyGv2Skin();
   mountTabBarEarly();
   global.addEventListener('client-shell:ui-flags', onUiFlagsChanged);
 

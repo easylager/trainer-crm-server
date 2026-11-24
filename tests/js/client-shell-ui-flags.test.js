@@ -353,8 +353,11 @@ describe('TASK-446 redesign_s5', () => {
     assert.equal(srcs.filter((x) => x.includes('checkin-live.js')).length, 1);
   });
 
-  it('s5 на «Я» и катке грузит, на главной — нет; флаг выключен — ни одного тега', async () => {
-    for (const path of ['/webapp/client-me', '/webapp/arena']) {
+  /* PDEC-040 батч C: главная тоже в списке страниц — там карточки «Ты на
+     катке?» и «Твоя компания». Ленивый пакет шире листа отметки: значки +
+     заглушка шаринга. */
+  it('s5 на «Я», катке и главной грузит ленивый пакет; флаг выключен — ни одного тега', async () => {
+    for (const path of ['/webapp/client-me', '/webapp/arena', '/webapp/client-home']) {
       const s = bootShell({
         pathname: path,
         stored: { u: '42', season_ui: false, redesign_s5: true, redesign_s2: false, redesign_s3: false, at: Date.now() },
@@ -363,14 +366,9 @@ describe('TASK-446 redesign_s5', () => {
       await s.runTimers();
       const srcs = s.domOps.filter(([k]) => k === 'head').map(([, c]) => c.src || c.href || '');
       assert.equal(srcs.filter((x) => x.includes('checkin-live.js')).length, 1, path);
+      assert.equal(srcs.filter((x) => x.includes('badge-collection.js')).length, 1, path);
+      assert.equal(srcs.filter((x) => x.includes('share-sheet-lazy.js')).length, 1, path);
     }
-    const home = bootShell({
-      pathname: '/webapp/client-home',
-      stored: { u: '42', season_ui: false, redesign_s5: true, redesign_s2: false, redesign_s3: false, at: Date.now() },
-      response: { season_ui: false, redesign_s5: true, redesign_s2: false, redesign_s3: false, redesign_s4: false },
-    });
-    await home.runTimers();
-    assert.equal(home.domOps.filter(([k]) => k === 'head').length, 0);
     const off = bootShell({
       pathname: '/webapp/ice',
       stored: { u: '42', season_ui: false, redesign_s5: false, redesign_s2: false, redesign_s3: false, at: Date.now() },

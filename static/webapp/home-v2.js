@@ -325,6 +325,8 @@
       heroUrls = heroUrls.slice(1).concat(heroUrls[0]);
     }
     armHero(heroUrls);
+    /* B2: новичку герой короче — атмосферное фото без второго полноэкранного кадра. */
+    els.hero.classList.toggle('hv2-hero--short', top === 'newbie');
     els.dateEl.textContent = dateLine();
     var title;
     if (top === 'citypick') {
@@ -530,7 +532,9 @@
     '</article>';
   }
 
-  function photoCardHtml(found) {
+  /* B2 (фикс-пак ревью): новичку — белый лёд-билет вместо второго полноэкранного
+     фото: чип «Ближайший …», крупное время Dela, каток, «до … · цена», фото-чип 72px. */
+  function iceTicketHtml(found) {
     var img = found.photo && (found.photo.card || found.photo.hero || found.photo.thumb);
     var mu = found.minutes_until;
     var chip;
@@ -548,16 +552,17 @@
       : '';
     var route = '<button type="button" class="hv2-btn hv2-btn--ink ga-press" data-act="nav" data-path="' + esc(found.href || 'ice') + '">' +
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.4"/><circle cx="18" cy="5" r="2.4"/><path d="M8.4 19h5.1a3.5 3.5 0 0 0 0-7h-3a3.5 3.5 0 0 1 0-7h5.1"/></svg> Маршрут</button>';
-    return '<article class="hv2-pcard" data-act="nav" data-path="' + esc(found.href || 'ice') + '">' +
-      (img ? '<img class="hv2-pcard__img" src="' + esc(img) + '" alt="">' : '') +
-      '<span class="hv2-pcard__shade"></span>' +
-      '<span class="hv2-pcard__chip"><span class="hv2-chip__dot"></span>' + esc(chip) + '</span>' +
-      '<span class="hv2-pcard__in">' +
-        '<span class="hv2-pcard__time">' + esc(found.time || '') + '</span>' +
-        '<span class="hv2-pcard__place">' + esc(found.name || '') + '</span>' +
-        (bits.length ? '<span class="hv2-pcard__sub">' + esc(bits.join(' · ')) + '</span>' : '') +
-      '</span></article>' +
-      '<div class="hv2-pcard__btns">' + route + share + '</div>';
+    return '<article class="hv2-card hv2-ice" data-act="nav" data-path="' + esc(found.href || 'ice') + '">' +
+      '<div class="hv2-ticket__head">' +
+        '<span class="hv2-chip"><span class="hv2-chip__dot"></span>' + esc(chip) + '</span>' +
+        (img ? '<img class="hv2-ice__thumb" src="' + esc(img) + '" alt="" width="72" height="72">' : '') +
+      '</div>' +
+      '<div class="hv2-ticket__time">' + esc(found.time || '') + '</div>' +
+      '<div class="hv2-ticket__name">' + esc(found.name || '') + '</div>' +
+      (bits.length ? '<div class="hv2-ticket__sub">' + esc(bits.join(' · ')) + '</div>' : '') +
+      '<div class="hv2-ticket__perf"></div>' +
+      '<div class="hv2-ice__btns">' + route + share + '</div>' +
+    '</article>';
   }
 
   /* ── TASK-446: состояние «Ты на катке?» (флаг s5, ключ home.on_ice) ──── */
@@ -883,7 +888,11 @@
 
   /* ── «Матчи» ─────────────────────────────────────────────── */
   function teamLogo(t, dark) {
-    if (t && t.logo) return '<img class="hv2-mcard__logo" src="' + esc(t.logo) + '" alt="" loading="lazy">';
+    if (t && t.logo) {
+      /* Тёмная эмблема на синей KK-карточке сливается — белая подложка-плашка под любой логотип. */
+      return '<span class="hv2-mcard__logo' + (dark ? ' hv2-mcard__logo--chip' : '') + '">' +
+        '<img src="' + esc(t.logo) + '" alt="" loading="lazy"></span>';
+    }
     var bg = (t && t.color) || (dark ? 'rgba(255,255,255,.25)' : '#6b7a86');
     return '<span class="hv2-mcard__logo" style="background:' + esc(bg) + '">' + esc(((t && (t.short || t.name)) || '?').slice(0, 3)) + '</span>';
   }
@@ -950,7 +959,7 @@
 
   /* ── «Ещё в городе» ──────────────────────────────────────── */
   var TILE_ICONS = {
-    ohm: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 17 7l2-2.5a1.2 1.2 0 0 1 1.7 0l.8.8a1.2 1.2 0 0 1 0 1.7L19 9.5 6 22l-4-4Z"/><path d="m14 10 2 2"/></svg>',
+    ohm: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 3.2 6.4 17.6 3.6 21h8.2"/><circle cx="16" cy="19.4" r="1.9"/></svg>',
     coach: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c1.5-4 4.5-6 7.5-6s6 2 7.5 6"/></svg>',
     service: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="2.5"/></svg>',
     shop: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.2 12a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8Z"/><path d="M8.5 10V6.5a3.5 3.5 0 0 1 7 0V10"/></svg>',
@@ -976,9 +985,16 @@
   }
   function renderMore() {
     var needs = (city() && city().needs) || [];
+    var s4 = s4On();
     var tiles = tileOrder().map(function (k) {
       var n = needs.find(function (x) { return x.key === k; });
-      return n ? '<a class="hv2-tile ga-press" href="' + esc(n.href || 'ice') + '">' +
+      /* B5: «Заточка»/«Магазины» под s4 ведут на экран «Сервис», не в старый каталог. */
+      var href = n && n.href;
+      if (s4 && (k === 'service' || k === 'shop')) {
+        var cid = (city() && city().id) || '';
+        href = 'service?tab=' + k + (cid ? '&city_id=' + encodeURIComponent(cid) : '');
+      }
+      return n ? '<a class="hv2-tile ga-press" href="' + esc(href || 'ice') + '">' +
         '<span class="hv2-tile__icon">' + TILE_ICONS[k] + '</span>' +
         '<span class="hv2-tile__title">' + esc(TILE_TITLES[k]) + '</span>' +
         '<span class="hv2-tile__sub">' + esc(tileSub(n)) + '</span></a>' : '';
@@ -1699,7 +1715,7 @@
             top = 'newbie';
             state.dedupSession = found.session_id;
             state.topPhoto = found.photo && (found.photo.card || found.photo.hero || found.photo.thumb);
-            html = photoCardHtml(found);
+            html = iceTicketHtml(found);
           } else top = 'ice-empty';
         }
       }
@@ -1753,14 +1769,26 @@
     var cached = s3 ? screenCacheRead() : null;
     var hadCache = !!(cached && cached.data);
     if (hadCache) {
-      /* TASK-448: прошлый экран из кэша до сети — скелетон не показываем. */
-      state.railTab = null; state.yellowUsed = false; state.dedupSession = null; state.topPhoto = null;
-      state.data = sanitizeCached(cached.data);
-      state.quiet = false;
-      renderAll();
-      els.skel.style.display = 'none';
-      notifyContent('cache');
-      scheduleIcePrefetch();
+      /* TASK-448: прошлый экран из кэша до сети — скелетон не показываем.
+         Битая/устаревшая запись (другая схема полей, ручная правка storage) не
+         должна вешать boot: любая ошибка в sanitize/рендере — выкидываем кэш,
+         возвращаем скелетон и уходим в сеть. */
+      try {
+        state.railTab = null; state.yellowUsed = false; state.dedupSession = null; state.topPhoto = null;
+        state.data = sanitizeCached(cached.data);
+        state.quiet = false;
+        renderAll();
+        els.skel.style.display = 'none';
+        notifyContent('cache');
+        scheduleIcePrefetch();
+      } catch (e) {
+        hadCache = false;
+        cached = null;
+        state.data = null;
+        try { localStorage.removeItem(screenCacheKey()); } catch (e2) { /* */ }
+        try { els.top.innerHTML = ''; } catch (e3) { /* */ }
+        els.skel.style.display = '';
+      }
     } else {
       els.skel.style.display = '';
     }

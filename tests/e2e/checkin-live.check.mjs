@@ -65,10 +65,10 @@ const base = 'http://localhost:' + server.address().port;
 const NOW = new Date('2026-11-22T16:30:00Z'); // 19:30 Минск, вс
 const TODAY_ISO = '2026-11-22';
 
-const TG_MOCK = `window.Telegram = { WebApp: {
+const tgMock = (scheme) => `window.Telegram = { WebApp: {
   initData: 'user=%7B%22id%22%3A42%7D&hash=x',
   initDataUnsafe: { user: { id: 42, first_name: 'Максим', allows_write_to_pm: true } },
-  colorScheme: 'light', themeParams: {}, version: '8.0', platform: 'ios', isExpanded: true,
+  colorScheme: '${scheme || 'light'}', themeParams: {}, version: '8.0', platform: 'ios', isExpanded: true,
   isVersionAtLeast(v) { const c=(a,b)=>a.split('.').map(Number).reduce((d,x,i)=>d||x-(b[i]||0),0); return c(this.version,v)>=0; },
   ready() {}, expand() {}, setHeaderColor() {}, setBackgroundColor() {}, setBottomBarColor() {},
   onEvent() {}, offEvent() {}, openTelegramLink() {}, openLink() {}, shareURL() {},
@@ -77,8 +77,9 @@ const TG_MOCK = `window.Telegram = { WebApp: {
   MainButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
 } };`;
 
-/* Кэш флага, чтобы оболочка видела s5 до первого запроса (как в проде после первой сессии). */
-const FLAGS_CACHE = (s5) => `(function(){try{localStorage.setItem('cw_ui_flags_v1', JSON.stringify({u:'42',season_ui:true,bookings_tab:false,redesign_s1:true,redesign_s5:${s5},at:Date.now()}));}catch(e){}})()`;
+/* Кэш флага, чтобы оболочка видела s5 до первого запроса (как в проде после первой сессии).
+   extra — PDEC-040 C3: сценарии s4-пина и «без s1». */
+const FLAGS_CACHE = (s5, extra) => `(function(){try{localStorage.setItem('cw_ui_flags_v1', JSON.stringify(Object.assign({u:'42',season_ui:true,bookings_tab:false,redesign_s1:true,redesign_s5:${s5},at:Date.now()}, ${JSON.stringify(extra || {})})));}catch(e){}})()`;
 
 const P = (n) => '/photos/' + n;
 
@@ -153,6 +154,50 @@ const STATE_ARENA = {
 const STATE_ME = { sessions: {}, me: { season_days: 12, streak_weeks: 3, has_this_week: false, helped: 5 } };
 const STATE_ME_NEWBIE = { sessions: {}, me: { season_days: 0, streak_weeks: 0, has_this_week: false, helped: 0 } };
 
+/* PDEC-040 батч C: старая главная — hub bootstrap с s5-полями home.*. */
+const HUB_BOOT = {
+  bookings: { days: [] }, requests: { items: [] }, client_session: {},
+  activity: null, passes: [], certificates: [], ice_teaser: null, pending_referral: null,
+  home: {
+    city: { id: 1, name: 'Минск', region: 'minsk', upcoming: [], needs: [] },
+    matches: null, now: null,
+    on_ice: {
+      session_id: 401, arena_id: 11, arena_name: 'Каток на Немиге', photo: null,
+      invite_url: 'https://t.me/glidebot/app?startapp=p11_401',
+      starts_local: '19:45', ends_local: '21:15', minutes_left: 105,
+      live: { level: 3, count: 2, last_min: 6 },
+      checked_in: false, checkin_id: null, load_level: null,
+      season_days: 6, streak_weeks: 2, has_this_week: true,
+      next_badge: { name: 'Крепкий лёд', name_gen: 'Крепкого льда', remaining: 3 },
+    },
+    companies: [{
+      code: 'abc12345', name: '', session_id: 401, arena_id: 11, arena_name: 'Каток на Немиге',
+      starts_local: '19:45', day_label: 'сегодня', going_count: 3, going_names: ['Аня', 'Дима', 'Света'],
+      crowd_line: 'Трое — это уже компания', my_status: 'going', page_url: 'https://t.me/k/abc12345',
+    }],
+    company_share: true,
+    pending_badges: [{
+      key: 'streak_3', name: 'Не растаял', name_gen: 'Не растаял', family: 'streak', total: 3,
+      earned: true, earned_at: '2026-11-22T15:00:00+00:00', progress: { done: 3, total: 3 },
+    }],
+  },
+};
+/* Без s5-полей: ни on_ice, ни компаний — карточек быть не должно. */
+const HUB_BOOT_PLAIN = { ...HUB_BOOT, home: { city: HUB_BOOT.home.city, matches: null, now: null } };
+
+/* Значки в ответе /client/me — полка на старом «Я». */
+const ME_BADGES = [
+  { key: 'first_ice', name: 'Вышел на лёд', name_gen: 'Выхода на лёд', family: 'intro', total: 1,
+    earned: true, earned_at: '2026-09-12T15:00:00+00:00', progress: { done: 1, total: 1 } },
+  { key: 'streak_3', name: 'Не растаял', name_gen: 'Не растаял', family: 'streak', total: 3,
+    earned: true, earned_at: '2026-11-03T15:00:00+00:00', progress: { done: 3, total: 3 } },
+  { key: 'streak_5', name: 'Крепкий лёд', name_gen: 'Крепкого льда', family: 'streak', total: 5,
+    earned: false, earned_at: null, progress: { done: 3, total: 5 } },
+  { key: 'days_10', name: 'Разогрелся', name_gen: 'Разогрелся', family: 'season', total: 10,
+    earned: false, earned_at: null, progress: { done: 8, total: 10 } },
+];
+const ME_WITH_BADGES = { ...ME, badges: ME_BADGES };
+
 /* TASK-452 (5.5): «обычно» — сетка «Когда свободнее» + blended-уровень на шкалах. */
 const SESS_LOAD = (id, s, e, lv) => ({ ...SESS(id, s, e), typical_load_level: lv });
 const ARENA_SESSIONS_LOAD = {
@@ -201,7 +246,7 @@ async function shot(page, name) {
   await page.screenshot({ path: path.join(shots, name + '.png') });
 }
 
-async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE, track, arenaSessions }) {
+async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE, track, arenaSessions, tgScheme, hub, me, flagsExtra }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
   const page = await ctx.newPage();
   const errors = [];
@@ -211,8 +256,8 @@ async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE,
   page.on('request', (r) => { if (/checkin-(sheet|live)\.(js|css)/.test(r.url())) checkinAssets.push(r.url()); });
   await page.clock.setFixedTime(NOW);
   await page.addInitScript(YMAPS_STUB);
-  await page.addInitScript(FLAGS_CACHE(s5));
-  await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: TG_MOCK }));
+  await page.addInitScript(FLAGS_CACHE(s5, flagsExtra));
+  await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock(tgScheme) }));
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   await page.route(/api-maps\.yandex|yastatic/, (r) => r.fulfill({ contentType: 'text/javascript', body: '' }));
   await page.route('**/api/**', (r) => {
@@ -221,7 +266,9 @@ async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE,
     const json = (b, code = 200) => r.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(b) });
     if (track) track.push(p + ' ' + r.request().method() + (url.search || ''));
     if (p === '/api/webapp/client/ui-flags') {
-      return json({ season_ui: true, bookings_tab: false, redesign_s1: true, redesign_s5: s5 });
+      /* PDEC-040 рескин: s4 пробрасываем из flagsExtra — иначе refresh сбросил
+         бы флаг и .gv2skin снялся бы сразу после первого ответа сервера. */
+      return json({ season_ui: true, bookings_tab: false, redesign_s1: true, redesign_s5: s5, redesign_s4: !!(flagsExtra && flagsExtra.redesign_s4) });
     }
     if (p === '/api/webapp/client/session' || p.startsWith('/api/webapp/client/session/')) {
       return json({ city_id: 1, city_name: 'Минск' });
@@ -238,7 +285,9 @@ async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE,
     if (p === '/api/public/arenas/11/sessions') return json(arenaSessions || ARENA_SESSIONS);
     if (p === '/api/public/arenas/11/matches') return json({ matches: [] });
     if (p === '/api/public/arenas/11/trainers') return json({ trainers: [] });
-    if (p === '/api/webapp/client/me') return json(ME);
+    if (p === '/api/webapp/client/me') return json(me || ME);
+    if (p === '/api/webapp/client/hub/bootstrap') return json(hub || HUB_BOOT_PLAIN);
+    if (p === '/api/webapp/client/badges/seen') return json({ shown: 1 });
     if (p === '/api/webapp/client/checkins/state') return json(state);
     if (p === '/api/webapp/client/checkins/intent') return r.fulfill({ status: 204, body: '' });
     if (p === '/api/webapp/client/checkins' && r.request().method() === 'POST') {
@@ -348,6 +397,27 @@ try {
     await tabBarCheck(page, '02');
     await sheetFitCheck(page, '02');
     check('02: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 02b. Фикс-пак ревью: пока сеанс идёт, оценку можно переставить — второй тап шлёт PATCH. */
+  {
+    const track = [];
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/ice', state: STATE_ICE, track });
+    await page.waitForSelector('.cil__btn', { timeout: 15000 });
+    await page.click('.cil__btn');
+    await page.waitForSelector('.cis.cis-on', { timeout: 8000 });
+    await page.waitForTimeout(600);
+    await page.click('.cis__lvl[data-level="1"]');
+    await page.waitForTimeout(400);
+    await page.click('.cis__lvl[data-level="3"]');
+    await page.waitForTimeout(400);
+    await shot(page, '02b-rerate');
+    const patches = track.filter((t) => /checkins\/\d+ PATCH/.test(t));
+    check('02b: два PATCH на перестановку оценки', patches.length === 2, JSON.stringify(patches));
+    check('02b: выбран уровень 3', await page.locator('.cis__lvl[data-level="3"].cis-sel').count() === 1);
+    check('02b: плашки ошибки нет', await page.locator('.cis__err:not([hidden])').count() === 0);
+    check('02b: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
 
@@ -500,14 +570,177 @@ try {
     await ctx.close();
   }
 
+  /* 11. PDEC-040 C: старая главная — «Ты на катке?» + «Твоя компания» + лист значка */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-home', state: STATE_ICE, hub: HUB_BOOT });
+    await page.waitForSelector('.cil-hub', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    await shot(page, '11-home-onice');
+    const hub = page.locator('.cil-hub');
+    check('11: карточка «Ты на катке?» в hubNow', await hub.count() === 1 && await page.locator('#hubNow .cil-hub').count() === 1);
+    if (await hub.count()) {
+      const txt = (await hub.textContent()) || '';
+      check('11: чип «Идёт сеанс · ещё»', /Идёт сеанс/.test(txt), txt.slice(0, 80));
+      check('11: название катка', /Каток на Немиге/.test(txt));
+      check('11: «Серия: 2 недели» и «На льду 6 раз»', /Серия: 2 недели подряд/.test(txt) && /На льду 6 раз за сезон/.test(txt), txt.slice(0, 160));
+      check('11: «✓ Я здесь» и «Позвать сюда»', (await hub.locator('[data-act="checkin"]').textContent()) === '✓ Я здесь' && (await hub.locator('[data-act="invite"]').count()) === 1);
+      const vis = await page.evaluate(() => {
+        const r = document.querySelector('.cil-hub').getBoundingClientRect();
+        return r.top >= 0 && r.left >= 0 && r.right <= innerWidth ? 'in' : `out:${r.top.toFixed(0)},${r.right.toFixed(0)}`;
+      });
+      check('11: карточка внутри экрана', vis === 'in', vis);
+    }
+    const comp = page.locator('.cil-comp');
+    check('11: карточка «Твоя компания»', await comp.count() === 1);
+    if (await comp.count()) {
+      const ctxt = (await comp.textContent()) || '';
+      check('11: «Твоя компания · сегодня» и имена', /Твоя компания · сегодня/.test(ctxt) && /Аня, Дима и Света/.test(ctxt), ctxt.slice(0, 120));
+      check('11: «Ты идёшь ✓» + «Позвать ещё»', (await comp.locator('[data-act="open"]').count()) >= 1 && (await comp.locator('[data-act="invite"]').count()) === 1);
+    }
+    /* pending_badges → лист вручения открывается сам; «Позже» шлёт seen. */
+    await page.waitForSelector('.baw', { timeout: 8000 }).catch(() => {});
+    check('11: лист вручения значка из pending_badges', await page.locator('.baw').count() === 1);
+    if (await page.locator('.baw__later').count()) await page.click('.baw__later');
+    await page.waitForTimeout(400);
+    /* «✓ Я здесь» на карточке открывает лист отметки. */
+    await page.click('.cil-hub [data-act="checkin"]');
+    await page.waitForSelector('.cis.cis-on', { timeout: 8000 });
+    await page.waitForTimeout(600);
+    await shot(page, '11b-home-sheet');
+    check('11: лист отметки открыт с главной', await page.locator('.cis.cis-on').count() === 1);
+    check('11: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 12. Без s5-полей в bootstrap — карточек нет */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-home', state: STATE_ICE, hub: HUB_BOOT_PLAIN });
+    await page.waitForTimeout(1400);
+    await shot(page, '12-home-plain');
+    check('12: нет .cil-hub/.cil-comp', await page.locator('.cil-hub, .cil-comp').count() === 0);
+    check('12: нет листа значка', await page.locator('.baw').count() === 0);
+    check('12: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 13. Полка значков на старом «Я» + коллекция */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-me', state: STATE_ME, me: ME_WITH_BADGES });
+    await page.waitForSelector('.cil-badges .mv2-badges', { timeout: 10000 }).catch(() => {});
+    await shot(page, '13-me-badges');
+    const shelf = page.locator('.cil-badges');
+    check('13: полка значков вставлена', await shelf.locator('.mv2-badges').count() === 1);
+    if (await shelf.count()) {
+      check('13: «Значки» + «Все значки»', (await shelf.locator('.mv2-sec__h').textContent()) === 'Значки' && await shelf.locator('#mv2BadgesAll').count() === 1);
+      check('13: «Первый шаг»', await shelf.locator('.mv2-bfirst').count() === 1);
+      check('13: плитки: 3 (earned streak_3 + ближайшие)', await shelf.locator('.mv2-btile').count() === 3);
+      /* сезонная карточка сверху, полка сразу под ней */
+      const order = await page.evaluate(() => {
+        const me = document.querySelector('.cil-me');
+        const b = document.querySelector('.cil-badges');
+        return me && b ? me.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING : 'missing';
+      });
+      check('13: полка под карточкой сезона', order === 4 || order === true, String(order));
+      await page.click('#mv2BadgesAll');
+      await page.waitForSelector('#mv2Collection:not([hidden])', { timeout: 5000 });
+      await shot(page, '13b-me-collection');
+      check('13: коллекция «Мои значки» открылась', (await page.locator('#mv2Collection .mv2-col__t').textContent()) === 'Мои значки');
+      await page.click('#mv2ColBack');
+      await page.waitForTimeout(300);
+    }
+    check('13: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 14. C3: тёмный Telegram + s1 — старая главная остаётся светлой */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-home', state: STATE_ICE, hub: HUB_BOOT, tgScheme: 'dark' });
+    await page.waitForSelector('.cil-hub', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    await shot(page, '14-home-dark-tg');
+    const dark = await page.evaluate(() => ({
+      html: document.documentElement.classList.contains('hub-is-dark') || document.documentElement.classList.contains('client-mini-dark'),
+      body: document.body.classList.contains('tg-dark'),
+    }));
+    check('14: s1 пин — html не тёмный', !dark.html, JSON.stringify(dark));
+    check('14: s1 пин — body без tg-dark', !dark.body);
+    check('14: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 15. C3: тёмный Telegram + s4 без s1 — старый «Я» тоже светлый */
+  {
+    const { page, ctx, errors } = await openPage(browser, {
+      page: '/webapp/client-me', state: STATE_ME, tgScheme: 'dark',
+      flagsExtra: { redesign_s1: false, redesign_s4: true },
+    });
+    await page.waitForSelector('.cil-me', { timeout: 10000 }).catch(() => {});
+    await shot(page, '15-me-dark-tg-s4');
+    const dark = await page.evaluate(() => ({
+      html: document.documentElement.classList.contains('client-mini-dark') || document.documentElement.classList.contains('trainer-theme-dark'),
+      body: document.body.classList.contains('tg-dark'),
+    }));
+    check('15: s4 пин — «Я» не тёмный', !dark.html && !dark.body, JSON.stringify(dark));
+    check('15: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 16–19. PDEC-040 рескин: под s4 старые страницы получают .gv2skin + gv2-skin.css
+     и перекрашиваются в палитру v2 (фон #f5f6f8). Шоты — пара «после» к «до»
+     (06-off-… и 12-home-plain). */
+  const SKIN_PAGES = [
+    ['16', 'home', '/webapp/client-home', { hub: HUB_BOOT }],
+    ['17', 'me', '/webapp/client-me', { state: STATE_ME }],
+    ['18', 'arena', '/webapp/arena?ref=11&s=401', {}],
+    ['19', 'ice', '/webapp/ice', {}],
+  ];
+  for (const [num, name, p, extra] of SKIN_PAGES) {
+    const { page, ctx, errors } = await openPage(browser, {
+      page: p, state: STATE_ICE, flagsExtra: { redesign_s1: false, redesign_s4: true }, ...extra,
+    });
+    await page.waitForSelector('link[data-gv2skin]', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    await shot(page, `${num}-${name}-gv2`);
+    const m = await page.evaluate(() => ({
+      html: document.documentElement.classList.contains('gv2skin'),
+      body: document.body.classList.contains('gv2skin'),
+      link: !!document.querySelector('link[data-gv2skin]'),
+      bg: getComputedStyle(document.body).backgroundColor,
+      dark: document.body.classList.contains('tg-dark'),
+    }));
+    check(`${num}: ${name} — .gv2skin на html и body`, m.html && m.body, JSON.stringify(m));
+    check(`${num}: ${name} — gv2-skin.css подключён`, m.link);
+    check(`${num}: ${name} — фон #f5f6f8`, m.bg === 'rgb(245, 246, 248)', m.bg);
+    check(`${num}: ${name} — без tg-dark`, !m.dark);
+    /* Заголовки секций — Golos 700 (v2), Dela остаётся только на герое/крупном времени. */
+    const fontSel = { home: '.hh__title', me: '.cm-name', arena: '.arena-h', ice: '.client-app-header__title' }[name];
+    if (fontSel) {
+      const ff = await page.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        return el ? { f: getComputedStyle(el).fontFamily, w: getComputedStyle(el).fontWeight } : null;
+      }, fontSel);
+      if (name === 'home' || name === 'ice') {
+        check(`${num}: ${name} — герой/тайтл остался Dela`, ff && /Dela/.test(ff.f), JSON.stringify(ff));
+      } else {
+        check(`${num}: ${name} — заголовок ${fontSel} уже Golos 700`, ff && !/Dela/.test(ff.f) && +ff.w >= 600, JSON.stringify(ff));
+      }
+    }
+    check(`${num}: без JS-ошибок`, errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
   /* 06→10. Флаг выключен: ни ассетов, ни узлов на всех трёх страницах */
-  const OFF_PAGES = [['ice', '/webapp/ice'], ['arena', '/webapp/arena?ref=11&s=401'], ['me', '/webapp/client-me']];
+  const OFF_PAGES = [['ice', '/webapp/ice'], ['arena', '/webapp/arena?ref=11&s=401'], ['me', '/webapp/client-me'], ['home', '/webapp/client-home']];
   for (let i = 0; i < OFF_PAGES.length; i++) {
     const p = OFF_PAGES[i][1];
     const { page, ctx, errors, checkinAssets } = await openPage(browser, { page: p, s5: false });
     await shot(page, `06-off-${OFF_PAGES[i][0]}`);
     check(`06-${i}: ${p} без checkin-ассетов`, checkinAssets.length === 0, checkinAssets.join(','));
     check(`06-${i}: ${p} без узлов .cil*/.cis`, await page.locator('.cil, .cil-arena, .cil-me, .cis').count() === 0);
+    check(`06-${i}: ${p} без .gv2skin`, await page.evaluate(() =>
+      !document.documentElement.classList.contains('gv2skin') &&
+      !(document.body && document.body.classList.contains('gv2skin')) &&
+      !document.querySelector('link[data-gv2skin]')));
     check(`06-${i}: ${p} без JS-ошибок`, errors.length === 0, errors.join('; '));
     await ctx.close();
   }

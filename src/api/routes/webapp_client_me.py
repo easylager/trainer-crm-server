@@ -267,8 +267,8 @@ async def get_client_me(
         include_v2=redesign_s4_enabled(account_key, get_settings()),
         include_companies=redesign_s4_enabled(account_key, get_settings())
         and redesign_s5_enabled(account_key, get_settings()),
-        include_badges=redesign_s4_enabled(account_key, get_settings())
-        and redesign_s5_enabled(account_key, get_settings()),
+        # PDEC-040 батч C: полка значков есть и на старом «Я» (client-me) — там s4 нет.
+        include_badges=redesign_s5_enabled(account_key, get_settings()),
     )
     body = ClientMeOut.model_validate(payload)
     await session.commit()

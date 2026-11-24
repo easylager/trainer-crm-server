@@ -49,6 +49,8 @@ html body.hv2 { padding: 0; margin: 0; }
   transition: opacity .3s var(--ease);
 }
 .hv2-hero--photo .hv2-hero__img { opacity: 1; }
+/* B2: новичку герой короче — атмосфера, сеанс уехал в белый билет. */
+.hv2-hero--short { height: 190px; }
 .hv2-hero__shade {
   position: absolute; inset: 0;
   background: linear-gradient(180deg, rgba(11, 22, 32, .18) 0%, rgba(11, 22, 32, 0) 34%, rgba(11, 22, 32, .62) 100%);
@@ -308,6 +310,18 @@ html body.hv2 { padding: 0; margin: 0; }
 .hv2-pcard__btns { display: flex; gap: 10px; margin-top: 12px; }
 .hv2-pcard__btns .hv2-btn { margin-top: 0; flex: 1; }
 
+/* B2: белый лёд-билет новичка — фото только чипом 72px. */
+.hv2-ice { padding: 20px; }
+.hv2-ice__thumb {
+  flex: 0 0 72px;
+  width: 72px; height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+  background: var(--soft);
+}
+.hv2-ice__btns { display: flex; gap: 10px; }
+.hv2-ice__btns .hv2-btn { margin-top: 0; flex: 1; }
+
 /* ── Выбор города ───────────────────────────────────────────── */
 .hv2-citypick { overflow: hidden; }
 .hv2-cprow {
@@ -433,6 +447,9 @@ html body.hv2 { padding: 0; margin: 0; }
   display: inline-flex; align-items: center; justify-content: center;
   font: 700 9px/24px var(--g-font); color: #fff;
 }
+.hv2-mcard__logo img { width: 100%; height: 100%; object-fit: contain; display: block; border-radius: 50%; }
+/* Тёмный фон (KK-карточка): белая подложка, чтобы эмблема не сливалась с --blue. */
+.hv2-mcard__logo--chip { background: #fff; padding: 3px; box-sizing: border-box; }
 .hv2-mcard__tname { font: 700 17px/1.2 var(--g-font); }
 .hv2-mcard__place { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
 .hv2-mcard--kk .hv2-mcard__place { color: rgba(255, 255, 255, .85); }

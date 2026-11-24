@@ -23,19 +23,39 @@ const MIME = {
 };
 
 /* Эмуляция диспетча app.py: s4 + чистые параметры → client-ice-v2.html;
-   map=1 / чужие параметры / s4 off → старый ice.html. */
+   map=1 / чужие параметры/значения / s4 off → старый ice.html.
+   B5: линзы intent/kind — только skate|ohm|figure; when — окна расписания. */
 let ICE_V2_SERVE = true;
 const ICE_V2_PARAMS = new Set(['city_id', 'day', 'kind', 'when', 'intent', 'init_data', 'tgWebAppStartParam']);
+const V2_LENS = new Set(['skate', 'ohm', 'figure']);
+const V2_WHEN = new Set(['today', 'tomorrow', 'weekend', 'week', 'any']);
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+function iceLegacy(q) {
+  if (q.has('map') || [...q.keys()].some((k) => !ICE_V2_PARAMS.has(k))) return true;
+  for (const name of ['intent', 'kind']) {
+    const v = (q.get(name) || '').toLowerCase();
+    if (v && !V2_LENS.has(v)) return true;
+  }
+  const when = (q.get('when') || '').toLowerCase();
+  if (when && !V2_WHEN.has(when) && !ISO_DAY.test(when)) return true;
+  const day = (q.get('day') || '').toLowerCase();
+  if (day && day !== 'any' && !V2_WHEN.has(day) && !ISO_DAY.test(day)) return true;
+  return false;
+}
 
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
   let file;
   if (p === '/webapp/ice') {
     const q = new URL(req.url, 'http://x').searchParams;
-    const legacy = q.has('map') || [...q.keys()].some((k) => !ICE_V2_PARAMS.has(k));
-    const target = (ICE_V2_SERVE && !legacy) ? 'client-ice-v2.html' : 'ice.html';
+    const target = (ICE_V2_SERVE && !iceLegacy(q)) ? 'client-ice-v2.html' : 'ice.html';
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end(readFileSync(path.join(staticDir, 'webapp', target)));
+    return;
+  }
+  if (p === '/webapp/service') {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end(readFileSync(path.join(staticDir, 'webapp', 'client-service.html')));
     return;
   }
   if (p.startsWith('/photos/')) {
@@ -68,6 +88,25 @@ const PHOTO = {
 };
 
 const UI_FLAGS = { season_ui: false, bookings_tab: true, fast_tabs: false, search_board: false, redesign_s1: true, redesign_s2: true, redesign_s3: true, redesign_s4: true };
+
+/* B5: стабы /api/public/ice/arenas для экрана «Сервис». */
+const SVC_PLACES = {
+  items: [
+    { id: 71, name: 'Заточка на Немиге', slug: 'zatochka-nemiga', city_name: 'Минск',
+      district: 'Центральный', address: 'пр-т Победителей, 1', thumb: P('arena-38/hero.webp'),
+      phone: '+375 29 111-22-33', opening_hours: { daily: { open: '10:00', close: '22:00' } } },
+    { id: 72, name: 'Прокат и заточка', slug: 'prokat', city_name: 'Минск',
+      district: 'Фрунзенский', address: 'ул. Притыцкого, 27',
+      opening_hours: { daily: { open: '09:00', close: '13:00' } } },
+  ],
+};
+const SHOP_PLACES = {
+  items: [
+    { id: 81, name: 'Хоккейный мир', slug: 'hockey-mir', city_name: 'Минск', venue_type: 'shop',
+      district: 'Московский', address: 'ул. Козлова, 5', thumb: P('arena-25/hero.jpg'),
+      opening_hours: { daily: { open: '10:00', close: '21:00' } } },
+  ],
+};
 
 function tgMock() {
   return `window.Telegram = { WebApp: {
@@ -145,6 +184,11 @@ async function openIce(browser, { variant, flags, url, now, flagsCache, company,
     if (p === '/api/webapp/client/ice/schedule') return json(scheduleFor(SCHED_VARIANT, url2.searchParams));
     if (p === '/api/webapp/client/session' && r.request().method() === 'GET') return json({ city_id: 1 });
     if (p === '/api/webapp/client/session/catalog-filters') return json({ success: true });
+    if (p === '/api/public/ice/arenas') {
+      if (url2.searchParams.get('svc') === 'service') return json(SVC_PLACES);
+      if (url2.searchParams.get('venue_type') === 'shop') return json(SHOP_PLACES);
+      return json({ items: [] });
+    }
     if (p === '/api/public/ice/cities') {
       return json({ items: [
         { id: 1, name: 'Минск', skate_count: 16 },
@@ -214,8 +258,13 @@ try {
     check('01: живой кусок подзаголовка — «2 идут сейчас»', (await page.locator('.iv2-live').textContent()) === '2 идут сейчас');
     check('01: подзаголовок «из N сегодня»', (await page.locator('#iv2Sub').textContent()).includes('сегодня'));
     check('01: саб строки — «до … · цена»', /^до \d{2}:\d{2} · /.test((await page.locator('.iv2-card__sub').first().textContent()).trim()));
+    check('01: сегодня — колонка времени есть', await page.locator('.iv2-row__time').count() === 5);
+    check('01: сегодня — старта внутри карточки нет', await page.locator('.iv2-card__when').count() === 0);
     check('01: плитки видов — 3', await page.locator('#iv2Kinds .iv2-kind').count() === 3);
-    check('01: пилюли дней — 4', await page.locator('#iv2Days .iv2-day').count() === 4);
+    check('01: пилюли дней — 7 дней + «Выходные»', await page.locator('#iv2Days .iv2-day').count() === 8);
+    const dayLabels = await page.locator('#iv2Days .iv2-day').allTextContents();
+    check('01: «Сегодня»/«Завтра» именами', dayLabels[0].startsWith('Сегодня') && dayLabels[1].startsWith('Завтра'), dayLabels.join('|'));
+    check('01: дальше «Вт 24» и чип «Выходные»', dayLabels[2].startsWith('Вт 24') && dayLabels[7].startsWith('Выходные'), dayLabels.join('|'));
     check('01: «Идёт сейчас» + 2 строки', await page.locator('.iv2-card__going').count() === 2);
     check('01: красная линия «Сейчас 19:30»', (await page.locator('.iv2-nowline').textContent()) === 'Сейчас 19:30');
     check('01: 5 карточек (2 идут + 3 ближайшие)', await page.locator('.iv2-card').count() === 5);
@@ -243,11 +292,12 @@ try {
     const { page, ctx, errors } = await openIce(browser);
     check('03: «Фигурное» бледное', await page.locator('[data-kind="figure"].iv2-kind--empty').count() === 1);
     await page.click('[data-kind="figure"]');
-    await page.waitForSelector('.iv2-grouphead', { timeout: 5000 }).catch(() => {});
+    await page.waitForSelector('.iv2-card', { timeout: 5000 }).catch(() => {});
     await page.waitForTimeout(300);
     await shot(page, '03-figure-weekend');
-    check('03: после тапа — группы выходных', await page.locator('.iv2-grouphead').count() >= 1);
-    check('03: пилюля «Выходные» выбрана', await page.locator('[data-day="weekend"].iv2-day--on').count() === 1);
+    /* B3: прыжок в ближайший день с сеансами — сб 28 (ISO-ключ), один день → строки. */
+    check('03: после тапа — сеанс субботы', await page.locator('.iv2-card').count() === 1);
+    check('03: пилюля «Сб 28» выбрана', await page.locator('[data-day="2026-11-28"].iv2-day--on').count() === 1);
     check('03: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
@@ -263,6 +313,10 @@ try {
     check('04: «завтра» в подзаголовке', (await page.locator('#iv2Sub').textContent()).includes('завтра'));
     check('04: строк завтра — 6', await page.locator('.iv2-card').count() === 6);
     check('04: без «Идёт сейчас»/линии', await page.locator('.iv2-card__going, .iv2-nowline').count() === 0);
+    /* Не-сегодня: левой колонки нет, старт внутри карточки жирным перед именем. */
+    check('04: колонки времени нет', await page.locator('.iv2-row__time').count() === 0);
+    check('04: старт внутри карточки ×6', await page.locator('.iv2-card__when').count() === 6);
+    check('04: старт «08:00» в первой строке', (await page.locator('.iv2-card__name').first().textContent()).startsWith('08:00'));
     check('04: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
@@ -276,6 +330,8 @@ try {
     await shot(page, '05-weekend');
     check('05: две группы Сб/Вс', await page.locator('.iv2-grouphead').count() === 2);
     check('05: «Сб, 28» и «Вс, 29»', (await page.locator('#iv2List').textContent()).includes('Сб, 28') && (await page.locator('#iv2List').textContent()).includes('Вс, 29'));
+    check('05: колонки времени нет в группах', await page.locator('.iv2-row__time').count() === 0);
+    check('05: старт внутри карточек', await page.locator('.iv2-card__when').count() >= 4);
     check('05: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
@@ -333,6 +389,11 @@ try {
     check('09: «На неделе» с чипсами', (await page.locator('#iv2List').textContent()).includes('На неделе') && await page.locator('.iv2-wchip').count() >= 4);
     check('09: строки без имени катка', await page.locator('.iv2-card--bare .iv2-card__name').count() === 0);
     check('09: Пинск в пилюле города', (await page.locator('#iv2City').textContent()).includes('Пинск'));
+    /* Компактный заголовок одного катка: «Идёт сеанс · ещё N мин» вместо
+       «2 сеанса массового / из 2 · на одном катке · 1 идёт сейчас». */
+    check('09: заголовок «Идёт сеанс»', (await page.locator('#iv2Title').textContent()) === 'Идёт сеанс');
+    check('09: живой саб «ещё N мин»', /^ещё \d+ мин$/.test((await page.locator('.iv2-live').textContent()).trim()));
+    check('09: без Dela-счётчика в сабе', !(await page.locator('#iv2Sub').textContent()).includes('из 2'));
     check('09: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
@@ -450,6 +511,44 @@ try {
       await shot(page, '14-company-plaque');
     }
     check('14: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 15. B4: «семейное» + зал — у Чижовки 2 площадки, у Спортпаласа один зал (не показываем). */
+  {
+    const { page, ctx, errors } = await openIce(browser, { variant: 'halls' });
+    await page.waitForSelector('.iv2-card', { timeout: 5000 }).catch(() => {});
+    await shot(page, '15-halls');
+    const list = await page.locator('#iv2List').textContent();
+    check('15: «семейное» в строке', list.includes('семейное'));
+    check('15: зал «Конькобежная дорожка»', list.includes('Конькобежная дорожка'));
+    check('15: зал «Хоккейная площадка»', list.includes('Хоккейная площадка'));
+    check('15: одиночный зал «Основной лёд» скрыт', !list.includes('Основной лёд'));
+    check('15: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 16. B5: intent=service → старый каталог, не лента v2; «Сервис» — свой экран. */
+  {
+    const { page, ctx, errors } = await openIce(browser, { url: '/webapp/ice?intent=service&city_id=1' });
+    await shot(page, '16-service-legacy');
+    check('16: intent=service → старый ice.html', await page.locator('#iceRoot').count() === 1);
+    check('16: нет v2-разметки', await page.locator('#iv2Title').count() === 0);
+    check('16: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+  {
+    const { page, ctx, errors } = await openIce(browser, { url: '/webapp/service?city_id=1' });
+    await page.waitForSelector('.sv2-row', { timeout: 5000 }).catch(() => {});
+    await shot(page, '16b-service');
+    check('16b: два места с заточкой', await page.locator('.sv2-row').count() === 2);
+    check('16b: «Открыто · до 22:00»', (await page.locator('.sv2-row__hours').first().textContent()) === 'Открыто · до 22:00');
+    check('16b: телефон есть', (await page.locator('.sv2-row__phone').first().textContent()).includes('111-22-33'));
+    await page.click('[data-tab="shop"]');
+    await page.waitForTimeout(500);
+    await shot(page, '16c-service-shops');
+    check('16c: «Магазины» → 1 магазин', await page.locator('.sv2-row').count() === 1 && (await page.locator('.sv2-row__name').first().textContent()) === 'Хоккейный мир');
+    check('16c: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
 } finally {

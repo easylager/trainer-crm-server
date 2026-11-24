@@ -119,8 +119,8 @@
 
   var KIND_ICONS = {
     skate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M4 6l16 12M20 6 4 18M8 4l4 4 4-4M8 20l4-4 4 4"/></svg>',
-    ohm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M14 4l6 6M12 12l-6 8h4l6-8"/><path d="M4 20h6"/></svg>',
-    figure: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3c0 4 3 5 5 5s5-1 5-5M12 8v11M8 21h8"/><path d="M9 14c-2 1-3 2-3 4"/></svg>',
+    ohm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.5 3.2 6.4 17.6 3.6 21h8.2"/><circle cx="16" cy="19.4" r="1.9"/></svg>',
+    figure: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h3.5v5.1c0 .5.2 1 .6 1.3l4.4 3.7c.9.7 1.4 1.8 1.4 2.9 0 .9-.7 1.6-1.6 1.6H7Z"/><path d="M8.8 18.1v2.1M14.6 18.1v2.1"/><path d="M4.8 20.2h14.4"/></svg>',
   };
   var CHEV = '<svg class="iv2-card__chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
   var BELL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
@@ -229,6 +229,22 @@
     els.stick.hidden = !kindsHtml && !daysHtml;
   }
 
+  /* «до 10:30 · 12 BYN · прокат 8» не рвём посередине фразы: каждая часть — nowrap,
+     перенос разрешён только на разделителях. */
+  function priceSubHtml(line) {
+    return String(line || '').split(' · ').filter(Boolean).map(function (p) {
+      return '<span class="iv2-card__subp">' + esc(p) + '</span>';
+    }).join(' · ');
+  }
+
+  /* B4: «семейное» и зал (когда >1 зала у катка или семейный сеанс) в подпись строки. */
+  function subLine(r) {
+    var line = r.price_line || '';
+    if (r.family) line += (line ? ' · ' : '') + 'семейное';
+    if (r.hall_shown && r.hall) line += (line ? ' · ' : '') + r.hall;
+    return line;
+  }
+
   function rowHtml(r, opts) {
     opts = opts || {};
     var photo = (r.photo && (r.photo.thumb || r.photo.card)) || '';
@@ -259,14 +275,17 @@
       live += '<button type="button" class="iv2-card__me ga-press" data-checkin="' + r.session_id + '" data-name="' + esc(r.arena_name) + '">' +
         (checked ? 'Отмечено' : '✓ Я здесь') + '</button>';
     }
+    /* Не-сегодня (завтра/выходные/дата): старт внутри карточки, левой колонки нет. */
     return '<div class="iv2-row">' +
-      '<div class="iv2-row__time">' + esc(r.time) + '</div>' +
+      (opts.inline ? '' : '<div class="iv2-row__time">' + esc(r.time) + '</div>') +
       '<a class="iv2-card ga-press" href="' + esc(r.href) + '" data-arena="' + r.arena_id + '" data-session="' + r.session_id + '">' +
       '<div class="iv2-card__top">' +
       (photo ? '<img class="iv2-card__img" src="' + esc(photo) + '" width="56" height="56" loading="lazy" decoding="async" alt="">' : '<div class="iv2-card__ph"></div>') +
       '<div class="iv2-card__txt">' + going +
-      '<div class="iv2-card__name">' + esc(r.arena_name) + '</div>' +
-      '<div class="iv2-card__sub">' + esc(r.price_line || '') + '</div>' +
+      (opts.inline
+        ? '<div class="iv2-card__name"><span class="iv2-card__when">' + esc(r.time) + '</span>' + esc(r.arena_name) + '</div>'
+        : '<div class="iv2-card__name">' + esc(r.arena_name) + '</div>') +
+      '<div class="iv2-card__sub">' + priceSubHtml(subLine(r)) + '</div>' +
       usualHtml(r, hasLive) +
       '</div>' + CHEV + '</div>' + comp + live + '</a></div>';
   }
@@ -301,7 +320,7 @@
       '<div class="iv2-row__time">' + esc(r.time) + '</div>' +
       '<a class="iv2-card iv2-card--bare ga-press" href="' + esc(r.href) + '" data-arena="' + r.arena_id + '" data-session="' + r.session_id + '">' +
       '<div class="iv2-card__top"><div class="iv2-card__txt">' + going +
-      '<div class="iv2-card__sub">' + esc(r.price_line || '') + '</div>' +
+      '<div class="iv2-card__sub">' + priceSubHtml(subLine(r)) + '</div>' +
       usualHtml(r, hasLive) +
       '</div>' + CHEV + '</div>' + comp + live + '</a></div>';
   }
@@ -335,7 +354,7 @@
       var rows = tm.rows.map(function (r) {
         return '<div class="iv2-end__row"><div class="iv2-end__time">' + esc(r.time) + '</div>' +
           '<div><div class="iv2-end__name">' + esc(r.arena_name) + '</div>' +
-          '<div class="iv2-end__sub">' + esc(r.price_line || '') + '</div></div></div>';
+          '<div class="iv2-end__sub">' + priceSubHtml(subLine(r)) + '</div></div></div>';
       }).join('');
       return '<div class="iv2-end"><div class="iv2-end__head">Завтра с утра <span class="iv2-end__date">' + esc(tm.label) + '</span></div>' +
         '<div class="iv2-end__card">' + rows +
@@ -371,12 +390,12 @@
     if (data.now_line) html += '<div class="iv2-nowline">' + esc(data.now_line) + '</div>';
     if (data.upcoming && data.upcoming.length) {
       hasRows = true;
-      html += data.upcoming.map(function (r) { return rowHtml(r); }).join('');
+      html += data.upcoming.map(function (r) { return rowHtml(r, { inline: state.day !== 'today' }); }).join('');
     }
     (data.groups || []).forEach(function (g) {
       hasRows = true;
       html += '<div class="iv2-grouphead">' + esc(cap(g.label)) + '</div>' +
-        g.rows.map(function (r) { return rowHtml(r); }).join('');
+        g.rows.map(function (r) { return rowHtml(r, { inline: true }); }).join('');
     });
     if (!hasRows && !data.next_ice && !data.tomorrow_morning) html += emptyDayHtml(data);
     /* «Завтра с утра» — сервером только на «Сегодня»; «Следующий лёд» — когда завтра пусто. */

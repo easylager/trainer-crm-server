@@ -103,44 +103,6 @@
   margin-right:-6px; border:2px solid #fff; }
 .mv2-comp__ava:last-child { margin-right:0; }
 
-/* TASK-451 (5.4): полка значков, «Первый шаг», коллекция */
-.mv2-badges__hrow { display:flex; align-items:baseline; justify-content:space-between; }
-.mv2-badges__all { border:0; background:none; color:#0a6f73; font:inherit; font-size:14px;
-  font-weight:600; cursor:pointer; padding:0 2px; margin:0 0 12px; }
-.mv2-bfirst { display:flex; align-items:center; gap:12px; background:#fff; border-radius:18px;
-  padding:12px 14px; margin-bottom:10px; }
-.mv2-bfirst__art { width:40px; height:40px; flex:none; }
-.mv2-bfirst__art svg { width:100%; height:100%; display:block; }
-.mv2-bfirst__t { font-size:15px; font-weight:600; }
-.mv2-bfirst__s { font-size:13px; color:#7b828f; margin-top:2px; }
-.mv2-badges__row { display:flex; gap:10px; overflow-x:auto; padding-bottom:4px;
-  margin:0 -14px; padding-left:14px; padding-right:14px; scrollbar-width:none; }
-.mv2-badges__row::-webkit-scrollbar { display:none; }
-.mv2-btile { flex:none; width:104px; background:#fff; border:0; border-radius:18px;
-  padding:12px 8px 10px; text-align:center; cursor:pointer; font:inherit; color:inherit;
-  display:flex; flex-direction:column; align-items:center; gap:6px; }
-.mv2-btile__art { width:56px; height:56px; }
-.mv2-btile__art svg { width:100%; height:100%; display:block; }
-.mv2-btile__n { font-size:12.5px; font-weight:600; line-height:1.2; }
-.mv2-btile__s { font-size:11px; color:#7b828f; }
-.mv2-btile.is-locked .mv2-btile__n { color:#6b7684; }
-
-/* Коллекция — оверлей поверх «Я» (макет 18) */
-.mv2-col { position:fixed; inset:0; z-index:8500; overflow-y:auto;
-  background:#f5f6f8; color:#12151c; font-family:"Golos Text",system-ui,sans-serif;
-  padding:10px 14px calc(84px + env(safe-area-inset-bottom,0px)); }
-body.mv2-col-open { overflow:hidden; }
-.mv2-col__head { display:flex; align-items:center; gap:8px; padding:6px 0 14px;
-  position:sticky; top:0; background:#f5f6f8; }
-.mv2-col__back { width:36px; height:36px; border:0; border-radius:50%; background:#fff;
-  font-size:22px; line-height:1; color:#12151c; cursor:pointer; }
-.mv2-col__t { font-size:20px; font-weight:700; }
-.mv2-col__lbl { font-size:13px; font-weight:700; color:#7b828f; text-transform:uppercase;
-  letter-spacing:.04em; margin:18px 2px 10px; }
-.mv2-col__grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-.mv2-col__grid .mv2-btile { width:auto; }
-.mv2-col__closest { display:flex; }
-.mv2-col__closest .mv2-btile { width:128px; }
-.mv2-col__first { display:flex; align-items:center; gap:12px; background:#fff;
-  border-radius:18px; padding:12px 14px; }
+/* TASK-451 (5.4): полка значков и коллекция — badge-collection.css (общие с
+   старым «Я», PDEC-040 батч C). Здесь остаётся только сезонное. */
 .mv2-season__hint--broken { color:#b45309; }

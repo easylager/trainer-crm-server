@@ -29,10 +29,19 @@
   }
 
   /* TASK-445 (glide-home-v1): у аккаунтов redesign_s1 все экраны светлые — тема Telegram
-     не перекрашивает. Признак читаем из того же кэша флагов, что и оболочка
-     (cw_ui_flags_v1), синхронно до первого кадра; свежее значение придёт событием
-     client-shell:ui-flags — на него переприменяем тему. */
+     не перекрашивает. PDEC-040 батч C: под redesign_s4 светлая пинится и на старых
+     страницах Лёд/каток/«Я» — v2-экраны в её мире только светлые. Признак читаем
+     из того же кэша флагов, что и оболочка (cw_ui_flags_v1), синхронно до первого
+     кадра; свежее значение придёт событием client-shell:ui-flags — на него
+     переприменяем тему. */
   var REDESIGN_BG = '#f5f6f8';
+  /* PDEC-040 батч C (рескин): под s4 светлые и старые страницы, которые
+     .gv2skin перекрашивает под v2 — v2-экраны тёмной темы не имеют. */
+  var REDESIGN_S4_PAGES = { ice: 1, arena: 1, 'client-me': 1, 'client-home': 1 };
+  function themePageKey() {
+    var p = (window.location && window.location.pathname || '').replace(/\/$/, '');
+    return (p.split('/').pop() || '').replace(/\.html$/, '');
+  }
   function redesignPinned() {
     try {
       var tg = getTg();
@@ -40,7 +49,9 @@
       var uid = u && u.id != null ? String(u.id) : '';
       if (!uid) return false;
       var c = JSON.parse(window.localStorage.getItem('cw_ui_flags_v1') || 'null');
-      return !!(c && String(c.u) === uid && c.redesign_s1 === true);
+      if (!c || String(c.u) !== uid) return false;
+      if (c.redesign_s1 === true) return true;
+      return !!(c.redesign_s4 === true && REDESIGN_S4_PAGES[themePageKey()]);
     } catch (e) {
       return false;
     }

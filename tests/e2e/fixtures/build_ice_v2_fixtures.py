@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from src.application.ice_schedule_v2 import shape_schedule
+from src.application.ice_schedule_v2 import WINDOW_DAYS, shape_schedule
 
 UTC = timezone.utc
 MINSK = ZoneInfo("Europe/Minsk")
@@ -39,7 +39,7 @@ PINSK_ARENAS = [
 ARENA_NAME = {a["id"]: a["name"] for a in MINSK_ARENAS + PINSK_ARENAS}
 
 
-def row(sid, arena, start, end, *, day=TODAY, kind="public_skate"):
+def row(sid, arena, start, end, *, day=TODAY, kind="public_skate", hall=None):
     """start/end — 'HH:MM' местные (Минск UTC+3); utc вычисляются из них."""
     def utc_of(hhmm):
         h, m = map(int, hhmm.split(":"))
@@ -50,7 +50,7 @@ def row(sid, arena, start, end, *, day=TODAY, kind="public_skate"):
         "starts_at_utc": utc_of(start), "ends_at_utc": utc_of(end),
         "starts_at_local": start, "ends_at_local": end,
         "local_date": day, "price_adult_minor": 1200, "price_rental_minor": 800,
-        "currency_code": "BYN",
+        "currency_code": "BYN", "hall": hall,
     }
 
 
@@ -98,6 +98,15 @@ PINSK_ROWS = [
     row(506, 1, "10:00", "11:30", day=SAT),
 ]
 
+# B4: «семейное» и зал — Чижовка с двумя площадками + семейный сеанс на ней.
+HALL_ROWS = [
+    row(401, 38, "18:30", "20:00"),
+    row(413, 115, "19:45", "21:00", kind="family_skate", hall="Конькобежная дорожка"),
+    row(414, 115, "21:00", "22:15", hall="Хоккейная площадка"),
+    row(403, 11, "20:00", "21:30", hall="Основной лёд"),
+    row(501, 38, "08:00", "09:30", day=TOM),
+]
+
 MINSK_CITY = {"id": 1, "name": "Минск"}
 PINSK_CITY = {"id": 5, "name": "Пинск"}
 AT = lambda h, m: datetime(TODAY.year, TODAY.month, TODAY.day, h, m, tzinfo=MINSK).astimezone(UTC)
@@ -108,13 +117,19 @@ VARIANTS = {
     "late":           dict(rows=LATE_ROWS, arenas=MINSK_ARENAS, city=MINSK_CITY, now=AT(23, 10)),
     "tomorrow-empty": dict(rows=TM_EMPTY_ROWS, arenas=MINSK_ARENAS, city=MINSK_CITY, now=AT(19, 30)),
     "onerink":        dict(rows=PINSK_ROWS, arenas=PINSK_ARENAS, city=PINSK_CITY, now=AT(19, 30)),
+    "halls":          dict(rows=HALL_ROWS, arenas=MINSK_ARENAS, city=MINSK_CITY, now=AT(19, 30)),
 }
+
+# B3: чипы дней — today/tomorrow по имени, дальше ISO-даты; weekend группой.
+DAYS = ("today", "tomorrow") + tuple(
+    (TODAY + timedelta(days=i)).isoformat() for i in range(2, WINDOW_DAYS)
+) + ("weekend", "week")
 
 
 def main() -> None:
     out = {}
     for name, v in VARIANTS.items():
-        for day in ("today", "tomorrow", "weekend", "week"):
+        for day in DAYS:
             for kind in ("skate", "ohm", "figure"):
                 payload = shape_schedule(
                     v["rows"], v["arenas"], city=v["city"],

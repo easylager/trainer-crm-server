@@ -322,6 +322,16 @@ _ICE_V2_PATH = _WEBAPP_DIR / "client-ice-v2.html"
 
 # TASK-449: параметры, которые «Лёд» v2 понимает сам; всё остальное — старая вкладка.
 _ICE_V2_PARAMS = {"city_id", "day", "kind", "when", "intent", "init_data", "tgWebAppStartParam"}
+# B5: диспатч по значению — не только по имени параметра. Линзы расписания (intent/kind)
+# и окна (when) у v2 конечные; всё чужое (intent=service, when=today_evening и т.п.) —
+# старый каталог, там эти значения живут («Заточка», фильтр «вечером»).
+_ICE_V2_LENS = {"skate", "ohm", "figure"}
+_ICE_V2_WHEN = {"today", "tomorrow", "weekend", "week", "any"}
+
+
+def _ice_v2_day_key(value: str) -> bool:
+    """ISO-дата ``YYYY-MM-DD`` — допустимый ключ дня у «Лёд» v2."""
+    return len(value) == 10 and value[4] == "-" and value[7] == "-"
 
 
 def _ice_v2_page(request: Request, principal: MiniAppPrincipal | None) -> HTMLResponse | None:
@@ -333,6 +343,16 @@ def _ice_v2_page(request: Request, principal: MiniAppPrincipal | None) -> HTMLRe
     if "map" in request.query_params:
         return None
     if any(name not in _ICE_V2_PARAMS for name in request.query_params):
+        return None
+    for name in ("intent", "kind"):
+        value = (request.query_params.get(name) or "").strip().lower()
+        if value and value not in _ICE_V2_LENS:
+            return None
+    when = (request.query_params.get("when") or "").strip().lower()
+    if when and when not in _ICE_V2_WHEN and not _ice_v2_day_key(when):
+        return None
+    day = (request.query_params.get("day") or "").strip().lower()
+    if day and day not in _ICE_V2_WHEN - {"any"} and not _ice_v2_day_key(day):
         return None
     path = _ICE_V2_PATH
     if not path.is_file():
@@ -394,6 +414,40 @@ def webapp_ice_tab_page(
         media_type="text/html",
         headers=_WEBAPP_BFCACHE_HTML_HEADERS,
     )
+
+
+_SERVICE_V2_PATH = _WEBAPP_DIR / "client-service.html"
+
+
+@app.get("/webapp/service")
+def webapp_service_page(
+    request: Request,
+    principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
+):
+    """Фикс-пак B5: «Сервис» — заточка и магазины города (редизайн-поверхность s4).
+
+    Без флага — редирект на старый каталог с тем же фильтром
+    (``intent=service`` заточка, ``venue=shop`` магазины).
+    """
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
+    if (
+        principal is not None
+        and redesign_s4_enabled(client_catalog_telegram_key(principal), get_settings())
+        and _SERVICE_V2_PATH.is_file()
+    ):
+        page = stamp_html(
+            _SERVICE_V2_PATH.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION)
+        )
+        return HTMLResponse(content=page, headers=_WEBAPP_NO_CACHE_HEADERS)
+    q = request.query_params
+    tab = (q.get("tab") or q.get("intent") or q.get("venue") or "service").strip().lower()
+    target = "/webapp/ice"
+    parts = []
+    if q.get("city_id"):
+        parts.append("city_id=" + str(q["city_id"]).strip())
+    parts.append("venue=shop" if tab == "shop" else "intent=service")
+    return RedirectResponse(url=target + "?" + "&".join(parts), status_code=307)
 
 
 @app.get("/webapp/trainer-bookings")
@@ -2516,6 +2570,71 @@ def webapp_badge_award_css(request: Request):
     return FileResponse(
         path,
         media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/badge-collection.js")
+def webapp_badge_collection_js(request: Request):
+    """PDEC-040 батч C: полка значков + коллекция (общая «Я» v2/старой). Use ``?v=…``."""
+    path = _WEBAPP_DIR / "badge-collection.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/badge-collection.css")
+def webapp_badge_collection_css(request: Request):
+    """PDEC-040 батч C: стили полки/коллекции значков. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "badge-collection.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/gv2-skin.css")
+def webapp_gv2_skin_css(request: Request):
+    """PDEC-040 батч C (рескин): старые страницы под языком v2 (redesign_s4). Use ``?v=…``."""
+    path = _WEBAPP_DIR / "gv2-skin.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/service-v2.css")
+def webapp_service_v2_css(request: Request):
+    """Фикс-пак B5: стили страницы «Сервис» (client-service.html, redesign_s4). Use ``?v=…``."""
+    path = _WEBAPP_DIR / "service-v2.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/service-v2.js")
+def webapp_service_v2_js(request: Request):
+    """Фикс-пак B5: логика страницы «Сервис» (client-service.html, redesign_s4). Use ``?v=…``."""
+    path = _WEBAPP_DIR / "service-v2.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
 

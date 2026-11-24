@@ -394,7 +394,8 @@ async def set_load(
     level: int,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Оценка «сколько народу» — один раз, и только пока сеанс идёт (+40 мин запас)."""
+    """Оценка «сколько народу»: пока сеанс идёт — можно переписать (ошибся тапом/передумал);
+    после конца — только первую (+40 мин запас на запоздалый тап, повтор — already_set)."""
     now = now or datetime.now(timezone.utc)
     if int(level) not in (1, 2, 3):
         raise CheckinError("bad_level")
@@ -416,10 +417,11 @@ async def set_load(
     )
     if row is None:
         raise CheckinError("not_found")
-    if row["load_level"] is not None:
-        raise CheckinError("already_set")
     # Оценку дают про «сейчас»: после конца сеанса она ничего не говорит. Запас — 40 минут,
-    # окно живой загрузки: чуть опоздал с тапом — всё равно учтём.
+    # окно живой загрузки: чуть опоздал с тапом — всё равно учтём, но только первую оценку.
+    ended = now > row["ends_at_utc"]
+    if ended and row["load_level"] is not None:
+        raise CheckinError("already_set")
     if now > row["ends_at_utc"] + LIVE_WINDOW:
         raise CheckinError("not_ongoing")
     await session.execute(

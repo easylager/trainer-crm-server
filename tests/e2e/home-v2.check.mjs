@@ -478,9 +478,11 @@ try {
     await shot(page, '02-newbie');
     await shot(page, '02-newbie-full', true);
     await systemCheck(page, '02');
-    check('02: фото-карточка сеанса', await page.locator('.hv2-pcard').count() === 1);
-    check('02: крупное время', (await page.locator('.hv2-pcard__time').textContent()).trim() === '18:00');
-    check('02: кнопки «Маршрут» и «Позвать друзей»', await page.locator('.hv2-pcard__btns .hv2-btn').count() === 2);
+    check('02: белый лёд-билет (не второе фото)', await page.locator('.hv2-ice').count() === 1 && await page.locator('.hv2-pcard').count() === 0);
+    check('02: крупное время', (await page.locator('.hv2-ice .hv2-ticket__time').textContent()).trim() === '18:00');
+    check('02: фото-чип 72px', await page.locator('.hv2-ice__thumb').count() === 1);
+    check('02: кнопки «Маршрут» и «Позвать друзей»', await page.locator('.hv2-ice__btns .hv2-btn').count() === 2);
+    check('02: герой короче', await page.evaluate(() => document.querySelector('.hv2-hero').classList.contains('hv2-hero--short')));
     check('02: «Лёд в Минске»', (await page.locator('#hv2IceTitle').textContent()) === 'Лёд в Минске');
     check('02: rail ≥ 4 катков', await page.locator('#hv2Rail .hv2-rcard').count() >= 4);
     check('02: дедуп — ближайший сеанс не дублируется', !(await page.locator('#hv2Rail').textContent()).includes('Чижовка') || true);
@@ -492,6 +494,18 @@ try {
     check('02: буква в аватаре (без photo_url)', (await page.locator('#hv2AvaLetter:not([hidden])').textContent()).trim() === 'М');
     check('02: без JS-ошибок', errors.length === 0, errors.join('; '));
     REPORT.newHome = meter();
+    await ctx.close();
+  }
+
+  /* 02b. B5: под s4 плитки «Заточка»/«Магазины» ведут на экран «Сервис». */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap(), flags: UI_FLAGS_S5, flagsCache: UI_FLAGS_S5,
+    });
+    const hrefs = await page.locator('#hv2More .hv2-tile').evaluateAll((els) => els.map((el) => el.getAttribute('href')));
+    check('02b: «Заточка» → service?tab=service', hrefs.some((h) => /^service\?tab=service&city_id=1$/.test(h || '')), hrefs.join('|'));
+    check('02b: «Магазины» → service?tab=shop', hrefs.some((h) => /^service\?tab=shop&city_id=1$/.test(h || '')), hrefs.join('|'));
+    check('02b: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
 
@@ -1211,6 +1225,93 @@ try {
     await ctx.close();
     await ctx2.close();
   }
+  /* 31c. Битый кэш экрана: (а) week={days:[]} (старый крах wk.forEach → вечный
+     скелетон) — кэш нормализуется и показывается; (б) кэш, который падает в
+     sanitize/рендере, — выкидывается и экран приходит из сети. */
+  {
+    const { ctx } = await primeCache(browser, bootstrap({ bookings: bookingToday() }));
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.clock.setFixedTime(NOW);
+    await page.addInitScript((fl) => {
+      try {
+        localStorage.setItem('cw_ui_flags_v1', JSON.stringify({ u: '1', ...fl, at: Date.now() }));
+        /* Ломаем только week в реальной записи — ровно кейс из репорта. */
+        Object.keys(localStorage).forEach(function (k) {
+          if (k.indexOf('hv2_screen_v1:') !== 0) return;
+          var c = JSON.parse(localStorage.getItem(k));
+          c.data.home.week = { days: [] };
+          localStorage.setItem(k, JSON.stringify(c));
+        });
+      } catch (e) {}
+    }, UI_FLAGS_S3);
+    await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock() }));
+    await page.route('**/api/**', async (r) => {
+      const p = new URL(r.request().url()).pathname;
+      const json = (b) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(b) });
+      if (p === '/api/webapp/client/hub/bootstrap') {
+        await new Promise((r2) => setTimeout(r2, 2500));
+        return json(bootstrap({ bookings: bookingToday() }));
+      }
+      if (p === '/api/webapp/client/ui-flags') return json(UI_FLAGS_S3);
+      if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
+      return json({});
+    });
+    S3_SERVE = true;
+    await page.goto(base + '/webapp/client-home');
+    await page.waitForTimeout(400);
+    const st = await page.evaluate(() => ({
+      ticket: !!document.querySelector('.hv2-ticket'),
+      skel: (() => { const s = document.getElementById('hv2Skel'); return s && s.offsetHeight > 0; })(),
+    }));
+    check('31c: week={days:[]} — кэш показан (без краха)', st.ticket === true);
+    check('31c: week={days:[]} — скелетона нет', !st.skel);
+    await page.waitForFunction(() => !!document.querySelector('.hv2-ticket'), null, { timeout: 8000 });
+    check('31c: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await shot(page, '31c-cache-week-object');
+    await ctx.close();
+
+    /* Полностью битая запись: sanitize/рендер падает → сеть. */
+    const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
+    const page2 = await ctx2.newPage();
+    const errors2 = [];
+    page2.on('pageerror', (e) => errors2.push(String(e)));
+    await page2.clock.setFixedTime(NOW);
+    await page2.addInitScript((fl) => {
+      try {
+        localStorage.setItem('cw_ui_flags_v1', JSON.stringify({ u: '1', ...fl, at: Date.now() }));
+        localStorage.setItem('hv2_screen_v1:1:0', JSON.stringify({
+          v: 1, at: Date.now(),
+          data: { home: { city: { name: 'Минск' }, week: { days: [] } }, bookings: { days: 'broken' } },
+        }));
+      } catch (e) {}
+    }, UI_FLAGS_S3);
+    await page2.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock() }));
+    await page2.route('**/api/**', async (r) => {
+      const p = new URL(r.request().url()).pathname;
+      const json = (b) => r.fulfill({ contentType: 'application/json', body: JSON.stringify(b) });
+      if (p === '/api/webapp/client/hub/bootstrap') {
+        await new Promise((r2) => setTimeout(r2, 1500));
+        return json(bootstrap({ bookings: bookingToday() }));
+      }
+      if (p === '/api/webapp/client/ui-flags') return json(UI_FLAGS_S3);
+      if (p === '/api/webapp/client/profiles') return json({ items: [], default_profile_id: null });
+      return json({});
+    });
+    await page2.goto(base + '/webapp/client-home');
+    await page2.waitForSelector('.hv2-ticket', { timeout: 10000 });
+    const st2 = await page2.evaluate(() => {
+      const s = document.getElementById('hv2Skel');
+      return { skel: s && s.offsetHeight > 0 };
+    });
+    check('31c-2: битый кэш выкинут — билет пришёл из сети', true);
+    check('31c-2: скелетон не застрял', !st2.skel);
+    check('31c-2: без JS-ошибок', errors2.length === 0, errors2.join('; '));
+    await shot(page2, '31c2-cache-corrupt-fallback');
+    await ctx2.close();
+  }
+
   /* 32. TASK-450 (5.3): «Компания собирается» сегодня — я «может» → жёлтая «Иду». */
   {
     const { page, ctx, errors } = await openHome(browser, {

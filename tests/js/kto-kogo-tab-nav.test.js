@@ -228,7 +228,9 @@ describe('S2: бар оболочки на странице игры', () => {
   it('классы вкладки ставятся только при флаге и пересчитываются при смене флага', () => {
     assert.match(js, /classList\.toggle\('kk-in-tab', on\)/);
     assert.match(js, /classList\.toggle\('tg-dark', on && b\.classList\.contains\('kk-dark'\)\)/);
-    assert.match(js, /'client-shell:ui-flags', function \(\) \{ syncTabMode\(\); syncBack\(\); \}/);
+    /* PDEC-040 батч C: при смене флага переприменяем тему — пин светлой под s1
+       живёт в kto-kogo.js (у игры свой applyTheme, не общий client-mini-app-theme). */
+    assert.match(js, /'client-shell:ui-flags', function \(\) \{ applyTheme\(\); syncTabMode\(\); syncBack\(\); \}/);
   });
   it('правила вкладки в css — только за body.kk-in-tab; шторки выше бара (9000)', () => {
     const tail = css.slice(css.indexOf('/* ─── TASK-374: игра во вкладке')).replace(/\/\*[\s\S]*?\*\//g, '');

@@ -81,7 +81,8 @@ SELECT
     s.local_date,
     s.price_adult_minor,
     s.price_rental_minor,
-    s.currency_code
+    s.currency_code,
+    s.hall
 {ICE_CITY_DAY_FROM_SQL}
 WHERE a.city_id = :cid
   AND s.local_date >= :d_from AND s.local_date <= :d_to
@@ -218,13 +219,18 @@ def _price_line(row: Mapping[str, Any]) -> str:
     return " · ".join(parts)
 
 
-def _row(row: Mapping[str, Any], photo: Mapping[str, Any], *, now_local: datetime) -> dict[str, Any]:
+def _row(
+    row: Mapping[str, Any], photo: Mapping[str, Any], *, now_local: datetime, multi_hall: bool = False
+) -> dict[str, Any]:
     ends = row.get("ends_at_utc")
     minutes_left = None
     if isinstance(ends, datetime):
         end_aware = ends if ends.tzinfo else ends.replace(tzinfo=timezone.utc)
         minutes_left = max(0, int((end_aware - now_local).total_seconds() // 60))
-    group = _kind_group(str(row.get("kind") or "")) or "skate"
+    raw_kind = str(row.get("kind") or "")
+    group = _kind_group(raw_kind) or "skate"
+    family = raw_kind == "family_skate"
+    hall = str(row.get("hall") or "").strip() or None
     return {
         "session_id": int(row["session_id"]),
         "arena_id": int(row["arena_id"]),
@@ -235,6 +241,11 @@ def _row(row: Mapping[str, Any], photo: Mapping[str, Any], *, now_local: datetim
         "minutes_left": minutes_left,
         "price_line": _price_line(row),
         "kind": group,
+        # B4: «семейное» + зал — зал показываем, когда у катка >1 зала на неделе
+        # или сеанс семейный (там зал критичен: «семейный лёд» на хоккейной площадке).
+        "family": family,
+        "hall": hall,
+        "hall_shown": bool(hall) and (multi_hall or family),
         "href": f"arena?ref={int(row['arena_id'])}&s={int(row['session_id'])}",
     }
 
@@ -291,14 +302,29 @@ def shape_schedule(
     by_all_date = by_date(rows)
 
     wknd = set(weekend_days(today))
-    week_n = len(kind_rows)
-    days_meta = [
-        ("today", "Сегодня", len(by_kind_date.get(today, []))),
-        ("tomorrow", "Завтра", len(by_kind_date.get(today + timedelta(days=1), []))),
-        ("weekend", "Выходные", sum(len(by_kind_date.get(d, [])) for d in wknd)),
-        ("week", "Неделя", week_n),
-    ]
-    days_out = [{"key": k, "label": lb, "count": n} for k, lb, n in days_meta]
+    # B3: пикер — 7 дней недели по датам («Сегодня»/«Завтра» именами, дальше «Ср 26»),
+    # плюс отдельный чип «Выходные» после ленты (группировка сб+вс).
+    days_out: list[dict[str, Any]] = []
+    for i in range(WINDOW_DAYS):
+        d = today + timedelta(days=i)
+        if i == 0:
+            key, label = "today", "Сегодня"
+        elif i == 1:
+            key, label = "tomorrow", "Завтра"
+        else:
+            key = d.isoformat()
+            label = f"{_WEEKDAYS_SHORT[d.weekday()].capitalize()} {d.day}"
+        days_out.append({"key": key, "label": label, "count": len(by_kind_date.get(d, []))})
+    days_out.append(
+        {"key": "weekend", "label": "Выходные", "count": sum(len(by_kind_date.get(d, [])) for d in wknd)}
+    )
+
+    # B4: у катка больше одного зала в окне недели → зал показываем в подписи строки.
+    halls_by_arena: dict[int, set[str]] = {}
+    for r in rows:
+        h = str(r.get("hall") or "").strip()
+        if h:
+            halls_by_arena.setdefault(int(r["arena_id"]), set()).add(h)
 
     sel_rows_all = [r for r in rows if _row_date(r) in sel_set]
     kind_week_counts = {k: sum(1 for r in rows if _kind_group(str(r.get("kind") or "")) == k) for k in KIND_GROUPS}
@@ -318,7 +344,8 @@ def shape_schedule(
     photos_fallback = {"thumb": None, "card": None}
 
     def mk(r: Mapping[str, Any]) -> dict[str, Any]:
-        return _row(r, photos.get(int(r["arena_id"]), photos_fallback), now_local=now_local)
+        multi = len(halls_by_arena.get(int(r["arena_id"]), ())) > 1
+        return _row(r, photos.get(int(r["arena_id"]), photos_fallback), now_local=now_local, multi_hall=multi)
 
     out: dict[str, Any] = {
         "city": {
@@ -437,6 +464,13 @@ def shape_schedule(
     n_sel = len(sel_rows)
     arenas_today = len({int(r["arena_id"]) for r in sel_rows})
     if day == "today":
+        all_today = len(by_all_date.get(today, []))
+        rinks_all = len({int(r["arena_id"]) for r in by_all_date.get(today, [])})
+        # Короткий заголовок: один каток в городе, либо все сегодняшние сеансы и так
+        # на одном катке и фильтр ничего не отсекает — «из N · на одном катке» не
+        # добавляет фактов, Dela-счётчик съедает треть экрана зря.
+        # Полный ответ — только когда информативен (rinks>1 или фильтр реально режет).
+        compact = bool(sel_rows) and n_sel == all_today and (out["one_rink"] or arenas_today == 1)
         if not sel_rows:
             if tomorrow_n:
                 first_t = _hhmm(tomorrow_rows[0].get("starts_at_local"))
@@ -446,10 +480,32 @@ def shape_schedule(
             else:
                 sub = "новых расписаний пока нет"
             out["title"] = {"main": "Сегодня лёд закончился", "sub_parts": [{"text": sub}]}
+        elif compact:
+            rink_name = (
+                (out["rink"] or {}).get("name")
+                or format_public_name(str(sel_rows[0].get("arena_name") or ""))
+            )
+            if out["ongoing"]:
+                live_n = len(out["ongoing"])
+                left = max(int(r.get("minutes_left") or 0) for r in out["ongoing"])
+                main = "Идёт сеанс" if live_n == 1 else f"{live_n} {plural_ru(live_n, 'сеанс', 'сеанса', 'сеансов')} идут"
+                sub_txt = f"ещё {left} мин"
+                if not out["one_rink"]:
+                    sub_txt += f" · {rink_name}"
+                out["title"] = {"main": main, "sub_parts": [{"text": sub_txt, "tone": "live"}]}
+            else:
+                first = sel_rows[0]
+                delta_min = 0
+                start_utc = _aware(first.get("starts_at_utc"))
+                if start_utc:
+                    delta_min = max(0, int((start_utc - now).total_seconds() // 60))
+                nearest = f"ближайший в {_hhmm(first.get('starts_at_local'))}, через {_human_delta(delta_min)}"
+                out["title"] = {
+                    "main": f"Сегодня на {rink_name}",
+                    "sub_parts": [{"text": nearest, "tone": "live"}] if delta_min < 60 else [{"text": nearest}],
+                }
         elif out["ongoing"]:
-            all_today = len(by_all_date.get(today, []))
             live_n = len(out["ongoing"])
-            rinks_all = len({int(r["arena_id"]) for r in by_all_date.get(today, [])})
             out["title"] = {
                 "main": _sessions_count_title(n_sel, kind),
                 "sub_parts": [
@@ -468,7 +524,6 @@ def shape_schedule(
             if delta_min >= NIGHT_MIN:
                 sub_parts = [{"text": f"сегодня на {rinks_txt} · {nearest}"}]
             else:
-                all_today = len(by_all_date.get(today, []))
                 sub_parts = [
                     {"text": f"из {all_today} сегодня · на {rinks_txt} · "},
                     {"text": nearest, "tone": "live"},

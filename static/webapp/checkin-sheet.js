@@ -47,7 +47,7 @@
     return out;
   }
   function errText(code) {
-    if (code === 'not_ongoing') return 'Сеанс уже закончился';
+    if (code === 'not_ongoing' || code === 'already_set') return 'Сеанс уже закончился';
     if (code === 'daily_limit') return 'Сегодня уже три отметки — хватит на сегодня';
     return 'Не получилось отметиться. Попробуйте ещё раз';
   }
@@ -128,10 +128,8 @@
   }
 
   function pickLevel(level) {
-    if (!state || !state.checkin_id || state.load_level) {
-      if (state && state.load_level) return; // оценка ставится один раз
-      return;
-    }
+    /* Ревью фикс-пак: пока сеанс идёт, оценку можно переставить — тот же тап = no-op. */
+    if (!state || !state.checkin_id || state.load_level === level) return;
     var prev = state.load_level;
     state.load_level = level;
     sheet.querySelectorAll('.cis__lvl').forEach(function (b) {

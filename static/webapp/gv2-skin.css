@@ -1,0 +1,222 @@
+/*
+ * PDEC-040 батч C (уточнение владельца): рескин «отстающих» страниц под язык v2.
+ *
+ * mini-app-client-shell.js при redesign_s4 вешает класс .gv2skin на <html> и
+ * <body> страниц client-home / client-me / arena / ice (см. GV2_SKIN_PAGES) и
+ * подключает этот файл. DOM-дерево, блоки, порядок и логика не трогаются —
+ * только тема и формы: старые стили построены на токенах --app-* / --glide-* /
+ * --tg-theme-* и на сайтовых --g-*, поэтому здесь они перенаправлены на палитру
+ * v2 (home-v2.css .hv2 / ice-v2.css .iv2): ink #0b1620, muted #6b7a86,
+ * фон #f5f6f8, поверхность #fff, тил #0a6f73, жёлтый акцент #ffd241,
+ * Golos Text. Скошенные углы «ленты» (--app-ribbon-clip-*) выключены, подъём
+ * карточки — v2-тенью.
+ *
+ * Прецедент — glide-skin.css (старые экраны на языке хаба): тот же приём,
+ * только палитра v2, а не --g-*.
+ * Без флага файла и класса нет — страницы выглядят ровно как раньше.
+ */
+
+/* ── Палитра v2 ─────────────────────────────────────────────────── */
+.gv2skin {
+  --gv2-ink: #0b1620;
+  --gv2-muted: #6b7a86;
+  --gv2-line: #e7ebee;
+  --gv2-bg: #f5f6f8;
+  --gv2-surface: #ffffff;
+  --gv2-soft: #eef1f3;
+  --gv2-teal: #0a6f73;
+  --gv2-teal-ink: #0a6f73;
+  --gv2-teal-wash: rgba(10, 111, 115, .10);
+  --gv2-yellow: #ffd241;
+  --gv2-on-yellow: #0b1620;
+  --gv2-chip-yellow-bg: #fff4cc;
+  --gv2-chip-yellow-text: #8a6d00;
+  --gv2-green: #22b35e;
+  --gv2-shadow: 0 8px 24px rgba(11, 22, 32, .08);
+  --gv2-shadow-soft: 0 8px 24px rgba(11, 22, 32, .06);
+  --gv2-r-sm: 14px;
+  --gv2-r-md: 18px;
+  --gv2-r-card: 22px;
+  --gv2-r-big: 26px;
+  --gv2-r-btn: 14px;
+}
+
+/* ── Токены: старые пространства имён → значения v2 ─────────────── */
+body.gv2skin {
+  /* Скосы «ленты» выключены — всё скругляется, как в v2. */
+  --app-cut-sm: 0px; --app-cut-md: 0px; --app-cut-lg: 0px;
+  --app-ribbon-cut: 0px; --app-ribbon-cut-sm: 0px;
+  --app-ribbon-clip-container: none; --app-ribbon-clip-btn: none;
+  --app-ribbon-clip-sm: none; --app-ribbon-clip-avatar: none;
+
+  /* Холст и поверхности — плоские, без градиентов «ленты». */
+  --app-bg: var(--gv2-bg); --app-canvas-bg: var(--gv2-bg);
+  --app-brand-root-bg: var(--gv2-bg); --app-brand-surface: var(--gv2-surface);
+  --glide-bg: var(--gv2-bg); --glide-paper: var(--gv2-bg);
+  --app-surface: var(--gv2-surface); --glide-surface: var(--gv2-surface); --glide-card: var(--gv2-surface);
+  --app-card-bg: var(--gv2-surface); --app-card-bg-solid: var(--gv2-surface); --app-surface-container: var(--gv2-surface);
+  --app-surface-row-top: var(--gv2-surface); --app-surface-row-bot: var(--gv2-surface);
+  --app-surface-card-top: var(--gv2-surface); --app-surface-card-bot: var(--gv2-surface);
+  --app-surface-header-top: transparent; --app-surface-header-bot: transparent;
+  --app-float-bg: var(--gv2-surface);
+
+  /* Линии и тени: карточку отделяет мягкая v2-тень, рамки — волосяные. */
+  --glide-line: var(--gv2-line); --glide-line-soft: var(--gv2-line); --glide-line-strong: var(--gv2-line);
+  --app-card-line: transparent; --app-hairline: var(--gv2-line);
+  --app-chip-line: transparent; --app-float-line: transparent;
+  --app-card-shadow: var(--gv2-shadow); --glide-shadow-card: var(--gv2-shadow); --app-lift: none;
+  --app-btn-shadow-cta: none; --app-btn-shadow-surface: none;
+  --glide-shadow-cta: none; --app-cta-glow: none; --app-cta-inset: none;
+
+  /* Радиусы — шкала v2. */
+  --app-radius-xs: 10px; --app-radius-sm: 14px; --app-radius-md: 18px;
+  --app-radius-lg: 22px; --app-radius-xl: 26px; --app-radius-pill: 999px;
+  --app-btn-radius: var(--gv2-r-btn);
+
+  /* Текст и акцент: тил глубже (v2), текст на заливке — белый. */
+  --app-font-sans: var(--g-font);
+  --glide-text: var(--gv2-ink); --glide-ink: var(--gv2-ink); --app-text: var(--gv2-ink);
+  --glide-hint: var(--gv2-muted); --app-muted: var(--gv2-muted);
+  --glide-brand: var(--gv2-teal); --glide-brand-pressed: var(--gv2-teal); --glide-ink-teal: var(--gv2-teal-ink);
+  --glide-on-fill: #ffffff; --glide-deep: var(--gv2-ink);
+  --glide-brand-wash: var(--gv2-teal-wash);
+  --app-cta-fill: var(--gv2-teal); --app-cta-text: #ffffff;
+  --app-accent: var(--gv2-teal); --app-accent-text: #ffffff;
+  --accent-rgb: 10, 111, 115; --accent-rgb-alt: 10, 111, 115;
+  --app-chip-bg: var(--gv2-soft); --app-chip-text: var(--gv2-ink);
+  --app-venue-ice: var(--gv2-teal); --app-venue-trainer: var(--gv2-teal);
+
+  /* Telegram-токены, на которых построены старые экраны. */
+  --tg-theme-bg-color: var(--gv2-bg); --tg-theme-secondary-bg-color: var(--gv2-surface);
+  --tg-theme-text-color: var(--gv2-ink); --tg-theme-hint-color: var(--gv2-muted);
+  --tg-theme-button-color: var(--gv2-teal); --tg-theme-button-text-color: #ffffff;
+  --tg-theme-link-color: var(--gv2-teal-ink);
+
+  /*
+   * Сайтовые --g-* подтягиваем к тем же значениям (hub-home / arena-hub /
+   * ice-hub / client-me построены на них). Заодно иммунитет: если tg-dark всё же
+   * выставился (пин s4 обычно его снимает), светлые значения ниже позже в
+   * каскаде и побеждают тёмный блок из glide-tokens.css.
+   */
+  --g-bg: var(--gv2-bg); --g-surface: var(--gv2-surface);
+  --g-ink: var(--gv2-ink); --g-ink-2: #4a5f71; --g-muted: var(--gv2-muted);
+  --g-line: var(--gv2-line); --g-line-strong: #c9d5dc;
+  --g-accent: var(--gv2-teal); --g-accent-pressed: var(--gv2-teal);
+  --g-accent-ink: var(--gv2-teal-ink); --g-accent-wash: var(--gv2-teal-wash);
+  --g-on-accent: #ffffff;
+  --g-chip: var(--gv2-soft); --g-seg: var(--gv2-soft);
+  --g-shadow: var(--gv2-shadow-soft);
+  --g-dark: var(--gv2-ink); --g-dark-2: #1b2b38;
+  --g-quiet: #9aacb8;
+}
+
+/* Холст и базовая гарнитура — как у .hv2/.iv2: светлый фон, Golos Text. */
+html body.gv2skin, html.trainer-theme-dark body.gv2skin, html.trainer-theme-light body.gv2skin {
+  background: var(--gv2-bg) !important;
+  color: var(--gv2-ink);
+  font-family: var(--g-font);
+}
+
+/* ── Формы: клипы «ленты» и градиентные скосы снять с элементов ─── */
+body.gv2skin [class*='ribbon'], body.gv2skin .client-app-header,
+body.gv2skin .btn-app-back, body.gv2skin .btn-app-home,
+body.gv2skin .arena-btn, body.gv2skin .ice-chip, body.gv2skin .ice-seg button {
+  clip-path: none !important;
+}
+
+/* ── Кнопки ────────────────────────────────────────────────────── */
+/* Основное действие — жёлтое (v2-primary), вторичные — мягкие серые. */
+body.gv2skin .btn-primary,
+body.gv2skin .arena-btn--pri {
+  border: 0;
+  border-radius: var(--gv2-r-btn);
+  background: var(--gv2-yellow);
+  color: var(--gv2-on-yellow);
+  clip-path: none;
+  box-shadow: none;
+}
+body.gv2skin .btn-secondary,
+body.gv2skin .btn-soft,
+body.gv2skin .arena-btn:not(.arena-btn--pri) {
+  border: 0;
+  border-radius: var(--gv2-r-btn);
+  background: var(--gv2-soft);
+  color: var(--gv2-ink);
+  clip-path: none;
+  box-shadow: none;
+}
+body.gv2skin .btn-app-back, body.gv2skin .btn-app-home {
+  height: 40px; padding: 0 16px;
+  border: 0 !important; border-radius: 999px;
+  background: rgba(255, 255, 255, .92) !important; color: var(--gv2-ink) !important;
+  font: 600 14px/40px var(--g-font);
+  clip-path: none !important; box-shadow: none !important;
+}
+
+/* Выбранные чипы/сегменты — тил v2 с белым текстом (как вид-карточка «Массовое»). */
+body.gv2skin .ice-chip[aria-pressed='true'],
+body.gv2skin .ice-tool[aria-pressed='true'],
+body.gv2skin .filter-btn.active {
+  background: var(--gv2-teal) !important;
+  border-color: var(--gv2-teal) !important;
+  color: #fff !important;
+}
+
+/* ── Заголовки секций: v2 — Golos 700, Dela только герой и крупное время ── */
+body.gv2skin .hs__title,
+body.gv2skin .hn__title,
+body.gv2skin .hn__head,
+body.gv2skin .hn__more-n,
+body.gv2skin.hh-body .me__head,
+body.gv2skin.hh-body .me__w-v,
+body.gv2skin.hh-body .me__when b,
+body.gv2skin.arena-hub .arena-h,
+body.gv2skin.arena-hub .arena-strip__day b,
+body.gv2skin.cm-body .cm-name,
+body.gv2skin.cm-body .cm-stat__n,
+body.gv2skin.cm-body .cm-avatar {
+  font-family: var(--g-font);
+  font-weight: 700;
+  letter-spacing: normal;
+}
+
+/* Заголовки секций по размеру — как .hv2-sec__title (22/700) и .mv2-sec__h. */
+body.gv2skin .hs__title,
+body.gv2skin.arena-hub .arena-h {
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--gv2-ink);
+}
+
+/* ── Карточки: белые, радиус 22, мягкая v2-тень ─────────────────── */
+body.gv2skin .hub-booking-row,
+body.gv2skin .hub-ice-card,
+body.gv2skin .hub-explore-tile,
+body.gv2skin .me,
+body.gv2skin .hw,
+body.gv2skin .hn__card,
+body.gv2skin .st-widget,
+body.gv2skin .ice-acard,
+body.gv2skin.arena-hub .arena-ticket,
+body.gv2skin.arena-hub .arena-none,
+body.gv2skin .arena-svc {
+  border: 0;
+  border-radius: var(--gv2-r-card);
+  background: var(--gv2-surface);
+  box-shadow: var(--gv2-shadow);
+}
+body.gv2skin .cm-card {
+  border-radius: var(--gv2-r-card);
+  box-shadow: var(--gv2-shadow);
+}
+
+/* Поля ввода — мягкая заливка v2, фокус — тиловое кольцо. */
+body.gv2skin input[type='text'], body.gv2skin input[type='tel'], body.gv2skin input[type='email'],
+body.gv2skin input[type='number'], body.gv2skin input[type='date'], body.gv2skin input[type='search'],
+body.gv2skin select, body.gv2skin textarea {
+  border: 0; border-radius: var(--gv2-r-btn); background: var(--gv2-soft);
+  color: var(--gv2-ink); font-family: var(--g-font); box-shadow: none;
+}
+body.gv2skin input:focus, body.gv2skin select:focus, body.gv2skin textarea:focus {
+  outline: none; box-shadow: 0 0 0 2px var(--gv2-teal);
+}

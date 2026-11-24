@@ -26,7 +26,7 @@ ARENAS = [
 
 
 def row(sid, start_local, end_local, *, day=TODAY, arena=11, kind="public_skate",
-        start_utc=None, end_utc=None, adult=1200, rental=800):
+        start_utc=None, end_utc=None, adult=1200, rental=800, hall=None):
     """start_local/end_local — 'HH:MM' местные; utc — реальные datetime (Минск = UTC+3)."""
     if start_utc is None:
         h, m = map(int, start_local.split(":"))
@@ -41,7 +41,7 @@ def row(sid, start_local, end_local, *, day=TODAY, arena=11, kind="public_skate"
         "starts_at_utc": start_utc, "ends_at_utc": end_utc,
         "starts_at_local": start_local, "ends_at_local": end_local,
         "local_date": day, "price_adult_minor": adult, "price_rental_minor": rental,
-        "currency_code": "BYN",
+        "currency_code": "BYN", "hall": hall,
     }
 
 
@@ -154,12 +154,67 @@ def test_week_grouping_and_title():
     assert len(out["groups"]) == 3
     assert out["title"]["main"] == "3 сеанса массового"
     days = {d["key"]: d for d in out["days"]}
-    assert days["week"]["count"] == 3
+    # «Неделя» чипа больше нет (B3): 7 дней по датам + «Выходные»; диплинк week работает.
+    assert "week" not in days
+    assert days["tomorrow"]["count"] == 1
+    assert days[(TODAY + timedelta(days=2)).isoformat()]["count"] == 1
+    assert days[(TODAY + timedelta(days=3)).isoformat()]["count"] == 1
+
+
+def test_days_strip_seven_days_plus_weekend():
+    """B3: пикер — «Сегодня»/«Завтра» + 5 дат «Вт 24» + чип «Выходные» в конце."""
+    out = shape([row(1, "19:00", "20:00")])
+    days = out["days"]
+    assert len(days) == 8
+    assert [d["key"] for d in days] == (
+        ["today", "tomorrow"]
+        + [(TODAY + timedelta(days=i)).isoformat() for i in range(2, 7)]
+        + ["weekend"]
+    )
+    labels = [d["label"] for d in days]
+    assert labels[:2] == ["Сегодня", "Завтра"]
+    assert labels[2] == "Вт 24" and labels[6] == "Сб 28" and labels[-1] == "Выходные"
+    assert days[0]["count"] == 1 and days[-1]["count"] == 0
+
+
+def test_hall_shown_when_arena_has_multiple_halls():
+    """B4: >1 зала у катка за неделю → hall_shown у его строк; один зал — нет."""
+    rows = [
+        row(1, "19:00", "20:00", arena=11, hall="Большая арена"),
+        row(2, "20:00", "21:00", arena=11, hall="Малая арена"),
+        row(3, "19:30", "20:30", arena=12, hall="Основной лёд"),
+    ]
+    out = shape(rows)
+    by_id = {r["session_id"]: r for r in out["upcoming"]}
+    assert by_id[1]["hall"] == "Большая арена" and by_id[1]["hall_shown"] is True
+    assert by_id[2]["hall_shown"] is True
+    assert by_id[3]["hall"] == "Основной лёд" and by_id[3]["hall_shown"] is False
+
+
+def test_family_skate_label_and_hall():
+    """B4: family_skate — «семейное» и зал показываем даже при одном зале катка."""
+    rows = [
+        row(1, "19:00", "20:00", arena=11, kind="family_skate", hall="Хоккейная площадка"),
+        row(2, "19:30", "20:30", arena=12),
+    ]
+    out = shape(rows)
+    by_id = {r["session_id"]: r for r in out["upcoming"]}
+    assert by_id[1]["family"] is True and by_id[1]["hall_shown"] is True
+    assert by_id[1]["kind"] == "skate"  # family_skate остаётся «массовым»
+    assert by_id[2]["family"] is False and by_id[2]["hall_shown"] is False
 
 
 def test_title_plurals():
+    # Счётчик-герой остаётся, когда сеансы на разных катках (sub информативен).
     for n, word in ((1, "сеанс"), (3, "сеанса"), (16, "сеансов")):
-        rows = [row(100 + i, f"{(18 + i) % 24:02d}:00", f"{(19 + i) % 24:02d}:00", kind="figure_free") for i in range(n)]
+        rows = [
+            row(100 + i, f"{(18 + i) % 24:02d}:00", f"{(19 + i) % 24:02d}:00", arena=11 + i % 2, kind="figure_free")
+            for i in range(n)
+        ]
+        if n == 1:
+            # Один сеанс в дне всегда даёт короткий заголовок — добавляем лишний
+            # сеанс другого вида, чтобы фильтр реально резал (из 2 → 1).
+            rows.append(row(999, "23:00", "23:30", kind="public_skate"))
         out = shape(rows, kind="figure")
         assert out["title"]["main"] == f"{n} {word} фигурного"
 
@@ -198,19 +253,46 @@ def test_sub_nearest_soon_is_live():
     assert "из 2 сегодня" in parts[0]["text"]
 
 
-def test_sub_nearest_far_is_muted():
-    # До ближайшего 2ч20м: вся строка серая, но с «из N сегодня».
+def test_sub_nearest_far_compact_single_rink():
+    # Все сегодняшние сеансы и так на одном катке — «из 1 · на одном катке» не
+    # добавляет фактов: короткий заголовок без счётчика-героя.
     rows = [row(1, "21:00", "22:00", arena=11)]
     out = shape(rows)
+    assert out["title"]["main"] == "Сегодня на Каток на Немиге"
     parts = out["title"]["sub_parts"]
-    assert len(parts) == 1 and "tone" not in parts[0]
-    assert "из 1 сегодня" in parts[0]["text"] and "ближайший в 21:00" in parts[0]["text"]
+    assert parts == [{"text": "ближайший в 21:00, через 2 ч 20 мин"}]
 
 
-def test_sub_one_rink_wording():
-    out = shape([row(1, "19:00", "20:00")], arenas=ARENAS[:1])
+def test_compact_title_one_rink_ongoing():
+    # Один каток в городе + идущий сеанс: «2 сеанса массового / из 2 · на одном
+    # катке · идёт» — тавтология. Короткий вариант: «Идёт сеанс · ещё N мин».
+    rows = [
+        row(1, "18:00", "19:30", arena=11),  # идёт, ещё 50 мин
+        row(2, "20:00", "21:00", arena=11),  # будущий
+    ]
+    out = shape(rows, arenas=ARENAS[:1])
+    assert out["title"]["main"] == "Идёт сеанс"
+    assert out["title"]["sub_parts"] == [{"text": "ещё 50 мин", "tone": "live"}]
+
+
+def test_compact_title_one_rink_upcoming():
+    out = shape([row(1, "20:00", "21:00")], arenas=ARENAS[:1])
+    assert out["title"]["main"] == "Сегодня на Каток на Немиге"
+    assert out["title"]["sub_parts"] == [
+        {"text": "ближайший в 20:00, через 1 ч 20 мин"}
+    ]
+
+
+def test_full_title_when_kind_filter_cuts():
+    # Фильтр реально отсекает (1 из 2 сегодняшних): полный ответ информативен.
+    rows = [
+        row(1, "19:00", "20:00", kind="hockey_practice"),
+        row(2, "20:00", "21:00", kind="public_skate"),
+    ]
+    out = shape(rows, kind="ohm", arenas=ARENAS[:1])
+    assert out["title"]["main"] == "1 сеанс с клюшкой"
     sub = "".join(p["text"] for p in out["title"]["sub_parts"])
-    assert "на одном катке" in sub
+    assert "из 2 сегодня" in sub and "на одном катке" in sub
 
 
 def test_one_rink_card_and_week():

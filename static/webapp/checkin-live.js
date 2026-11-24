@@ -1,6 +1,9 @@
-/* TASK-446 (5.2): «Я здесь» на страницах Лёд / каток / «Я» — грузится оболочкой
-   только при redesign_s5. Живые строки загрузки, блок «Сейчас» на карточке катка,
-   карточка сезона в «Я». Страница без флага не видит этого файла вообще. */
+/* TASK-446 (5.2): «Я здесь» на страницах Лёд / каток / «Я» / главная — грузится
+   оболочкой только при redesign_s5. Живые строки загрузки, блок «Сейчас» на
+   карточке катка, карточка сезона в «Я». PDEC-040 батч C: карточки «Ты на
+   катке?» и «Твоя компания» на старой главной (слот #hubNow, данные —
+   glide:hub-bootstrap / __hubBootstrap) и полка значков на старом «Я»
+   (glide:me-data / __clientMeData). Страница без флага не видит файла вообще. */
 (function () {
   'use strict';
 
@@ -62,14 +65,20 @@
     for (var i = 1; i <= 3; i++) out += '<i class="' + (i <= level ? 'on' : '') + '"></i>';
     return out + '</span>';
   }
-  function openSheet(sessionId, arenaName, st) {
+  function openSheet(sessionId, arenaName, st, extra) {
     if (!window.GlideCheckin) return;
+    extra = extra || {};
     window.GlideCheckin.open({
       session_id: sessionId,
+      arena_id: extra.arena_id || null,
+      company: !!extra.company,
+      streak_weeks: extra.streak_weeks || null,
       arena_name: arenaName,
       checkin_id: st && st.checkin_id || null,
       load_level: st && st.load_level || null,
       season_days: st && st.checked_in ? st.season_days : null,
+      onDone: extra.onDone || null,
+      onLive: extra.onLive || null,
     });
   }
   function pageKey() {
@@ -310,7 +319,290 @@
     setInterval(function () { if (!document.hidden) run(); }, REFRESH_MS);
   }
 
-  /* ── «Я»: карточка сезона ───────────────────────────────────────────── */
+  /* ── Главная клиента (старая): «Ты на катке?» + «Твоя компания» ─────── */
+  /* PDEC-040 батч C: карточки ставим в слот #hubNow над карточкой HubHome —
+     тот же приоритет, что на главной v2 (on_ice главнее любой). hubNow
+     перерисовывается HubHome (replaceChildren) — карточки возвращаем наблюдателем. */
+
+  var hubCard = null;
+  var compCard = null;
+  var lastHub = null;
+  var homeBadgeShown = false;
+
+  function hubSlot() { return document.getElementById('hubNow'); }
+
+  function fmtLeft(min) {
+    if (min == null) return '';
+    var h = Math.floor(min / 60), m = min % 60;
+    if (h && m) return h + ' ч ' + m + ' мин';
+    if (h) return h + ' ч';
+    return m + ' мин';
+  }
+
+  function companyShare() {
+    return !!((lastHub && lastHub.home) || {}).company_share;
+  }
+
+  /* «Позвать» — лист GlideShareSheet (заглушка share-sheet-lazy догружает
+     настоящий); запасной путь — подготовленная ссылка invite_url. */
+  function openInviteSheet(arenaId, sessionId, label, place) {
+    var sheet = window.GlideShareSheet;
+    if (!sheet || !arenaId) return false;
+    try {
+      sheet.open({
+        ref: arenaId,
+        sessionId: sessionId != null ? sessionId : null,
+        slots: sessionId != null ? [{ id: sessionId, label: label || '' }] : [],
+        invite: true,
+        company: companyShare(),
+        context: 'client_home',
+        placeName: place || '',
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  function openExternal(url) {
+    if (!url) return;
+    var t = tg();
+    if (t && typeof t.openTelegramLink === 'function') { t.openTelegramLink(url); return; }
+    if (t && typeof t.openLink === 'function') { t.openLink(url); return; }
+    window.open(url, '_blank');
+  }
+
+  function onIceCardHtml(o) {
+    var live = o.live;
+    var bits = [];
+    if (o.ends_local) bits.push('до ' + o.ends_local);
+    var liveTxt = liveText(live);
+    if (liveTxt) bits.push(liveTxt);
+    var checked = !!o.checked_in;
+    var stats =
+      '<div class="cil-hub__stats">' +
+        '<div class="cil-hub__row">' +
+          '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 3c2 4-3 5-3 9a3 3 0 006 0c0-2-1-3-1-3s4 2 4 6a6 6 0 11-12 0c0-6 6-8 6-12z"/></svg>' +
+          '<div class="cil-hub__tx"><div class="cil-hub__rt">Серия: ' + (o.streak_weeks || 0) + ' ' + plural(o.streak_weeks || 0, 'неделя', 'недели', 'недель') + ' подряд</div>' +
+          '<div class="cil-hub__rs">' + (o.has_this_week ? 'Отметка этой недели засчитана' : 'Отметься сегодня — будет ' + ((o.streak_weeks || 0) + 1) + '-я') +
+          (o.next_badge ? ' · до «' + esc(o.next_badge.name_gen || o.next_badge.name) + '» — ' + o.next_badge.remaining + ' ' + plural(o.next_badge.remaining, 'неделя', 'недели', 'недель') : '') +
+          '</div></div>' +
+          weekPills(o.streak_weeks || 0) +
+        '</div>' +
+        '<div class="cil-hub__row">' +
+          '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 4v4m0 0-2 2m2-2 2 2M4 20l2-9h12l2 9z"/></svg>' +
+          '<div class="cil-hub__tx"><div class="cil-hub__rt">На льду ' + (o.season_days || 0) + ' ' + plural(o.season_days || 0, 'раз', 'раза', 'раз') + ' за сезон</div>' +
+          '<div class="cil-hub__rs">' + (checked ? 'Отметка засчитана' : 'Сегодня будет ' + ((o.season_days || 0) + 1) + '-й') + '</div></div>' +
+        '</div>' +
+      '</div>';
+    return '<a class="cil-hub__hit" href="arena?ref=' + encodeURIComponent(o.arena_id || '') + '&s=' + encodeURIComponent(o.session_id || '') + '">' +
+      '<span class="cil-hub__chip"><span class="cil-hub__dot"></span>Идёт сеанс' + (o.minutes_left != null ? ' · ещё ' + esc(fmtLeft(o.minutes_left)) : '') + '</span>' +
+      '<span class="cil-hub__name">' + esc(o.arena_name || 'Каток') + '</span>' +
+      (bits.length ? '<span class="cil-hub__sub">' + esc(bits.join(' · ')) + '</span>' : '') +
+      '</a>' +
+      stats +
+      '<div class="cil-hub__btns">' +
+        '<button type="button" class="cil-hub__btn' + (checked ? ' cil-hub__btn--soft' : ' cil-hub__btn--yellow') + ' ga-press" data-act="checkin">' +
+          (checked ? 'Отмечено · ' + (o.season_days || 0) + '-й раз' : '✓ Я здесь') + '</button>' +
+        (o.invite_url || o.arena_id
+          ? '<button type="button" class="cil-hub__btn cil-hub__btn--soft ga-press" data-act="invite">Позвать сюда</button>'
+          : '') +
+      '</div>';
+  }
+
+  /* «Аня и Дима», «Аня, Дима и Света» — последнее имя через «и». */
+  function namesJoin(arr) {
+    return arr.length > 1 ? arr.slice(0, -1).join(', ') + ' и ' + arr[arr.length - 1] : (arr[0] || '');
+  }
+
+  function compCardHtml(c) {
+    var names = (c.going_names || []).slice(0, 3);
+    var avas = names.map(function (n) {
+      return '<span class="cil-comp__ava">' + esc(String(n || '?').trim().charAt(0).toUpperCase()) + '</span>';
+    }).join('');
+    var count = c.going_count || names.length || 0;
+    var namesLine = names.length
+      ? (count > names.length ? names.join(', ') + ' и ещё ' + (count - names.length) : namesJoin(names)) +
+        ' ' + plural(count, 'идёт', 'идут', 'идут')
+      : 'Пока только ты — позови ещё';
+    var btns;
+    if (c.my_status === 'maybe') {
+      btns = '<button type="button" class="cil-hub__btn cil-hub__btn--yellow ga-press" data-act="going">Иду</button>';
+    } else if (c.my_status === 'going') {
+      btns = '<button type="button" class="cil-hub__btn cil-hub__btn--soft ga-press" data-act="open">Ты идёшь ✓</button>' +
+        '<button type="button" class="cil-hub__btn cil-hub__btn--soft ga-press" data-act="invite">Позвать ещё</button>' +
+        '<button type="button" class="cil-hub__btn cil-hub__btn--soft ga-press" data-act="open">Открыть</button>';
+    } else {
+      btns = '<button type="button" class="cil-hub__btn cil-hub__btn--soft ga-press" data-act="invite">Позвать ещё</button>' +
+        '<button type="button" class="cil-hub__btn cil-hub__btn--soft ga-press" data-act="open">Открыть</button>';
+    }
+    var meta = [c.arena_name, c.crowd_line].filter(Boolean).join(' · ');
+    return '<div class="cil-comp__chip"><span class="cil-comp__dot"></span>Твоя компания' +
+      (c.day_label || c.starts_local ? ' · ' + esc([c.day_label, c.starts_local].filter(Boolean).join(' ')) : '') + '</div>' +
+      '<div class="cil-comp__names">' + esc(namesLine) + '</div>' +
+      (meta ? '<div class="cil-comp__meta">' + esc(meta) + '</div>' : '') +
+      (avas ? '<div class="cil-comp__avas">' + avas + '<span class="cil-comp__cnt">Идут ' + esc(count) + '</span></div>' : '') +
+      '<div class="cil-hub__btns">' + btns + '</div>';
+  }
+
+  function wireCompCard(c) {
+    if (!compCard) return;
+    compCard.querySelectorAll('[data-act]').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var act = b.getAttribute('data-act');
+        if (act === 'going') {
+          b.disabled = true;
+          var u = tg() && tg().initDataUnsafe && tg().initDataUnsafe.user;
+          fetch('/api/public/ice-companies/' + encodeURIComponent(c.code) + '/responses', {
+            method: 'POST', headers: headers(),
+            body: JSON.stringify({ status: 'going', display_name: (u && u.first_name) || 'Я' }),
+          }).then(function (r) {
+            if (!r.ok) { b.disabled = false; return; }
+            c.my_status = 'going';
+            compCard.innerHTML = compCardHtml(c);
+            wireCompCard(c);
+          }).catch(function () { b.disabled = false; });
+        } else if (act === 'invite') {
+          if (!openInviteSheet(c.arena_id, c.session_id, [c.day_label, c.starts_local].filter(Boolean).join(' '), c.arena_name)) {
+            openExternal(c.page_url);
+          }
+        } else if (act === 'open') {
+          openExternal(c.page_url);
+        }
+      });
+    });
+  }
+
+  function wireHubCard(o) {
+    if (!hubCard) return;
+    hubCard.querySelectorAll('[data-act]').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var act = b.getAttribute('data-act');
+        if (act === 'checkin') {
+          openSheet(o.session_id, o.arena_name || 'катке', {
+            checkin_id: o.checked_in ? o.checkin_id : null,
+            load_level: o.load_level,
+            checked_in: o.checked_in,
+            season_days: o.season_days,
+          }, {
+            arena_id: o.arena_id,
+            company: companyShare(),
+            streak_weeks: o.streak_weeks,
+            onDone: function () { refreshHomeCheckin(o.session_id); },
+            onLive: function (live) { o.live = live; decorateHome(lastHub); },
+          });
+        } else if (act === 'invite') {
+          if (!openInviteSheet(o.arena_id, o.session_id, 'до ' + (o.ends_local || ''), o.arena_name)) {
+            openExternal(o.invite_url);
+          }
+        }
+      });
+    });
+  }
+
+  /* Карточки — первыми в #hubNow: hub, затем компания, затем карточка HubHome.
+     replaceChildren() хаба их выносит — наблюдатель возвращает на место. DOM
+     трогаем только при реальном рассинхроне: insertBefore того же узла — тоже
+     мутация, и наблюдатель зациклится на собственных вставках. */
+  function pinHubCards() {
+    var slot = hubSlot();
+    if (!slot) return;
+    var i = 0, ok = true;
+    if (hubCard) { ok = slot.children[i] === hubCard; i++; }
+    if (ok && compCard) ok = slot.children[i] === compCard;
+    if (ok) return;
+    if (compCard) slot.insertBefore(compCard, slot.firstChild);
+    if (hubCard) slot.insertBefore(hubCard, slot.firstChild);
+  }
+
+  function maybeOpenHomeBadges(home) {
+    var p = home && home.pending_badges;
+    if (homeBadgeShown || !Array.isArray(p) || !p.length) return;
+    homeBadgeShown = true;
+    var go = function () {
+      if (!window.GlideBadgeAward) return;
+      window.GlideBadgeAward.open({
+        badges: p,
+        onClose: function (keys) {
+          fetch('/api/webapp/client/badges/seen', {
+            method: 'POST', headers: headers(),
+            body: JSON.stringify({ keys: keys }),
+          }).catch(function () {});
+        },
+      });
+    };
+    /* Ассеты едут тем же ленивым пакетом до этого файла — почти всегда уже есть. */
+    if (window.GlideBadgeAward && window.GlideBadgeArt) { go(); return; }
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      if (window.GlideBadgeAward && window.GlideBadgeArt) { clearInterval(iv); go(); }
+      else if (tries > 40) clearInterval(iv);
+    }, 50);
+  }
+
+  function decorateHome(hub) {
+    var slot = hubSlot();
+    if (!slot) return;
+    lastHub = hub;
+    var home = (hub && hub.home) || {};
+    var o = home.on_ice;
+    if (o) {
+      if (!hubCard) { hubCard = document.createElement('div'); hubCard.className = 'cil-hub'; }
+      hubCard.innerHTML = onIceCardHtml(o);
+      wireHubCard(o);
+    } else if (hubCard) { hubCard.remove(); hubCard = null; }
+    /* «Твоя компания» — сегодняшняя первая, как на главной v2. */
+    var list = Array.isArray(home.companies) ? home.companies : [];
+    var comp = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].day_label === 'сегодня') { comp = list[i]; break; }
+    }
+    if (!comp) comp = list[0] || null;
+    if (comp) {
+      if (!compCard) { compCard = document.createElement('div'); compCard.className = 'cil-comp'; }
+      compCard.innerHTML = compCardHtml(comp);
+      wireCompCard(comp);
+    } else if (compCard) { compCard.remove(); compCard = null; }
+    pinHubCards();
+    maybeOpenHomeBadges(home);
+  }
+
+  /* После отметки лист шлёт glide:checkin-done — карточку обновляем из state,
+     без повторного bootstrap. */
+  function refreshHomeCheckin(sessionId) {
+    if (!lastHub || !lastHub.home || !lastHub.home.on_ice) return;
+    var sid = sessionId || lastHub.home.on_ice.session_id;
+    stateApi([sid], sid).then(function (j) {
+      if (!j || !lastHub || !lastHub.home || !lastHub.home.on_ice) return;
+      var st = (j.sessions || {})[sid] || {};
+      var o = lastHub.home.on_ice;
+      if ('checked_in' in st) o.checked_in = st.checked_in;
+      if ('checkin_id' in st) o.checkin_id = st.checkin_id;
+      if ('load_level' in st) o.load_level = st.load_level;
+      if ('live' in st) o.live = st.live;
+      if (j.me) {
+        if ('season_days' in j.me) o.season_days = j.me.season_days;
+        if ('streak_weeks' in j.me) o.streak_weeks = j.me.streak_weeks;
+        if ('has_this_week' in j.me) o.has_this_week = j.me.has_this_week;
+      }
+      decorateHome(lastHub);
+    });
+  }
+
+  function bootHome() {
+    if (window.__hubBootstrap) decorateHome(window.__hubBootstrap);
+    window.addEventListener('glide:hub-bootstrap', function (ev) {
+      decorateHome((ev && ev.detail) || window.__hubBootstrap);
+    });
+    var slot = hubSlot();
+    if (slot && window.MutationObserver) {
+      new MutationObserver(function () { pinHubCards(); }).observe(slot, { childList: true });
+    }
+  }
+
+  /* ── «Я»: карточка сезона + полка значков ───────────────────────────── */
 
   function weekPills(streak) {
     var out = '';
@@ -347,11 +639,39 @@
     root.insertBefore(box, root.firstChild);
   }
 
+  /* Полка значков (PDEC-040 батч C): разметка — общий GlideBadgeShelf, данные —
+     свежий ответ /client/me (client-me.js кладёт __clientMeData + шлёт событие).
+     client-me перерисовывает meRoot — полку возвращаем тем же наблюдателем. */
+  var meBadgesSig = '';
+  var meBadgesBox = null;
+  function decorateMeBadges() {
+    var root = document.getElementById('meRoot');
+    if (!root) return;
+    var data = window.__clientMeData;
+    var list = data && Array.isArray(data.badges) ? data.badges : [];
+    var sig = JSON.stringify(list);
+    if (meBadgesBox && meBadgesBox.isConnected && sig === meBadgesSig) return;
+    if (meBadgesBox) { meBadgesBox.remove(); meBadgesBox = null; meBadgesSig = ''; }
+    if (!window.GlideBadgeShelf || !list.length) return;
+    var html = window.GlideBadgeShelf.shelfHtml(list);
+    if (!html) return;
+    meBadgesSig = sig;
+    meBadgesBox = document.createElement('div');
+    meBadgesBox.className = 'cil-badges';
+    meBadgesBox.innerHTML = html;
+    window.GlideBadgeShelf.wireShelf(meBadgesBox, list);
+    /* После карточки сезона — тот же порядок блоков, что в «Я» v2. */
+    var season = root.querySelector(':scope > .cil-me');
+    if (season) root.insertBefore(meBadgesBox, season.nextSibling);
+    else root.insertBefore(meBadgesBox, root.firstChild);
+  }
+
   function bootMe() {
     var run = function () {
       stateApi([], null).then(function (j) { if (j) decorateMe(j); });
+      decorateMeBadges();
     };
-    /* client-me перерисовывает meRoot — карточку возвращаем после каждого рендера. */
+    /* client-me перерисовывает meRoot — карточки возвращаем после каждого рендера. */
     var t = null;
     var mo = new MutationObserver(function () {
       if (t) clearTimeout(t);
@@ -359,16 +679,20 @@
     });
     var root = document.getElementById('meRoot');
     if (root) mo.observe(root, { childList: true });
+    window.addEventListener('glide:me-data', function () { decorateMeBadges(); });
     run();
   }
 
   window.addEventListener('glide:checkin-done', function () {
-    if (pageKey() === 'ice') iceRefresh(true);
-    if (pageKey() === 'client-me') bootMe();
+    var k = pageKey();
+    if (k === 'ice') iceRefresh(true);
+    if (k === 'client-me') bootMe();
+    if (k === 'client-home') refreshHomeCheckin();
   });
 
   var key = pageKey();
   if (key === 'ice') bootIce();
   else if (key === 'arena') bootArena();
   else if (key === 'client-me') bootMe();
+  else if (key === 'client-home') bootHome();
 })();
