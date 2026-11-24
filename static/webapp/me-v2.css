@@ -1,0 +1,94 @@
+/* TASK-449 (этап 4B): «Я» v2. Без Dela и жёлтого; светлая тема. */
+.mv2, .mv2 *, .mv2 *::before, .mv2 *::after { box-sizing:border-box; }
+.mv2 { background:#f5f6f8; color:#12151c; font-family:"Golos Text",system-ui,sans-serif; }
+.mv2__page { max-width:560px; margin:0 auto; padding:14px 14px 40px; }
+.mv2-card { background:#fff; border-radius:22px; padding:16px; margin-bottom:12px; }
+
+/* header */
+.mv2-head { display:flex; align-items:center; gap:14px; padding:6px 2px 16px; }
+.mv2-head__ava { width:56px; height:56px; border-radius:50%; overflow:hidden; flex:none;
+  background:#0a6f73; color:#fff; font-size:24px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; }
+.mv2-head__ava img { width:100%; height:100%; object-fit:cover; }
+.mv2-head__name { font-size:22px; font-weight:700; line-height:1.15; border:0; background:none; padding:0; text-align:left; color:inherit; cursor:pointer; }
+.mv2-head__sub { font-size:13px; color:#7b828f; margin-top:3px; }
+
+/* pass */
+.mv2-pass__top { display:flex; gap:16px; align-items:center; }
+.mv2-pass__ring { width:76px; height:76px; border-radius:50%; flex:none;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:conic-gradient(#0a6f73 var(--mv2-p,0%), #e7eaee 0); position:relative; }
+.mv2-pass__ring::before { content:""; position:absolute; inset:7px; border-radius:50%; background:#fff; }
+.mv2-pass__ring b, .mv2-pass__ring span { position:relative; }
+.mv2-pass__ring b { font-size:24px; font-weight:700; line-height:1; }
+.mv2-pass__ring span { font-size:11px; color:#7b828f; }
+.mv2-pass__t { font-size:17px; font-weight:700; }
+.mv2-pass__s { font-size:13px; color:#7b828f; margin-top:4px; }
+.mv2-pass__divider { height:1px; background:#eceef1; margin:14px 0; }
+.mv2-pass__tr { display:flex; align-items:center; gap:12px; }
+.mv2-pass__tr img { width:40px; height:40px; border-radius:50%; object-fit:cover; flex:none; }
+.mv2-pass__tr-n { font-size:15px; font-weight:700; }
+.mv2-pass__tr-w { font-size:13px; color:#7b828f; margin-top:2px; }
+.mv2-pass__book { margin-left:auto; flex:none; background:#12151c; color:#fff; border-radius:14px;
+  padding:10px 16px; font-size:15px; font-weight:600; text-decoration:none; border:0; cursor:pointer; }
+
+/* season */
+.mv2-season__n { font-size:30px; font-weight:700; line-height:1.1; letter-spacing:-.02em; margin-top:2px; }
+.mv2-season__lbl { font-size:13px; color:#6b7a86; }
+.mv2-season__streak { font-size:15px; font-weight:600; margin-top:12px; }
+.mv2-season__bar { display:flex; gap:4px; margin-top:8px; }
+.mv2-season__bar i { flex:1; height:8px; border-radius:4px; background:#e7eaee; }
+.mv2-season__bar i.on { background:#0a6f73; }
+.mv2-season__goal { font-size:17px; font-weight:700; }
+.mv2-season__hint { font-size:13px; color:#7b828f; margin-top:6px; }
+
+/* rink photo card */
+.mv2-rink { position:relative; border-radius:26px; overflow:hidden; height:170px; margin-bottom:12px;
+  display:block; text-decoration:none; color:#fff; background:#1a1d24 center/cover; }
+.mv2-rink__img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.mv2-rink__grad { position:absolute; inset:0; background:linear-gradient(180deg,rgba(10,12,16,.05) 30%,rgba(10,12,16,.72)); }
+.mv2-rink__chip { position:absolute; top:12px; left:12px; background:rgba(255,255,255,.92); color:#12151c;
+  font-size:13px; font-weight:600; border-radius:999px; padding:6px 12px; }
+.mv2-rink__chip i { color:#1faa59; font-style:normal; margin-right:4px; }
+.mv2-rink__change { position:absolute; top:12px; right:12px; background:rgba(255,255,255,.9); color:#12151c;
+  border:0; border-radius:999px; padding:7px 13px; font-size:13px; font-weight:600; cursor:pointer; }
+.mv2-rink__bottom { position:absolute; left:14px; right:14px; bottom:12px; }
+.mv2-rink__name { font-size:17px; font-weight:700; }
+.mv2-rink__times { font-size:13px; opacity:.9; margin-top:2px; }
+
+/* rows */
+.mv2-row { display:flex; align-items:center; gap:12px; background:#fff; border-radius:18px;
+  padding:14px 16px; margin-bottom:10px; text-decoration:none; color:inherit; border:0; width:100%;
+  text-align:left; cursor:pointer; font-size:15px; }
+.mv2-row__logo { width:32px; height:32px; border-radius:50%; object-fit:contain; flex:none; }
+.mv2-row__main { min-width:0; flex:1; }
+.mv2-row__t { font-size:15px; font-weight:600; }
+.mv2-row__s { font-size:13px; color:#7b828f; margin-top:2px; }
+.mv2-row__chev { color:#b8bec8; flex:none; }
+.mv2-row--quiet { background:none; border-radius:0; margin:0; padding:13px 4px; }
+.mv2-row--quiet + .mv2-row--quiet { border-top:1px solid #eceef1; }
+
+/* tiles */
+.mv2-tiles { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+.mv2-tile { background:#fff; border-radius:20px; padding:14px; text-decoration:none; color:inherit;
+  border:0; text-align:left; cursor:pointer; }
+.mv2-tile__t { font-size:15px; font-weight:700; }
+.mv2-tile__s { font-size:13px; color:#7b828f; margin-top:4px; }
+
+/* settings card */
+.mv2-set { padding:6px 16px; }
+.mv2-switch { margin-left:auto; width:46px; height:28px; border-radius:999px; background:#d7dbe1;
+  border:0; position:relative; cursor:pointer; flex:none; transition:background .15s; }
+.mv2-switch::after { content:""; position:absolute; top:3px; left:3px; width:22px; height:22px;
+  border-radius:50%; background:#fff; transition:transform .15s; }
+.mv2-switch[aria-checked="true"] { background:#0a6f73; }
+.mv2-switch[aria-checked="true"]::after { transform:translateX(18px); }
+
+/* skeleton */
+.mv2-skel__head { height:56px; border-radius:28px; background:#e9ecf0; margin-bottom:14px; }
+.mv2-skel__card { height:110px; border-radius:22px; background:#e9ecf0; margin-bottom:12px; }
+.mv2-skel__card--wide { height:170px; }
+@keyframes mv2fade { from{opacity:.4} to{opacity:1} }
+.mv2-skel > * { animation:mv2fade 1s ease-in-out infinite alternate; }
+.mv2-fade { transition:opacity .18s ease; }
+.mv2-fade.out { opacity:0; }

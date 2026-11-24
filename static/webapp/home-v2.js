@@ -806,7 +806,7 @@
   }
   /* «Все {count}» ведёт на окно активной вкладки, а не всегда на «сегодня». */
   function setIceMore(w) {
-    els.iceMore.setAttribute('href', (w && w.href) || 'ice');
+    els.iceMore.setAttribute('href', iceHref(w && w.href, w && w.key));
     els.iceMore.textContent = 'Все' + (w && w.count ? ' ' + w.count : '');
   }
   function positionInk() {
@@ -1028,6 +1028,20 @@
       return !!(c && String(c.u) === uid && c.redesign_s3 === true);
     } catch (e) { return false; }
   }
+  function s4On() {
+    try {
+      var u = tgUser();
+      var uid = u && u.id != null ? String(u.id) : '';
+      var c = JSON.parse(localStorage.getItem('cw_ui_flags_v1') || 'null');
+      return !!(c && String(c.u) === uid && c.redesign_s4 === true);
+    } catch (e) { return false; }
+  }
+  /* TASK-449: «Все N» дома → «Лёд» v2 с day/kind, чтобы числа совпадали. Только под s4. */
+  function iceHref(href, day) {
+    if (!s4On()) return href || 'ice';
+    var h = href || 'ice';
+    return h + (h.indexOf('?') >= 0 ? '&' : '?') + 'day=' + encodeURIComponent(day || 'today') + '&kind=skate';
+  }
   function screenCacheKey() {
     var u = tgUser();
     var uid = u && u.id != null ? String(u.id) : '0';
@@ -1178,9 +1192,29 @@
       if (window.ClientShell && typeof window.ClientShell.prefetchTab === 'function') {
         window.ClientShell.prefetchTab('catalog');
       }
+      if (s4On()) prefetchIceV2();
     };
     if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(go, { timeout: 2500 });
     else setTimeout(go, 1500);
+  }
+
+  /* s4: расписание «Льда» v2 в screen cache — вкладка откроется мгновенно. */
+  function prefetchIceV2() {
+    var uid = '';
+    try { var u = tgUser(); uid = u && u.id != null ? String(u.id) : '0'; } catch (e) { return; }
+    var q = 'day=today&kind=skate' + (cityId() ? '&city_id=' + encodeURIComponent(cityId()) : '');
+    apiFetch('/api/webapp/client/ice/schedule?' + q)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) return;
+        try {
+          var body = JSON.stringify({ v: 1, at: Date.now(), data: d });
+          if (body.length > 150 * 1024) return;
+          var c = d.city || {};
+          localStorage.setItem('iv2_screen_v1:' + uid + ':' + (c.id || 0) + ':skate:today', body);
+        } catch (e) { /* quota */ }
+      })
+      .catch(function () { /* тихо */ });
   }
 
   /* Все не-мертвые записи от сегодня вперёд, по дате и времени. */
@@ -1360,6 +1394,7 @@
     var week = home().week;
     if (!week || !week.length) return '';
     var allHref = 'ice' + (cityId() ? '?city_id=' + encodeURIComponent(cityId()) : '');
+    allHref = iceHref(allHref, 'week');
     var total = week.reduce(function (n, d) { return n + (d.times || []).length; }, 0);
     var rows = '';
     var i = 0;

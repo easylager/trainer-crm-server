@@ -396,6 +396,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     client_redesign_s2_percent: int = Field(default=0, ge=0, le=100)
     client_redesign_s3_telegram_ids: EnvIntList = None
     client_redesign_s3_percent: int = Field(default=0, ge=0, le=100)
+    # TASK-449 (этап 4): вкладка «Лёд» v2 и «Я» v2.
+    # CLIENT_REDESIGN_S4_TELEGRAM_IDS=1,2; CLIENT_REDESIGN_S4_PERCENT=0…100.
+    client_redesign_s4_telegram_ids: EnvIntList = None
+    client_redesign_s4_percent: int = Field(default=0, ge=0, le=100)
 
     # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
     # Full log: every update + inner gate/menu DB phase timings.

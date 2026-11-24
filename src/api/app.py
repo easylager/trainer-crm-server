@@ -70,7 +70,7 @@ from src.shared.outage import (
 from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, get_optional_client_miniapp_principal
 from src.api.miniapp_auth.principal_keys import client_catalog_telegram_key
 from src.api.miniapp_auth.types import MiniAppPrincipal
-from src.application.client_ui_flags import fast_tabs_enabled, redesign_s1_enabled, redesign_s3_enabled, search_board_enabled
+from src.application.client_ui_flags import fast_tabs_enabled, redesign_s1_enabled, redesign_s3_enabled, redesign_s4_enabled, search_board_enabled
 from src.shared.config import Settings, get_settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
 from src.shared.sentry_init import init_sentry
@@ -318,6 +318,31 @@ def webapp_ice_company_page():
 # TASK-438: параметры диплинков вкладки «Лёд» — с ними открывается старая страница, не лента.
 _ICE_DEEP_LINK_PARAMS = ("intent", "seg", "focus", "arena", "ref", "svc", "trainer", "venue", "season")
 _ICE_BOARD_PATH = _WEBAPP_DIR / "ice-board.html"
+_ICE_V2_PATH = _WEBAPP_DIR / "client-ice-v2.html"
+
+# TASK-449: параметры, которые «Лёд» v2 понимает сам; всё остальное — старая вкладка.
+_ICE_V2_PARAMS = {"city_id", "day", "kind", "when", "intent", "init_data", "tgWebAppStartParam"}
+
+
+def _ice_v2_page(request: Request, principal: MiniAppPrincipal | None) -> HTMLResponse | None:
+    """«Лёд» v2, если redesign_s4 и адрес без параметров старой вкладки (``?map=1`` — карта старой)."""
+    from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
+
+    if principal is None or not redesign_s4_enabled(client_catalog_telegram_key(principal), get_settings()):
+        return None
+    if "map" in request.query_params:
+        return None
+    if any(name not in _ICE_V2_PARAMS for name in request.query_params):
+        return None
+    path = _ICE_V2_PATH
+    if not path.is_file():
+        return None
+    page = stamp_html(path.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
+    if redesign_s3_enabled(client_catalog_telegram_key(principal), get_settings()):
+        from src.application.home_v2_bundles import apply_bundles
+
+        page = apply_bundles(page, page="ice-v2") or page
+    return HTMLResponse(content=page, headers=_WEBAPP_NO_CACHE_HEADERS)
 
 
 def _search_board_page(request: Request, principal: MiniAppPrincipal | None) -> HTMLResponse | None:
@@ -347,6 +372,9 @@ def webapp_ice_tab_page(
     """
     from src.application.style_b import FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION
 
+    v2 = _ice_v2_page(request, principal)
+    if v2 is not None:
+        return v2
     board = _search_board_page(request, principal)
     if board is not None:
         return board
@@ -480,6 +508,35 @@ def webapp_home_v2_bundle_css():
     return _home_v2_bundle_response("bundle.css")
 
 
+def _ice_v2_bundle_response(kind: str):
+    """TASK-449: контентно-адресованный бандл «Льда» v2 — кэш immutable."""
+    from src.application.home_v2_bundles import build_bundle, media_type
+
+    try:
+        _version, body = build_bundle(kind, page="ice-v2")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="bundle source missing")
+    return Response(content=body, media_type=media_type(kind, page="ice-v2"), headers=_WEBAPP_IMMUTABLE_CACHE_HEADERS)
+
+
+@app.get("/webapp/ice-v2.head.js")
+def webapp_ice_v2_head_js():
+    """Синхронные head-скрипты «Льда» v2 одним файлом (redesign_s3+s4). ``?v=`` = sha256."""
+    return _ice_v2_bundle_response("head.js")
+
+
+@app.get("/webapp/ice-v2.app.js")
+def webapp_ice_v2_app_js():
+    """Defer/body-скрипты «Льда» v2 одним файлом (redesign_s3+s4). ``?v=`` = sha256."""
+    return _ice_v2_bundle_response("app.js")
+
+
+@app.get("/webapp/ice-v2.bundle.css")
+def webapp_ice_v2_bundle_css():
+    """Все стили «Льда» v2 одним файлом (redesign_s3+s4). ``?v=`` = sha256."""
+    return _ice_v2_bundle_response("bundle.css")
+
+
 @app.get("/webapp/client-home")
 def webapp_client_home_page(
     principal: MiniAppPrincipal | None = Depends(get_optional_client_miniapp_principal),
@@ -524,6 +581,15 @@ def webapp_client_me_page(
     shell = _fast_tabs_shell("me", principal)
     if shell is not None:
         return shell
+    if principal is not None and redesign_s4_enabled(client_catalog_telegram_key(principal), get_settings()):
+        v2 = _WEBAPP_DIR / "client-me-v2.html"
+        if v2.is_file():
+            html = stamp_html(v2.read_text(encoding="utf-8").replace(FONT_V_PLACEHOLDER, PUBLIC_FONTS_ASSET_VERSION))
+            if redesign_s3_enabled(client_catalog_telegram_key(principal), get_settings()):
+                from src.application.home_v2_bundles import apply_bundles
+
+                html = apply_bundles(html, page="me-v2") or html
+            return HTMLResponse(content=html, headers=_WEBAPP_NO_CACHE_HEADERS)
     path = _WEBAPP_DIR / "client-me.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
@@ -2313,6 +2379,73 @@ def webapp_home_v2_js(request: Request):
 def webapp_home_v2_css(request: Request):
     """TASK-445: стили новой главной. Use ``?v=…`` for long cache."""
     path = _WEBAPP_DIR / "home-v2.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/ice-v2.js")
+def webapp_ice_v2_js(request: Request):
+    """TASK-449: логика вкладки «Лёд» v2 (флаг redesign_s4). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "ice-v2.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+def _me_v2_bundle_response(kind: str):
+    from src.application.home_v2_bundles import build_bundle, media_type
+
+    try:
+        _version, body = build_bundle(kind, page="me-v2")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="bundle source missing")
+    return Response(content=body, media_type=media_type(kind, page="me-v2"), headers=_WEBAPP_IMMUTABLE_CACHE_HEADERS)
+
+
+@app.get("/webapp/me-v2.head.js")
+def webapp_me_v2_head_js():
+    return _me_v2_bundle_response("head.js")
+
+
+@app.get("/webapp/me-v2.app.js")
+def webapp_me_v2_app_js():
+    return _me_v2_bundle_response("app.js")
+
+
+@app.get("/webapp/me-v2.bundle.css")
+def webapp_me_v2_bundle_css():
+    return _me_v2_bundle_response("bundle.css")
+
+
+@app.get("/webapp/me-v2.js")
+def webapp_me_v2_js(request: Request):
+    path = _WEBAPP_DIR / "me-v2.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(path, media_type="application/javascript", headers=_webapp_versioned_asset_cache_headers(request))
+
+
+@app.get("/webapp/me-v2.css")
+def webapp_me_v2_css(request: Request):
+    path = _WEBAPP_DIR / "me-v2.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(path, media_type="text/css", headers=_webapp_versioned_asset_cache_headers(request))
+
+
+@app.get("/webapp/ice-v2.css")
+def webapp_ice_v2_css(request: Request):
+    """TASK-449: стили вкладки «Лёд» v2. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "ice-v2.css"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
     return FileResponse(

@@ -102,6 +102,19 @@ def redesign_s3_enabled(account_key: int, settings: Settings) -> bool:
     return redesign_s3_bucket(account_key) < settings.client_redesign_s3_percent
 
 
+def redesign_s4_bucket(account_key: int) -> int:
+    """Своя корзина: процент redesign_s4 не повторяет выборки остальных флагов."""
+    digest = hashlib.sha256(f"redesign-s4:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def redesign_s4_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-449: этап 4 редизайна — вкладки «Лёд» и «Я» v2."""
+    if int(account_key) in (settings.client_redesign_s4_telegram_ids or ()):
+        return True
+    return redesign_s4_bucket(account_key) < settings.client_redesign_s4_percent
+
+
 # Профили аккаунта — как у GET /client/passes и /client/bookings/history: своя строка,
 # семейный доступ (resolve_acting_client_id) и профили из client_profile_links.
 # Любой статус и любая давность: вкладка, появившись, не исчезает.

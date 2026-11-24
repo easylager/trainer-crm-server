@@ -1,0 +1,7375 @@
+{
+ "base|today|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 5
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 6
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 5
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 19
+   }
+  ],
+  "ongoing": [
+   {
+    "session_id": 401,
+    "arena_id": 38,
+    "arena_name": "Каток на Немиге",
+    "photo": {
+     "thumb": "/photos/arena-38/hero.webp",
+     "card": "/photos/arena-38/hero.webp"
+    },
+    "time": "18:30",
+    "end": "20:00",
+    "minutes_left": 30,
+    "price_line": "до 20:00 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=38&s=401"
+   },
+   {
+    "session_id": 402,
+    "arena_id": 25,
+    "arena_name": "Ледовый дворец",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "19:00",
+    "end": "20:30",
+    "minutes_left": 60,
+    "price_line": "до 20:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=25&s=402"
+   }
+  ],
+  "now_line": "Сейчас 19:30",
+  "upcoming": [
+   {
+    "session_id": 403,
+    "arena_id": 11,
+    "arena_name": "Минск-Спортпалас",
+    "photo": {
+     "thumb": "/photos/arena-11/hero.webp",
+     "card": "/photos/arena-11/hero.webp"
+    },
+    "time": "20:00",
+    "end": "21:30",
+    "minutes_left": 120,
+    "price_line": "до 21:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=11&s=403"
+   },
+   {
+    "session_id": 404,
+    "arena_id": 115,
+    "arena_name": "Чижовка-Арена",
+    "photo": {
+     "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+     "card": "/photos/arena-115/hockey-rink-interior.jpg"
+    },
+    "time": "20:30",
+    "end": "22:00",
+    "minutes_left": 150,
+    "price_line": "до 22:00 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=115&s=404"
+   },
+   {
+    "session_id": 405,
+    "arena_id": 40,
+    "arena_name": "Олимпик Центр",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "21:00",
+    "end": "22:30",
+    "minutes_left": 180,
+    "price_line": "до 22:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=40&s=405"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": {
+   "label": "пн, 23 ноября",
+   "all_label": "Весь понедельник",
+   "rows": [
+    {
+     "session_id": 501,
+     "arena_id": 38,
+     "arena_name": "Каток на Немиге",
+     "photo": {
+      "thumb": "/photos/arena-38/hero.webp",
+      "card": "/photos/arena-38/hero.webp"
+     },
+     "time": "08:00",
+     "end": "09:30",
+     "minutes_left": 840,
+     "price_line": "до 09:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=38&s=501"
+    },
+    {
+     "session_id": 502,
+     "arena_id": 25,
+     "arena_name": "Ледовый дворец",
+     "photo": {
+      "thumb": "/photos/arena-25/hero.jpg",
+      "card": "/photos/arena-25/hero.jpg"
+     },
+     "time": "09:00",
+     "end": "10:30",
+     "minutes_left": 900,
+     "price_line": "до 10:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=25&s=502"
+    },
+    {
+     "session_id": 503,
+     "arena_id": 115,
+     "arena_name": "Чижовка-Арена",
+     "photo": {
+      "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+      "card": "/photos/arena-115/hockey-rink-interior.jpg"
+     },
+     "time": "10:00",
+     "end": "11:30",
+     "minutes_left": 960,
+     "price_line": "до 11:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=115&s=503"
+    }
+   ],
+   "total": 6,
+   "href_day": "tomorrow"
+  },
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "5 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "из 7 сегодня · на 5 катках · "
+    },
+    {
+     "text": "2 идут сейчас",
+     "tone": "live"
+    }
+   ]
+  }
+ },
+ "base|today|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 1
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [
+   {
+    "session_id": 411,
+    "arena_id": 115,
+    "arena_name": "Чижовка-Арена",
+    "photo": {
+     "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+     "card": "/photos/arena-115/hockey-rink-interior.jpg"
+    },
+    "time": "18:00",
+    "end": "19:45",
+    "minutes_left": 15,
+    "price_line": "до 19:45 · 12 BYN · прокат 8",
+    "kind": "ohm",
+    "href": "arena?ref=115&s=411"
+   }
+  ],
+  "now_line": "Сейчас 19:30",
+  "upcoming": [
+   {
+    "session_id": 412,
+    "arena_id": 40,
+    "arena_name": "Олимпик Центр",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "20:00",
+    "end": "21:30",
+    "minutes_left": 120,
+    "price_line": "до 21:30 · 12 BYN · прокат 8",
+    "kind": "ohm",
+    "href": "arena?ref=40&s=412"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": {
+   "label": "пн, 23 ноября",
+   "all_label": "Весь понедельник",
+   "rows": [
+    {
+     "session_id": 511,
+     "arena_id": 115,
+     "arena_name": "Чижовка-Арена",
+     "photo": {
+      "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+      "card": "/photos/arena-115/hockey-rink-interior.jpg"
+     },
+     "time": "07:00",
+     "end": "08:30",
+     "minutes_left": 780,
+     "price_line": "до 08:30 · 12 BYN · прокат 8",
+     "kind": "ohm",
+     "href": "arena?ref=115&s=511"
+    }
+   ],
+   "total": 1,
+   "href_day": "tomorrow"
+  },
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "2 сеанса с клюшкой",
+   "sub_parts": [
+    {
+     "text": "из 7 сегодня · на 5 катках · "
+    },
+    {
+     "text": "1 идёт сейчас",
+     "tone": "live"
+    }
+   ]
+  }
+ },
+ "base|today|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 3
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "ближайший — сб, 28"
+    }
+   ]
+  }
+ },
+ "base|tomorrow|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 6,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 1,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 5
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 6
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 5
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 19
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [
+   {
+    "session_id": 501,
+    "arena_id": 38,
+    "arena_name": "Каток на Немиге",
+    "photo": {
+     "thumb": "/photos/arena-38/hero.webp",
+     "card": "/photos/arena-38/hero.webp"
+    },
+    "time": "08:00",
+    "end": "09:30",
+    "minutes_left": 840,
+    "price_line": "до 09:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=38&s=501"
+   },
+   {
+    "session_id": 502,
+    "arena_id": 25,
+    "arena_name": "Ледовый дворец",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "09:00",
+    "end": "10:30",
+    "minutes_left": 900,
+    "price_line": "до 10:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=25&s=502"
+   },
+   {
+    "session_id": 503,
+    "arena_id": 115,
+    "arena_name": "Чижовка-Арена",
+    "photo": {
+     "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+     "card": "/photos/arena-115/hockey-rink-interior.jpg"
+    },
+    "time": "10:00",
+    "end": "11:30",
+    "minutes_left": 960,
+    "price_line": "до 11:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=115&s=503"
+   },
+   {
+    "session_id": 504,
+    "arena_id": 11,
+    "arena_name": "Минск-Спортпалас",
+    "photo": {
+     "thumb": "/photos/arena-11/hero.webp",
+     "card": "/photos/arena-11/hero.webp"
+    },
+    "time": "11:00",
+    "end": "12:30",
+    "minutes_left": 1020,
+    "price_line": "до 12:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=11&s=504"
+   },
+   {
+    "session_id": 505,
+    "arena_id": 40,
+    "arena_name": "Олимпик Центр",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "18:00",
+    "end": "19:30",
+    "minutes_left": 1440,
+    "price_line": "до 19:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=40&s=505"
+   },
+   {
+    "session_id": 506,
+    "arena_id": 38,
+    "arena_name": "Каток на Немиге",
+    "photo": {
+     "thumb": "/photos/arena-38/hero.webp",
+     "card": "/photos/arena-38/hero.webp"
+    },
+    "time": "19:00",
+    "end": "20:30",
+    "minutes_left": 1500,
+    "price_line": "до 20:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=38&s=506"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "6 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "завтра · на 5 катках"
+    }
+   ]
+  }
+ },
+ "base|tomorrow|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 6,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 1,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 1
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [
+   {
+    "session_id": 511,
+    "arena_id": 115,
+    "arena_name": "Чижовка-Арена",
+    "photo": {
+     "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+     "card": "/photos/arena-115/hockey-rink-interior.jpg"
+    },
+    "time": "07:00",
+    "end": "08:30",
+    "minutes_left": 780,
+    "price_line": "до 08:30 · 12 BYN · прокат 8",
+    "kind": "ohm",
+    "href": "arena?ref=115&s=511"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "1 сеанс с клюшкой",
+   "sub_parts": [
+    {
+     "text": "завтра · на одном катке"
+    }
+   ]
+  }
+ },
+ "base|tomorrow|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 6,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 1,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 3
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "base|weekend|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 3,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 5
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 6
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 5
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 19
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 601,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 8160,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=601"
+     },
+     {
+      "session_id": 602,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "12:00",
+      "end": "13:30",
+      "minutes_left": 8280,
+      "price_line": "до 13:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=602"
+     },
+     {
+      "session_id": 603,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "14:00",
+      "end": "15:30",
+      "minutes_left": 8400,
+      "price_line": "до 15:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=603"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-29",
+    "label": "вс, 29",
+    "rows": [
+     {
+      "session_id": 604,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 9600,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=11&s=604"
+     },
+     {
+      "session_id": 605,
+      "arena_id": 40,
+      "arena_name": "Олимпик Центр",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "16:00",
+      "end": "17:30",
+      "minutes_left": 9960,
+      "price_line": "до 17:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=40&s=605"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "5 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "на выходных · на 5 катках"
+    }
+   ]
+  }
+ },
+ "base|weekend|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 3,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 1
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "base|weekend|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 3,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 3
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 611,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "09:00",
+      "end": "10:30",
+      "minutes_left": 8100,
+      "price_line": "до 10:30 · 12 BYN · прокат 8",
+      "kind": "figure",
+      "href": "arena?ref=11&s=611"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-29",
+    "label": "вс, 29",
+    "rows": [
+     {
+      "session_id": 612,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 9600,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "figure",
+      "href": "arena?ref=11&s=612"
+     },
+     {
+      "session_id": 613,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "12:00",
+      "end": "13:30",
+      "minutes_left": 9720,
+      "price_line": "до 13:30 · 12 BYN · прокат 8",
+      "kind": "figure",
+      "href": "arena?ref=25&s=613"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "3 сеанса фигурного",
+   "sub_parts": [
+    {
+     "text": "на выходных · на 2 катках"
+    }
+   ]
+  }
+ },
+ "base|week|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 17,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 1,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 5
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 6
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 5
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 19
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-22",
+    "label": "вс, 22",
+    "rows": [
+     {
+      "session_id": 401,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "18:30",
+      "end": "20:00",
+      "minutes_left": 30,
+      "price_line": "до 20:00 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=401"
+     },
+     {
+      "session_id": 402,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "19:00",
+      "end": "20:30",
+      "minutes_left": 60,
+      "price_line": "до 20:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=402"
+     },
+     {
+      "session_id": 403,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "20:00",
+      "end": "21:30",
+      "minutes_left": 120,
+      "price_line": "до 21:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=11&s=403"
+     },
+     {
+      "session_id": 404,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "20:30",
+      "end": "22:00",
+      "minutes_left": 150,
+      "price_line": "до 22:00 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=404"
+     },
+     {
+      "session_id": 405,
+      "arena_id": 40,
+      "arena_name": "Олимпик Центр",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "21:00",
+      "end": "22:30",
+      "minutes_left": 180,
+      "price_line": "до 22:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=40&s=405"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-23",
+    "label": "пн, 23",
+    "rows": [
+     {
+      "session_id": 501,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "08:00",
+      "end": "09:30",
+      "minutes_left": 840,
+      "price_line": "до 09:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=501"
+     },
+     {
+      "session_id": 502,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "09:00",
+      "end": "10:30",
+      "minutes_left": 900,
+      "price_line": "до 10:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=502"
+     },
+     {
+      "session_id": 503,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 960,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=503"
+     },
+     {
+      "session_id": 504,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "11:00",
+      "end": "12:30",
+      "minutes_left": 1020,
+      "price_line": "до 12:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=11&s=504"
+     },
+     {
+      "session_id": 505,
+      "arena_id": 40,
+      "arena_name": "Олимпик Центр",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "18:00",
+      "end": "19:30",
+      "minutes_left": 1440,
+      "price_line": "до 19:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=40&s=505"
+     },
+     {
+      "session_id": 506,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "19:00",
+      "end": "20:30",
+      "minutes_left": 1500,
+      "price_line": "до 20:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=506"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-24",
+    "label": "вт, 24",
+    "rows": [
+     {
+      "session_id": 701,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 2400,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=701"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-25",
+    "label": "ср, 25",
+    "rows": [
+     {
+      "session_id": 702,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 3840,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=702"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-26",
+    "label": "чт, 26",
+    "rows": [
+     {
+      "session_id": 703,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 5280,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=703"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 601,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 8160,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=601"
+     },
+     {
+      "session_id": 602,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "12:00",
+      "end": "13:30",
+      "minutes_left": 8280,
+      "price_line": "до 13:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=602"
+     },
+     {
+      "session_id": 603,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "14:00",
+      "end": "15:30",
+      "minutes_left": 8400,
+      "price_line": "до 15:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=603"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "17 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "на неделе · на 5 катках"
+    }
+   ]
+  }
+ },
+ "base|week|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 17,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 1,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 1
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-22",
+    "label": "вс, 22",
+    "rows": [
+     {
+      "session_id": 411,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "18:00",
+      "end": "19:45",
+      "minutes_left": 15,
+      "price_line": "до 19:45 · 12 BYN · прокат 8",
+      "kind": "ohm",
+      "href": "arena?ref=115&s=411"
+     },
+     {
+      "session_id": 412,
+      "arena_id": 40,
+      "arena_name": "Олимпик Центр",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "20:00",
+      "end": "21:30",
+      "minutes_left": 120,
+      "price_line": "до 21:30 · 12 BYN · прокат 8",
+      "kind": "ohm",
+      "href": "arena?ref=40&s=412"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-23",
+    "label": "пн, 23",
+    "rows": [
+     {
+      "session_id": 511,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "07:00",
+      "end": "08:30",
+      "minutes_left": 780,
+      "price_line": "до 08:30 · 12 BYN · прокат 8",
+      "kind": "ohm",
+      "href": "arena?ref=115&s=511"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "3 сеанса с клюшкой",
+   "sub_parts": [
+    {
+     "text": "на неделе · на 2 катках"
+    }
+   ]
+  }
+ },
+ "base|week|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 17,
+    "week_count": 19
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 1,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 3
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 611,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "09:00",
+      "end": "10:30",
+      "minutes_left": 8100,
+      "price_line": "до 10:30 · 12 BYN · прокат 8",
+      "kind": "figure",
+      "href": "arena?ref=11&s=611"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "1 сеанс фигурного",
+   "sub_parts": [
+    {
+     "text": "на неделе · на одном катке"
+    }
+   ]
+  }
+ },
+ "night|today|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "skate",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 3
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 2
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 5
+   }
+  ],
+  "ongoing": [],
+  "now_line": "Сейчас 03:13",
+  "upcoming": [
+   {
+    "session_id": 410,
+    "arena_id": 25,
+    "arena_name": "Ледовый дворец",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "09:00",
+    "end": "10:30",
+    "minutes_left": 437,
+    "price_line": "до 10:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=25&s=410"
+   },
+   {
+    "session_id": 411,
+    "arena_id": 38,
+    "arena_name": "Каток на Немиге",
+    "photo": {
+     "thumb": "/photos/arena-38/hero.webp",
+     "card": "/photos/arena-38/hero.webp"
+    },
+    "time": "10:00",
+    "end": "11:30",
+    "minutes_left": 497,
+    "price_line": "до 11:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=38&s=411"
+   },
+   {
+    "session_id": 412,
+    "arena_id": 115,
+    "arena_name": "Чижовка-Арена",
+    "photo": {
+     "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+     "card": "/photos/arena-115/hockey-rink-interior.jpg"
+    },
+    "time": "10:00",
+    "end": "11:30",
+    "minutes_left": 497,
+    "price_line": "до 11:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=115&s=412"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": {
+   "label": "пн, 23 ноября",
+   "all_label": "Весь понедельник",
+   "rows": [
+    {
+     "session_id": 501,
+     "arena_id": 38,
+     "arena_name": "Каток на Немиге",
+     "photo": {
+      "thumb": "/photos/arena-38/hero.webp",
+      "card": "/photos/arena-38/hero.webp"
+     },
+     "time": "08:00",
+     "end": "09:30",
+     "minutes_left": 1817,
+     "price_line": "до 09:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=38&s=501"
+    },
+    {
+     "session_id": 502,
+     "arena_id": 25,
+     "arena_name": "Ледовый дворец",
+     "photo": {
+      "thumb": "/photos/arena-25/hero.jpg",
+      "card": "/photos/arena-25/hero.jpg"
+     },
+     "time": "09:00",
+     "end": "10:30",
+     "minutes_left": 1877,
+     "price_line": "до 10:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=25&s=502"
+    }
+   ],
+   "total": 2,
+   "href_day": "tomorrow"
+  },
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "3 сеанса массового",
+   "sub_parts": [
+    {
+     "text": "сегодня на 3 катках · ближайший в 09:00, через 5 ч 47 мин"
+    }
+   ]
+  }
+ },
+ "night|today|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "ohm",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "новых расписаний пока нет"
+    }
+   ]
+  }
+ },
+ "night|today|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "figure",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "новых расписаний пока нет"
+    }
+   ]
+  }
+ },
+ "night|tomorrow|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "skate",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 2,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 3
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 2
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 5
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [
+   {
+    "session_id": 501,
+    "arena_id": 38,
+    "arena_name": "Каток на Немиге",
+    "photo": {
+     "thumb": "/photos/arena-38/hero.webp",
+     "card": "/photos/arena-38/hero.webp"
+    },
+    "time": "08:00",
+    "end": "09:30",
+    "minutes_left": 1817,
+    "price_line": "до 09:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=38&s=501"
+   },
+   {
+    "session_id": 502,
+    "arena_id": 25,
+    "arena_name": "Ледовый дворец",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "09:00",
+    "end": "10:30",
+    "minutes_left": 1877,
+    "price_line": "до 10:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=25&s=502"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "2 сеанса массового",
+   "sub_parts": [
+    {
+     "text": "завтра · на 2 катках"
+    }
+   ]
+  }
+ },
+ "night|tomorrow|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "ohm",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 2,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "night|tomorrow|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "figure",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 2,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "night|weekend|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "skate",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 3
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 2
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 5
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "night|weekend|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "ohm",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "night|weekend|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "figure",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "night|week|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "skate",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 3
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 2
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 5
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-22",
+    "label": "вс, 22",
+    "rows": [
+     {
+      "session_id": 410,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "09:00",
+      "end": "10:30",
+      "minutes_left": 437,
+      "price_line": "до 10:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=410"
+     },
+     {
+      "session_id": 411,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 497,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=411"
+     },
+     {
+      "session_id": 412,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 497,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=412"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-23",
+    "label": "пн, 23",
+    "rows": [
+     {
+      "session_id": 501,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "08:00",
+      "end": "09:30",
+      "minutes_left": 1817,
+      "price_line": "до 09:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=501"
+     },
+     {
+      "session_id": 502,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "09:00",
+      "end": "10:30",
+      "minutes_left": 1877,
+      "price_line": "до 10:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=502"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "5 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "на неделе · на 3 катках"
+    }
+   ]
+  }
+ },
+ "night|week|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "ohm",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "night|week|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "03:13",
+  "kind": "figure",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 5
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "late|today|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "skate",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 3
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": {
+   "label": "пн, 23 ноября",
+   "all_label": "Весь понедельник",
+   "rows": [
+    {
+     "session_id": 501,
+     "arena_id": 38,
+     "arena_name": "Каток на Немиге",
+     "photo": {
+      "thumb": "/photos/arena-38/hero.webp",
+      "card": "/photos/arena-38/hero.webp"
+     },
+     "time": "08:00",
+     "end": "09:30",
+     "minutes_left": 620,
+     "price_line": "до 09:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=38&s=501"
+    },
+    {
+     "session_id": 502,
+     "arena_id": 25,
+     "arena_name": "Ледовый дворец",
+     "photo": {
+      "thumb": "/photos/arena-25/hero.jpg",
+      "card": "/photos/arena-25/hero.jpg"
+     },
+     "time": "09:00",
+     "end": "10:30",
+     "minutes_left": 680,
+     "price_line": "до 10:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=25&s=502"
+    },
+    {
+     "session_id": 503,
+     "arena_id": 115,
+     "arena_name": "Чижовка-Арена",
+     "photo": {
+      "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+      "card": "/photos/arena-115/hockey-rink-interior.jpg"
+     },
+     "time": "10:00",
+     "end": "11:30",
+     "minutes_left": 740,
+     "price_line": "до 11:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=115&s=503"
+    }
+   ],
+   "total": 3,
+   "href_day": "tomorrow"
+  },
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "завтра 3 сеанса · первый в 08:00"
+    }
+   ]
+  }
+ },
+ "late|today|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "ohm",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "новых расписаний пока нет"
+    }
+   ]
+  }
+ },
+ "late|today|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "figure",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "новых расписаний пока нет"
+    }
+   ]
+  }
+ },
+ "late|tomorrow|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "skate",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 3
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [
+   {
+    "session_id": 501,
+    "arena_id": 38,
+    "arena_name": "Каток на Немиге",
+    "photo": {
+     "thumb": "/photos/arena-38/hero.webp",
+     "card": "/photos/arena-38/hero.webp"
+    },
+    "time": "08:00",
+    "end": "09:30",
+    "minutes_left": 620,
+    "price_line": "до 09:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=38&s=501"
+   },
+   {
+    "session_id": 502,
+    "arena_id": 25,
+    "arena_name": "Ледовый дворец",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "09:00",
+    "end": "10:30",
+    "minutes_left": 680,
+    "price_line": "до 10:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=25&s=502"
+   },
+   {
+    "session_id": 503,
+    "arena_id": 115,
+    "arena_name": "Чижовка-Арена",
+    "photo": {
+     "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+     "card": "/photos/arena-115/hockey-rink-interior.jpg"
+    },
+    "time": "10:00",
+    "end": "11:30",
+    "minutes_left": 740,
+    "price_line": "до 11:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=115&s=503"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "3 сеанса массового",
+   "sub_parts": [
+    {
+     "text": "завтра · на 3 катках"
+    }
+   ]
+  }
+ },
+ "late|tomorrow|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "ohm",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "late|tomorrow|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "figure",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "late|weekend|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "skate",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 3
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "late|weekend|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "ohm",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "late|weekend|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "figure",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "late|week|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "skate",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 3
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-23",
+    "label": "пн, 23",
+    "rows": [
+     {
+      "session_id": 501,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "08:00",
+      "end": "09:30",
+      "minutes_left": 620,
+      "price_line": "до 09:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=501"
+     },
+     {
+      "session_id": 502,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "09:00",
+      "end": "10:30",
+      "minutes_left": 680,
+      "price_line": "до 10:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=502"
+     },
+     {
+      "session_id": 503,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 740,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=503"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "3 сеанса массового",
+   "sub_parts": [
+    {
+     "text": "на неделе · на 3 катках"
+    }
+   ]
+  }
+ },
+ "late|week|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "ohm",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "late|week|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "23:10",
+  "kind": "figure",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 3
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|today|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 5
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 5
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 10
+   }
+  ],
+  "ongoing": [
+   {
+    "session_id": 401,
+    "arena_id": 38,
+    "arena_name": "Каток на Немиге",
+    "photo": {
+     "thumb": "/photos/arena-38/hero.webp",
+     "card": "/photos/arena-38/hero.webp"
+    },
+    "time": "18:30",
+    "end": "20:00",
+    "minutes_left": 30,
+    "price_line": "до 20:00 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=38&s=401"
+   },
+   {
+    "session_id": 402,
+    "arena_id": 25,
+    "arena_name": "Ледовый дворец",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "19:00",
+    "end": "20:30",
+    "minutes_left": 60,
+    "price_line": "до 20:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=25&s=402"
+   }
+  ],
+  "now_line": "Сейчас 19:30",
+  "upcoming": [
+   {
+    "session_id": 403,
+    "arena_id": 11,
+    "arena_name": "Минск-Спортпалас",
+    "photo": {
+     "thumb": "/photos/arena-11/hero.webp",
+     "card": "/photos/arena-11/hero.webp"
+    },
+    "time": "20:00",
+    "end": "21:30",
+    "minutes_left": 120,
+    "price_line": "до 21:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=11&s=403"
+   },
+   {
+    "session_id": 404,
+    "arena_id": 115,
+    "arena_name": "Чижовка-Арена",
+    "photo": {
+     "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+     "card": "/photos/arena-115/hockey-rink-interior.jpg"
+    },
+    "time": "20:30",
+    "end": "22:00",
+    "minutes_left": 150,
+    "price_line": "до 22:00 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=115&s=404"
+   },
+   {
+    "session_id": 405,
+    "arena_id": 40,
+    "arena_name": "Олимпик Центр",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "21:00",
+    "end": "22:30",
+    "minutes_left": 180,
+    "price_line": "до 22:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=40&s=405"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "5 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "из 7 сегодня · на 5 катках · "
+    },
+    {
+     "text": "2 идут сейчас",
+     "tone": "live"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|today|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 2
+   }
+  ],
+  "ongoing": [
+   {
+    "session_id": 411,
+    "arena_id": 115,
+    "arena_name": "Чижовка-Арена",
+    "photo": {
+     "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+     "card": "/photos/arena-115/hockey-rink-interior.jpg"
+    },
+    "time": "18:00",
+    "end": "19:45",
+    "minutes_left": 15,
+    "price_line": "до 19:45 · 12 BYN · прокат 8",
+    "kind": "ohm",
+    "href": "arena?ref=115&s=411"
+   }
+  ],
+  "now_line": "Сейчас 19:30",
+  "upcoming": [
+   {
+    "session_id": 412,
+    "arena_id": 40,
+    "arena_name": "Олимпик Центр",
+    "photo": {
+     "thumb": "/photos/arena-25/hero.jpg",
+     "card": "/photos/arena-25/hero.jpg"
+    },
+    "time": "20:00",
+    "end": "21:30",
+    "minutes_left": 120,
+    "price_line": "до 21:30 · 12 BYN · прокат 8",
+    "kind": "ohm",
+    "href": "arena?ref=40&s=412"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "2 сеанса с клюшкой",
+   "sub_parts": [
+    {
+     "text": "из 7 сегодня · на 5 катках · "
+    },
+    {
+     "text": "1 идёт сейчас",
+     "tone": "live"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|today|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 3
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "ближайший — сб, 28"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|tomorrow|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 5
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 5
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 10
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|tomorrow|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 2
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|tomorrow|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 0,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 3
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|weekend|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 3,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 5
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 5
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 10
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 601,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 8160,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=601"
+     },
+     {
+      "session_id": 602,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "12:00",
+      "end": "13:30",
+      "minutes_left": 8280,
+      "price_line": "до 13:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=602"
+     },
+     {
+      "session_id": 603,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "14:00",
+      "end": "15:30",
+      "minutes_left": 8400,
+      "price_line": "до 15:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=603"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-29",
+    "label": "вс, 29",
+    "rows": [
+     {
+      "session_id": 604,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 9600,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=11&s=604"
+     },
+     {
+      "session_id": 605,
+      "arena_id": 40,
+      "arena_name": "Олимпик Центр",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "16:00",
+      "end": "17:30",
+      "minutes_left": 9960,
+      "price_line": "до 17:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=40&s=605"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "5 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "на выходных · на 5 катках"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|weekend|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 3,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 2
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|weekend|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 5,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 3,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 3
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 611,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "09:00",
+      "end": "10:30",
+      "minutes_left": 8100,
+      "price_line": "до 10:30 · 12 BYN · прокат 8",
+      "kind": "figure",
+      "href": "arena?ref=11&s=611"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-29",
+    "label": "вс, 29",
+    "rows": [
+     {
+      "session_id": 612,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 9600,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "figure",
+      "href": "arena?ref=11&s=612"
+     },
+     {
+      "session_id": 613,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "12:00",
+      "end": "13:30",
+      "minutes_left": 9720,
+      "price_line": "до 13:30 · 12 BYN · прокат 8",
+      "kind": "figure",
+      "href": "arena?ref=25&s=613"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "3 сеанса фигурного",
+   "sub_parts": [
+    {
+     "text": "на выходных · на 2 катках"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|week|skate": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 8,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 1,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 5
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 5
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 10
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-22",
+    "label": "вс, 22",
+    "rows": [
+     {
+      "session_id": 401,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "18:30",
+      "end": "20:00",
+      "minutes_left": 30,
+      "price_line": "до 20:00 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=401"
+     },
+     {
+      "session_id": 402,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "19:00",
+      "end": "20:30",
+      "minutes_left": 60,
+      "price_line": "до 20:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=402"
+     },
+     {
+      "session_id": 403,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "20:00",
+      "end": "21:30",
+      "minutes_left": 120,
+      "price_line": "до 21:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=11&s=403"
+     },
+     {
+      "session_id": 404,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "20:30",
+      "end": "22:00",
+      "minutes_left": 150,
+      "price_line": "до 22:00 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=404"
+     },
+     {
+      "session_id": 405,
+      "arena_id": 40,
+      "arena_name": "Олимпик Центр",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "21:00",
+      "end": "22:30",
+      "minutes_left": 180,
+      "price_line": "до 22:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=40&s=405"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 601,
+      "arena_id": 38,
+      "arena_name": "Каток на Немиге",
+      "photo": {
+       "thumb": "/photos/arena-38/hero.webp",
+       "card": "/photos/arena-38/hero.webp"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 8160,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=38&s=601"
+     },
+     {
+      "session_id": 602,
+      "arena_id": 25,
+      "arena_name": "Ледовый дворец",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "12:00",
+      "end": "13:30",
+      "minutes_left": 8280,
+      "price_line": "до 13:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=25&s=602"
+     },
+     {
+      "session_id": 603,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "14:00",
+      "end": "15:30",
+      "minutes_left": 8400,
+      "price_line": "до 15:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=115&s=603"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "8 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "на неделе · на 5 катках"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|week|ohm": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 8,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 1,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 2
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-22",
+    "label": "вс, 22",
+    "rows": [
+     {
+      "session_id": 411,
+      "arena_id": 115,
+      "arena_name": "Чижовка-Арена",
+      "photo": {
+       "thumb": "/photos/arena-115/hockey-rink-interior.jpg",
+       "card": "/photos/arena-115/hockey-rink-interior.jpg"
+      },
+      "time": "18:00",
+      "end": "19:45",
+      "minutes_left": 15,
+      "price_line": "до 19:45 · 12 BYN · прокат 8",
+      "kind": "ohm",
+      "href": "arena?ref=115&s=411"
+     },
+     {
+      "session_id": 412,
+      "arena_id": 40,
+      "arena_name": "Олимпик Центр",
+      "photo": {
+       "thumb": "/photos/arena-25/hero.jpg",
+       "card": "/photos/arena-25/hero.jpg"
+      },
+      "time": "20:00",
+      "end": "21:30",
+      "minutes_left": 120,
+      "price_line": "до 21:30 · 12 BYN · прокат 8",
+      "kind": "ohm",
+      "href": "arena?ref=40&s=412"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "2 сеанса с клюшкой",
+   "sub_parts": [
+    {
+     "text": "на неделе · на 2 катках"
+    }
+   ]
+  }
+ },
+ "tomorrow-empty|week|figure": {
+  "city": {
+   "id": 1,
+   "name": "Минск",
+   "name_in": "Минске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 8,
+    "week_count": 10
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 2,
+    "week_count": 2
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 1,
+    "week_count": 3
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 3
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 3
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 611,
+      "arena_id": 11,
+      "arena_name": "Минск-Спортпалас",
+      "photo": {
+       "thumb": "/photos/arena-11/hero.webp",
+       "card": "/photos/arena-11/hero.webp"
+      },
+      "time": "09:00",
+      "end": "10:30",
+      "minutes_left": 8100,
+      "price_line": "до 10:30 · 12 BYN · прокат 8",
+      "kind": "figure",
+      "href": "arena?ref=11&s=611"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": {
+   "label": "сб, 28",
+   "date": "2026-11-28"
+  },
+  "one_rink": false,
+  "rink": null,
+  "week": null,
+  "arenas": [
+   {
+    "id": 38,
+    "name": "Каток на Немиге"
+   },
+   {
+    "id": 25,
+    "name": "Ледовый дворец"
+   },
+   {
+    "id": 11,
+    "name": "Минск-Спортпалас"
+   },
+   {
+    "id": 115,
+    "name": "Чижовка-Арена"
+   },
+   {
+    "id": 40,
+    "name": "Олимпик Центр"
+   }
+  ],
+  "title": {
+   "main": "1 сеанс фигурного",
+   "sub_parts": [
+    {
+     "text": "на неделе · на одном катке"
+    }
+   ]
+  }
+ },
+ "onerink|today|skate": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 2,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 3
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 1
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 8
+   }
+  ],
+  "ongoing": [
+   {
+    "session_id": 401,
+    "arena_id": 1,
+    "arena_name": "УСК «Волна»",
+    "photo": {
+     "thumb": "/photos/mozyr-global-ice/hero.jpg",
+     "card": "/photos/mozyr-global-ice/hero.jpg"
+    },
+    "time": "18:30",
+    "end": "20:00",
+    "minutes_left": 30,
+    "price_line": "до 20:00 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=1&s=401"
+   }
+  ],
+  "now_line": "Сейчас 19:30",
+  "upcoming": [
+   {
+    "session_id": 403,
+    "arena_id": 1,
+    "arena_name": "УСК «Волна»",
+    "photo": {
+     "thumb": "/photos/mozyr-global-ice/hero.jpg",
+     "card": "/photos/mozyr-global-ice/hero.jpg"
+    },
+    "time": "20:00",
+    "end": "21:30",
+    "minutes_left": 120,
+    "price_line": "до 21:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=1&s=403"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": {
+   "label": "пн, 23 ноября",
+   "all_label": "Весь понедельник",
+   "rows": [
+    {
+     "session_id": 501,
+     "arena_id": 1,
+     "arena_name": "УСК «Волна»",
+     "photo": {
+      "thumb": "/photos/mozyr-global-ice/hero.jpg",
+      "card": "/photos/mozyr-global-ice/hero.jpg"
+     },
+     "time": "08:00",
+     "end": "09:30",
+     "minutes_left": 840,
+     "price_line": "до 09:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=1&s=501"
+    },
+    {
+     "session_id": 502,
+     "arena_id": 1,
+     "arena_name": "УСК «Волна»",
+     "photo": {
+      "thumb": "/photos/mozyr-global-ice/hero.jpg",
+      "card": "/photos/mozyr-global-ice/hero.jpg"
+     },
+     "time": "10:00",
+     "end": "11:30",
+     "minutes_left": 960,
+     "price_line": "до 11:30 · 12 BYN · прокат 8",
+     "kind": "skate",
+     "href": "arena?ref=1&s=502"
+    }
+   ],
+   "total": 3,
+   "href_day": "tomorrow"
+  },
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": [
+   {
+    "date": "2026-11-23",
+    "label": "Завтра",
+    "sub": "23",
+    "times": [
+     {
+      "time": "08:00",
+      "session_id": 501,
+      "href": "arena?ref=1&s=501"
+     },
+     {
+      "time": "10:00",
+      "session_id": 502,
+      "href": "arena?ref=1&s=502"
+     },
+     {
+      "time": "18:00",
+      "session_id": 503,
+      "href": "arena?ref=1&s=503"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-24",
+    "label": "Вт",
+    "sub": "24",
+    "times": [
+     {
+      "time": "12:00",
+      "session_id": 504,
+      "href": "arena?ref=1&s=504"
+     },
+     {
+      "time": "19:00",
+      "session_id": 505,
+      "href": "arena?ref=1&s=505"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-28",
+    "label": "Сб",
+    "sub": "28",
+    "times": [
+     {
+      "time": "10:00",
+      "session_id": 506,
+      "href": "arena?ref=1&s=506"
+     }
+    ]
+   }
+  ],
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "2 сеанса массового",
+   "sub_parts": [
+    {
+     "text": "из 2 сегодня · на одном катке · "
+    },
+    {
+     "text": "1 идёт сейчас",
+     "tone": "live"
+    }
+   ]
+  }
+ },
+ "onerink|today|ohm": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 2,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": [],
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "новых расписаний пока нет"
+    }
+   ]
+  }
+ },
+ "onerink|today|figure": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "today",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 2,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": [],
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "Сегодня лёд закончился",
+   "sub_parts": [
+    {
+     "text": "новых расписаний пока нет"
+    }
+   ]
+  }
+ },
+ "onerink|tomorrow|skate": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 3
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 1
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 8
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [
+   {
+    "session_id": 501,
+    "arena_id": 1,
+    "arena_name": "УСК «Волна»",
+    "photo": {
+     "thumb": "/photos/mozyr-global-ice/hero.jpg",
+     "card": "/photos/mozyr-global-ice/hero.jpg"
+    },
+    "time": "08:00",
+    "end": "09:30",
+    "minutes_left": 840,
+    "price_line": "до 09:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=1&s=501"
+   },
+   {
+    "session_id": 502,
+    "arena_id": 1,
+    "arena_name": "УСК «Волна»",
+    "photo": {
+     "thumb": "/photos/mozyr-global-ice/hero.jpg",
+     "card": "/photos/mozyr-global-ice/hero.jpg"
+    },
+    "time": "10:00",
+    "end": "11:30",
+    "minutes_left": 960,
+    "price_line": "до 11:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=1&s=502"
+   },
+   {
+    "session_id": 503,
+    "arena_id": 1,
+    "arena_name": "УСК «Волна»",
+    "photo": {
+     "thumb": "/photos/mozyr-global-ice/hero.jpg",
+     "card": "/photos/mozyr-global-ice/hero.jpg"
+    },
+    "time": "18:00",
+    "end": "19:30",
+    "minutes_left": 1440,
+    "price_line": "до 19:30 · 12 BYN · прокат 8",
+    "kind": "skate",
+    "href": "arena?ref=1&s=503"
+   }
+  ],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "3 сеанса массового",
+   "sub_parts": [
+    {
+     "text": "завтра · на одном катке"
+    }
+   ]
+  }
+ },
+ "onerink|tomorrow|ohm": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "onerink|tomorrow|figure": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "tomorrow",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 3,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "onerink|weekend|skate": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 1,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 3
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 1
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 8
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 506,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 8160,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=506"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "1 сеанс массового",
+   "sub_parts": [
+    {
+     "text": "на выходных · на одном катке"
+    }
+   ]
+  }
+ },
+ "onerink|weekend|ohm": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 1,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "onerink|weekend|figure": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "weekend",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 1,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "onerink|week|skate": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "skate",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 8,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 2
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 3
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 1
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 8
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [
+   {
+    "date": "2026-11-22",
+    "label": "вс, 22",
+    "rows": [
+     {
+      "session_id": 401,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "18:30",
+      "end": "20:00",
+      "minutes_left": 30,
+      "price_line": "до 20:00 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=401"
+     },
+     {
+      "session_id": 403,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "20:00",
+      "end": "21:30",
+      "minutes_left": 120,
+      "price_line": "до 21:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=403"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-23",
+    "label": "пн, 23",
+    "rows": [
+     {
+      "session_id": 501,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "08:00",
+      "end": "09:30",
+      "minutes_left": 840,
+      "price_line": "до 09:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=501"
+     },
+     {
+      "session_id": 502,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 960,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=502"
+     },
+     {
+      "session_id": 503,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "18:00",
+      "end": "19:30",
+      "minutes_left": 1440,
+      "price_line": "до 19:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=503"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-24",
+    "label": "вт, 24",
+    "rows": [
+     {
+      "session_id": 504,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "12:00",
+      "end": "13:30",
+      "minutes_left": 2520,
+      "price_line": "до 13:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=504"
+     },
+     {
+      "session_id": 505,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "19:00",
+      "end": "20:30",
+      "minutes_left": 2940,
+      "price_line": "до 20:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=505"
+     }
+    ]
+   },
+   {
+    "date": "2026-11-28",
+    "label": "сб, 28",
+    "rows": [
+     {
+      "session_id": 506,
+      "arena_id": 1,
+      "arena_name": "УСК «Волна»",
+      "photo": {
+       "thumb": "/photos/mozyr-global-ice/hero.jpg",
+       "card": "/photos/mozyr-global-ice/hero.jpg"
+      },
+      "time": "10:00",
+      "end": "11:30",
+      "minutes_left": 8160,
+      "price_line": "до 11:30 · 12 BYN · прокат 8",
+      "kind": "skate",
+      "href": "arena?ref=1&s=506"
+     }
+    ]
+   }
+  ],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "8 сеансов массового",
+   "sub_parts": [
+    {
+     "text": "на неделе · на одном катке"
+    }
+   ]
+  }
+ },
+ "onerink|week|ohm": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "ohm",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 8,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов с клюшкой",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ },
+ "onerink|week|figure": {
+  "city": {
+   "id": 5,
+   "name": "Пинск",
+   "name_in": "Пинске"
+  },
+  "now_local": "19:30",
+  "kind": "figure",
+  "day": "week",
+  "kinds": [
+   {
+    "key": "skate",
+    "label": "Массовое",
+    "count": 8,
+    "week_count": 8
+   },
+   {
+    "key": "ohm",
+    "label": "С клюшкой",
+    "count": 0,
+    "week_count": 0
+   },
+   {
+    "key": "figure",
+    "label": "Фигурное",
+    "count": 0,
+    "week_count": 0
+   }
+  ],
+  "days": [
+   {
+    "key": "today",
+    "label": "Сегодня",
+    "count": 0
+   },
+   {
+    "key": "tomorrow",
+    "label": "Завтра",
+    "count": 0
+   },
+   {
+    "key": "weekend",
+    "label": "Выходные",
+    "count": 0
+   },
+   {
+    "key": "week",
+    "label": "Неделя",
+    "count": 0
+   }
+  ],
+  "ongoing": [],
+  "now_line": null,
+  "upcoming": [],
+  "groups": [],
+  "tomorrow_morning": null,
+  "next_ice": null,
+  "one_rink": true,
+  "rink": {
+   "id": 1,
+   "name": "УСК «Волна»",
+   "address": "ул. Завальная, 14",
+   "photo": {
+    "thumb": "/photos/mozyr-global-ice/hero.jpg",
+    "card": "/photos/mozyr-global-ice/hero.jpg"
+   },
+   "href": "arena?ref=1"
+  },
+  "week": null,
+  "arenas": [
+   {
+    "id": 1,
+    "name": "УСК «Волна»"
+   }
+  ],
+  "title": {
+   "main": "0 сеансов фигурного",
+   "sub_parts": [
+    {
+     "text": "сеансов нет"
+    }
+   ]
+  }
+ }
+}
