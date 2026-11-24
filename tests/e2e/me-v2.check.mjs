@@ -93,6 +93,11 @@ const ME_NEWBIE = {
   rows: { bookings: null, passes: null, saved: { count: 0 }, family: { count: 0 }, requests: null, trainer: null },
   profile_name: null, saved_detail: null, pass: null,
 };
+const ME_COMPANY = { code: 'abc12345', name: '', session_id: 401, arena_id: 11,
+  arena_name: 'Конькобежный', starts_local: '17:45', day_label: 'сб, 28', going_count: 3,
+  going_names: ['Аня', 'Дима', 'Света'], crowd_line: 'Трое — это уже компания',
+  my_status: 'going', page_url: '/k/abc12345', photo: { thumb: null, card: null } };
+const ME_WITH_COMPANIES = { ...ME_SOLO, companies: [ME_COMPANY, { ...ME_COMPANY, code: 'def67890', day_label: 'завтра', my_status: 'organizer', arena_name: 'Ледовый дворец', starts_local: '10:00' }] };
 const ME_PARENT = {
   ...ME_SOLO, name: 'Максим', profile_name: 'Миша Ковалёв',
   rows: { ...ME_SOLO.rows, family: { count: 2, value: 'Максим, Миша' } },
@@ -245,6 +250,23 @@ const browser = await chromium.launch();
   await shot(page, '06-no-s5');
   check('06: сезонной карточки нет', await page.locator('.mv2-season').count() === 0);
   check('06: без JS-ошибок', errors.length === 0, errors.join('; '));
+  await ctx.close();
+}
+
+/* 08 «Мои компании» (s4+s5) */
+{
+  const { page, ctx, errors } = await openMe(browser, { me: ME_WITH_COMPANIES });
+  await shot(page, '08-companies');
+  check('08: секция «Мои компании»', (await page.locator('.mv2-sec__h').textContent()).includes('Мои компании'));
+  check('08: заголовок 22/700 вне карточки', await page.locator('.mv2-sec__h').evaluate((el) => {
+    const s = getComputedStyle(el);
+    return s.fontSize === '22px' && s.fontWeight === '700' && !el.closest('.mv2-card');
+  }));
+  check('08: имена через «и»', (await page.locator('[data-company]').first().textContent()).includes('Аня, Дима и Света'));
+  check('08: 2 строки', await page.locator('[data-company]').count() === 2);
+  check('08: «ты идёшь»', (await page.locator('[data-company]').first().textContent()).includes('ты идёшь'));
+  check('08: «организатор»', (await page.locator('[data-company]').nth(1).textContent()).includes('организатор'));
+  check('08: без JS-ошибок', errors.length === 0, errors.join('; '));
   await ctx.close();
 }
 

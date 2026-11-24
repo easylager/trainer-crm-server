@@ -196,6 +196,34 @@
       '<svg class="mv2-row__chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></button>';
   }
 
+  function companiesHtml(d) {
+    if (!s5on()) return '';
+    var list = Array.isArray(d.companies) ? d.companies : [];
+    if (!list.length) return '';
+    var rows = list.map(function (c) {
+      var names = (c.going_names || []).slice(0, 3);
+      var avas = names.map(function (n) {
+        return '<span class="mv2-comp__ava">' + esc(String(n || '?').trim().charAt(0).toUpperCase()) + '</span>';
+      }).join('');
+      var who = c.my_status === 'organizer' ? 'организатор' : 'ты идёшь';
+      var sub = [c.day_label, c.arena_name + (c.starts_local ? ', ' + c.starts_local : ''), who].filter(Boolean).join(' · ');
+      var title = names.length
+        ? namesJoin(names) + (c.going_count > names.length ? ' и ещё ' + (c.going_count - names.length) : '')
+        : (c.name || 'Компания');
+      return '<a class="mv2-row mv2-row--quiet ga-press" href="' + esc(c.page_url) + '" data-company="' + esc(c.page_url) + '">' +
+        '<span class="mv2-comp__avas">' + avas + '</span>' +
+        '<div class="mv2-row__main"><div class="mv2-row__t">' + esc(title) + '</div>' +
+        '<div class="mv2-row__s">' + esc(sub) + '</div></div>' +
+        '<svg class="mv2-row__chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></a>';
+    }).join('');
+    return '<section class="mv2-sec"><h2 class="mv2-sec__h">Мои компании</h2><div class="mv2-card mv2-set">' + rows + '</div></section>';
+  }
+
+  /* «Аня и Дима», «Аня, Дима и Света» — последнее имя через «и». */
+  function namesJoin(arr) {
+    return arr.length > 1 ? arr.slice(0, -1).join(', ') + ' и ' + arr[arr.length - 1] : (arr[0] || '');
+  }
+
   function tilesHtml(d) {
     var fam = isObj(d.rows) && isObj(d.rows.family) ? d.rows.family : {};
     var famLine = text(fam.value) || 'Добавить ребёнка';
@@ -227,6 +255,7 @@
       seasonHtml(season) +
       (isObj(d.home_arena) && d.home_arena.id ? rinkHtml(d.home_arena) : pickRinkHtml()) +
       clubHtml(d.club) +
+      companiesHtml(d) +
       tilesHtml(d) +
       settingsHtml(d);
     page.innerHTML = html;
@@ -261,6 +290,15 @@
       });
     }
     page.addEventListener('click', function (ev) {
+      var cb = ev.target.closest && ev.target.closest('[data-company]');
+      if (cb) {
+        ev.preventDefault();
+        var cu = cb.getAttribute('data-company');
+        var tw = root.Telegram && root.Telegram.WebApp;
+        if (cu && tw && tw.openTelegramLink) { tw.openTelegramLink(cu); return; }
+        if (cu) { root.open(cu, '_blank'); }
+        return;
+      }
       var a = ev.target.closest && ev.target.closest('[data-nav]');
       if (!a) return;
       var href = a.getAttribute('data-nav');

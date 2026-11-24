@@ -488,6 +488,7 @@ async def client_me(
     telegram_name: str,
     now: datetime | None = None,
     include_v2: bool = False,
+    include_companies: bool = False,
 ) -> dict:
     """Один экран «Я». Запросы идут по очереди: одна сессия не держит их параллельно."""
     moment = now or datetime.now(timezone.utc)
@@ -560,4 +561,9 @@ async def client_me(
         if saved_v2 and saved:
             saved["line"] = saved_v2["line"]
         out["saved_detail"] = saved_v2
+    # TASK-450 (5.3): «Мои компании» — открытые, где я организатор или «иду/может» (s5).
+    if include_companies:
+        from src.application.ice_company.mine import my_open_companies
+
+        out["companies"] = await my_open_companies(session, account_key, moment, limit=5)
     return out

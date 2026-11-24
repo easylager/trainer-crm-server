@@ -540,8 +540,11 @@
     var bits = [];
     if (found.end) bits.push('до ' + found.end);
     if (found.price) bits.push(found.price);
-    var share = found.invite_url
-      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="share" data-url="' + esc(found.invite_url) + '">Позвать друзей</button>'
+    var share = found.invite_url || (s5On() && found.arena_id)
+      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="invite" data-url="' + esc(found.invite_url || '') +
+        '" data-arena="' + esc(found.arena_id || '') + '" data-session="' + esc(found.session_id || '') +
+        '" data-label="' + esc((found.time || '') + ' · ' + (found.name || '')) + '" data-place="' + esc(found.name || '') +
+        '">Позвать друзей</button>'
       : '';
     var route = '<button type="button" class="hv2-btn hv2-btn--ink ga-press" data-act="nav" data-path="' + esc(found.href || 'ice') + '">' +
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.4"/><circle cx="18" cy="5" r="2.4"/><path d="M8.4 19h5.1a3.5 3.5 0 0 0 0-7h-3a3.5 3.5 0 0 1 0-7h5.1"/></svg> Маршрут</button>';
@@ -605,8 +608,11 @@
       ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="checkin">Отмечено · ' + o.season_days + '-й раз</button>'
       : '<button type="button" class="hv2-btn hv2-btn--yellow ga-press" data-act="checkin">✓ Я здесь</button>';
     state.yellowUsed = !checked;
-    var share = o.invite_url
-      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="share" data-url="' + esc(o.invite_url) + '">Позвать сюда</button>'
+    var share = o.invite_url || (s5On() && o.arena_id)
+      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="invite" data-url="' + esc(o.invite_url || '') +
+        '" data-arena="' + esc(o.arena_id || '') + '" data-session="' + esc(o.session_id || '') +
+        '" data-label="' + esc('до ' + (o.ends_local || '')) + '" data-place="' + esc(o.arena_name || '') +
+        '">Позвать сюда</button>'
       : '';
     var stats =
       '<article class="hv2-card hv2-onice__stats">' +
@@ -641,7 +647,9 @@
       if (!window.GlideCheckin) return;
       window.GlideCheckin.open({
         session_id: o.session_id,
+        arena_id: o.arena_id || null,
         arena_name: o.arena_name,
+        company: !!((home() || {}).company_share),
         checkin_id: o.checked_in ? o.checkin_id : null,
         load_level: o.load_level,
         season_days: o.checked_in ? o.season_days : null,
@@ -1036,6 +1044,80 @@
       return !!(c && String(c.u) === uid && c.redesign_s4 === true);
     } catch (e) { return false; }
   }
+  function s5On() {
+    try {
+      var u = tgUser();
+      var uid = u && u.id != null ? String(u.id) : '';
+      var c = JSON.parse(localStorage.getItem('cw_ui_flags_v1') || 'null');
+      return !!(c && String(c.u) === uid && c.redesign_s5 === true);
+    } catch (e) { return false; }
+  }
+
+  /* TASK-450 (5.3): «Позвать» — существующий лист GlideShareSheet (компания, если город включён).
+     Запасной путь — подготовленная ссылка (shareUrl). */
+  function openInviteSheet(arenaId, sessionId, label, place, context) {
+    var sheet = window.GlideShareSheet;
+    if (!sheet || !arenaId) return false;
+    try {
+      sheet.open({
+        ref: arenaId,
+        sessionId: sessionId != null ? sessionId : null,
+        slots: sessionId != null ? [{ id: sessionId, label: label || '' }] : [],
+        invite: true,
+        company: !!((home() || {}).company_share),
+        context: context || 'home_v2',
+        placeName: place || '',
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function companies() {
+    var l = home().companies;
+    return s5On() && l && l.length ? l : [];
+  }
+  function companyToday() { return companies().find(function (c) { return c.day_label === 'сегодня'; }) || null; }
+  function companyLater() { return companies().find(function (c) { return c.day_label !== 'сегодня'; }) || null; }
+
+  /* «Аня и Дима», «Аня, Дима и Света» — последнее имя через «и». */
+  function namesJoin(arr) {
+    return arr.length > 1 ? arr.slice(0, -1).join(', ') + ' и ' + arr[arr.length - 1] : (arr[0] || '');
+  }
+  function companyCardHtml(c) {
+    var img = c.photo && (c.photo.card || c.photo.thumb);
+    var names = (c.going_names || []).slice(0, 3);
+    var avas = names.map(function (n) {
+      return '<span class="hv2-comp__ava">' + esc(String(n || '?').trim().charAt(0).toUpperCase()) + '</span>';
+    }).join('');
+    var namesLine = names.length
+      ? (c.going_count > names.length
+          ? names.join(', ') + ' и ещё ' + (c.going_count - names.length)
+          : namesJoin(names)) + ' ' + plural(c.going_count, 'идёт', 'идут', 'идут')
+      : 'Пока только ты — позови ещё';
+    if (c.my_status === 'maybe') state.yellowUsed = true; /* единственная жёлтая на экране */
+    var btns = c.my_status === 'maybe'
+      ? '<button type="button" class="hv2-btn hv2-btn--yellow ga-press" data-act="company-going" data-code="' + esc(c.code) + '" data-page="' + esc(c.page_url) + '">Иду</button>'
+      : '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="invite" data-arena="' + esc(c.arena_id || '') +
+        '" data-session="' + esc(c.session_id || '') + '" data-label="' + esc((c.day_label || '') + ' ' + (c.starts_local || '')) +
+        '" data-place="' + esc(c.arena_name || '') + '">Позвать ещё</button>' +
+        '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="open" data-url="' + esc(c.page_url) + '">Открыть</button>';
+    if (c.my_status === 'going') {
+      btns = '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="open" data-url="' + esc(c.page_url) + '">Ты идёшь ✓</button>' + btns;
+    }
+    var meta = [c.arena_name, c.crowd_line].filter(Boolean).join(' · ');
+    return '<article class="hv2-pcard hv2-comp" data-act="open" data-url="' + esc(c.page_url) + '">' +
+      '<span class="hv2-comp__photo">' +
+        (img ? '<img class="hv2-pcard__img" src="' + esc(img) + '" alt="">' : '') +
+        '<span class="hv2-pcard__shade"></span>' +
+        '<span class="hv2-pcard__chip"><span class="hv2-chip__dot"></span>Твоя компания · ' + esc(c.day_label) + ' ' + esc(c.starts_local) + '</span>' +
+        '<span class="hv2-comp__plaque">' + avas + 'Идут ' + esc(c.going_count) + '</span>' +
+      '</span>' +
+      '<span class="hv2-comp__body">' +
+        '<span class="hv2-comp__names">' + esc(namesLine) + '</span>' +
+        (meta ? '<span class="hv2-comp__meta">' + esc(meta) + '</span>' : '') +
+        '<span class="hv2-pcard__btns">' + btns + '</span>' +
+      '</span>';
+  }
   /* TASK-449: «Все N» дома → «Лёд» v2 с day/kind, чтобы числа совпадали. Только под s4. */
   function iceHref(href, day) {
     if (!s4On()) return href || 'ice';
@@ -1203,7 +1285,7 @@
     var uid = '';
     try { var u = tgUser(); uid = u && u.id != null ? String(u.id) : '0'; } catch (e) { return; }
     var q = 'day=today&kind=skate' + (cityId() ? '&city_id=' + encodeURIComponent(cityId()) : '');
-    apiFetch('/api/webapp/client/ice/schedule?' + q)
+    fetch('/api/webapp/client/ice/schedule?' + q, { headers: headersJson(), cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
@@ -1376,8 +1458,11 @@
     var route = o.map_link
       ? '<button type="button" class="hv2-btn hv2-btn--ink ga-press" data-act="map" data-href="' + esc(o.map_link) + '">' + ICON_ROUTE + ' Маршрут</button>'
       : '<button type="button" class="hv2-btn hv2-btn--ink ga-press" data-act="nav" data-path="' + esc(o.href || 'ice') + '">' + ICON_ROUTE + ' Маршрут</button>';
-    var share = o.invite_url
-      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="share" data-url="' + esc(o.invite_url) + '">Позвать друзей</button>'
+    var share = o.invite_url || (s5On() && o.arena_id)
+      ? '<button type="button" class="hv2-btn hv2-btn--soft ga-press" data-act="invite" data-url="' + esc(o.invite_url || '') +
+        '" data-arena="' + esc(o.arena_id || '') + '" data-session="' + esc(o.session_id || '') +
+        '" data-label="' + esc((o.time || '') + ' · ' + (o.arena_name || '')) + '" data-place="' + esc(o.arena_name || '') +
+        '">Позвать друзей</button>'
       : '';
     return '<article class="hv2-card hv2-one" data-act="nav" data-path="' + esc(o.href || 'ice') + '">' +
       '<span class="hv2-chip">' + '<span class="hv2-chip__dot"></span>' + esc(chip) + '</span>' +
@@ -1529,12 +1614,14 @@
         }
       }
       else if (kk) { top = 'kkmatch'; html = kkMatchCardHtml(kk) + nextBookingsSecHtml(futureBookings(data), -1); }
+      else if (companyToday()) { top = 'company'; var ct = companyToday(); state.topPhoto = ct.photo && (ct.photo.card || ct.photo.thumb); html = companyCardHtml(ct); }
       else if (p) { top = 'pass'; html = passCardHtml(p); }
       else if (cs.primary_trainer_id) {
         var ret = s2 ? returnInfo(cs) : null;
         if (ret) { top = 'return'; html = returnCardHtml(cs, ret); }
         else { top = 'coach'; html = coachCardHtml(cs); }
       }
+      else if (companyLater()) { top = 'company'; var cl = companyLater(); state.topPhoto = cl.photo && (cl.photo.card || cl.photo.thumb); html = companyCardHtml(cl); }
       else {
         var one = s2 ? home().one_rink : null;
         var nextIce = s2 && 'next_ice' in home() ? home().next_ice : undefined;
@@ -1667,7 +1754,44 @@
       if (actEl) {
         var act = actEl.getAttribute('data-act');
         if (act === 'checkin') { ev.preventDefault(); haptic('light'); openCheckinSheet(); return; }
-        if (act === 'share') { ev.preventDefault(); haptic('light'); shareUrl(actEl.getAttribute('data-url')); return; }
+        if (act === 'share' || act === 'invite') {
+          ev.preventDefault(); haptic('light');
+          if (act === 'invite' && s5On() && openInviteSheet(
+            actEl.getAttribute('data-arena'), actEl.getAttribute('data-session'),
+            actEl.getAttribute('data-label'), actEl.getAttribute('data-place'), 'home_v2')) return;
+          shareUrl(actEl.getAttribute('data-url'));
+          return;
+        }
+        if (act === 'company-going') {
+          ev.preventDefault();
+          var code = actEl.getAttribute('data-code');
+          actEl.disabled = true;
+          var tgU = tgUser();
+          fetch('/api/public/ice-companies/' + encodeURIComponent(code) + '/responses', {
+            method: 'POST', headers: headersJson(),
+            body: JSON.stringify({ status: 'going', display_name: (tgU && tgU.first_name) || 'Я' }),
+          }).then(function (r) {
+            if (!r.ok) { actEl.disabled = false; return; }
+            haptic('success');
+            actEl.className = 'hv2-btn hv2-btn--soft ga-press';
+            actEl.textContent = 'Ты идёшь ✓';
+            actEl.setAttribute('data-act', 'open');
+            actEl.setAttribute('data-url', actEl.getAttribute('data-page') || actEl.getAttribute('data-url') || '');
+            actEl.disabled = false;
+          }).catch(function () { actEl.disabled = false; });
+          return;
+        }
+        if (act === 'open') {
+          ev.preventDefault();
+          var ou = actEl.getAttribute('data-url');
+          if (ou) {
+            var w = window.Telegram && window.Telegram.WebApp;
+            if (w && w.openTelegramLink) { w.openTelegramLink(ou); return; }
+            if (w && w.openLink) { w.openLink(ou); return; }
+            window.open(ou, '_blank');
+          }
+          return;
+        }
         if (act === 'map') { ev.preventDefault(); haptic('light'); openExternal(actEl.getAttribute('data-href')); return; }
         if (act === 'watch') { ev.preventDefault(); haptic('light'); watchSubscribe(actEl); return; }
         if (act === 'book' || act === 'nav') {

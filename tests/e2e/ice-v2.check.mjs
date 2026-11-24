@@ -91,18 +91,26 @@ function check(name, cond, extra) {
 /* Ответ /ice/schedule — сгенерирован tests/e2e/fixtures/build_ice_v2_fixtures.py
    из реального shape_schedule; ключ "<variant>|<day>|<kind>". */
 const ICE_FIX = JSON.parse(readFileSync(path.join(here, 'fixtures', 'ice-v2.json'), 'utf-8'));
+let WITH_COMPANY = false;
 function scheduleFor(variant, q) {
   const day = q.get('day') || 'today';
   const kind = q.get('kind') || 'skate';
-  return ICE_FIX[`${variant}|${day}|${kind}`] || ICE_FIX[`base|${day}|${kind}`];
+  const base = ICE_FIX[`${variant}|${day}|${kind}`] || ICE_FIX[`base|${day}|${kind}`];
+  if (!WITH_COMPANY) return base;
+  /* TASK-450 (5.3): сервер докидывает company на строки с моей открытой компанией — имитируем на первой видимой. */
+  const d = JSON.parse(JSON.stringify(base));
+  const row = (d.ongoing || [])[0] || (d.upcoming || [])[0] || ((d.groups || [])[0] || { rows: [] }).rows[0];
+  if (row) row.company = { code: 'abc12345', going_count: 3, page_url: '/k/abc12345' };
+  return d;
 }
 
 const WATCH_CALLS = [];
 let SCHED_VARIANT = 'base';
 let CHECKIN_STATE = {};
 
-async function openIce(browser, { variant, flags, url, now, flagsCache } = {}) {
+async function openIce(browser, { variant, flags, url, now, flagsCache, company } = {}) {
   SCHED_VARIANT = variant || 'base';
+  WITH_COMPANY = !!company;
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
   const page = await ctx.newPage();
   const errors = [];
@@ -376,6 +384,24 @@ try {
     check('13b: ?map=1 → старая вкладка', await r2.page.locator('#iceRoot').count() === 1);
     check('13b: нет v2-разметки', await r2.page.locator('#iv2Title').count() === 0);
     await r2.ctx.close();
+  }
+  /* 14. TASK-450 (5.3): плашка «Твоя компания · идут N» в строке — тап → страница компании. */
+  {
+    const { page, ctx, errors } = await openIce(browser, { company: true, flags: { ...UI_FLAGS, redesign_s5: true }, flagsCache: { ...UI_FLAGS, redesign_s5: true } });
+    const comp = page.locator('.iv2-card__comp');
+    check('14: плашка компании есть', await comp.count() === 1);
+    if (await comp.count()) {
+      check('14: текст «Твоя компания · идут 3»', (await comp.textContent()).includes('идут 3'));
+      await comp.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(200);
+      check('14: плашка во вьюпорте', await comp.isVisible() && await comp.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= window.innerHeight;
+      }));
+      await shot(page, '14-company-plaque');
+    }
+    check('14: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
   }
 } finally {
   await browser.close();

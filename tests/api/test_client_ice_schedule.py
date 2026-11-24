@@ -123,3 +123,105 @@ async def test_ice_schedule_shape_and_filters(app_use_test_db, db_session, s4_en
     week = r_week.json()
     flat = [x["session_id"] for g in week["groups"] for x in g["rows"]]
     assert {ongoing, soon, tm_id} <= set(flat)
+
+
+@pytest.fixture
+def s5_env(monkeypatch: pytest.MonkeyPatch):
+    def apply(ids: str | None) -> None:
+        if ids is None:
+            monkeypatch.delenv("CLIENT_REDESIGN_S5_TELEGRAM_IDS", raising=False)
+        else:
+            monkeypatch.setenv("CLIENT_REDESIGN_S5_TELEGRAM_IDS", ids)
+        monkeypatch.delenv("CLIENT_REDESIGN_S5_PERCENT", raising=False)
+        get_settings.cache_clear()
+
+    yield apply
+    get_settings.cache_clear()
+
+
+async def _company_for(db_session, session_id: int, telegram_id: int) -> str:
+    """Открытая компания на сеанс + ответ организатора (минимум для my_open_companies)."""
+    from src.application.ice_company.codes import new_public_code, tg_participant_key
+
+    ev = (
+        await db_session.execute(
+            _text(
+                """
+                SELECT s.id, s.kind, s.starts_at_utc, s.ends_at_utc, s.arena_id,
+                       a.name AS arena_name, a.city_id
+                FROM ice_sessions s JOIN arenas a ON a.id = s.arena_id WHERE s.id = :id
+                """
+            ),
+            {"id": session_id},
+        )
+    ).mappings().one()
+    event_id = (
+        await db_session.execute(
+            _text(
+                """
+                INSERT INTO ice_company_events (kind, source_ref, starts_at, ends_at, venue_ref, venue_label, city_id, cancelled)
+                VALUES (:k, :src, :st, :en, :vref, :vlabel, :cid, false) RETURNING id
+                """
+            ),
+            {
+                "k": str(ev["kind"]), "src": f"ice_session:{session_id}",
+                "st": ev["starts_at_utc"], "en": ev["ends_at_utc"],
+                "vref": f"arena:{int(ev['arena_id'])}", "vlabel": str(ev["arena_name"]),
+                "cid": int(ev["city_id"]),
+            },
+        )
+    ).scalar_one()
+    code = new_public_code()
+    cid2 = (
+        await db_session.execute(
+            _text(
+                """
+                INSERT INTO ice_companies (public_code, name, organizer_ref, event_id, event_version, status, expires_at)
+                VALUES (:code, 'Каток', :org, :eid, 1, 'open', :exp) RETURNING id
+                """
+            ),
+            {"code": code, "org": tg_participant_key(telegram_id), "eid": event_id, "exp": ev["ends_at_utc"] + timedelta(days=30)},
+        )
+    ).scalar_one()
+    await db_session.execute(
+        _text(
+            """
+            INSERT INTO ice_company_responses (company_id, participant_key, display_name, status, source)
+            VALUES (:c, :k, 'Я', 'going', 'tg')
+            """
+        ),
+        {"c": cid2, "k": tg_participant_key(telegram_id)},
+    )
+    return code
+
+
+@pytest.mark.asyncio
+async def test_ice_schedule_company_under_s5(app_use_test_db, db_session, s4_env, s5_env, monkeypatch) -> None:
+    """Без s5 поля company нет; с s5 — на сеансе моей компании плашка {code,going_count,page_url}."""
+    tid = unique_test_telegram_id()
+    cid = await _real_city(db_session, "Пинск")
+    arena = await _insert_arena(db_session, cid, name="Каток А", has_photo=False)
+    now = datetime.now(_MINSK)
+    sid = await _session(db_session, arena, now + timedelta(hours=2), "public_skate")
+    code = await _company_for(db_session, sid, tid)
+    await db_session.commit()
+
+    url = f"/api/webapp/client/ice/schedule?city_id={cid}&day=today&kind=skate"
+    s4_env(str(tid))
+    s5_env(None)
+    with patch_client_init_auth(tid):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            off = await client.get(url, headers=_client_auth_headers())
+            assert off.status_code == 200, off.text
+            rows = off.json().get("upcoming") or []
+            assert all("company" not in r for r in rows)
+            assert "company_share" not in off.json()
+
+            s5_env(str(tid))
+            on = await client.get(url, headers=_client_auth_headers())
+            body = on.json()
+            rows = [r for r in (body.get("upcoming") or []) if r.get("session_id") == sid]
+            assert rows and rows[0]["company"]["code"] == code
+            assert rows[0]["company"]["going_count"] == 1
+            assert rows[0]["company"]["page_url"].endswith(f"/k/{code}")
+    s5_env(None)

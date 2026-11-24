@@ -20,7 +20,7 @@ from src.application.catalog_consumer_events import (
 from src.application.client_account import set_account_name, set_home_arena
 from src.application.client_me import client_me, home_arena_payload
 from src.application.client_use_cases import get_client_id_by_telegram_id
-from src.application.client_ui_flags import redesign_s4_enabled
+from src.application.client_ui_flags import redesign_s4_enabled, redesign_s5_enabled
 from src.shared.config import get_settings
 from src.api.routes.webapp_client_hockey import _player_name
 
@@ -117,6 +117,29 @@ class _SavedV2(BaseModel):
     line: str
 
 
+class _CompanyPhoto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    thumb: str | None
+    card: str | None
+
+
+class _CompanyV2(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str
+    name: str
+    session_id: int | None
+    arena_id: int | None
+    arena_name: str
+    starts_local: str
+    day_label: str
+    going_count: int
+    going_names: list[str]
+    crowd_line: str
+    my_status: str
+    page_url: str
+    photo: _CompanyPhoto | None = None
+
+
 class _Person(BaseModel):
     model_config = ConfigDict(extra="forbid")
     profile_id: int | None
@@ -159,6 +182,7 @@ class ClientMeOut(BaseModel):
     joined_label: str | None = None
     pass_: _PassV2 | None = Field(None, alias="pass")
     saved_detail: _SavedV2 | None = None
+    companies: list[_CompanyV2] | None = None
 
 
 class NameIn(BaseModel):
@@ -222,6 +246,8 @@ async def get_client_me(
         profile_id=_parse_profile_id_header(x_profile_id),
         telegram_name=_player_name(None, _init_raw(init_data, x_telegram_init_data)),
         include_v2=redesign_s4_enabled(account_key, get_settings()),
+        include_companies=redesign_s4_enabled(account_key, get_settings())
+        and redesign_s5_enabled(account_key, get_settings()),
     )
     body = ClientMeOut.model_validate(payload)
     await session.commit()

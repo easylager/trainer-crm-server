@@ -3146,6 +3146,7 @@ async def get_client_hub_bootstrap(
     # для остальных форма ответа как раньше (ключей просто нет).
     redesign = redesign_s1_enabled(telegram_id, Settings())
     redesign_s2 = redesign_s2_enabled(telegram_id, Settings())
+    redesign_s5 = redesign_s5_enabled(telegram_id, Settings())
     # Personalized, and it decides whether the invite gate covers the hub.
     # A cached copy would keep «Вас пригласил тренер» after registration.
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -3702,11 +3703,30 @@ async def get_client_hub_bootstrap(
             logger.exception("client hub s2 profile failed")
             return None
 
+    async def _home_companies() -> list[dict] | None:
+        """TASK-450 (5.3): мои открытые компании для карточки «Компания собирается» — только под s5."""
+        if not redesign_s5:
+            return None
+        try:
+            async with async_session_factory() as s:
+                from src.application.ice_company.flag import city_enabled
+                from src.application.ice_company.mine import my_open_companies
+
+                sess_row = await read_client_bot_session(telegram_id, s)
+                city_id = (sess_row or {}).get("city_id")
+                return {
+                    "list": await my_open_companies(s, telegram_id, datetime.now(timezone.utc), limit=3),
+                    "enabled": bool(city_id and city_enabled(int(city_id))),
+                }
+        except Exception:
+            logger.exception("client hub companies failed")
+            return None
+
     (
-        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick, home_on_ice, home_profile_s2
+        bookings, requests, client_session, activity, passes, certificates, home_city, home_hockey, home_extraliga, home_city_pick, home_on_ice, home_profile_s2, home_companies
     ) = await asyncio.gather(
         _bookings(), _requests(), _hub_session(), _activity(), _passes(), _certificates(), _home_city(),
-        _home_hockey(), _home_extraliga(), _home_city_pick(), _home_on_ice(), _home_profile_s2(),
+        _home_hockey(), _home_extraliga(), _home_city_pick(), _home_on_ice(), _home_profile_s2(), _home_companies(),
     )
     ice_teaser = None
     try:
@@ -3779,6 +3799,14 @@ async def get_client_hub_bootstrap(
             **(
                 {"on_ice": home_on_ice}
                 if home_on_ice is not None
+                else {}
+            ),
+            **(
+                {
+                    "companies": (home_companies or {}).get("list") or [],
+                    "company_share": bool((home_companies or {}).get("enabled")),
+                }
+                if redesign_s5 and home_companies
                 else {}
             ),
         },

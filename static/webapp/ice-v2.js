@@ -231,6 +231,12 @@
       going = '<div class="iv2-card__going">идёт' + esc(left) + '</div>';
     }
     var live = '';
+    /* TASK-450 (5.3): плашка «Твоя компания · идут N» — открывает страницу компании. */
+    var comp = '';
+    if (s5On() && r.company && r.company.code) {
+      comp = '<button type="button" class="iv2-card__comp ga-press" data-company="' + esc(r.company.page_url || '') + '">' +
+        'Твоя компания · идут ' + esc(r.company.going_count) + '</button>';
+    }
     if (opts.ongoing && s5On()) {
       var lv = st && st.live;
       if (lv && lv.level && LOAD_WORDS[lv.level]) {
@@ -251,7 +257,7 @@
       '<div class="iv2-card__txt">' + going +
       '<div class="iv2-card__name">' + esc(r.arena_name) + '</div>' +
       '<div class="iv2-card__sub">' + esc(r.price_line || '') + '</div>' +
-      '</div>' + CHEV + '</div>' + live + '</a></div>';
+      '</div>' + CHEV + '</div>' + comp + live + '</a></div>';
   }
 
   /* Один каток: строка без имени/фото — время + «до … · цена» (+ идёт/живость). */
@@ -273,12 +279,17 @@
       live += '<button type="button" class="iv2-card__me ga-press" data-checkin="' + r.session_id + '" data-name="' + esc(r.arena_name) + '">' +
         (st && st.checked_in ? 'Отмечено' : '✓ Я здесь') + '</button>';
     }
+    var comp = '';
+    if (s5On() && r.company && r.company.code) {
+      comp = '<button type="button" class="iv2-card__comp ga-press" data-company="' + esc(r.company.page_url || '') + '">' +
+        'Твоя компания · идут ' + esc(r.company.going_count) + '</button>';
+    }
     return '<div class="iv2-row">' +
       '<div class="iv2-row__time">' + esc(r.time) + '</div>' +
       '<a class="iv2-card iv2-card--bare ga-press" href="' + esc(r.href) + '" data-arena="' + r.arena_id + '" data-session="' + r.session_id + '">' +
       '<div class="iv2-card__top"><div class="iv2-card__txt">' + going +
       '<div class="iv2-card__sub">' + esc(r.price_line || '') + '</div>' +
-      '</div>' + CHEV + '</div>' + live + '</a></div>';
+      '</div>' + CHEV + '</div>' + comp + live + '</a></div>';
   }
 
   function rinkCardHtml(rink) {
@@ -425,7 +436,9 @@
     var st = state.checkins[btn.getAttribute('data-checkin')] || {};
     global.GlideCheckin.open({
       session_id: Number(btn.getAttribute('data-checkin')),
+      arena_id: Number(btn.closest('[data-arena]') && btn.closest('[data-arena]').getAttribute('data-arena')) || null,
       arena_name: btn.getAttribute('data-name') || 'катке',
+      company: !!(state.data && state.data.company_share),
       checkin_id: st.checkin_id || null,
       load_level: st.load_level || null,
       season_days: st.checked_in ? st.season_days : null,
@@ -611,6 +624,15 @@
       if (gd) { ev.preventDefault(); switchFilter({ day: gd.getAttribute('data-goto-day') }); return; }
       var retry = t && t.closest ? t.closest('[data-retry]') : null;
       if (retry) { ev.preventDefault(); load(); return; }
+      var compBtn = t && t.closest ? t.closest('[data-company]') : null;
+      if (compBtn) {
+        ev.preventDefault(); ev.stopPropagation(); haptic('light');
+        var cu = compBtn.getAttribute('data-company');
+        var tw = window.Telegram && window.Telegram.WebApp;
+        if (cu && tw && tw.openTelegramLink) { tw.openTelegramLink(cu); return; }
+        if (cu) { window.open(cu, '_blank'); }
+        return;
+      }
       var a = t && t.closest ? t.closest('a.iv2-card') : null;
       if (a) {
         ev.preventDefault();

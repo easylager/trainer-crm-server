@@ -278,6 +278,16 @@ const UI_FLAGS_ON = { season_ui: false, bookings_tab: true, fast_tabs: false, se
 const UI_FLAGS_S2 = { ...UI_FLAGS_ON, redesign_s2: true };
 const UI_FLAGS_S3 = { ...UI_FLAGS_S2, redesign_s3: true };
 const UI_FLAGS_OFF = { season_ui: false, bookings_tab: false, fast_tabs: false, search_board: false, redesign_s1: false };
+const UI_FLAGS_S5 = { ...UI_FLAGS_S3, redesign_s4: true, redesign_s5: true };
+const COMPANY_TODAY = { code: 'abc12345', name: '', session_id: 401, arena_id: 11, arena_name: 'Каток на Немиге',
+  starts_local: '19:00', day_label: 'сегодня', going_count: 3, going_names: ['Аня', 'Дима', 'Света'],
+  crowd_line: 'Трое — это уже компания', my_status: 'maybe', page_url: '/k/abc12345',
+  photo: { thumb: PHOTO.nemiga, card: PHOTO.nemiga } };
+const COMPANY_SAT = { ...COMPANY_TODAY, code: 'def67890', day_label: 'сб, 28', starts_local: '17:45',
+  arena_name: 'Конькобежный', going_count: 4, going_names: ['Аня', 'Дима', 'Света'],
+  crowd_line: 'Четверо — можно два на два', my_status: 'organizer', page_url: '/k/def67890',
+  photo: { thumb: PHOTO.gorky, card: PHOTO.gorky } };
+const COMPANY_RESP_CALLS = [];
 
 function tgMock(colorScheme, photoUrl) {
   const photo = photoUrl ? `, photo_url: '${photoUrl}'` : '';
@@ -378,6 +388,14 @@ async function openHome(browser, { boot, flags, tgScheme, tgPhoto, page: pagePat
     }
     if (/^\/api\/webapp\/client\/checkins\/\d+\/share$/.test(p)) {
       return json({ prepared_message_id: null, share_url: 'https://t.me/share/url?url=https%3A%2F%2Ft.me%2Fglidebot', text: 'Максим на «Каток на Немиге» до 21:15\nПодъезжай!' });
+    }
+    if (/^\/api\/public\/ice-companies\/[^/]+\/responses$/.test(p) && r.request().method() === 'POST') {
+      COMPANY_RESP_CALLS.push(JSON.parse(r.request().postData() || '{}'));
+      return json({ ok: true });
+    }
+    if (/^\/api\/public\/arenas\/[^/]+\/share$/.test(p)) {
+      return json({ share_url: 'https://t.me/share/url?url=https%3A%2F%2Ft.me%2Fglidebot', share_text: '', sessions: [], slots: [],
+        og_image_url: '/photos/arena-38/hero.webp' });
     }
     if (p.startsWith('/api/webapp/client/checkins')) return json({});
     if (p.startsWith('/api/public/photos')) {
@@ -648,7 +666,7 @@ try {
     check('13: жёлтая «✓ Я здесь»', await page.locator('button[data-act="checkin"]', { hasText: 'Я здесь' }).count() === 1);
     check('13: чип «Идёт сеанс»', (await page.locator('.hv2-pcard__chip').textContent() || '').includes('Идёт сеанс'));
     check('13: карточка серии и сезона', await page.locator('.hv2-onice__stats .hv2-onice__row').count() === 2);
-    check('13: «Позвать сюда» мягкая', await page.locator('button[data-act="share"]', { hasText: 'Позвать сюда' }).count() === 1);
+    check('13: «Позвать сюда» мягкая', await page.locator('button[data-act="invite"],button[data-act="share"]', { hasText: 'Позвать сюда' }).count() === 1);
     check('13: без JS-ошибок', errors.length === 0, errors.join('; '));
     await ctx.close();
   }
@@ -1181,6 +1199,70 @@ try {
     check('31b: без JS-ошибок', errors.filter((e) => !/Transition was aborted/.test(e)).length === 0, errors.join('; '));
     await ctx.close();
     await ctx2.close();
+  }
+  /* 32. TASK-450 (5.3): «Компания собирается» сегодня — я «может» → жёлтая «Иду». */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { companies: [COMPANY_TODAY], company_share: true } }),
+      flags: UI_FLAGS_S5, flagsCache: UI_FLAGS_S5,
+    });
+    await systemCheck(page, '32');
+    await shot(page, '32-company-today');
+    check('32: чип «Твоя компания · сегодня»', (await page.locator('.hv2-pcard__chip').first().textContent()).includes('Твоя компания'));
+    check('32: плашка «Идут 3»', (await page.locator('.hv2-comp__plaque').textContent()).includes('Идут 3'));
+    check('32: имена через «и»', (await page.locator('.hv2-comp__names').textContent()).includes('Аня, Дима и Света идут'));
+    check('32: «Иду» жёлтая', await page.locator('[data-act="company-going"]').count() === 1);
+    await page.locator('[data-act="company-going"]').click();
+    await page.waitForTimeout(400);
+    check('32: POST responses {status:going}', COMPANY_RESP_CALLS.some((c) => c.status === 'going'), JSON.stringify(COMPANY_RESP_CALLS));
+    check('32: «Ты идёшь ✓»', (await page.locator('.hv2-pcard__btns').textContent()).includes('Ты идёшь'));
+    check('32: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 33. Компания в выходные, я организатор → «Позвать ещё» + «Открыть». */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { companies: [COMPANY_SAT], company_share: true, variant: 'many' } }),
+      flags: UI_FLAGS_S5, flagsCache: UI_FLAGS_S5,
+    });
+    await shot(page, '33-company-weekend');
+    check('33: «сб, 28» в чипе', (await page.locator('.hv2-pcard__chip').first().textContent()).includes('сб, 28'));
+    check('33: «Позвать ещё»', (await page.locator('.hv2-pcard__btns').textContent()).includes('Позвать ещё'));
+    check('33: «Открыть»', (await page.locator('.hv2-pcard__btns').textContent()).includes('Открыть'));
+    check('33: жёлтой «Иду» нет', await page.locator('[data-act="company-going"]').count() === 0);
+    check('33: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 34. «Позвать друзей» (новичок) открывает лист GlideShareSheet. */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { companies: [], company_share: true, variant: 'many' } }),
+      flags: UI_FLAGS_S5, flagsCache: UI_FLAGS_S5,
+    });
+    const invite = page.locator('[data-act="invite"]').first();
+    check('34: кнопка «Позвать» есть', await invite.count() === 1);
+    if (await invite.count()) {
+      await invite.click();
+      await page.waitForTimeout(1200);
+      const sheet = await page.locator('.gss, [class*="gss"]').count();
+      check('34: лист GlideShareSheet открылся', sheet > 0);
+      await shot(page, '34-share-sheet');
+    }
+    check('34: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 34b. Без s5 компаний нет и «Позвать» ведёт себя как раньше. */
+  {
+    const { page, ctx, errors } = await openHome(browser, {
+      boot: bootstrap({ home: { variant: 'many' } }),
+      flags: UI_FLAGS_S3, flagsCache: UI_FLAGS_S3,
+    });
+    check('34b: карточки компании нет', await page.locator('.hv2-comp__plaque').count() === 0);
+    check('34b: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
   }
 } finally {
   await browser.close();

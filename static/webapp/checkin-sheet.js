@@ -161,6 +161,23 @@
     var st = state;
     if (!st || !st.checkin_id) return;
     var btn = sheet.querySelector('.cis__share');
+    /* TASK-450 (5.3): «Позвать сюда» — существующий лист GlideShareSheet (компания/Зов).
+       Подготовленное сообщение /client/checkins/{id}/share — запасной путь. */
+    if (window.GlideShareSheet && st.arena_id) {
+      try {
+        window.GlideShareSheet.open({
+          ref: st.arena_id,
+          sessionId: st.session_id,
+          slots: st.session_id != null ? [{ id: st.session_id, label: st.arena_name || '' }] : [],
+          invite: true,
+          company: !!st.company,
+          context: 'checkin_sheet',
+          placeName: st.arena_name || '',
+        });
+        haptic('tap');
+        return;
+      } catch (e) {}
+    }
     btn.disabled = true;
     api('POST', '/client/checkins/' + st.checkin_id + '/share').then(function (r) {
       btn.disabled = false;
@@ -197,6 +214,8 @@
     opts = opts || {};
     state = {
       session_id: opts.session_id,
+      arena_id: opts.arena_id || null,
+      company: !!opts.company,
       arena_name: opts.arena_name || 'катке',
       checkin_id: opts.checkin_id || null,
       load_level: opts.load_level || null,
