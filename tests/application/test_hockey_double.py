@@ -107,6 +107,12 @@ async def test_trump_follows_a_moved_match_or_returns_on_collision(db_session) -
     for x in (sun, mon_busy):
         await _pick(db_session, x, SASHA, side="home")
         await _pick(db_session, x, KATYA, side="home")
+    # picked_at в INSERT — wall-clock now(); иначе после «сегодня» перенос на 24.11
+    # аннулирует ходы как «после закрытия» (как в test_pick_closes… ниже).
+    await db_session.execute(
+        text("UPDATE hockey_picks SET picked_at = :t WHERE match_id = ANY(:ids)"),
+        {"t": NOV, "ids": [sun, mon_busy]},
+    )
     await set_double(db_session, player_key=SASHA, match_id=sun, on=True, now=NOV)
     await set_double(db_session, player_key=KATYA, match_id=sun, on=True, now=NOV)
     await set_double(
