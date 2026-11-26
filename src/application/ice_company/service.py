@@ -18,7 +18,8 @@ from src.application.catalog_consumer_events import (
 )
 from src.application.ice_company.codes import new_public_code, new_web_token, tg_participant_key, web_participant_key
 from src.application.ice_company.copy import MATCH_KIND, Snap, card_text, crowd_line
-from src.application.ice_company.flag import city_enabled
+from src.application.ice_company.flag import feature_enabled
+
 from src.application.ice_company.safety import TextRejected, clean_free_text, clean_team_title
 from src.shared.config import Settings
 
@@ -431,8 +432,9 @@ async def preview_snap(
     """Карточка ещё не созданной компании — для превью в листе шаринга. В базу ничего не пишет."""
     cfg = _settings(settings)
     slot = await _session_row(session, session_id)
-    if slot is None or slot["kind"] not in _SKATE or not city_enabled(int(slot["city_id"]), cfg):
+    if slot is None or slot["kind"] not in _SKATE or not feature_enabled(cfg):
         return None
+
     try:
         title = clean_team_title(name, max_len=40, required=False, field="Название компании")
     except TextRejected:
@@ -467,8 +469,9 @@ async def create_company(
     slot = await _session_row(session, session_id)
     if slot is None or slot["kind"] not in _SKATE:
         raise CompanyRejected("Сеанс не найден.", 404)
-    if not city_enabled(int(slot["city_id"]), cfg):
-        raise CompanyRejected("Сбор компании в этом городе пока выключен.", 404)
+    if not feature_enabled(cfg):
+        raise CompanyRejected("Сбор компании пока выключен.", 404)
+
     if str(slot["status"]) != "active" or slot["starts_at_utc"] <= current:
         raise CompanyRejected("Этот сеанс уже нельзя собрать.", 422)
     try:

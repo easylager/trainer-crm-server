@@ -1794,12 +1794,13 @@ async def list_public_ice_arenas(
     items = [_public_list_item(row, intent=intent_value, today=today) for row in page]
     next_cursor = str(offset + cap) if offset + cap < len(rows) else None
     from src.application.city_picks import for_you
-    from src.application.ice_company.flag import city_enabled
+    from src.application.ice_company.flag import feature_enabled
 
     return {
         "items": items,
         "for_you": await for_you(session, int(city_id), now=now) if city_id is not None else [],
-        "ice_company": bool(city_id and city_enabled(int(city_id))),
+        "ice_company": bool(city_id and feature_enabled()),
+
         "total": len(rows),
         "intent": intent_value,
         "venue_type": sorted(venue_filter) if venue_filter else None,
@@ -2378,10 +2379,11 @@ async def get_public_arena_card(
         ),
     }
     _sanitize_public_profile_fields(card)
-    from src.application.ice_company.flag import city_enabled
+    from src.application.ice_company.flag import feature_enabled
 
-    if city_enabled(int(row["city_id"])):
+    if feature_enabled():
         card["ice_company"] = True
+
     from src.application.arena_partners import partners_for_arena
 
     card["partners"] = partners_for_arena(int(row["id"]), today=_today_minsk())

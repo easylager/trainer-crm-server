@@ -394,10 +394,10 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     trainer_webapp_benchmark_log: BenchmarkLogFlag = False
     trainer_webapp_benchmark_slow_ms: int | None = None
 
-    # «Компания на лёд». Пустой список городов — фича выключена везде.
-    # ICE_COMPANY_CITY_IDS=12,34
-    ice_company_city_ids: str = ""
+    # «Компания на лёд». 0/пусто — выкл.; 1/true — вкл. везде. Старые /k/ открываются и при выкл.
+    ice_company_enabled: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     ice_company_retention_days: int = 30
+
     ice_company_max_active_per_organizer: int = 5
     ice_company_max_responses: int = 50
     ice_company_name_max_len: int = 48

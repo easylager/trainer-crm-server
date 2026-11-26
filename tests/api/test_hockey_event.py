@@ -250,7 +250,8 @@ async def test_ice_card_keeps_its_own_texts_and_buttons(db_session, monkeypatch)
     city_id = await _insert_city(db_session, name=f"Лёд{uuid.uuid4().hex[:6]}")
     ice_arena = await _insert_arena(db_session, city_id, name="Каток")
     session_id = await _insert_session(db_session, ice_arena, starts_at=datetime.now(timezone.utc) + timedelta(days=2))
-    monkeypatch.setenv("ICE_COMPANY_CITY_IDS", str(city_id))
+    monkeypatch.setenv("ICE_COMPANY_ENABLED", "1")
+
     view = await create_company(db_session, telegram_user_id=ME, session_id=session_id, display_name="Макс")
     await respond(
         db_session,

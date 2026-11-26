@@ -8,7 +8,8 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from src.application.ice_company.copy import Snap, card_text, closed_headline, crowd_line, kind_label
-from src.application.ice_company.flag import city_enabled, enabled_city_ids
+from src.application.ice_company.flag import feature_enabled
+
 from src.application.ice_company.lifecycle import button_rows, buttons_for, parse_callback, render_hash
 from src.application.ice_company.service import ice_slot_url
 from src.application.ice_company.limiter import OutboundLimiter
@@ -108,13 +109,13 @@ def test_poster_team_titles() -> None:
     assert render_company_card(_snap(team_title="Команда 🏒🔥", going_names=("Макс",))).startswith(b"\x89PNG")
 
 
-def test_flag_is_off_until_a_city_is_listed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ICE_COMPANY_CITY_IDS", "")
-    assert enabled_city_ids(Settings()) == set()
-    assert city_enabled(1, Settings()) is False
-    monkeypatch.setenv("ICE_COMPANY_CITY_IDS", "12, 34")
-    assert city_enabled(12, Settings()) is True
-    assert city_enabled(99, Settings()) is False
+def test_flag_is_off_until_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ICE_COMPANY_ENABLED", "0")
+    assert feature_enabled(Settings()) is False
+    monkeypatch.setenv("ICE_COMPANY_ENABLED", "1")
+    assert feature_enabled(Settings()) is True
+    monkeypatch.setenv("ICE_COMPANY_ENABLED", "true")
+    assert feature_enabled(Settings()) is True
 
 
 def test_poster_strips_emoji_from_names() -> None:

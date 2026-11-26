@@ -2714,8 +2714,8 @@ def _b_plan(view: Mapping[str, Any], *, invite: bool) -> str:
 
 
 def _company_link(view: Mapping[str, Any]) -> str:
-    """Кнопка сбора компании только если город включён флагом. Иначе разметки нет."""
-    from src.application.ice_company.flag import city_enabled
+    """Кнопка сбора компании только если ICE_COMPANY_ENABLED. Иначе разметки нет."""
+    from src.application.ice_company.flag import feature_enabled
     from src.application.place_links import public_telegram_cta_url
     from src.shared.config import Settings
 
@@ -2723,15 +2723,15 @@ def _company_link(view: Mapping[str, Any]) -> str:
     focus = view.get("focus")
     if not isinstance(card, Mapping) or not isinstance(focus, Mapping) or focus.get("id") is None:
         return ""
-    city_id = int(card.get("city_id") or 0)
-    if not city_enabled(city_id):
+    if not feature_enabled():
         return ""
+    city_id = int(card.get("city_id") or 0)
     session_id = int(focus["id"])
     url = public_telegram_cta_url(
         Settings().webapp_base_url or "",
         start_param=f"company_{session_id}",
         surface="place_page",
-        city_id=city_id,
+        city_id=city_id or None,
         arena_id=int(card.get("id") or 0) or None,
         session_id=session_id,
     )

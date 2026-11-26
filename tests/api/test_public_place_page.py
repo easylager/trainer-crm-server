@@ -339,6 +339,54 @@ async def test_place_image_rendering_runs_off_event_loop_thread(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_place_og_survives_matches_by_day_date_keys(monkeypatch) -> None:
+    """Регресс: арена с матчами (matches_by_day[date]) не должна валить cache_key / og.png."""
+    from datetime import date, datetime, timezone
+
+    from src.api.routes import public_place_page
+    from src.application import png_render_cache as pc
+
+    pc.reset_png_cache_for_tests()
+
+    async def resolve(*args, **kwargs):
+        return {"name": "Гомель"}, 33
+
+    async def load_view(*args, **kwargs):
+        return {
+            "card": {
+                "city_name": "Гомель",
+                "slug": "gomel-lds",
+                "name": "Гомельский ледовый дворец спорта",
+                "venue_type": "ice",
+                "venue_noun": "Каток",
+            },
+            "today": date(2026, 11, 26),
+            "now": datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc),
+            "matches": [{"id": 1}],
+            "matches_by_day": {date(2026, 11, 27): [{"id": 1}]},
+            "trainers": [],
+            "days": [],
+            "ohm_days": [],
+            "figure_days": [],
+            "family_days": [],
+            "focus": None,
+            "focus_missing": False,
+            "next_slot": None,
+            "session_count": 0,
+            "schedule_note": "",
+            "alternatives": [],
+        }
+
+    monkeypatch.setattr(public_place_page, "_resolve", resolve)
+    monkeypatch.setattr(public_place_page, "load_place_view", load_view)
+    response = await public_place_page._image(None, "gomel", "gomel-lds", None, "1", story=False)
+
+    assert response.status_code == 200
+    assert response.media_type == "image/png"
+    assert response.body[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.asyncio
 async def test_selection_image_rendering_runs_off_event_loop_thread(monkeypatch) -> None:
     from src.api.routes import public_place_page
     from src.application import place_card_image

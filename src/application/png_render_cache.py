@@ -24,9 +24,25 @@ _cache: OrderedDict[str, bytes] = OrderedDict()
 _total_bytes = 0
 _stats = {"hits": 0, "renders": 0}
 
+# json.dumps принимает только str/int/float/bool/None как ключи. default= чинит значения,
+# не ключи — а place view кладёт matches_by_day: dict[date, …] (TASK-347). Без нормализации
+# cache_key валит /p/.../og.png 500 на любой арене с матчами (Гомельский ЛДС, Чижовка, …).
+_JSON_KEY_TYPES = (str, int, float, bool, type(None))
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            (key if isinstance(key, _JSON_KEY_TYPES) else str(key)): _jsonable(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    return value
+
 
 def cache_key(kind: str, params: dict[str, Any], data: Any) -> str:
-    raw = json.dumps([kind, params, data], sort_keys=True, ensure_ascii=False, default=str)
+    raw = json.dumps(_jsonable([kind, params, data]), sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

@@ -366,6 +366,21 @@ async def test_png_cache_key_changes_with_data() -> None:
     assert a == b and c != a and calls == [1, 2]
 
 
+def test_png_cache_key_accepts_date_dict_keys() -> None:
+    """place view: matches_by_day keyed by date — без str(key) json.dumps валит OG 500."""
+    from datetime import date
+
+    day = date(2026, 11, 27)
+    a = pc.cache_key("place_og", {"arena_id": 33}, {"matches_by_day": {day: [{"id": 1}]}})
+    b = pc.cache_key("place_og", {"arena_id": 33}, {"matches_by_day": {day: [{"id": 1}]}})
+    c = pc.cache_key(
+        "place_og",
+        {"arena_id": 33},
+        {"matches_by_day": {date(2026, 11, 28): [{"id": 1}]}},
+    )
+    assert a == b and a != c
+
+
 @pytest.mark.asyncio
 async def test_png_cache_is_bounded(monkeypatch) -> None:
     monkeypatch.setattr(pc, "MAX_ENTRIES", 3)

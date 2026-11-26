@@ -128,7 +128,7 @@
 | [ice-ingest-junost-instagram.md](instructions/ice-ingest-junost-instagram.md) | Юность: копипаст подписи IG → прод (`ingest_junost_from_caption.py`) |
 | [junost-caption-update.md](ops/junost-caption-update.md) | Юность: обновить подпись расписания через `set_junost_caption.py` (dry-run / `--apply`) |
 | [catalog-share-launch.md](ops/catalog-share-launch.md) | Чеклист выката шаринга каталога: env, фото, магазины, og, телеметрия 0212, 20 минут руками |
-| [ice-company-launch.md](ops/ice-company-launch.md) | Выкат «Собрать компанию»: env `ICE_COMPANY_CITY_IDS`, три сервиса, 20 минут руками |
+| [ice-company-launch.md](ops/ice-company-launch.md) | Выкат «Собрать компанию»: env `ICE_COMPANY_ENABLED`, три сервиса, 20 минут руками |
 | [platform-processes-for-legal-by-v1.md](ops/platform-processes-for-legal-by-v1.md) | Описание процессов платформы для юристов (BY) |
 
 ## Остальное

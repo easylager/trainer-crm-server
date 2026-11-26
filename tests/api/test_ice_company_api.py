@@ -43,8 +43,8 @@ def _limits() -> None:
     reset_company_rate_limits()
 
 
-async def _enable(monkeypatch: pytest.MonkeyPatch, city_id: int) -> None:
-    monkeypatch.setenv("ICE_COMPANY_CITY_IDS", str(city_id))
+async def _enable(monkeypatch: pytest.MonkeyPatch, city_id: int | None = None) -> None:
+    monkeypatch.setenv("ICE_COMPANY_ENABLED", "1")
 
 
 async def _create(db_session, monkeypatch, *, user_id: int = 501):
@@ -61,9 +61,10 @@ async def _create(db_session, monkeypatch, *, user_id: int = 501):
 
 
 @pytest.mark.asyncio
-async def test_create_requires_fresh_init_data_and_city_flag(app_use_test_db, db_session, monkeypatch) -> None:
+async def test_create_requires_fresh_init_data_and_feature_flag(app_use_test_db, db_session, monkeypatch) -> None:
     place = await _place(db_session)
     session_id = await _insert_session(db_session, place["arena_id"], starts_at=_at(days=2))
+    monkeypatch.setenv("ICE_COMPANY_ENABLED", "0")
     async with _client() as client:
         off = await client.post(
             "/api/public/ice-companies",
@@ -71,7 +72,7 @@ async def test_create_requires_fresh_init_data_and_city_flag(app_use_test_db, db
             json={"session_id": session_id, "display_name": "Аня"},
         )
         assert off.status_code == 404
-        await _enable(monkeypatch, place["city_id"])
+        await _enable(monkeypatch)
         missing = await client.post(
             "/api/public/ice-companies",
             headers=_headers(),
