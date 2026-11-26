@@ -30,6 +30,8 @@
     catalog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.9-3.9"/></svg>',
     bookings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     /* TASK-369: вкладки режима season_ui. Шайба — «Кто кого», человек — «Я». */
+    /* TASK-445: вкладка «Лёд» (редизайн) — снежинка вместо лупы. */
+    ice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M4 6l16 12M20 6 4 18M12 2l-2 3m2-3 2 3M12 22l-2-3m2 3 2-3M4 6l3.5.5M4 6 4.5 9.5M20 18l-3.5-.5m3.5.5-.5-3.5M20 6l-3.5.5M20 6l-.5 3.5M4 18l3.5-.5M4 18l.5-3.5"/></svg>',
     kk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="9.5" rx="8" ry="3.5"/><path d="M4 9.5v4.5c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5V9.5"/></svg>',
     me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6.5 8-6.5s7.2 2.5 8 6.5"/></svg>',
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>',
@@ -121,12 +123,27 @@
   var UI_FLAGS_TTL_MS = 24 * 60 * 60 * 1000;
   /* Метка «флаги уже спрошены в этой сессии» (sessionStorage): один запрос на сессию, а не на страницу. */
   var UI_FLAGS_SYNC_KEY = 'cw_ui_flags_sync_v1';
-  var uiFlags = { season_ui: true, bookings_tab: false };
+  var uiFlags = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false, redesign_s2: false, redesign_s3: false, redesign_s4: false };
   var uiFlagsRefreshed = false;
 
   function normalizeUiFlags(raw) {
-    var season = !!raw && raw.season_ui === true;
-    return { season_ui: season, bookings_tab: season && raw.bookings_tab === true };
+    /* TASK-445: redesign_s1 — своя навигация и новая главная; для оболочки это тот же
+       режим season_ui (бар без «Ещё», «Записи» у всех), плюс свой набор вкладок. */
+    var redesign = !!raw && raw.redesign_s1 === true;
+    var season = !!raw && (raw.season_ui === true || redesign);
+    return {
+      season_ui: season,
+      bookings_tab: season && raw.bookings_tab === true,
+      redesign_s1: redesign,
+      /* TASK-446: redesign_s5 («Я здесь») — не включает season-режим, только ассеты листа. */
+      redesign_s5: !!raw && raw.redesign_s5 === true,
+      /* TASK-447: redesign_s2 — состояния главной: серверу нужен только флаг в ответе. */
+      redesign_s2: !!raw && raw.redesign_s2 === true,
+      /* TASK-448: redesign_s3 — скорость и переходы: серверу нужен только флаг в ответе. */
+      redesign_s3: !!raw && raw.redesign_s3 === true,
+      /* TASK-449: redesign_s4 — вкладки «Лёд»/«Я» v2. */
+      redesign_s4: !!raw && raw.redesign_s4 === true,
+    };
   }
 
   function initDataUserId() {
@@ -144,7 +161,7 @@
     }
   }
 
-  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false };
+  var UI_FLAGS_DEFAULT = { season_ui: true, bookings_tab: false, redesign_s1: false, redesign_s5: false, redesign_s2: false, redesign_s3: false, redesign_s4: false };
 
   function readUiFlags() {
     var uid = initDataUserId();
@@ -154,8 +171,20 @@
       if (!cached || String(cached.u) !== uid) return UI_FLAGS_DEFAULT;
       var age = Date.now() - cached.at;
       if (typeof cached.at !== 'number' || !(age >= 0 && age < UI_FLAGS_TTL_MS)) return UI_FLAGS_DEFAULT;
-      if (cached.season_ui === false) return normalizeUiFlags(null);
-      return { season_ui: true, bookings_tab: cached.bookings_tab === true };
+      /* Явный свежий false гасит флаг; всё остальное (true, мусор, отсутствие поля) — включено,
+         как и раньше. redesign_s1 в кэше всегда идёт с season-режимом. */
+      if (cached.season_ui === false && cached.redesign_s1 !== true && cached.redesign_s5 !== true && cached.redesign_s2 !== true && cached.redesign_s3 !== true && cached.redesign_s4 !== true) return normalizeUiFlags(null);
+      /* s5 сам по себе season-режим не включает — возвращаем его честно. */
+      var seasonOn = cached.season_ui !== false || cached.redesign_s1 === true;
+      return {
+        season_ui: seasonOn,
+        bookings_tab: seasonOn && cached.bookings_tab === true,
+        redesign_s1: cached.redesign_s1 === true,
+        redesign_s5: cached.redesign_s5 === true,
+        redesign_s2: cached.redesign_s2 === true,
+        redesign_s3: cached.redesign_s3 === true,
+        redesign_s4: cached.redesign_s4 === true,
+      };
     } catch (e) {
       return UI_FLAGS_DEFAULT;
     }
@@ -167,7 +196,17 @@
     try {
       global.localStorage.setItem(
         UI_FLAGS_KEY,
-        JSON.stringify({ u: uid, season_ui: flags.season_ui, bookings_tab: flags.bookings_tab, at: Date.now() })
+        JSON.stringify({
+          u: uid,
+          season_ui: flags.season_ui,
+          bookings_tab: flags.bookings_tab,
+          redesign_s1: flags.redesign_s1 === true,
+          redesign_s5: flags.redesign_s5 === true,
+          redesign_s2: flags.redesign_s2 === true,
+          redesign_s3: flags.redesign_s3 === true,
+          redesign_s4: flags.redesign_s4 === true,
+          at: Date.now(),
+        })
       );
     } catch (e) { /* storage может быть запрещён */ }
   }
@@ -187,7 +226,14 @@
   }
 
   function applyUiFlags(next) {
-    var changed = next.season_ui !== uiFlags.season_ui || next.bookings_tab !== uiFlags.bookings_tab;
+    var changed =
+      next.season_ui !== uiFlags.season_ui ||
+      next.bookings_tab !== uiFlags.bookings_tab ||
+      next.redesign_s1 !== uiFlags.redesign_s1 ||
+      next.redesign_s5 !== uiFlags.redesign_s5 ||
+      next.redesign_s2 !== uiFlags.redesign_s2 ||
+      next.redesign_s3 !== uiFlags.redesign_s3 ||
+      next.redesign_s4 !== uiFlags.redesign_s4;
     uiFlags = next;
     if (changed && typeof global.CustomEvent === 'function') {
       global.dispatchEvent(new global.CustomEvent('client-shell:ui-flags', { detail: getUiFlags() }));
@@ -224,7 +270,7 @@
   }
 
   function getUiFlags() {
-    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab };
+    return { season_ui: uiFlags.season_ui, bookings_tab: uiFlags.bookings_tab, redesign_s1: uiFlags.redesign_s1 === true, redesign_s5: uiFlags.redesign_s5 === true, redesign_s2: uiFlags.redesign_s2 === true, redesign_s3: uiFlags.redesign_s3 === true, redesign_s4: uiFlags.redesign_s4 === true };
   }
 
   function getTg() {
@@ -326,7 +372,7 @@
       if (q.indexOf('tab=catalog') >= 0 || q.indexOf('tab=') < 0) return 'catalog';
       return null;
     }
-    if (key === 'client-bookings') return uiFlags.bookings_tab ? 'bookings' : 'me';
+    if (key === 'client-bookings') return uiFlags.bookings_tab || uiFlags.redesign_s1 ? 'bookings' : 'me';
     if (key === 'kto-kogo') return 'kk';
     if (SEASON_ME_ROUTES[key] === 1) return 'me';
     return null;
@@ -334,7 +380,7 @@
 
   function seasonForcedTab(id) {
     if (id === 'more') return 'me';
-    if (id === 'bookings' && !uiFlags.bookings_tab) return 'me';
+    if (id === 'bookings' && !uiFlags.bookings_tab && !uiFlags.redesign_s1) return 'me';
     return id;
   }
 
@@ -374,6 +420,17 @@
    * Живёт отдельно от buildTabBar ниже: тот остаётся как был, ветвление по флагу — одно.
    */
   function seasonTabs() {
+    /* TASK-445: редизайн — всегда 5 вкладок «Главная · Лёд · Записи · Кто кого · Я»,
+       «Записи» есть у всех (пустой экран с действием внутри страницы). */
+    if (uiFlags.redesign_s1) {
+      return [
+        { id: 'home', label: 'Главная', path: 'client-home', icon: TAB_ICONS.home },
+        { id: 'catalog', label: 'Лёд', path: 'ice', icon: TAB_ICONS.ice },
+        { id: 'bookings', label: 'Записи', path: 'client-bookings', icon: TAB_ICONS.bookings },
+        { id: 'kk', label: 'Кто кого', path: 'kto-kogo', icon: TAB_ICONS.kk },
+        { id: 'me', label: 'Я', path: 'client-me', icon: TAB_ICONS.me },
+      ];
+    }
     var tabs = [
       { id: 'home', label: 'Главная', path: 'client-home', icon: TAB_ICONS.home },
       { id: 'catalog', label: 'Поиск', path: 'ice', icon: TAB_ICONS.catalog },
@@ -963,7 +1020,15 @@
    * Страница вкладки зовёт, когда на экране первое осмысленное содержимое (данные или тёплый
    * кэш, не скелетон). Один раз за загрузку страницы; время берётся в кадре после показа.
    */
-  function contentShown() {
+  /* TASK-448: узкий вход для прогрева вкладки со страниц (главная догревает «Лёд»). */
+  function prefetchTab(tab) {
+    if (tab === 'catalog' || tab === 'ice') {
+      return Promise.all([prefetchIceAssets(), prefetchCatalogAssets(), prefetchCatalogWarmCache()]);
+    }
+    return Promise.resolve();
+  }
+
+  function contentShown(extra) {
     if (tabTimingDone) return;
     tabTimingDone = true;
     try {
@@ -987,6 +1052,9 @@
           nav: tabTimingNav || readNavType(),
           platform: tg && tg.platform,
           seasonUi: uiFlags.season_ui,
+          /* TASK-448: источник первого кадра и время до данных — передают страницы с кэшем. */
+          src: extra && extra.src,
+          dataMs: extra && extra.data_ms,
         };
         loadTabTimingModel(function (model) {
           if (!model) return;
@@ -1094,6 +1162,8 @@
     } catch (e) {
       path = raw;
     }
+    /* TASK-448: под s3 у целей свой opt-in — исключение не нужно. */
+    if (uiFlags.redesign_s3) return false;
     return NO_VIEW_TRANSITION_PAGE.test(path);
   }
 
@@ -1115,7 +1185,7 @@
     var entry = ev && ev.activation && ev.activation.entry;
     if (!vt || !entry || !entry.url) return;
     try {
-      if (NO_VIEW_TRANSITION_PAGE.test(new URL(entry.url).pathname)) vt.skipTransition();
+      if (!uiFlags.redesign_s3 && NO_VIEW_TRANSITION_PAGE.test(new URL(entry.url).pathname)) vt.skipTransition();
     } catch (e) { /* */ }
   }
 
@@ -1145,6 +1215,12 @@
       var dir = traversalBack ? 'back' : stored || 'forward';
       try {
         ev.viewTransition.types.add(dir);
+        /* TASK-448: переход между вкладками — свой тип, чистый кросс-фейд без сдвига. */
+        if (uiFlags.redesign_s3) {
+          var fromBar = false;
+          try { fromBar = !!global.sessionStorage.getItem(TAP_KEY); } catch (e2) { /* */ }
+          if (fromBar) ev.viewTransition.types.add('tab');
+        }
       } catch (e) {
         /* types не поддержаны — останется кросс-фейд по умолчанию */
       }
@@ -1322,6 +1398,79 @@
   }
 
   /*
+   * TASK-446 (5.2): «Я здесь» на старых страницах — лист + живые строки грузим
+   * только при включённом redesign_s5 и только на страницах Лёд/каток/«Я»/главная.
+   * PDEC-040 батч C: главная клиента (карточки «Ты на катке?»/«Твоя компания»),
+   * полка значков и лист вручения на «Я» — тот же ленивый пакет: значки
+   * (GlideBadgeArt/Award/Shelf) и заглушка шаринга (GlideShareSheet грузит
+   * настоящий лист сама). Флаг выключен → ни одного тега, DOM не трогаем.
+   */
+  var CHECKIN_LIVE_PAGES = { ice: 1, arena: 1, 'client-me': 1, 'client-home': 1 };
+  var CHECKIN_LIVE_CSS = ['checkin-sheet.css', 'badge-collection.css', 'badge-award.css'];
+  var CHECKIN_LIVE_JS = [
+    'share-sheet-lazy.js', 'badge-art.js', 'badge-award.js', 'badge-collection.js',
+    'checkin-sheet.js', 'checkin-live.js',
+  ];
+  var checkinLiveRequested = false;
+
+  /*
+   * PDEC-040 батч C (рескин): старые страницы под языком v2 при redesign_s4.
+   * На этих адресах под s4 всё ещё живут старые DOM/CSS: главная v2 — под s1,
+   * «Лёд» v2 — только без диплинков (?map=1, ref/…), арены v2 нет вовсе.
+   * Класс .gv2skin на <html>/<body> + gv2-skin.css перенаправляют токены на
+   * палитру v2; флаг выключен → ни класса, ни файла, страница как была.
+   * Ставим на <html> синхронно при загрузке (кэш флагов читается до первого
+   * кадра), на <body> — когда он появится; событие client-shell:ui-flags
+   * переприменяет.
+   */
+  var GV2_SKIN_PAGES = { ice: 1, arena: 1, 'client-me': 1, 'client-home': 1 };
+  var gv2SkinCssRequested = false;
+
+  /* Тело v2-страницы (s4 отдал client-ice-v2/client-me-v2 или s1 — home-v2) —
+     скин не нужен: она уже на языке v2. body появляется после eval — до
+     DOMContentLoaded проверки нет, класс на <html> с --gv2-* безвреден. */
+  function gv2SkinWanted() {
+    if (!uiFlags.redesign_s4 || !GV2_SKIN_PAGES[pathnameKey()]) return false;
+    var cls = (document.body && document.body.className) || '';
+    if (/\b(?:hv2|mv2|iv2|sv2)\b/.test(cls)) return false;
+    return true;
+  }
+  function applyGv2Skin() {
+    var on = gv2SkinWanted();
+    var root = document.documentElement;
+    if (root && root.classList) root.classList.toggle('gv2skin', on);
+    if (document.body && document.body.classList) document.body.classList.toggle('gv2skin', on);
+    if (!on || gv2SkinCssRequested) return;
+    gv2SkinCssRequested = true;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = assetUrl(webappBasePath(), 'gv2-skin.css');
+    link.setAttribute('data-gv2skin', 'css');
+    document.head.appendChild(link);
+  }
+
+  function maybeLoadCheckinLive() {
+    if (checkinLiveRequested || !uiFlags.redesign_s5) return;
+    if (!CHECKIN_LIVE_PAGES[pathnameKey()]) return;
+    checkinLiveRequested = true;
+    var base = webappBasePath();
+    CHECKIN_LIVE_CSS.forEach(function (file) {
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = assetUrl(base, file);
+      link.setAttribute('data-checkin-live', 'css');
+      document.head.appendChild(link);
+    });
+    CHECKIN_LIVE_JS.forEach(function (file) {
+      var sc = document.createElement('script');
+      sc.src = assetUrl(base, file);
+      sc.async = false;
+      sc.setAttribute('data-checkin-live', 'js');
+      document.head.appendChild(sc);
+    });
+  }
+
+  /*
    * TASK-369: флаг сменился на лету (client-shell:ui-flags, TASK-366) — бар пересобирается на
    * месте. Без перезагрузки, без анимации: новый узел встаёт на место старого целиком.
    */
@@ -1329,6 +1478,8 @@
     var body = document.body;
     if (!state.inited || !body) return;
     state.mode = computeMode(state.baseMode);
+    maybeLoadCheckinLive();
+    applyGv2Skin();
     var old = document.getElementById('clientTabBar');
     var overlay = document.getElementById('clientMoreOverlay');
 
@@ -2008,6 +2159,7 @@
     prefetchCatalogWarmCache: prefetchCatalogWarmCache,
     prefetchCatalogAssets: prefetchCatalogAssets,
     prefetchIceAssets: prefetchIceAssets,
+    prefetchTab: prefetchTab,
     scheduleCatalogNavigationPrefetch: scheduleCatalogNavigationPrefetch,
     readCatalogWarmCache: readCatalogWarmCache,
     writeCatalogWarmCache: writeCatalogWarmCache,
@@ -2267,6 +2419,8 @@
     if (isPublicPlaceRoute() && !getInitData()) return;
     init();
     if (typeof global.setTimeout === 'function') global.setTimeout(refreshUiFlags, 0);
+    maybeLoadCheckinLive();
+    applyGv2Skin();
     if (isPublicPlaceRoute()) {
       if (state.mode === 'tabs') setForcedTab('catalog');
       return;
@@ -2304,6 +2458,7 @@
     if (getTg() && getInitData()) global.sessionStorage.setItem('glide_mini_app_active_v1', '1');
   } catch (e) { /* storage может быть запрещён */ }
   uiFlags = readUiFlags();
+  applyGv2Skin();
   mountTabBarEarly();
   global.addEventListener('client-shell:ui-flags', onUiFlagsChanged);
 

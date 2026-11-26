@@ -6,6 +6,11 @@
   <title>Учиться с тренером</title>
   <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <!-- TASK-448: как у kto-kogo — opt-in в cross-document VT, иначе первый тап обрывается (TASK-391). -->
+  <style id="trainers-vt-opt-in">
+    @view-transition { navigation: auto; }
+    @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  </style>
   <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611231" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="client-mini-app-theme.js?v=202611231"></script>

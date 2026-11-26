@@ -1669,6 +1669,13 @@
         teaserArenaId = iceTeaser && iceTeaser.arena_id != null ? Number(iceTeaser.arena_id) : null;
         /* TASK-303: шапка, слот «сейчас», «Ближайший лёд» и «Что нужно» — HubHome из bootstrap.home. */
         var slotKind = window.HubHome ? window.HubHome.apply(hubMeta) : 'none';
+        /* PDEC-040, батч C: s5-поля home.* (on_ice/companies/pending_badges) — для
+           ленивого checkin-live, который ставит карточки «Ты на катке?» и «Твоя
+           компания» в слот hubNow. Кэш — на случай, если модуль загрузился позже. */
+        try {
+          window.__hubBootstrap = hubMeta;
+          window.dispatchEvent(new CustomEvent('glide:hub-bootstrap', { detail: hubMeta }));
+        } catch (e) { /* CustomEvent может отсутствовать — кэша достаточно */ }
         var hasCity = !!(hubMeta && hubMeta.home && hubMeta.home.city);
         // Без города карточка клиента сама зовёт выбрать город или честно говорит «вы далеко».
         // far_confirmed: IP уже сказал, что клиент вне рынков, — GPS спрашивать незачем.

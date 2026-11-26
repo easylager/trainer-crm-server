@@ -19,7 +19,7 @@ from src.application.city_hub_page import _WINDOW_KEYS, _b_counts_line, _b_today
 from src.application.ice_city_day import plural_ru
 from src.application.style_b import b_photo_url
 from src.shared.copy_ru import t
-from src.shared.public_display import format_public_name
+from src.shared.public_display import format_clock, format_public_name
 
 UPCOMING_LIMIT = 3
 # Слот «сейчас»: до трёх ближайших матчей (с игровой карточкой Динамо), затем «Все матчи».
@@ -216,6 +216,74 @@ def city_block(view: Mapping[str, Any], *, invite_link: InviteLink | None = None
     }
 
 
+ICE_RAIL_ARENAS = 8
+ICE_RAIL_TIMES = 3
+
+
+def ice_rail_window(
+    rows: Sequence[Mapping[str, Any]],
+    places: Sequence[Mapping[str, Any]] | None,
+    *,
+    now: datetime,
+    invite_link: InviteLink | None = None,
+) -> list[dict[str, Any]]:
+    """«Лёд в городе» новой главной: сеансы окна, сгруппированные по катку.
+
+    ``rows`` — строки ``_USER_UPCOMING_SQL`` одного окна (уже по времени). Порядок катков —
+    по ближайшему сеансу, на карточке до ``ICE_RAIL_TIMES`` чипов времени; фото и имя — как
+    у ``city_block`` (``places`` из ``load_city_hub_view``).
+    """
+    from src.application.catalog_home_page import _session_card
+
+    by_slug = {str(p.get("slug") or ""): p for p in places or []}
+    grouped: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for row in rows or []:
+        slug = str(row.get("arena_slug") or "").strip()
+        gkey = slug or str(row.get("arena_name") or "")
+        card = _session_card(row, now=now)
+        if gkey not in grouped:
+            grouped[gkey] = {"row": row, "times": []}
+            order.append(gkey)
+        grouped[gkey]["times"].append(card)
+
+    def first_start(gkey: str) -> Any:
+        raw = grouped[gkey]["times"][0].get("starts_at_utc")
+        return raw if isinstance(raw, datetime) else datetime.max.replace(tzinfo=timezone.utc)
+
+    arenas: list[dict[str, Any]] = []
+    for gkey in sorted(order, key=first_start)[:ICE_RAIL_ARENAS]:
+        pack = grouped[gkey]
+        row = pack["row"]
+        place = by_slug.get(str(row.get("arena_slug") or "").strip()) or {}
+        arena_id = place.get("id")
+        times = pack["times"]
+        arenas.append(
+            {
+                "arena_id": arena_id,
+                "name": format_public_name(str(row.get("arena_name") or "")),
+                "href": _place_href(arena_id, times[0].get("session_id")),
+                "photo": _photo(place),
+                "price": _price_bits(times[0]) or "",
+                "times": [
+                    {
+                        "time": format_clock(str(c.get("starts_at_local") or "")),
+                        "end": format_clock(str(c.get("ends_at_local") or "")),
+                        "session_id": c.get("session_id"),
+                        "minutes_until": c.get("minutes_until"),
+                        "href": _place_href(arena_id, c.get("session_id")),
+                        # «Позвать» у фото-карточки ближайшего сеанса (та же ссылка, что у city_block).
+                        "invite_url": invite_link(int(arena_id), c.get("session_id"))
+                        if invite_link and arena_id is not None
+                        else None,
+                    }
+                    for c in times[:ICE_RAIL_TIMES]
+                ],
+            }
+        )
+    return arenas
+
+
 def _booking_today(bookings: Mapping[str, Any] | None, *, local_now: datetime) -> dict[str, Any] | None:
     today = local_now.date().isoformat()
     for day in (bookings or {}).get("days") or []:
@@ -307,4 +375,4 @@ def now_slot(
     return None
 
 
-__all__ = ["UPCOMING_LIMIT", "city_block", "now_slot"]
+__all__ = ["UPCOMING_LIMIT", "city_block", "ice_rail_window", "now_slot"]

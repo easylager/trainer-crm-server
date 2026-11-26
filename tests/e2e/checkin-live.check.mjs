@@ -1,0 +1,756 @@
+/**
+ * TASK-446 (5.2): «Я здесь» на РЕАЛЬНЫХ страницах Лёд / каток / «Я».
+ * Те же приёмы, что в home-v2.check.mjs и ice-map-fullscreen.check.mjs:
+ * статический сервер static/ + /photos/* из data/arena-cards/photos,
+ * ymaps-stub (офлайн), Telegram-мок, стабы /api/*.
+ *
+ * Сценарии (390×844, Europe/Minsk, «сейчас» 22.11.2026 19:30):
+ *   01 ice-on       — вкладка Лёд: 2 идущих сеанса (live «людно · 2 отметки» и без) + будущий;
+ *   02 ice-sheet    — тап «✓ Я здесь» под карточкой открывает лист;
+ *   03 arena        — arena.html?ref=11&s=401: блок «Сейчас свободно» + «Маршрут»→intent;
+ *   04 me           — client-me.html: карточка сезона + «Помог выбрать»;
+ *   05 me-newbie    — «Сезон ещё не начат»;
+ *   07 arena-usual  — TASK-452: сетка «Когда свободнее» + blended «обычно» на шкалах;
+ *   08 usual-quiet  — сетка без идущего сеанса;
+ *   09 usual-none   — arena_usual=null → блока нет;
+ *   06/10 flag-off  — флаг выключен: ни checkin-ассетов, ни узлов (все 3 страницы).
+ *
+ * Run: node tests/e2e/checkin-live.check.mjs
+ * Скриншоты: tests/e2e/__shots__/checkin-live/
+ */
+import { chromium } from 'playwright';
+import http from 'node:http';
+import { mkdirSync, rmSync, readFileSync, existsSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { YMAPS_STUB } from './ymaps-stub.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.join(here, '../..');
+const staticDir = path.join(repoRoot, 'static');
+const photosDir = path.join(repoRoot, 'data', 'arena-cards', 'photos');
+const shots = path.join(here, '__shots__', 'checkin-live');
+rmSync(shots, { recursive: true, force: true });
+mkdirSync(shots, { recursive: true });
+
+const MIME = {
+  '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2',
+};
+const server = http.createServer((req, res) => {
+  let p = decodeURIComponent(req.url.split('?')[0]);
+  let file;
+  if (p.startsWith('/photos/')) {
+    file = path.join(photosDir, p.slice('/photos/'.length));
+    if (!file.startsWith(photosDir) || !existsSync(file) || statSync(file).isDirectory()) {
+      res.writeHead(404); res.end('no'); return;
+    }
+  } else {
+    if (p.startsWith('/static/')) p = p.slice('/static'.length);
+    file = path.join(staticDir, p);
+    if (file.startsWith(staticDir) && !existsSync(file) && !path.extname(file) && existsSync(file + '.html')) {
+      file += '.html';
+    }
+    if (!file.startsWith(staticDir) || !existsSync(file) || statSync(file).isDirectory()) {
+      res.writeHead(404); res.end('no'); return;
+    }
+  }
+  res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
+  res.end(readFileSync(file));
+});
+await new Promise((r) => server.listen(0, r));
+const base = 'http://localhost:' + server.address().port;
+
+const NOW = new Date('2026-11-22T16:30:00Z'); // 19:30 Минск, вс
+const TODAY_ISO = '2026-11-22';
+
+const tgMock = (scheme) => `window.Telegram = { WebApp: {
+  initData: 'user=%7B%22id%22%3A42%7D&hash=x',
+  initDataUnsafe: { user: { id: 42, first_name: 'Максим', allows_write_to_pm: true } },
+  colorScheme: '${scheme || 'light'}', themeParams: {}, version: '8.0', platform: 'ios', isExpanded: true,
+  isVersionAtLeast(v) { const c=(a,b)=>a.split('.').map(Number).reduce((d,x,i)=>d||x-(b[i]||0),0); return c(this.version,v)>=0; },
+  ready() {}, expand() {}, setHeaderColor() {}, setBackgroundColor() {}, setBottomBarColor() {},
+  onEvent() {}, offEvent() {}, openTelegramLink() {}, openLink() {}, shareURL() {},
+  HapticFeedback: { selectionChanged() {}, impactOccurred() {}, notificationOccurred() {} },
+  BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+  MainButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+} };`;
+
+/* Кэш флага, чтобы оболочка видела s5 до первого запроса (как в проде после первой сессии).
+   extra — PDEC-040 C3: сценарии s4-пина и «без s1». */
+const FLAGS_CACHE = (s5, extra) => `(function(){try{localStorage.setItem('cw_ui_flags_v1', JSON.stringify(Object.assign({u:'42',season_ui:true,bookings_tab:false,redesign_s1:true,redesign_s5:${s5},at:Date.now()}, ${JSON.stringify(extra || {})})));}catch(e){}})()`;
+
+const P = (n) => '/photos/' + n;
+
+/* ── Стабы данных ───────────────────────────────────────────────────────── */
+
+const ICE_ARENAS = [
+  { id: 11, name: 'Каток на Немиге', slug: 'katok-na-nemige', district: 'Центральный', venue_type: 'ice', tier: 'A', on_map: true,
+    latitude: 53.93, longitude: 27.51, thumb: P('arena-38/hero.webp'), address: 'пр-т Победителей, 1', distance_km: 1.2,
+    live: { kind: 'session', session_id: 401, text: 'Идёт сеанс · до 21:15', starts_at_local: '19:45' } },
+  { id: 12, name: 'Ледовый дворец', slug: 'ledoviy-dvorets', district: 'Фрунзенский', venue_type: 'ice', tier: 'A', on_map: true,
+    latitude: 53.90, longitude: 27.48, thumb: P('arena-25/hero.jpg'), address: 'ул. Притыцкого, 27', distance_km: 3.4,
+    live: { kind: 'session', session_id: 402, text: 'Идёт сеанс · до 20:30', starts_at_local: '19:00' } },
+  { id: 13, name: 'Парк Горького', slug: 'park-gorkogo', district: 'Партизанский', venue_type: 'ice', tier: 'B', on_map: true,
+    latitude: 53.90, longitude: 27.57, thumb: P('arena-11/hero.webp'), address: 'ул. Фрунзе, 2', distance_km: 4.1,
+    live: { kind: 'session', session_id: 403, text: 'Сегодня с 21:30', starts_at_local: '21:30' } },
+];
+
+const ARENA_CARD = {
+  id: 11, slug: 'katok-na-nemige', city_id: 1, city_name: 'Минск', public_path: '/p/minsk/katok-na-nemige',
+  name: 'Каток на Немиге', venue_type: 'ice', venue_noun: 'каток', venue_chip: 'Каток', venue_site_label: 'Сайт',
+  has_skating: true, district: 'Центральный', address: 'пр-т Победителей, 1',
+  latitude: 53.93, longitude: 27.51, timezone: 'Europe/Minsk',
+  short_description: 'Крытый каток в центре', phone: '+375 29 000-00-00', website_url: null, tickets_url: null,
+  social_urls: {}, opening_hours: {}, season_start_month: 9, season_end_month: 5, in_season: true,
+  amenities: {}, visit_info: {}, visit: {},
+  contacts: { phone: '+375 29 000-00-00', website_url: null, social_urls: {} },
+  hero: { mode: 'photo', url: P('arena-38/hero.webp'), variants: { thumb: P('arena-38/hero.webp'), card: P('arena-38/hero.webp'), hero: P('arena-38/hero.webp') }, urls: [P('arena-38/hero.webp')] },
+  gallery: [], tier: 'A', currency_code: 'BYN', trainer_count: 0,
+  freshness: { state: 'fresh', label: null },
+};
+
+const SESS = (id, s, e) => ({
+  id, arena_id: 11, kind: 'public_skate',
+  starts_at_utc: TODAY_ISO + 'T' + s + ':00+03:00', ends_at_utc: TODAY_ISO + 'T' + e + ':00+03:00',
+  local_date: TODAY_ISO, starts_at_local: s, ends_at_local: e,
+  price_minor: 1200, currency_code: 'BYN', status: 'active',
+});
+
+const ARENA_SESSIONS = {
+  arena_id: 11, timezone: 'Europe/Minsk', from: TODAY_ISO, to: '2026-11-29',
+  days: [{ local_date: TODAY_ISO, sessions: [SESS(401, '19:45', '21:15'), SESS(405, '21:30', '23:00')] }],
+  ohm_days: [], figure_days: [], family_days: [],
+  kinds: ['public_skate'], freshness: { state: 'fresh', label: null },
+};
+
+const ME = {
+  name: 'Максим', initial: 'М', city: 'Минск', profile_name: null,
+  stats: { trainings: 8, streak_weeks: 3, kk_points: 124, kk_place: 7 },
+  club: { name: 'ХК Минск', label_ink: 'Мой клуб' },
+  home_arena: { id: 11, name: 'Каток на Немиге', href: 'arena?ref=11', sessions_left_today: 0 },
+  rows: {
+    trainer: { name: 'Анна Коваль', href: 'client-requests' },
+    bookings: { next_starts_at: '2026-11-24T18:30:00+03:00' },
+    passes: { lessons_left: 4 },
+    requests: { count: 1 },
+    family: { people: [{ is_you: true, active: true, profile_id: null, name: 'Максим' }] },
+  },
+};
+
+const STATE_ICE = {
+  sessions: {
+    401: { ongoing: true, checked_in: false, checkin_id: null, load_level: null, ends_local: '21:15', live: { level: 3, count: 2, last_min: 6 } },
+    402: { ongoing: true, checked_in: true, checkin_id: 910, load_level: null, ends_local: '20:30', live: null },
+    403: { ongoing: false, checked_in: false, checkin_id: null, load_level: null, ends_local: '23:00', live: null },
+  },
+  me: { season_days: 6, streak_weeks: 2, has_this_week: true, helped: 0 },
+};
+const STATE_ARENA = {
+  sessions: { 401: { ongoing: true, checked_in: false, checkin_id: null, load_level: null, ends_local: '21:15', live: { level: 1, count: 3, last_min: 12 } } },
+  me: { season_days: 6, streak_weeks: 2, has_this_week: true, helped: 0 },
+};
+const STATE_ME = { sessions: {}, me: { season_days: 12, streak_weeks: 3, has_this_week: false, helped: 5 } };
+const STATE_ME_NEWBIE = { sessions: {}, me: { season_days: 0, streak_weeks: 0, has_this_week: false, helped: 0 } };
+
+/* PDEC-040 батч C: старая главная — hub bootstrap с s5-полями home.*. */
+const HUB_BOOT = {
+  bookings: { days: [] }, requests: { items: [] }, client_session: {},
+  activity: null, passes: [], certificates: [], ice_teaser: null, pending_referral: null,
+  home: {
+    city: { id: 1, name: 'Минск', region: 'minsk', upcoming: [], needs: [] },
+    matches: null, now: null,
+    on_ice: {
+      session_id: 401, arena_id: 11, arena_name: 'Каток на Немиге', photo: null,
+      invite_url: 'https://t.me/glidebot/app?startapp=p11_401',
+      starts_local: '19:45', ends_local: '21:15', minutes_left: 105,
+      live: { level: 3, count: 2, last_min: 6 },
+      checked_in: false, checkin_id: null, load_level: null,
+      season_days: 6, streak_weeks: 2, has_this_week: true,
+      next_badge: { name: 'Крепкий лёд', name_gen: 'Крепкого льда', remaining: 3 },
+    },
+    companies: [{
+      code: 'abc12345', name: '', session_id: 401, arena_id: 11, arena_name: 'Каток на Немиге',
+      starts_local: '19:45', day_label: 'сегодня', going_count: 3, going_names: ['Аня', 'Дима', 'Света'],
+      crowd_line: 'Трое — это уже компания', my_status: 'going', page_url: 'https://t.me/k/abc12345',
+    }],
+    company_share: true,
+    pending_badges: [{
+      key: 'streak_3', name: 'Не растаял', name_gen: 'Не растаял', family: 'streak', total: 3,
+      earned: true, earned_at: '2026-11-22T15:00:00+00:00', progress: { done: 3, total: 3 },
+    }],
+  },
+};
+/* Без s5-полей: ни on_ice, ни компаний — карточек быть не должно. */
+const HUB_BOOT_PLAIN = { ...HUB_BOOT, home: { city: HUB_BOOT.home.city, matches: null, now: null } };
+
+/* Значки в ответе /client/me — полка на старом «Я». */
+const ME_BADGES = [
+  { key: 'first_ice', name: 'Вышел на лёд', name_gen: 'Выхода на лёд', family: 'intro', total: 1,
+    earned: true, earned_at: '2026-09-12T15:00:00+00:00', progress: { done: 1, total: 1 } },
+  { key: 'streak_3', name: 'Не растаял', name_gen: 'Не растаял', family: 'streak', total: 3,
+    earned: true, earned_at: '2026-11-03T15:00:00+00:00', progress: { done: 3, total: 3 } },
+  { key: 'streak_5', name: 'Крепкий лёд', name_gen: 'Крепкого льда', family: 'streak', total: 5,
+    earned: false, earned_at: null, progress: { done: 3, total: 5 } },
+  { key: 'days_10', name: 'Разогрелся', name_gen: 'Разогрелся', family: 'season', total: 10,
+    earned: false, earned_at: null, progress: { done: 8, total: 10 } },
+];
+const ME_WITH_BADGES = { ...ME, badges: ME_BADGES };
+
+/* TASK-452 (5.5): «обычно» — сетка «Когда свободнее» + blended-уровень на шкалах. */
+const SESS_LOAD = (id, s, e, lv) => ({ ...SESS(id, s, e), typical_load_level: lv });
+const ARENA_SESSIONS_LOAD = {
+  ...ARENA_SESSIONS,
+  days: [{
+    local_date: TODAY_ISO,
+    sessions: [SESS_LOAD(401, '19:45', '21:15', 'medium'), SESS_LOAD(405, '21:30', '23:00', 'calm')],
+  }],
+};
+const ARENA_USUAL = {
+  total: 14,
+  buckets: [10, 14, 18, 20],
+  weekdays: ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'],
+  cells: [
+    [1, 1, 1, 1, 1, 2, null],
+    [1, 1, 1, 1, 2, 3, null],
+    [2, 2, 2, 2, 3, 3, 1],
+    [2, 2, 2, 2, 3, 2, 1],
+  ],
+  best: 'Свободнее всего — будни в 10:00 и 14:00',
+};
+const STATE_ARENA_USUAL = {
+  sessions: {
+    401: { ongoing: true, checked_in: false, checkin_id: null, load_level: null, ends_local: '21:15',
+           live: null, usual: { key: 'calm', word: 'свободно' } },
+    405: { ongoing: false, checked_in: false, checkin_id: null, load_level: null, ends_local: '23:00',
+           live: null, usual: { key: 'busy', word: 'людно' } },
+  },
+  me: { season_days: 6, streak_weeks: 2, has_this_week: true, helped: 0 },
+  arena_usual: ARENA_USUAL,
+};
+/* Сетка без идущего сеанса: блок «Когда свободнее» не зависит от «Сейчас». */
+const STATE_ARENA_USUAL_QUIET = {
+  sessions: { 405: { ongoing: false, checked_in: false, checkin_id: null, load_level: null,
+                     ends_local: '23:00', live: null, usual: { key: 'busy', word: 'людно' } } },
+  me: { season_days: 6, streak_weeks: 2, has_this_week: true, helped: 0 },
+  arena_usual: ARENA_USUAL,
+};
+
+let failures = 0;
+function check(name, cond, extra) {
+  console.log((cond ? '✔' : '✖') + ' ' + name + (cond || !extra ? '' : '  → ' + extra));
+  if (!cond) failures++;
+}
+async function shot(page, name) {
+  await page.screenshot({ path: path.join(shots, name + '.png') });
+}
+
+async function openPage(browser, { page: pagePath, s5 = true, state = STATE_ICE, track, arenaSessions, tgScheme, hub, me, flagsExtra }) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Europe/Minsk', locale: 'ru-RU' });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|ERR_FAILED|net::|404|favicon/.test(m.text())) errors.push(m.text()); });
+  const checkinAssets = [];
+  page.on('request', (r) => { if (/checkin-(sheet|live)\.(js|css)/.test(r.url())) checkinAssets.push(r.url()); });
+  await page.clock.setFixedTime(NOW);
+  await page.addInitScript(YMAPS_STUB);
+  await page.addInitScript(FLAGS_CACHE(s5, flagsExtra));
+  await page.route('https://telegram.org/**', (r) => r.fulfill({ contentType: 'text/javascript', body: tgMock(tgScheme) }));
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  await page.route(/api-maps\.yandex|yastatic/, (r) => r.fulfill({ contentType: 'text/javascript', body: '' }));
+  await page.route('**/api/**', (r) => {
+    const url = new URL(r.request().url());
+    const p = url.pathname;
+    const json = (b, code = 200) => r.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(b) });
+    if (track) track.push(p + ' ' + r.request().method() + (url.search || ''));
+    if (p === '/api/webapp/client/ui-flags') {
+      /* PDEC-040 рескин: s4 пробрасываем из flagsExtra — иначе refresh сбросил
+         бы флаг и .gv2skin снялся бы сразу после первого ответа сервера. */
+      return json({ season_ui: true, bookings_tab: false, redesign_s1: true, redesign_s5: s5, redesign_s4: !!(flagsExtra && flagsExtra.redesign_s4) });
+    }
+    if (p === '/api/webapp/client/session' || p.startsWith('/api/webapp/client/session/')) {
+      return json({ city_id: 1, city_name: 'Минск' });
+    }
+    if (p === '/api/public/ice/cities') {
+      return json({ items: [{ id: 1, name: 'Минск', skate_count: 3, trainer_count: 14, latitude: 53.9, longitude: 27.56 }] });
+    }
+    if (p === '/api/public/ice/map-config') return json({ yandex_maps_js_api_key: 'stub-key' });
+    if (p === '/api/public/ice/arenas' || p === '/api/public/ice/arenas-map') {
+      return json({ items: ICE_ARENAS, total: ICE_ARENAS.length, window: { key: 'today_evening', label: 'Сегодня вечером', hits: 3 } });
+    }
+    if (p.startsWith('/api/public/ice/')) return json({ items: [] });
+    if (p === '/api/public/arenas/11') return json(ARENA_CARD);
+    if (p === '/api/public/arenas/11/sessions') return json(arenaSessions || ARENA_SESSIONS);
+    if (p === '/api/public/arenas/11/matches') return json({ matches: [] });
+    if (p === '/api/public/arenas/11/trainers') return json({ trainers: [] });
+    if (p === '/api/webapp/client/me') return json(me || ME);
+    if (p === '/api/webapp/client/hub/bootstrap') return json(hub || HUB_BOOT_PLAIN);
+    if (p === '/api/webapp/client/badges/seen') return json({ shown: 1 });
+    if (p === '/api/webapp/client/checkins/state') return json(state);
+    if (p === '/api/webapp/client/checkins/intent') return r.fulfill({ status: 204, body: '' });
+    if (p === '/api/webapp/client/checkins' && r.request().method() === 'POST') {
+      return json({ checkin_id: 950, session_id: 401, load_level: null, season_days: 7, nth_label: '7-й раз за сезон', streak_weeks: 2, has_this_week: true, live: null });
+    }
+    if (/^\/api\/webapp\/client\/checkins\/\d+$/.test(p) && r.request().method() === 'PATCH') return json({ live: { level: 2, count: 3, last_min: 0 } });
+    if (/^\/api\/webapp\/client\/checkins\/\d+\/share$/.test(p)) {
+      return json({ prepared_message_id: null, share_url: 'https://t.me/share/url?url=x', text: 'Подъезжай!' });
+    }
+    return json({});
+  });
+  await page.goto(base + pagePath);
+  await page.waitForTimeout(1600);
+  return { page, ctx, errors, checkinAssets };
+}
+
+const S1_TABS = 'Главная|Лёд|Записи|Кто кого|Я';
+async function tabBarCheck(page, name) {
+  const labels = await page.evaluate(() =>
+    [...document.querySelectorAll('.client-tab-bar__btn > span:last-child')].map((e) => e.textContent.trim()).join('|'));
+  check(name + ': редизайн-бар «Главная · Лёд · Записи · Кто кого · Я»', labels === S1_TABS, labels);
+}
+
+/* «Позвать сюда» и «Готово» полностью в экране и не перекрыты (elementFromPoint). */
+async function sheetFitCheck(page, name) {
+  const m = await page.evaluate(() => {
+    function covered(sel) {
+      const el = document.querySelector(sel);
+      if (!el) return 'missing:' + sel;
+      const r = el.getBoundingClientRect();
+      if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) {
+        return 'out:' + JSON.stringify({ t: r.top | 0, b: r.bottom | 0, l: r.left | 0, r: r.right | 0 });
+      }
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return hit && (hit === el || el.contains(hit) || hit.contains(el)) ? 'ok' : 'covered:' + (hit ? hit.className : 'none');
+    }
+    return { share: covered('.cis__share'), close: covered('.cis__close') };
+  });
+  check(name + ': «Позвать сюда» в экране и не перекрыта', m.share === 'ok', m.share);
+  check(name + ': «Готово» в экране и не перекрыто', m.close === 'ok', m.close);
+}
+
+async function sysCheck(page, name) {
+  const m = await page.evaluate(() => ({
+    scrollW: document.documentElement.scrollWidth,
+    innerW: window.innerWidth,
+    yellow: [...document.querySelectorAll('.cis__share, .hv2-btn--yellow')].filter((el) => el.offsetParent).length,
+    cilBtns: [...document.querySelectorAll('.cil__btn')].map((b) => {
+      const cs = getComputedStyle(b);
+      return { ws: cs.whiteSpace, lines: Math.round(b.getBoundingClientRect().height / parseFloat(cs.lineHeight || '14')) };
+    }),
+  }));
+  check(name + ': нет горизонтального скролла', m.scrollW <= m.innerW, `${m.scrollW}>${m.innerW}`);
+  check(name + ': не больше одного жёлтого действия', m.yellow <= 1, `${m.yellow}`);
+  check(name + ': «✓ Я здесь» не переносится', m.cilBtns.every((b) => b.ws === 'nowrap' && b.lines <= 1), JSON.stringify(m.cilBtns));
+}
+
+const browser = await chromium.launch();
+try {
+  /* 01. Лёд: живые строки на карточках идущих сеансов */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/ice', state: STATE_ICE });
+    await page.waitForSelector('.ice-board[data-session-id]', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    await shot(page, '01-ice-live');
+    await sysCheck(page, '01');
+    await tabBarCheck(page, '01');
+    const rows = await page.evaluate(() => [...document.querySelectorAll('.ice-board-wrap, .ice-board[data-session-id]')].map((w) => {
+      const a = w.querySelector('[data-session-id]') || (w.getAttribute('data-session-id') ? w : null);
+      return a ? {
+        sid: a.getAttribute('data-session-id'),
+        live: ((w.parentElement || w).querySelector('.cil__live') || {}).textContent || '',
+        btn: ((w.parentElement || w).querySelector('.cil__btn') || {}).textContent || '',
+      } : null;
+    }).filter(Boolean));
+    const by = Object.fromEntries(rows.map((r) => [r.sid, r]));
+    check('01: у 401 живая строка «Сейчас людно · 2 отметки»', /людно · 2 отметки/.test(by['401']?.live || ''), by['401']?.live);
+    check('01: у 401 кнопка «✓ Я здесь»', by['401']?.btn === '✓ Я здесь', by['401']?.btn);
+    check('01: у 402 «Отмечено» без live', (by['402']?.live || '') === '' && by['402']?.btn === 'Отмечено', JSON.stringify(by['402']));
+    check('01: у 403 (будущий) ничего нет', !by['403'] || (by['403'].live === '' && by['403'].btn === ''), JSON.stringify(by['403']));
+    const vis = await page.evaluate(() => {
+      const el = document.querySelector('.cil');
+      if (!el) return 'missing';
+      const r = el.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= innerHeight ? 'in' : `out:${r.top.toFixed(0)}..${r.bottom.toFixed(0)}`;
+    });
+    check('01: живая строка внутри экрана', vis === 'in', vis);
+    check('01: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 02. Лёд: тап «✓ Я здесь» открывает лист */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/ice', state: STATE_ICE });
+    await page.waitForSelector('.ice-board-wrap .cil__btn, .cil__btn', { timeout: 15000 });
+    await page.click('.cil__btn');
+    await page.waitForSelector('.cis.cis-on', { timeout: 8000 });
+    await page.waitForTimeout(600); /* дать доиграть выезду и пружине плашки */
+    await shot(page, '02-ice-sheet');
+    check('02: лист открыт', await page.locator('.cis.cis-on').count() === 1);
+    check('02: три оценки', await page.locator('.cis__lvl').count() === 3);
+    check('02: зелёная плашка галочки видна', await page.evaluate(() => {
+      const r = document.querySelector('.cis__check').getBoundingClientRect();
+      return r.width >= 40 && r.height >= 40;
+    }));
+    await sysCheck(page, '02');
+    await tabBarCheck(page, '02');
+    await sheetFitCheck(page, '02');
+    check('02: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 02b. Фикс-пак ревью: пока сеанс идёт, оценку можно переставить — второй тап шлёт PATCH. */
+  {
+    const track = [];
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/ice', state: STATE_ICE, track });
+    await page.waitForSelector('.cil__btn', { timeout: 15000 });
+    await page.click('.cil__btn');
+    await page.waitForSelector('.cis.cis-on', { timeout: 8000 });
+    await page.waitForTimeout(600);
+    await page.click('.cis__lvl[data-level="1"]');
+    await page.waitForTimeout(400);
+    await page.click('.cis__lvl[data-level="3"]');
+    await page.waitForTimeout(400);
+    await shot(page, '02b-rerate');
+    const patches = track.filter((t) => /checkins\/\d+ PATCH/.test(t));
+    check('02b: два PATCH на перестановку оценки', patches.length === 2, JSON.stringify(patches));
+    check('02b: выбран уровень 3', await page.locator('.cis__lvl[data-level="3"].cis-sel').count() === 1);
+    check('02b: плашки ошибки нет', await page.locator('.cis__err:not([hidden])').count() === 0);
+    check('02b: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 03. Каток: блок «Сейчас свободно» и «Маршрут»→intent */
+  {
+    const track = [];
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/arena?ref=11&s=401', state: STATE_ARENA, track });
+    await shot(page, '03-arena-live');
+    await sysCheck(page, '03');
+    const blk = page.locator('.cil-arena');
+    check('03: блок «Сейчас» вставлен', await blk.count() === 1);
+    if (await blk.count()) {
+      check('03: «Сейчас свободно»', (await blk.locator('.cil-arena__t').textContent() || '') === 'Сейчас свободно');
+      check('03: подстрока «3 отметки за 40 минут · сеанс до 21:15»',
+        (await blk.locator('.cil-arena__s').textContent() || '').includes('3 отметки за 40 минут · сеанс до 21:15'),
+        await blk.locator('.cil-arena__s').textContent());
+      const vis = await page.evaluate(() => {
+        const r = document.querySelector('.cil-arena').getBoundingClientRect();
+        return r.top >= 0 && r.left >= 0 && r.right <= innerWidth ? 'in' : `out:${r.top.toFixed(0)},${r.right.toFixed(0)}`;
+      });
+      check('03: блок внутри экрана', vis === 'in', vis);
+      const btnR = await page.evaluate(() => document.querySelector('.cil-arena .cil__btn').getBoundingClientRect().right);
+      check('03: кнопка не упирается в край (right ≤ w−16)', btnR <= 390 - 16 + 1, String(btnR));
+    }
+    const arenaBar = await page.locator('.client-tab-bar').count();
+    check('03: на катке (hidden-оболочка) бара нет — как в проде', arenaBar === 0, String(arenaBar));
+    check('03: focus в запросе state', track.some((t) => t.includes('checkins/state') && t.includes('focus=401')), track.filter((t) => t.includes('state')).join('|'));
+    await page.click('a.ga-onphoto').catch(() => {});
+    await page.waitForTimeout(400);
+    check('03: «Маршрут» → POST intent route', track.some((t) => t.includes('checkins/intent POST')), track.join('|'));
+    await page.click('.cil-arena .cil__btn');
+    await page.waitForSelector('.cis.cis-on', { timeout: 8000 });
+    await page.waitForTimeout(600);
+    await shot(page, '03b-arena-sheet');
+    await sheetFitCheck(page, '03b');
+    check('03: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 04. «Я»: карточка сезона + «Помог выбрать» */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-me', state: STATE_ME });
+    await page.waitForSelector('.cil-me', { timeout: 10000 }).catch(() => {});
+    await shot(page, '04-me-season');
+    await sysCheck(page, '04');
+    const txt = (await page.locator('.cil-me').textContent()) || '';
+    check('04: «12 раз на льду»', /12 раз на льду/.test(txt), txt.slice(0, 120));
+    check('04: серия 3 недели', /Серия 3 недели подряд/.test(txt));
+    check('04: «Помог выбрать время 5 раз»', /Помог выбрать время 5 раз/.test(txt));
+    check('04: пилюли ≤4', await page.locator('.cil-weeks i').count() <= 4);
+    await tabBarCheck(page, '04');
+    await page.evaluate(() => window.GlideCheckin && window.GlideCheckin.open({
+      session_id: 401, arena_name: 'Каток на Немиге', checkin_id: 910, season_days: 12, streak_weeks: 3 }));
+    await page.waitForSelector('.cis.cis-on', { timeout: 8000 });
+    await page.waitForTimeout(600);
+    await shot(page, '04b-me-sheet');
+    await sheetFitCheck(page, '04b');
+    check('04: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 05. «Я» новичок: «Сезон ещё не начат» */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-me', state: STATE_ME_NEWBIE });
+    await page.waitForSelector('.cil-me', { timeout: 10000 }).catch(() => {});
+    await shot(page, '05-me-newbie');
+    const txt = (await page.locator('.cil-me').textContent()) || '';
+    check('05: «Сезон ещё не начат»', /Сезон ещё не начат/.test(txt), txt.slice(0, 120));
+    check('05: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 07. TASK-452: «Когда свободнее» на катке + blended «обычно» на шкалах сеансов */
+  {
+    const track = [];
+    const { page, ctx, errors } = await openPage(browser, {
+      page: '/webapp/arena?ref=11&s=401', state: STATE_ARENA_USUAL,
+      track, arenaSessions: ARENA_SESSIONS_LOAD,
+    });
+    await page.waitForSelector('.cil-usual', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    await shot(page, '07-arena-usual');
+    await sysCheck(page, '07');
+    const blk = page.locator('.cil-usual');
+    check('07: сетка «Когда свободнее» вставлена', await blk.count() === 1);
+    if (await blk.count()) {
+      check('07: заголовок «Когда свободнее»', (await blk.locator('.cil-usual__t').textContent()) === 'Когда свободнее');
+      check('07: «по 14 отметкам»', (await blk.locator('.cil-usual__n').textContent()) === 'по 14 отметкам',
+        await blk.locator('.cil-usual__n').textContent());
+      check('07: плашка «Свободнее всего»', (await blk.locator('.cil-usual__best').textContent()) === 'Свободнее всего — будни в 10:00 и 14:00',
+        await blk.locator('.cil-usual__best').textContent());
+      check('07: сетка 4×7 ячеек', await blk.locator('.cil-usual__grid i').count() === 28);
+      check('07: «мало данных» (h0) — 2 ячейки', await blk.locator('.cil-usual__grid i.h0').count() === 2);
+      check('07: «людно» (h3) — 4 ячейки', await blk.locator('.cil-usual__grid i.h3').count() === 4);
+      check('07: легенда — 4 пункта', await blk.locator('.cil-usual__legend span').count() === 4);
+      /* сетка выше «Сейчас» (перед блоком сеансов) */
+      const order = await page.evaluate(() => {
+        const u = document.querySelector('.cil-usual');
+        const a = document.querySelector('.cil-arena');
+        return a ? u.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING : 'no-arena';
+      });
+      check('07: сетка выше блока «Сейчас»', typeof order === 'number' && (order & 4) === 4, String(order));
+      const vis = await page.evaluate(() => {
+        const r = document.querySelector('.cil-usual').getBoundingClientRect();
+        return r.top >= 0 && r.left >= 0 && r.right <= innerWidth ? 'in' : `out:${r.top.toFixed(0)},${r.right.toFixed(0)}`;
+      });
+      check('07: сетка внутри экрана', vis === 'in', vis);
+    }
+    /* blended «обычно»: шкала сеанса 401 перепатчена medium → calm, слово «свободно» */
+    const patched = await page.evaluate(() => {
+      const out = { meters: [], smalls: [] };
+      document.querySelectorAll('[data-session-id="401"]').forEach((el) => {
+        el.querySelectorAll('.arena-load').forEach((m) => out.meters.push(m.getAttribute('data-level')));
+        el.querySelectorAll('small').forEach((s) => out.smalls.push((s.textContent || '').trim()));
+      });
+      return out;
+    });
+    check('07: шкала 401 перепатчена в calm', patched.meters.length > 0 && patched.meters.every((l) => l === 'calm'),
+      JSON.stringify(patched.meters));
+    check('07: слово «обычно свободно» на сеансе 401', patched.smalls.some((t) => t === 'обычно свободно'),
+      JSON.stringify(patched.smalls));
+    check('07: arena_id в запросе state', track.some((t) => t.includes('checkins/state') && t.includes('arena_id=11')),
+      track.filter((t) => t.includes('state')).join('|'));
+    check('07: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 08. Сетка без идущего сеанса видна; arena_usual=null → блока нет */
+  {
+    const { page, ctx, errors } = await openPage(browser, {
+      page: '/webapp/arena?ref=11&s=405', state: STATE_ARENA_USUAL_QUIET, arenaSessions: ARENA_SESSIONS_LOAD,
+    });
+    await page.waitForSelector('.cil-usual', { timeout: 10000 }).catch(() => {});
+    await shot(page, '08-arena-usual-quiet');
+    check('08: сетка видна без идущего сеанса', await page.locator('.cil-usual').count() === 1);
+    check('08: блока «Сейчас» нет (не идёт ничего)', await page.locator('.cil-arena').count() === 0);
+    check('08: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+  {
+    const { page, ctx, errors } = await openPage(browser, {
+      page: '/webapp/arena?ref=11&s=401',
+      state: { ...STATE_ARENA, arena_usual: null },
+    });
+    await page.waitForTimeout(1200);
+    await shot(page, '09-arena-usual-none');
+    check('09: arena_usual=null → сетки нет', await page.locator('.cil-usual').count() === 0);
+    check('09: блок «Сейчас» на месте', await page.locator('.cil-arena').count() === 1);
+    check('09: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 11. PDEC-040 C: старая главная — «Ты на катке?» + «Твоя компания» + лист значка */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-home', state: STATE_ICE, hub: HUB_BOOT });
+    await page.waitForSelector('.cil-hub', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    await shot(page, '11-home-onice');
+    const hub = page.locator('.cil-hub');
+    check('11: карточка «Ты на катке?» в hubNow', await hub.count() === 1 && await page.locator('#hubNow .cil-hub').count() === 1);
+    if (await hub.count()) {
+      const txt = (await hub.textContent()) || '';
+      check('11: чип «Идёт сеанс · ещё»', /Идёт сеанс/.test(txt), txt.slice(0, 80));
+      check('11: название катка', /Каток на Немиге/.test(txt));
+      check('11: «Серия: 2 недели» и «На льду 6 раз»', /Серия: 2 недели подряд/.test(txt) && /На льду 6 раз за сезон/.test(txt), txt.slice(0, 160));
+      check('11: «✓ Я здесь» и «Позвать сюда»', (await hub.locator('[data-act="checkin"]').textContent()) === '✓ Я здесь' && (await hub.locator('[data-act="invite"]').count()) === 1);
+      const vis = await page.evaluate(() => {
+        const r = document.querySelector('.cil-hub').getBoundingClientRect();
+        return r.top >= 0 && r.left >= 0 && r.right <= innerWidth ? 'in' : `out:${r.top.toFixed(0)},${r.right.toFixed(0)}`;
+      });
+      check('11: карточка внутри экрана', vis === 'in', vis);
+    }
+    const comp = page.locator('.cil-comp');
+    check('11: карточка «Твоя компания»', await comp.count() === 1);
+    if (await comp.count()) {
+      const ctxt = (await comp.textContent()) || '';
+      check('11: «Твоя компания · сегодня» и имена', /Твоя компания · сегодня/.test(ctxt) && /Аня, Дима и Света/.test(ctxt), ctxt.slice(0, 120));
+      check('11: «Ты идёшь ✓» + «Позвать ещё»', (await comp.locator('[data-act="open"]').count()) >= 1 && (await comp.locator('[data-act="invite"]').count()) === 1);
+    }
+    /* pending_badges → лист вручения открывается сам; «Позже» шлёт seen. */
+    await page.waitForSelector('.baw', { timeout: 8000 }).catch(() => {});
+    check('11: лист вручения значка из pending_badges', await page.locator('.baw').count() === 1);
+    if (await page.locator('.baw__later').count()) await page.click('.baw__later');
+    await page.waitForTimeout(400);
+    /* «✓ Я здесь» на карточке открывает лист отметки. */
+    await page.click('.cil-hub [data-act="checkin"]');
+    await page.waitForSelector('.cis.cis-on', { timeout: 8000 });
+    await page.waitForTimeout(600);
+    await shot(page, '11b-home-sheet');
+    check('11: лист отметки открыт с главной', await page.locator('.cis.cis-on').count() === 1);
+    check('11: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 12. Без s5-полей в bootstrap — карточек нет */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-home', state: STATE_ICE, hub: HUB_BOOT_PLAIN });
+    await page.waitForTimeout(1400);
+    await shot(page, '12-home-plain');
+    check('12: нет .cil-hub/.cil-comp', await page.locator('.cil-hub, .cil-comp').count() === 0);
+    check('12: нет листа значка', await page.locator('.baw').count() === 0);
+    check('12: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 13. Полка значков на старом «Я» + коллекция */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-me', state: STATE_ME, me: ME_WITH_BADGES });
+    await page.waitForSelector('.cil-badges .mv2-badges', { timeout: 10000 }).catch(() => {});
+    await shot(page, '13-me-badges');
+    const shelf = page.locator('.cil-badges');
+    check('13: полка значков вставлена', await shelf.locator('.mv2-badges').count() === 1);
+    if (await shelf.count()) {
+      check('13: «Значки» + «Все значки»', (await shelf.locator('.mv2-sec__h').textContent()) === 'Значки' && await shelf.locator('#mv2BadgesAll').count() === 1);
+      check('13: «Первый шаг»', await shelf.locator('.mv2-bfirst').count() === 1);
+      check('13: плитки: 3 (earned streak_3 + ближайшие)', await shelf.locator('.mv2-btile').count() === 3);
+      /* сезонная карточка сверху, полка сразу под ней */
+      const order = await page.evaluate(() => {
+        const me = document.querySelector('.cil-me');
+        const b = document.querySelector('.cil-badges');
+        return me && b ? me.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING : 'missing';
+      });
+      check('13: полка под карточкой сезона', order === 4 || order === true, String(order));
+      await page.click('#mv2BadgesAll');
+      await page.waitForSelector('#mv2Collection:not([hidden])', { timeout: 5000 });
+      await shot(page, '13b-me-collection');
+      check('13: коллекция «Мои значки» открылась', (await page.locator('#mv2Collection .mv2-col__t').textContent()) === 'Мои значки');
+      await page.click('#mv2ColBack');
+      await page.waitForTimeout(300);
+    }
+    check('13: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 14. C3: тёмный Telegram + s1 — старая главная остаётся светлой */
+  {
+    const { page, ctx, errors } = await openPage(browser, { page: '/webapp/client-home', state: STATE_ICE, hub: HUB_BOOT, tgScheme: 'dark' });
+    await page.waitForSelector('.cil-hub', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(400);
+    await shot(page, '14-home-dark-tg');
+    const dark = await page.evaluate(() => ({
+      html: document.documentElement.classList.contains('hub-is-dark') || document.documentElement.classList.contains('client-mini-dark'),
+      body: document.body.classList.contains('tg-dark'),
+    }));
+    check('14: s1 пин — html не тёмный', !dark.html, JSON.stringify(dark));
+    check('14: s1 пин — body без tg-dark', !dark.body);
+    check('14: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 15. C3: тёмный Telegram + s4 без s1 — старый «Я» тоже светлый */
+  {
+    const { page, ctx, errors } = await openPage(browser, {
+      page: '/webapp/client-me', state: STATE_ME, tgScheme: 'dark',
+      flagsExtra: { redesign_s1: false, redesign_s4: true },
+    });
+    await page.waitForSelector('.cil-me', { timeout: 10000 }).catch(() => {});
+    await shot(page, '15-me-dark-tg-s4');
+    const dark = await page.evaluate(() => ({
+      html: document.documentElement.classList.contains('client-mini-dark') || document.documentElement.classList.contains('trainer-theme-dark'),
+      body: document.body.classList.contains('tg-dark'),
+    }));
+    check('15: s4 пин — «Я» не тёмный', !dark.html && !dark.body, JSON.stringify(dark));
+    check('15: без JS-ошибок', errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 16–19. PDEC-040 рескин: под s4 старые страницы получают .gv2skin + gv2-skin.css
+     и перекрашиваются в палитру v2 (фон #f5f6f8). Шоты — пара «после» к «до»
+     (06-off-… и 12-home-plain). */
+  const SKIN_PAGES = [
+    ['16', 'home', '/webapp/client-home', { hub: HUB_BOOT }],
+    ['17', 'me', '/webapp/client-me', { state: STATE_ME }],
+    ['18', 'arena', '/webapp/arena?ref=11&s=401', {}],
+    ['19', 'ice', '/webapp/ice', {}],
+  ];
+  for (const [num, name, p, extra] of SKIN_PAGES) {
+    const { page, ctx, errors } = await openPage(browser, {
+      page: p, state: STATE_ICE, flagsExtra: { redesign_s1: false, redesign_s4: true }, ...extra,
+    });
+    await page.waitForSelector('link[data-gv2skin]', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    await shot(page, `${num}-${name}-gv2`);
+    const m = await page.evaluate(() => ({
+      html: document.documentElement.classList.contains('gv2skin'),
+      body: document.body.classList.contains('gv2skin'),
+      link: !!document.querySelector('link[data-gv2skin]'),
+      bg: getComputedStyle(document.body).backgroundColor,
+      dark: document.body.classList.contains('tg-dark'),
+    }));
+    check(`${num}: ${name} — .gv2skin на html и body`, m.html && m.body, JSON.stringify(m));
+    check(`${num}: ${name} — gv2-skin.css подключён`, m.link);
+    check(`${num}: ${name} — фон #f5f6f8`, m.bg === 'rgb(245, 246, 248)', m.bg);
+    check(`${num}: ${name} — без tg-dark`, !m.dark);
+    /* Заголовки секций — Golos 700 (v2), Dela остаётся только на герое/крупном времени. */
+    const fontSel = { home: '.hh__title', me: '.cm-name', arena: '.arena-h', ice: '.client-app-header__title' }[name];
+    if (fontSel) {
+      const ff = await page.evaluate((sel) => {
+        const el = document.querySelector(sel);
+        return el ? { f: getComputedStyle(el).fontFamily, w: getComputedStyle(el).fontWeight } : null;
+      }, fontSel);
+      if (name === 'home' || name === 'ice') {
+        check(`${num}: ${name} — герой/тайтл остался Dela`, ff && /Dela/.test(ff.f), JSON.stringify(ff));
+      } else {
+        check(`${num}: ${name} — заголовок ${fontSel} уже Golos 700`, ff && !/Dela/.test(ff.f) && +ff.w >= 600, JSON.stringify(ff));
+      }
+    }
+    check(`${num}: без JS-ошибок`, errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+
+  /* 06→10. Флаг выключен: ни ассетов, ни узлов на всех трёх страницах */
+  const OFF_PAGES = [['ice', '/webapp/ice'], ['arena', '/webapp/arena?ref=11&s=401'], ['me', '/webapp/client-me'], ['home', '/webapp/client-home']];
+  for (let i = 0; i < OFF_PAGES.length; i++) {
+    const p = OFF_PAGES[i][1];
+    const { page, ctx, errors, checkinAssets } = await openPage(browser, { page: p, s5: false });
+    await shot(page, `06-off-${OFF_PAGES[i][0]}`);
+    check(`06-${i}: ${p} без checkin-ассетов`, checkinAssets.length === 0, checkinAssets.join(','));
+    check(`06-${i}: ${p} без узлов .cil*/.cis`, await page.locator('.cil, .cil-arena, .cil-me, .cis').count() === 0);
+    check(`06-${i}: ${p} без .gv2skin`, await page.evaluate(() =>
+      !document.documentElement.classList.contains('gv2skin') &&
+      !(document.body && document.body.classList.contains('gv2skin')) &&
+      !document.querySelector('link[data-gv2skin]')));
+    check(`06-${i}: ${p} без JS-ошибок`, errors.length === 0, errors.join('; '));
+    await ctx.close();
+  }
+} finally {
+  await browser.close();
+  server.close();
+}
+
+if (failures) {
+  console.log(`\n✖ ${failures} проверок упало`);
+  process.exit(1);
+}
+console.log('\n✔ все проверки прошли');

@@ -167,6 +167,31 @@ html:active-view-transition-type(back)::view-transition-new(root) {
 }
 
 /*
+ * TASK-448 (redesign_s3). Вкладочная навигация — без сдвига, чистый кросс-фейд
+ * 150мс: меню и так остаётся на месте, смысла в «перелистывании» нет. Правила
+ * срабатывают только с типом `tab`, поэтому поведение без s3 не меняется.
+ */
+@keyframes client-vt-tab-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes client-vt-tab-in {
+  from {
+    opacity: 0;
+  }
+}
+
+html:active-view-transition-type(tab)::view-transition-old(root) {
+  animation: client-vt-tab-out 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+html:active-view-transition-type(tab)::view-transition-new(root) {
+  animation: client-vt-tab-in 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/*
  * Таб-бар не участвует в переходе: стоит на месте, пока экран под ним меняется
  * (TASK-332, как у тренера). Старый снимок прячем — на экранах без панели она
  * просто исчезает, а не уезжает вместе со страницей.

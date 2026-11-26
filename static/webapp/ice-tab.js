@@ -1678,7 +1678,9 @@
       esc(v.href) +
       '" data-arena-ref="' +
       esc(v.arenaId) +
-      '">' +
+      '"' +
+      (v.sessionId != null ? ' data-session-id="' + esc(v.sessionId) + '"' : '') +
+      '>' +
       photo +
       scrim +
       '</span>' +

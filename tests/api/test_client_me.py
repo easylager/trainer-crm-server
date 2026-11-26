@@ -954,3 +954,124 @@ async def test_trainer_divergence_ever_booked_on_real_data(app_use_test_db, db_s
     edge, src = compute_primary_edge_meta([], None, ever_booked_trainer_id=ever[0], ever_booked_service_id=ever[1])
     assert edge is not None and src == "ever_booked"  # «Главная» показала бы тренера
     assert (await _get()).json()["rows"]["trainer"] is None
+
+
+@pytest.fixture
+def s4_env(monkeypatch: pytest.MonkeyPatch):
+    def apply(ids: str | None) -> None:
+        if ids is None:
+            monkeypatch.delenv("CLIENT_REDESIGN_S4_TELEGRAM_IDS", raising=False)
+        else:
+            monkeypatch.setenv("CLIENT_REDESIGN_S4_TELEGRAM_IDS", ids)
+        monkeypatch.delenv("CLIENT_REDESIGN_S4_PERCENT", raising=False)
+        from src.shared.config import get_settings
+
+        get_settings.cache_clear()
+
+    yield apply
+    from src.shared.config import get_settings
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_me_v2_payload_only_under_s4(app_use_test_db, db_session, client_me_auth, s4_env) -> None:
+    """Без флага ключей v2 нет; с флагом — joined_label/pass/saved_detail + поля home_arena."""
+    uid = 368_100_090
+    _auth(uid)
+    cid = await _client_row(db_session, uid, "Максим")
+    tid = await _trainer(db_session, "Ольга", "Смирнова")
+    product = (
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO trainer_pass_products (trainer_id, name, sessions_total, price_cents)
+                VALUES (:t, 'Абонемент', 8, 80000) RETURNING id
+                """
+            ),
+            {"t": tid},
+        )
+    ).scalar_one()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO pass_instances (client_id, pass_product_id, sessions_remaining, sessions_total, price_cents, status)
+            VALUES (:c, :p, 5, 8, 50000, 'active')
+            """
+        ),
+        {"c": cid, "p": product},
+    )
+    await db_session.execute(
+        text("INSERT INTO client_sessions (telegram_id, state) VALUES (:tg, 'idle') ON CONFLICT DO NOTHING"),
+        {"tg": uid},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_trainer_edges (client_id, telegram_id, trainer_id, is_saved)
+            VALUES (:c, :tg, :t, true)
+            """
+        ),
+        {"c": cid, "tg": uid, "t": tid},
+    )
+
+    s4_env(None)
+    off = (await _get()).json()
+    assert "joined_label" not in off and "pass" not in off and "saved_detail" not in off
+
+    s4_env(str(uid))
+    body = (await _get()).json()
+    assert body["joined_label"].startswith("в Glide с")
+    assert body["pass"]["left"] == 5
+    assert body["pass"]["total"] == 8
+    assert body["pass"]["trainer_name"] == "Ольга Смирнова"
+    assert body["pass"]["book_href"].startswith("catalog?")
+    assert body["saved_detail"]["trainers"] == 1
+    assert body["saved_detail"]["line"] == "1 тренер"
+    assert body["rows"]["saved"]["line"] == "1 тренер"
+    s4_env(None)
+
+
+@pytest.fixture
+def s5_env(monkeypatch: pytest.MonkeyPatch):
+    def apply(ids: str | None) -> None:
+        if ids is None:
+            monkeypatch.delenv("CLIENT_REDESIGN_S5_TELEGRAM_IDS", raising=False)
+        else:
+            monkeypatch.setenv("CLIENT_REDESIGN_S5_TELEGRAM_IDS", ids)
+        monkeypatch.delenv("CLIENT_REDESIGN_S5_PERCENT", raising=False)
+        from src.shared.config import get_settings
+
+        get_settings.cache_clear()
+
+    yield apply
+    from src.shared.config import get_settings
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_me_companies_only_under_s4_s5(app_use_test_db, db_session, client_me_auth, s4_env, s5_env) -> None:
+    """«Мои компании» — только s4+s5: список открытых компаний, где я участвую."""
+    from tests.api.test_client_ice_schedule import _company_for
+    from tests.api.test_ice_invites import _at, _insert_session, _place
+
+    uid = 368_100_091
+    _auth(uid)
+    await _client_row(db_session, uid, "Максим")
+    place = await _place(db_session)
+    sid = await _insert_session(db_session, place["arena_id"], starts_at=_at(days=1))
+    code = await _company_for(db_session, sid, uid)
+
+    s4_env(str(uid)); s5_env(None)
+    off = (await _get()).json()
+    assert "companies" not in off
+
+    s5_env(str(uid))
+    body = (await _get()).json()
+    assert len(body["companies"]) == 1
+    c = body["companies"][0]
+    assert c["code"] == code and c["my_status"] == "organizer"
+    assert c["going_count"] == 1 and c["session_id"] == sid
+    assert c["page_url"].endswith(f"/k/{code}")
+    s4_env(None); s5_env(None)

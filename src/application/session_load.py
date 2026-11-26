@@ -188,15 +188,19 @@ def _shift_level(level: LoadLevel, character: str) -> LoadLevel:
     return level
 
 
-def resolve_level(
+def resolve_level_opt(
     rules: Sequence[LoadRule],
     *,
     arena_id: int,
     character: str,
     local_weekday: int,
     starts_at_local: dt_time | str,
-) -> LoadLevel:
-    """Самое конкретное правило + сдвиг характера, если победило не правило арены."""
+) -> LoadLevel | None:
+    """То же, что ``resolve_level``, но ``None``, когда правило не подошло вовсе.
+
+    Нужно blend-модели «обычно» (TASK-452): отсутствие правила — это отсутствие
+    prior'а, а не дефолтный «medium».
+    """
     start = _parse_local_time(starts_at_local)
     day_group = weekday_to_day_group(int(local_weekday))
     matching: list[LoadRule] = []
@@ -212,7 +216,7 @@ def resolve_level(
         matching.append(rule)
 
     if not matching:
-        return LEVEL_MEDIUM
+        return None
 
     def sort_key(r: LoadRule) -> tuple[int, int]:
         return (r.specificity, -r.interval_minutes())
@@ -222,6 +226,24 @@ def resolve_level(
     if winner.scope == _SCOPE_ARENA and winner.arena_id == int(arena_id):
         return level
     return _shift_level(level, character)
+
+
+def resolve_level(
+    rules: Sequence[LoadRule],
+    *,
+    arena_id: int,
+    character: str,
+    local_weekday: int,
+    starts_at_local: dt_time | str,
+) -> LoadLevel:
+    """Самое конкретное правило + сдвиг характера, если победило не правило арены."""
+    return resolve_level_opt(
+        rules,
+        arena_id=arena_id,
+        character=character,
+        local_weekday=local_weekday,
+        starts_at_local=starts_at_local,
+    ) or LEVEL_MEDIUM
 
 
 def typical_load_fields(

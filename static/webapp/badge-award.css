@@ -1,0 +1,95 @@
+/* TASK-451 (5.4): лист вручения значка. Модель — checkin-sheet.css (.cis). */
+.baw-dim {
+  position: fixed; inset: 0; z-index: 9400;
+  background: rgba(15, 23, 42, 0.44);
+  opacity: 0; transition: opacity 0.24s ease;
+}
+.baw-dim.baw-on { opacity: 1; }
+.baw {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 9401;
+  background: #ffffff;
+  border-radius: 22px 22px 0 0;
+  padding: 8px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(105%);
+  transition: transform 0.26s cubic-bezier(0.2, 0.9, 0.25, 1);
+  text-align: center;
+  color: #0f172a;
+}
+.baw.baw-on { transform: translateY(0); }
+.baw__grip {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: #d7dde3; margin: 2px auto 14px;
+}
+.baw__stage { position: relative; width: 168px; height: 168px; margin: 0 auto 6px; }
+.baw__rays {
+  position: absolute; inset: -14px; border-radius: 50%;
+  background: repeating-conic-gradient(from -8deg, rgba(10, 111, 115, 0.14) 0deg 10deg, transparent 10deg 24deg);
+  opacity: 0;
+}
+.baw__art { position: relative; width: 168px; height: 168px; }
+.baw__art svg { width: 100%; height: 100%; display: block; }
+.baw-anim .baw__art { animation: baw-pop 240ms cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.baw-anim .baw__rays { animation: baw-rays 400ms 160ms ease-out both; }
+.baw__snow {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+}
+.baw__snow i {
+  position: absolute; top: -6px; width: 6px; height: 6px; border-radius: 50%;
+  background: #b9e1e5;
+}
+.baw__snow i:nth-child(1) { left: 12%; }
+.baw__snow i:nth-child(2) { left: 30%; animation-delay: 120ms; }
+.baw__snow i:nth-child(3) { left: 52%; animation-delay: 60ms; }
+.baw__snow i:nth-child(4) { left: 70%; animation-delay: 180ms; }
+.baw__snow i:nth-child(5) { left: 86%; animation-delay: 90ms; }
+.baw-anim .baw__snow { animation: baw-snow-fade 700ms 100ms ease-out both; }
+.baw-anim .baw__snow i { animation: baw-snow-fall 700ms 100ms ease-in both; }
+@keyframes baw-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes baw-rays {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes baw-snow-fade {
+  0% { opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; }
+}
+@keyframes baw-snow-fall {
+  from { transform: translateY(0); }
+  to { transform: translateY(150px); }
+}
+.baw__new {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #0a6f73; margin-bottom: 4px;
+}
+.baw__name { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.baw__sub { font-size: 14px; color: #64748b; margin-top: 4px; }
+.baw__next { font-size: 13px; color: #475569; margin-top: 12px; }
+.baw__next b { color: #0f172a; }
+.baw__pager { display: flex; gap: 6px; justify-content: center; margin-top: 10px; min-height: 8px; }
+.baw__pager i { width: 6px; height: 6px; border-radius: 50%; background: #d7dde3; }
+.baw__pager i.on { background: #0a6f73; }
+.baw__more { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+.baw__share {
+  display: block; width: 100%; margin-top: 16px;
+  padding: 14px; border: 0; border-radius: 14px;
+  background: #facc15; color: #0f172a;
+  font: inherit; font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.baw__share:active { opacity: 0.88; }
+.baw__share[disabled] { opacity: 0.55; }
+.baw__later {
+  display: block; width: 100%; margin-top: 8px;
+  padding: 12px; border: 0; background: none;
+  color: #64748b; font: inherit; font-size: 15px; cursor: pointer;
+}
+.baw__nav { position: absolute; top: 50%; transform: translateY(-50%); }
+@media (prefers-reduced-motion: reduce) {
+  .baw, .baw-dim { transition: opacity 0.15s ease; }
+  .baw { transform: none; }
+  .baw-anim .baw__art, .baw-anim .baw__rays { animation: baw-fade 200ms ease-out both; }
+  .baw-anim .baw__snow, .baw-anim .baw__snow i { animation: none; }
+  .baw__rays { opacity: 1; }
+}
+@keyframes baw-fade { from { opacity: 0; } to { opacity: 1; } }

@@ -9,7 +9,7 @@
     python3 scripts/tab_timing_report.py tab.log --by platform,to --kind tab
 
 Группы по умолчанию: kind, to, platform. Колонки: n, медиана, p90, медиана page_ms.
-Ключи группировки: kind, from, to, platform, season_ui, nav.
+Ключи группировки: kind, from, to, platform, season_ui, nav, src.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import sys
 from collections import defaultdict
 
 _LINE = re.compile(r"client tab-timing (?P<kv>(?:\w+=\S+\s*)+)")
-_KEYS = ("kind", "from", "to", "platform", "season_ui", "nav")
+_KEYS = ("kind", "from", "to", "platform", "season_ui", "nav", "src")
 
 
 def parse_line(line: str) -> dict[str, str] | None:
@@ -59,6 +59,19 @@ def summarize(rows: list[dict[str, str]], by: tuple[str, ...]) -> list[tuple[tup
     return out
 
 
+def summarize_by_src(rows: list[dict[str, str]]) -> list[tuple[str, int, int, int]]:
+    """TASK-448: медианы отдельно по источнику первого кадра (cache|net|-)."""
+    groups: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        groups[row.get("src", "-")].append(row)
+    out = []
+    for key, items in sorted(groups.items()):
+        ms = [int(r["ms"]) for r in items]
+        data = [int(r["data_ms"]) for r in items if str(r.get("data_ms", "")).isdigit()]
+        out.append((key, len(items), int(statistics.median(ms)), int(statistics.median(data)) if data else -1))
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("log", help="файл с логом или - для stdin")
@@ -78,6 +91,12 @@ def main(argv: list[str] | None = None) -> int:
     print("\t".join([*by, "n", "median_ms", "p90_ms", "median_page_ms"]))
     for key, n, med, p90, page in summarize(rows, by):
         print("\t".join([*key, str(n), str(med), str(p90), str(page)]))
+    src_rows = summarize_by_src(rows)
+    if len(src_rows) > 1 or (src_rows and src_rows[0][0] != "-"):
+        print()
+        print("\t".join(["src", "n", "median_ms", "median_data_ms"]))
+        for key, n, med, dmed in src_rows:
+            print("\t".join([key, str(n), str(med), str(dmed) if dmed >= 0 else "-"]))
     return 0
 
 

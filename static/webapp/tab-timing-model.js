@@ -78,6 +78,10 @@
       platform: cleanPlatform(i.platform),
       season_ui: i.seasonUi === true,
     };
+    /* TASK-448: необязательная разметка источника кадра и времени до данных. */
+    if (i.src === 'cache' || i.src === 'net') base.src = i.src;
+    var dataMs = clampMs(i.dataMs);
+    if (dataMs !== null) base.data_ms = dataMs;
     var tap = decodeTap(i.tapRaw, i.nowMs);
     if (tap) {
       if (tap.to !== tab || (nav !== 'navigate' && nav !== 'shell')) return null;

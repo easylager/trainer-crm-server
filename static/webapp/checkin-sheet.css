@@ -1,0 +1,246 @@
+/* TASK-446: лист отметки «Я здесь» (макет C). Шарится страницами через GlideCheckin. */
+.cis-dim {
+  position: fixed; inset: 0; z-index: 9400;
+  background: rgba(11, 22, 32, .3);
+  opacity: 0; transition: opacity .24s cubic-bezier(.2,.8,.2,1);
+}
+.cis-dim.cis-on { opacity: 1; }
+.cis {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 9401;
+  background: #fff; border-radius: 28px 28px 0 0;
+  padding: 10px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(105%);
+  transition: transform .24s cubic-bezier(.2,.8,.2,1);
+  font-family: var(--g-font, "Golos Text", -apple-system, sans-serif);
+  color: #0b1620;
+  max-height: calc(100dvh - 24px); overflow-y: auto;
+}
+/* Лист рисуется на разных страницах — защищаемся от их глобальных сбросов
+   (svg-нормализации, button, box-sizing, межстрочные интервалы). */
+.cis, .cis *, .cis *::before, .cis *::after { box-sizing: border-box; }
+.cis svg { display: block; flex: none; }
+.cis button { min-height: 0; appearance: none; }
+.cis p, .cis h1, .cis h2, .cis h3 { margin: 0; font-size: inherit; font-weight: inherit; line-height: inherit; }
+.cis.cis-on { transform: translateY(0); }
+.cis__grip { width: 36px; height: 4px; border-radius: 2px; background: #dfe5e8; margin: 0 auto 12px; }
+.cis__done-row { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+.cis__check {
+  width: 48px; height: 48px; border-radius: 14px; flex: 0 0 48px;
+  background: #e8f7ee; display: flex; align-items: center; justify-content: center;
+  transform: scale(0); transition: transform .24s cubic-bezier(.34,1.56,.64,1);
+}
+.cis.cis-on .cis__check { transform: scale(1); transition-delay: .08s; }
+.cis__check svg { width: 26px; height: 26px; }
+.cis__title { font: 700 22px/1.15 var(--g-font, inherit); }
+.cis__sub { margin-top: 2px; font: 400 15px/1.3 var(--g-font, inherit); color: #6b7a86; }
+.cis__q { font: 700 17px/1.25 var(--g-font, inherit); margin: 4px 0 2px; }
+.cis__hint { font: 400 13px/1.35 var(--g-font, inherit); color: #6b7a86; margin-bottom: 14px; }
+.cis__levels { display: flex; gap: 8px; margin-bottom: 16px; }
+.cis__lvl {
+  flex: 1; border: 1px solid #e7ebee; border-radius: 16px; background: #fff;
+  padding: 12px 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  font: 600 13px/1.2 var(--g-font, inherit); color: #0b1620; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.cis__lvl:active { transform: scale(.97); }
+.cis__lvl.cis-sel { border: 2px solid #0a6f73; background: #e6f2f2; padding: 11px 4px 9px; }
+.cis__bars { display: flex; align-items: flex-end; gap: 3px; height: 16px; }
+.cis__bars i { width: 5px; border-radius: 2px; background: #dfe5e8; }
+.cis__bars i:nth-child(1) { height: 6px; }
+.cis__bars i:nth-child(2) { height: 11px; }
+.cis__bars i:nth-child(3) { height: 16px; }
+.cis__lvl.cis-sel .cis__bars i, .cis__lvl:hover .cis__bars i { background: #0a6f73; }
+.cis__lvl[data-level="1"] .cis__bars i:nth-child(n+2),
+.cis__lvl[data-level="2"] .cis__bars i:nth-child(3) { background: #dfe5e8; }
+.cis__lvl[data-level="1"].cis-sel .cis__bars i:nth-child(1),
+.cis__lvl[data-level="2"].cis-sel .cis__bars i:nth-child(-n+2),
+.cis__lvl[data-level="3"].cis-sel .cis__bars i { background: #0a6f73; }
+.cis__streak {
+  display: flex; align-items: center; gap: 12px;
+  background: #f5f6f8; border-radius: 16px; padding: 12px 16px; margin-bottom: 12px;
+}
+.cis__streak-ic { width: 24px; height: 24px; flex: 0 0 24px; color: #0a6f73; }
+.cis__streak-t { font: 600 15px/1.25 var(--g-font, inherit); }
+.cis__streak-s { font: 400 13px/1.3 var(--g-font, inherit); color: #6b7a86; margin-top: 2px; }
+.cis__weeks { display: flex; gap: 4px; margin-left: auto; flex: 0 0 auto; }
+.cis__weeks i { width: 18px; height: 8px; border-radius: 4px; background: #dfe5e8; }
+.cis__weeks i.on { background: #0a6f73; }
+.cis__share {
+  display: block; width: 100%; border: 0; border-radius: 16px;
+  background: #ffd241; color: #0b1620; font: 700 17px/48px var(--g-font, inherit);
+  text-align: center; cursor: pointer; margin-bottom: 4px;
+}
+.cis__share:active { transform: scale(.98); }
+.cis__share[disabled] { opacity: .6; }
+.cis__close {
+  display: block; width: 100%; border: 0; background: none;
+  font: 600 15px/40px var(--g-font, inherit); color: #6b7a86; cursor: pointer; text-align: center;
+}
+.cis__err {
+  margin: 0 0 12px; padding: 10px 14px; border-radius: 12px;
+  background: #fff4cc; color: #8a6d00; font: 600 14px/1.3 var(--g-font, inherit);
+}
+.cis__err[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .cis, .cis-dim, .cis__check { transition: opacity .2s ease; }
+  .cis { transform: none; }
+  .cis__check { transform: none; }
+}
+
+/* TASK-446 (5.2): живые строки и блоки на страницах Лёд/каток/«Я» (checkin-live.js). */
+.cil {
+  display: flex; align-items: center; gap: 10px; white-space: normal;
+  margin: 8px 4px 4px;
+  font-family: var(--g-font, "Golos Text", -apple-system, sans-serif);
+}
+.cil__live {
+  display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;
+  font: 600 13px/1.3 var(--g-font, inherit); color: #16a34a;
+}
+.cil__bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.cil__bars i { width: 4px; border-radius: 2px; background: #dfe5e8; }
+.cil__bars i:nth-child(1) { height: 5px; }
+.cil__bars i:nth-child(2) { height: 9px; }
+.cil__bars i:nth-child(3) { height: 12px; }
+.cil__bars i.on { background: #16a34a; }
+.cil__btn {
+  margin-left: auto; flex-shrink: 0; border: 0; border-radius: 12px;
+  background: #eef1f3; color: #0b1620;
+  font: 600 13px/34px var(--g-font, inherit); padding: 0 14px;
+  white-space: nowrap;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.cil__btn:active { transform: scale(.97); }
+.cil-arena {
+  display: flex; align-items: center; gap: 12px; white-space: normal;
+  margin: 10px 16px 4px; padding: 14px 16px;
+  background: #fff; border-radius: 18px;
+  font-family: var(--g-font, "Golos Text", -apple-system, sans-serif);
+}
+.cil-arena__dot {
+  width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px;
+  background: #16a34a; animation: cil-pulse 1.8s ease infinite;
+}
+@keyframes cil-pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+.cil-arena__txt { flex: 1; min-width: 0; }
+.cil-arena__t { font: 600 17px/1.25 var(--g-font, inherit); color: #0b1620; }
+.cil-arena__s { margin-top: 2px; font: 400 13px/1.3 var(--g-font, inherit); color: #6b7a86; }
+.cil-arena__s span { white-space: nowrap; }
+.cil-me { display: flex; flex-direction: column; gap: 10px; white-space: normal; margin-bottom: 12px;
+  font-family: var(--g-font, "Golos Text", -apple-system, sans-serif); }
+.cil-me__card { background: #fff; border-radius: 18px; padding: 16px; }
+.cil-me__kick { font: 600 13px/1.3 var(--g-font, inherit); color: #6b7a86; display: flex; align-items: center; gap: 6px; }
+.cil-me__big { margin-top: 4px; font: 700 30px/1.15 var(--g-font, inherit); color: #0b1620; }
+.cil-me__big--muted { font-size: 20px; }
+.cil-me__sub { margin-top: 4px; font: 400 13px/1.35 var(--g-font, inherit); color: #6b7a86; }
+.cil-me__streak { display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  font: 500 13px/1.3 var(--g-font, inherit); color: #4d5b66; }
+.cil-weeks { display: inline-flex; gap: 4px; }
+.cil-weeks i { width: 18px; height: 8px; border-radius: 4px; background: #dfe5e8; }
+.cil-weeks i.on { background: #0a6f73; }
+
+/* TASK-452 (5.5): «Когда свободнее» — тепловая сетка катка (макет F). */
+.cil-usual {
+  white-space: normal;
+  margin: 10px 16px 4px; padding: 16px;
+  background: #fff; border-radius: 18px;
+  font-family: var(--g-font, "Golos Text", -apple-system, sans-serif);
+}
+.cil-usual__head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.cil-usual__t { font: 700 17px/1.25 var(--g-font, inherit); color: #0b1620; }
+.cil-usual__n { font: 400 13px/1.3 var(--g-font, inherit); color: #6b7a86; white-space: nowrap; }
+.cil-usual__best {
+  margin: 8px 0 12px; padding: 10px 12px; border-radius: 12px;
+  background: #e6f2f2; color: #0a6f73; font: 600 14px/1.3 var(--g-font, inherit);
+}
+.cil-usual__grid {
+  display: grid; grid-template-columns: 24px repeat(7, 1fr); gap: 3px;
+  font: 400 11px/1 var(--g-font, inherit); color: #6b7a86; align-items: center;
+}
+.cil-usual__grid b { font-weight: 600; text-align: center; }
+.cil-usual__grid i { height: 20px; border-radius: 5px; display: block; }
+.cil-usual__grid i.h0, .cil-usual__legend i.h0 { background: #f1f3f5; }
+.cil-usual__grid i.h1, .cil-usual__legend i.h1 { background: #d6eeef; }
+.cil-usual__grid i.h2, .cil-usual__legend i.h2 { background: #8cc9cc; }
+.cil-usual__grid i.h3, .cil-usual__legend i.h3 { background: #0a6f73; }
+.cil-usual__legend {
+  display: flex; gap: 12px; margin-top: 10px; align-items: center; flex-wrap: wrap;
+  font: 400 12px/1.2 var(--g-font, inherit); color: #6b7a86;
+}
+.cil-usual__legend span { display: flex; align-items: center; gap: 5px; }
+.cil-usual__legend i { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
+@media (prefers-reduced-motion: reduce) {
+  .cil-arena__dot { animation: none; }
+}
+
+/* PDEC-040 батч C: карточки «Ты на катке?» и «Твоя компания» на старой главной
+   (слот #hubNow). Самодостаточные: токены --g-* с запасными значениями, чтобы
+   карточка не рассыпалась, если страница их не задаёт. */
+.cil-hub, .cil-comp {
+  display: flex; flex-direction: column; gap: 12px; white-space: normal;
+  padding: 16px; margin-bottom: 12px; border-radius: 22px;
+  background: var(--g-surface, #fff); color: var(--g-ink, #0b1620);
+  font-family: var(--g-font, "Golos Text", -apple-system, sans-serif);
+  box-shadow: 0 1px 2px rgba(13, 27, 38, .06), 0 10px 28px rgba(13, 27, 38, .10);
+}
+body.tg-dark .cil-hub, body.tg-dark .cil-comp {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 10px 28px rgba(0, 0, 0, .35);
+}
+.cil-hub__hit {
+  display: flex; flex-direction: column; gap: 6px;
+  text-decoration: none; color: inherit;
+}
+.cil-hub__chip, .cil-comp__chip {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  font: 600 13px/1.3 var(--g-font, inherit); color: #16a34a;
+}
+.cil-hub__dot, .cil-comp__dot {
+  width: 8px; height: 8px; border-radius: 4px; flex: 0 0 8px;
+  background: #16a34a; animation: cil-pulse 1.8s ease infinite;
+}
+.cil-comp__chip, .cil-comp__dot { color: var(--g-accent-ink, #0a6f73); }
+.cil-comp__dot { background: var(--g-accent-ink, #0a6f73); animation: none; }
+.cil-hub__name { font: 700 22px/1.15 var(--g-font, inherit); color: var(--g-ink, #0b1620); }
+.cil-hub__sub { font: 400 14px/1.35 var(--g-font, inherit); color: var(--g-muted, #6b7a86); }
+.cil-hub__stats {
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--g-bg, #f5f6f8); border-radius: 16px; padding: 12px 14px;
+}
+.cil-hub__row { display: flex; align-items: center; gap: 10px; color: var(--g-accent-ink, #0a6f73); }
+.cil-hub__row svg { flex: 0 0 18px; }
+.cil-hub__tx { flex: 1; min-width: 0; }
+.cil-hub__rt { font: 600 14px/1.3 var(--g-font, inherit); color: var(--g-ink, #0b1620); }
+.cil-hub__rs { font: 400 13px/1.3 var(--g-font, inherit); color: var(--g-muted, #6b7a86); margin-top: 1px; }
+.cil-hub__row .cil-weeks { flex: 0 0 auto; }
+.cil-hub__btns { display: flex; gap: 8px; }
+.cil-hub__btn {
+  flex: 1; border: 0; border-radius: 14px; cursor: pointer;
+  font: 700 15px/44px var(--g-font, inherit); text-align: center;
+  white-space: nowrap; padding: 0 12px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+  -webkit-tap-highlight-color: transparent;
+}
+.cil-hub__btn--yellow { background: #ffd241; color: #0b1620; }
+.cil-hub__btn--soft { background: var(--g-chip, #eef1f3); color: var(--g-ink, #0b1620); font-weight: 600; }
+.cil-hub__btn:active { transform: scale(.98); }
+.cil-hub__btn[disabled] { opacity: .6; }
+.cil-comp__names { font: 700 18px/1.25 var(--g-font, inherit); color: var(--g-ink, #0b1620); }
+.cil-comp__meta { font: 400 14px/1.35 var(--g-font, inherit); color: var(--g-muted, #6b7a86); }
+.cil-comp__avas { display: flex; align-items: center; }
+.cil-comp__ava {
+  width: 28px; height: 28px; border-radius: 50%; flex: 0 0 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--g-accent-ink, #0a6f73); color: #fff;
+  font: 700 13px/1 var(--g-font, inherit);
+  border: 2px solid var(--g-surface, #fff); margin-left: -8px;
+}
+.cil-comp__ava:first-child { margin-left: 0; }
+.cil-comp__cnt { margin-left: 8px; font: 600 13px/1.3 var(--g-font, inherit); color: var(--g-muted, #6b7a86); }
+
+/* Полка значков на старом «Я» — разметка общая (badge-collection.js, классы
+   mv2-*), здесь только отступ под ритм .cil-me. */
+.cil-badges { margin: 0 0 12px; }
+.cil-badges .mv2-sec__h { margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  .cil-hub__dot { animation: none; }
+}

@@ -526,6 +526,13 @@
   function paint(data) {
     state.data = data;
     state.failed = false;
+    /* PDEC-040, батч C: свежий ответ /client/me наружу — ленивый checkin-live
+       рисует полку значков (data.badges под s5) поверх этого экрана. Кэш на
+       случай, если модуль доехал позже события. */
+    try {
+      root.__clientMeData = data;
+      root.dispatchEvent(new CustomEvent('glide:me-data', { detail: data }));
+    } catch (e) { /* старый webview без CustomEvent — полка просто не появится */ }
     var m = screenModel(data, { bookingsTab: bookingsTab(), now: new Date() });
     var parts = blockParts(m);
     if (!state.keys) {

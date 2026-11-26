@@ -1,0 +1,219 @@
+/* TASK-449 (этап 4): вкладка «Лёд» v2 (макет 14). Светлая тема; Dela — только заголовок;
+   жёлтого нет вообще; единственный красный — линия «Сейчас». */
+.iv2 {
+  --ink: #0b1620;
+  --muted: #6b7a86;
+  --line: #e7ebee;
+  --soft: #eef1f3;
+  --teal: #0a6f73;
+  --green: #16a34a;
+  --red: #e5484d;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  background: #f5f6f8;
+  color: var(--ink);
+  font-family: var(--g-font);
+  min-height: 100dvh;
+}
+.iv2 *, .iv2 *::before, .iv2 *::after { box-sizing: border-box; }
+.iv2 button { font-family: inherit; }
+.iv2__page { padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 120px; }
+
+/* ── Шапка ── */
+.iv2-top { display: flex; align-items: center; gap: 10px; margin: 2px -4px 14px; }
+.iv2-city {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #fff; border: 0; border-radius: 999px; padding: 10px 16px;
+  font: 600 15px/1 var(--g-font); color: var(--ink); cursor: pointer;
+}
+.iv2-top__acts { margin-left: auto; display: flex; gap: 8px; }
+.iv2-iconbtn {
+  width: 40px; height: 40px; border-radius: 999px; border: 0; background: #fff;
+  color: var(--ink); display: grid; place-items: center; cursor: pointer;
+}
+
+/* ── Заголовок-ответ ── */
+.iv2-title {
+  margin: 0 0 6px;
+  font: 400 30px/1.15 var(--g-font-display);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.iv2-sub { margin: 0 0 16px; font: 400 15px/1.4 var(--g-font); color: var(--muted); }
+.iv2-sub .iv2-live { color: var(--green); font-weight: 600; }
+
+/* ── Плитки + дни (липнут при прокрутке) ── */
+.iv2-stick {
+  position: sticky; top: 0; z-index: 30;
+  margin: 0 -16px; padding: 8px 16px 10px;
+  background: #f5f6f8;
+  transition: box-shadow .18s var(--ease);
+}
+.iv2-stick--stuck { box-shadow: 0 1px 0 var(--line), 0 8px 16px -12px rgba(11, 22, 32, .18); }
+.iv2-kinds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.iv2-kinds:empty { display: none; }
+.iv2-kind {
+  border: 0; border-radius: 20px; background: #fff; padding: 14px 14px 12px;
+  text-align: left; cursor: pointer; color: var(--ink);
+  display: flex; flex-direction: column; gap: 6px; min-width: 0; height: 100%;
+}
+.iv2-kind svg { width: 24px; height: 24px; }
+.iv2-kind__label { font: 700 15px/1.15 var(--g-font); white-space: nowrap; }
+.iv2-kind__count { font: 400 13px/1 var(--g-font); color: var(--muted); margin-top: auto; }
+.iv2-kind--on { background: var(--teal); color: #fff; }
+.iv2-kind--on .iv2-kind__count { color: rgba(255, 255, 255, .8); }
+.iv2-kind--empty { opacity: .5; }
+.iv2-days { display: flex; gap: 8px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+.iv2-days::-webkit-scrollbar { display: none; }
+.iv2-day {
+  flex: 0 0 auto; border: 0; border-radius: 999px; background: #fff;
+  padding: 10px 16px; font: 600 15px/1 var(--g-font); color: var(--ink); cursor: pointer;
+}
+.iv2-day__count { font: 400 13px/1 var(--g-font); color: var(--muted); margin-left: 6px; }
+.iv2-day--on { background: var(--ink); color: #fff; }
+.iv2-day--on .iv2-day__count { color: rgba(255, 255, 255, .7); }
+.iv2-day--empty { opacity: .55; }
+
+/* ── Список ── */
+.iv2-list { margin-top: 12px; transition: opacity .18s var(--ease); }
+.iv2-list--fade { opacity: .15; }
+.iv2-grouphead {
+  display: flex; align-items: center; gap: 8px;
+  margin: 18px 0 10px; font: 700 17px/1.2 var(--g-font);
+}
+.iv2-grouphead:first-child { margin-top: 4px; }
+.iv2-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--green); flex: 0 0 auto; animation: iv2-pulse 1.8s ease infinite; }
+@keyframes iv2-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.iv2-row { display: flex; gap: 12px; align-items: flex-start; }
+.iv2-row + .iv2-row { margin-top: 14px; }
+.iv2-row__time { flex: 0 0 52px; padding-top: 18px; font: 700 17px/1 var(--g-font); }
+.iv2-card {
+  flex: 1 1 auto; min-width: 0; display: block; text-decoration: none; color: inherit;
+  background: #fff; border-radius: 20px; padding: 12px;
+}
+.iv2-card__top { display: flex; gap: 12px; align-items: flex-start; }
+.iv2-card__img { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; background: var(--soft); flex: 0 0 auto; }
+.iv2-card__ph { width: 56px; height: 56px; border-radius: 14px; background: var(--soft); flex: 0 0 auto; }
+.iv2-card__txt { flex: 1 1 auto; min-width: 0; }
+.iv2-card__going { font: 600 13px/1.3 var(--g-font); color: var(--green); margin-bottom: 2px; }
+.iv2-card__name { font: 700 15px/1.3 var(--g-font); overflow-wrap: anywhere; }
+/* Старт внутри карточки — дни не-сегодня (без левой колонки времени). */
+.iv2-card__when { margin-right: 8px; }
+.iv2-card__sub { font: 400 13px/1.35 var(--g-font); color: var(--muted); margin-top: 2px; }
+.iv2-card__subp { white-space: nowrap; }
+.iv2-card__chev { flex: 0 0 auto; align-self: center; color: var(--muted); }
+.iv2-card__me {
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 6px;
+  border: 0; border-radius: 999px; background: var(--soft); color: var(--ink);
+  padding: 7px 14px; font: 600 13px/1 var(--g-font); cursor: pointer; white-space: nowrap;
+}
+.iv2-card__live { display: flex; align-items: center; gap: 6px; margin-top: 6px; font: 600 13px/1.3 var(--g-font); color: var(--green); }
+.iv2-card__live i { display: inline-block; width: 3px; border-radius: 2px; background: #d4dbe0; }
+.iv2-card__live i.on { background: var(--green); }
+.iv2-card__live i:nth-child(1) { height: 8px; } .iv2-card__live i:nth-child(2) { height: 12px; } .iv2-card__live i:nth-child(3) { height: 16px; }
+.iv2-card__live span { display: inline-flex; gap: 2px; align-items: flex-end; }
+/* TASK-452 (5.5): «Обычно …» — та же шкала, но серая подпись и teal-черточки (макет E). */
+.iv2-card__usual { display: flex; align-items: center; gap: 6px; margin-top: 4px; font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.iv2-card__usual i { display: inline-block; width: 3px; border-radius: 2px; background: #d4dbe0; }
+.iv2-card__usual i.on { background: var(--teal); }
+.iv2-card__usual i:nth-child(1) { height: 7px; } .iv2-card__usual i:nth-child(2) { height: 10px; } .iv2-card__usual i:nth-child(3) { height: 13px; }
+.iv2-card__usual span { display: inline-flex; gap: 2px; align-items: flex-end; }
+
+.iv2-nowline {
+  display: flex; align-items: center; gap: 8px; margin: 16px 0 14px;
+  font: 700 12px/1 var(--g-font); color: var(--red); white-space: nowrap;
+}
+.iv2-nowline::before { content: ''; width: 8px; height: 8px; border-radius: 999px; background: var(--red); flex: 0 0 auto; }
+.iv2-nowline::after { content: ''; flex: 1 1 auto; height: 2px; border-radius: 2px; background: var(--red); }
+
+/* ── «Завтра с утра» / конец списка ── */
+.iv2-end { margin-top: 22px; }
+.iv2-end__head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; font: 700 17px/1.2 var(--g-font); }
+.iv2-end__date { font: 400 15px/1.2 var(--g-font); color: var(--muted); }
+.iv2-end__card { background: #fff; border-radius: 20px; padding: 4px 12px; }
+.iv2-end__row { display: flex; gap: 12px; padding: 10px 0; align-items: baseline; }
+.iv2-end__row + .iv2-end__row { border-top: 1px solid var(--line); }
+.iv2-end__time { flex: 0 0 52px; font: 700 15px/1.3 var(--g-font); }
+.iv2-end__name { font: 700 15px/1.3 var(--g-font); }
+.iv2-end__sub { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.iv2-end__all {
+  display: flex; align-items: center; width: 100%; border: 0; background: none;
+  border-top: 1px solid var(--line); margin-top: 4px; padding: 12px 0;
+  font: 700 15px/1 var(--g-font); color: var(--teal); cursor: pointer;
+}
+.iv2-end__all svg { margin-left: auto; }
+.iv2-end__card--empty { padding: 16px; }
+.iv2-end__title { font: 700 17px/1.3 var(--g-font); }
+.iv2-end__text { font: 400 15px/1.4 var(--g-font); color: var(--muted); margin-top: 4px; }
+.iv2-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  margin-top: 12px; border: 0; border-radius: 16px; padding: 14px;
+  font: 700 15px/1 var(--g-font); cursor: pointer; text-decoration: none;
+}
+.iv2-btn--ink { background: var(--ink); color: #fff; }
+.iv2-btn--soft { background: var(--soft); color: var(--ink); }
+.iv2-watch-ok { margin-top: 12px; font: 600 15px/1.3 var(--g-font); color: var(--muted); text-align: center; }
+
+/* ── Скелетон ── */
+.iv2-skel__row { height: 80px; border-radius: 20px; background: #fff; margin-bottom: 14px; animation: iv2-skel 1.2s ease infinite alternate; }
+@keyframes iv2-skel { from { opacity: .55; } to { opacity: 1; } }
+
+/* ── Листы (город, поиск) ── */
+.iv2-sheetbg { position: fixed; inset: 0; background: rgba(11, 22, 32, .4); z-index: 60; }
+.iv2-sheetbg[hidden], .iv2-sheet[hidden] { display: none; }
+.iv2-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61;
+  background: #fff; border-radius: 24px 24px 0 0;
+  max-height: calc(100dvh - 48px); display: flex; flex-direction: column;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  animation: iv2-sheet .24s var(--ease) both;
+}
+@keyframes iv2-sheet { from { transform: translateY(32px); opacity: .5; } to { transform: none; opacity: 1; } }
+.iv2-sheet__grip { width: 40px; height: 4px; border-radius: 4px; background: var(--line); margin: 10px auto 4px; }
+.iv2-sheet__head { padding: 6px 20px 10px; }
+.iv2-sheet__head h2 { margin: 0; font: 700 22px/1.2 var(--g-font); }
+.iv2-sheet__list { overflow-y: auto; }
+.iv2-sheet__search { padding: 0 20px 10px; }
+.iv2-sheet__search input {
+  width: 100%; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px;
+  font: 400 16px/1.2 var(--g-font); background: #f5f6f8; color: var(--ink); outline: none;
+}
+.iv2-srow {
+  display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none;
+  padding: 13px 20px; text-align: left; cursor: pointer;
+}
+.iv2-srow + .iv2-srow { border-top: 1px solid var(--line); }
+.iv2-srow__name { font: 700 16px/1.3 var(--g-font); color: var(--ink); }
+.iv2-srow__sub { font: 400 14px/1.3 var(--g-font); color: var(--muted); }
+.iv2-srow__chev { margin-left: auto; color: var(--muted); flex: 0 0 auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .iv2-list { transition: none; }
+  .iv2-dot { animation: none; }
+  .iv2-sheet { animation: none; }
+}
+
+/* ── Один каток: карточка катка + неделя чипсами ── */
+.iv2-rink {
+  display: flex; gap: 12px; align-items: center; text-decoration: none; color: inherit;
+  background: #fff; border-radius: 20px; padding: 12px; margin-bottom: 16px;
+}
+.iv2-rink__img { width: 64px; height: 64px; border-radius: 16px; object-fit: cover; background: var(--soft); flex: 0 0 auto; }
+.iv2-rink__txt { flex: 1 1 auto; min-width: 0; }
+.iv2-rink__name { font: 700 17px/1.25 var(--g-font); }
+.iv2-rink__addr { font: 400 13px/1.35 var(--g-font); color: var(--muted); margin-top: 2px; }
+.iv2-card--bare .iv2-card__sub { margin-top: 0; }
+.iv2-week { display: flex; flex-direction: column; gap: 10px; }
+.iv2-wrow { display: flex; gap: 12px; align-items: flex-start; background: #fff; border-radius: 20px; padding: 12px 14px; }
+.iv2-wrow__day { flex: 0 0 64px; }
+.iv2-wrow__label { font: 700 17px/1.15 var(--g-font); }
+.iv2-wrow__sub { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.iv2-wrow__chips { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.iv2-wchip {
+  display: inline-flex; align-items: center; text-decoration: none; color: inherit;
+  border: 1px solid var(--line); border-radius: 999px; background: #fff;
+  padding: 8px 12px; font: 700 15px/1 var(--g-font);
+}
+
+/* TASK-450 (5.3): плашка «Твоя компания» в строке сеанса */
+.iv2-card__comp { display:block; width:100%; margin-top:8px; border:0; background:none;
+  color:#0a6f73; font-size:13px; font-weight:600; text-align:left; cursor:pointer; padding:0; }

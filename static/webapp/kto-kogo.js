@@ -66,9 +66,26 @@
 
   // ---------- среда ----------
 
+  /* PDEC-040 батч C: у аккаунтов redesign_s1 все экраны светлые — «Кто кого»
+     тему держит свой applyTheme (не через client-mini-app-theme.js), поэтому
+     пин повторяем здесь из того же кэша флагов, что и у общей темы. */
+  function redesignPinned() {
+    try {
+      var u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      var uid = u && u.id != null ? String(u.id) : '';
+      if (!uid) return false;
+      var c = JSON.parse(window.localStorage.getItem('cw_ui_flags_v1') || 'null');
+      return !!(c && String(c.u) === uid && c.redesign_s1 === true);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function applyTheme() {
-    // Тему сообщает Telegram; вне его (браузер, превью) — системная.
-    var dark = tg && tg.initData ? tg.colorScheme === 'dark' : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    // Тему сообщает Telegram; вне его (браузер, превью) — системная. Под s1 — всегда светлая.
+    var dark = !redesignPinned() && (tg && tg.initData
+      ? tg.colorScheme === 'dark'
+      : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches));
     document.body.classList.toggle('kk-dark', !!dark);
     syncTabMode();
     if (tg && tg.setHeaderColor) {
@@ -1007,7 +1024,7 @@
     window.addEventListener('client-shell:retap', function (e) {
       if (e && e.detail && e.detail.tab === 'kk' && inTab()) retap();
     });
-    window.addEventListener('client-shell:ui-flags', function () { syncTabMode(); syncBack(); });
+    window.addEventListener('client-shell:ui-flags', function () { applyTheme(); syncTabMode(); syncBack(); });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && state.sheet) return closeSheet();
       if (e.key !== 'Tab' || !state.sheet) return;

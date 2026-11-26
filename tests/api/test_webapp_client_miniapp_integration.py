@@ -10,7 +10,7 @@ import json
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import quote
 
@@ -44,6 +44,7 @@ from src.infrastructure.db.models import (
 )
 from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, MINIAPP_CREDENTIAL_USER_DETAIL_RU
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+from src.shared.config import Settings
 from src.shared.telegram_webapp import InitDataAuthError
 from tests.conftest import belarus_test_phone
 
@@ -1998,6 +1999,247 @@ async def test_client_hub_bootstrap_includes_passes(app_use_test_db, db_session)
 
 
 @pytest.mark.asyncio
+async def test_client_hub_bootstrap_redesign_keys_absent_with_flag_off(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """TASK-445: ice_rail/place_photos/city_pick/name_in — только под флагом redesign_s1."""
+    monkeypatch.setenv("CLIENT_REDESIGN_S1_TELEGRAM_IDS", "")
+    monkeypatch.setenv("CLIENT_REDESIGN_S1_PERCENT", "0")
+    from src.shared.config import get_settings
+
+    get_settings.cache_clear()
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/client/hub/bootstrap",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    get_settings.cache_clear()
+    assert resp.status_code == 200, resp.text
+    home = resp.json().get("home") or {}
+    assert "ice_rail" not in home
+    assert "place_photos" not in home
+    assert "city_pick" not in home
+    assert "name_in" not in (home.get("city") or {})
+
+
+async def _seed_public_rink_city_committed(
+    *, name: str, with_photo: bool = True, sessions_today: int = 1, tg_id: int | None = None,
+    city_for_tg: bool = False,
+) -> tuple[int, int]:
+    """TASK-445: город BY + каток + сеанс(ы) сегодня — НАСТОЯЩИМ коммитом.
+
+    ``_home_city``/``_home_city_pick`` в маршруте открывают отдельную сессию через
+    ``async_session_factory`` (fan-out, conftest его не патчит) — данные из
+    откатываемой транзакции теста им не видны. Поэтому сидируем своим engine с
+    реальным коммитом и чистим за собой в ``_cleanup_committed_seed``.
+    Возвращает (city_id, arena_id).
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            city_id = int(
+                (
+                    await conn.execute(
+                        text(
+                            "INSERT INTO cities (name, country, price_group, is_active, sort_order) "
+                            "VALUES (:name, 'BY', 'BY_BASE', true, -1) RETURNING id"
+                        ),
+                        {"name": name},
+                    )
+                ).scalar_one()
+            )
+            arena_id = int(
+                (
+                    await conn.execute(
+                        text(
+                            "INSERT INTO arenas (city_id, name, address, venue_type, is_active, is_confirmed) "
+                            "VALUES (:cid, :name, 'ул. Тестовая, 1', 'ice', true, true) RETURNING id"
+                        ),
+                        {"cid": city_id, "name": f"Каток {name}"},
+                    )
+                ).scalar_one()
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO arena_profiles (arena_id, city_id, slug, status, amenities) "
+                    "VALUES (:aid, :cid, :slug, 'published', CAST('{}' AS jsonb))"
+                ),
+                {"aid": arena_id, "cid": city_id, "slug": f"rail-{arena_id}"},
+            )
+            if with_photo:
+                await conn.execute(
+                    text(
+                        "INSERT INTO media (owner_type, owner_id, storage_key, variants, license, status, sort_order, width) "
+                        "VALUES ('arena', :aid, :key, CAST(:variants AS jsonb), 'own', 'published', 0, 1600)"
+                    ),
+                    {
+                        "aid": arena_id,
+                        "key": f"arenas/{arena_id}/card.jpg",
+                        "variants": json.dumps(
+                            {
+                                "thumb": f"arenas/{arena_id}/thumb.jpg",
+                                "card": f"arenas/{arena_id}/card.jpg",
+                                "hero": f"arenas/{arena_id}/hero.jpg",
+                            }
+                        ),
+                    },
+                )
+            now = datetime.now(timezone.utc)
+            starts = now + timedelta(hours=3)
+            ends = starts + timedelta(hours=1)
+            local_date = (starts + timedelta(hours=3)).date()  # Europe/Minsk = UTC+3
+            for i in range(sessions_today):
+                await conn.execute(
+                    text(
+                        """
+                        INSERT INTO ice_sessions (arena_id, kind, starts_at_utc, ends_at_utc, local_date,
+                            starts_at_local, ends_at_local, currency_code, status, source_id, observed_at)
+                        VALUES (:aid, 'public_skate', :s, :e, :d, :sl, :el, 'BYN', 'active', 'admin', :obs)
+                        """
+                    ),
+                    {
+                        "aid": arena_id,
+                        "s": starts + timedelta(minutes=30 * i),
+                        "e": ends + timedelta(minutes=30 * i),
+                        "d": local_date,
+                        "sl": (starts + timedelta(hours=3, minutes=30 * i)).time(),
+                        "el": (ends + timedelta(hours=3, minutes=30 * i)).time(),
+                        "obs": now,
+                    },
+                )
+            if tg_id is not None:
+                await conn.execute(
+                    text(
+                        "INSERT INTO client_sessions (telegram_id, state, city_id) "
+                        "VALUES (:t, 'city_selected', :cid) "
+                        "ON CONFLICT (telegram_id) DO UPDATE SET city_id = :cid"
+                    ),
+                    {"t": tg_id, "cid": city_id if city_for_tg else None},
+                )
+    finally:
+        await engine.dispose()
+    return city_id, arena_id
+
+
+async def _cleanup_committed_seed(*, city_id: int, arena_id: int, tg_id: int) -> None:
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM client_sessions WHERE telegram_id = :t"), {"t": tg_id}
+            )
+            await conn.execute(
+                text("DELETE FROM ice_sessions WHERE arena_id = :a"), {"a": arena_id}
+            )
+            await conn.execute(
+                text("DELETE FROM media WHERE owner_type = 'arena' AND owner_id = :a"),
+                {"a": arena_id},
+            )
+            await conn.execute(
+                text("DELETE FROM arena_profiles WHERE arena_id = :a"), {"a": arena_id}
+            )
+            await conn.execute(text("DELETE FROM arenas WHERE id = :a"), {"a": arena_id})
+            await conn.execute(text("DELETE FROM cities WHERE id = :c"), {"c": city_id})
+    finally:
+        await engine.dispose()
+
+
+def _enable_redesign_s2(monkeypatch, tg_id: int) -> None:
+    """TASK-447: s2 поверх s1 (городской вид + состояния главной)."""
+    _enable_redesign(monkeypatch, tg_id)
+    monkeypatch.setenv("CLIENT_REDESIGN_S2_TELEGRAM_IDS", str(tg_id))
+    monkeypatch.setenv("CLIENT_REDESIGN_S2_PERCENT", "0")
+    from src.shared.config import get_settings
+
+    get_settings.cache_clear()
+
+
+def _enable_redesign(monkeypatch, tg_id: int) -> None:
+    monkeypatch.setenv("CLIENT_REDESIGN_S1_TELEGRAM_IDS", str(tg_id))
+    monkeypatch.setenv("CLIENT_REDESIGN_S1_PERCENT", "0")
+    from src.shared.config import get_settings
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_client_hub_bootstrap_redesign_city_pick_with_flag_on(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """TASK-445: сессия без города → home.city_pick с today_sessions и фото катка."""
+    ctg = _fresh_client_telegram_id()
+    city_id, arena_id = await _seed_public_rink_city_committed(
+        name=f"pick-{uuid.uuid4().hex[:8]}", sessions_today=2, tg_id=ctg
+    )
+    try:
+        _enable_redesign(monkeypatch, ctg)
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/webapp/client/hub/bootstrap",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+    finally:
+        from src.shared.config import get_settings
+
+        get_settings.cache_clear()
+        await _cleanup_committed_seed(city_id=city_id, arena_id=arena_id, tg_id=ctg)
+    assert resp.status_code == 200, resp.text
+    home = resp.json().get("home") or {}
+    pick = home.get("city_pick")
+    assert isinstance(pick, list) and pick, resp.text
+    ours = next((c for c in pick if c["id"] == city_id), None)
+    assert ours is not None, pick
+    assert ours["name"]
+    assert ours["today_sessions"] >= 1, ours
+    assert isinstance(ours["trainer_count"], int)
+    assert ours["photo"] and (ours["photo"]["card"] or ours["photo"]["thumb"]), ours
+
+
+@pytest.mark.asyncio
+async def test_client_hub_bootstrap_redesign_ice_rail_with_flag_on(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """TASK-445: сессия с городом → ice_rail (3 окна, каток сгруппирован), place_photos, name_in."""
+    ctg = _fresh_client_telegram_id()
+    city_id, arena_id = await _seed_public_rink_city_committed(
+        name=f"rail-{uuid.uuid4().hex[:8]}", tg_id=ctg, city_for_tg=True
+    )
+    try:
+        _enable_redesign(monkeypatch, ctg)
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/webapp/client/hub/bootstrap",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+    finally:
+        from src.shared.config import get_settings
+
+        get_settings.cache_clear()
+        await _cleanup_committed_seed(city_id=city_id, arena_id=arena_id, tg_id=ctg)
+    assert resp.status_code == 200, resp.text
+    home = resp.json().get("home") or {}
+    rail = home.get("ice_rail") or {}
+    windows = rail.get("windows") or []
+    assert [w["key"] for w in windows] == ["today", "tomorrow", "weekend"], windows
+    today = windows[0]
+    assert any(a["arena_id"] == arena_id for a in today["arenas"]), today
+    photos = home.get("place_photos") or {}
+    assert str(arena_id) in photos, photos
+    city = home.get("city") or {}
+    assert "name_in" in city
+
+
+@pytest.mark.asyncio
 async def test_client_booking_post_response_shape_smoke(app_use_test_db, db_session) -> None:
     """POST /client/booking success JSON shape is stable for shared booking-client.js parser."""
     slot_day = date.today() + timedelta(days=14)
@@ -2031,3 +2273,123 @@ async def test_client_booking_post_response_shape_smoke(app_use_test_db, db_sess
     assert data.get("success") is True
     assert isinstance(data.get("booking_id"), int)
     assert "detail" not in data
+
+
+@pytest.mark.asyncio
+async def test_client_hub_bootstrap_s2_keys_with_flag(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """TASK-447: variant/week/one_rink/profile/kk_player — только под redesign_s2."""
+    ctg = _fresh_client_telegram_id()
+    # Профиль и город читаются фан-аут сессиями вне откатываемой транзакции —
+    # клиента сидируем настоящим коммитом, как город/каток/сеансы.
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("INSERT INTO clients (telegram_id, first_name, is_sandbox) VALUES (:t, 'Клиент', false)"),
+                {"t": ctg},
+            )
+    finally:
+        await engine.dispose()
+    city_id, arena_id = await _seed_public_rink_city_committed(
+        name=f"s2-{uuid.uuid4().hex[:8]}", tg_id=ctg, city_for_tg=True
+    )
+    try:
+        # s1 есть, s2 нет — ключей этапа 2 в home быть не должно.
+        _enable_redesign(monkeypatch, ctg)
+        monkeypatch.setenv("CLIENT_REDESIGN_S2_TELEGRAM_IDS", "")
+        monkeypatch.setenv("CLIENT_REDESIGN_S2_PERCENT", "0")
+        from src.shared.config import get_settings
+
+        get_settings.cache_clear()
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/webapp/client/hub/bootstrap",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+        assert resp.status_code == 200, resp.text
+        home = resp.json().get("home") or {}
+        for key in ("variant", "week", "next_ice", "one_rink", "nearby", "profile", "kk_player"):
+            assert key not in home, key
+
+        # s2 включён — один каток в городе → variant one, неделя, билет, профиль.
+        _enable_redesign_s2(monkeypatch, ctg)
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/webapp/client/hub/bootstrap",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+        assert resp.status_code == 200, resp.text
+        home = resp.json().get("home") or {}
+        assert home.get("variant") == "one", home.keys()
+        week = home.get("week")
+        assert isinstance(week, list) and len(week) == 7, week
+        assert week[0]["label"] == "Сегодня" and week[0]["times"], week[0]
+        one = home.get("one_rink")
+        assert one is not None, home
+        assert one["arena_id"] == arena_id and one["time"], one
+        assert isinstance(one["prices"], list)  # у тестового сеанса цен нет — только известные
+        profile = home.get("profile")
+        assert profile and profile["is_own"] is True and profile["name"] == "Клиент", profile
+        assert home.get("kk_player") is False
+        # Сегодня сеанс ещё впереди → ключа next_ice нет.
+        assert "next_ice" not in home
+    finally:
+        from src.shared.config import get_settings
+
+        get_settings.cache_clear()
+        await _cleanup_committed_seed(city_id=city_id, arena_id=arena_id, tg_id=ctg)
+        engine = create_async_engine(Settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DELETE FROM clients WHERE telegram_id = :t"), {"t": ctg})
+        finally:
+            await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_webapp_client_home_bundles_only_with_s3(
+    app_use_test_db, db_session, monkeypatch
+) -> None:
+    """TASK-448: s3 подменяет одиночные ассеты бандлами; без s3 разметка как раньше."""
+    from src.shared.config import get_settings
+
+    ctg = _fresh_client_telegram_id()
+    monkeypatch.setenv("CLIENT_REDESIGN_S1_TELEGRAM_IDS", str(ctg))
+    monkeypatch.setenv("CLIENT_REDESIGN_S3_TELEGRAM_IDS", "")
+    monkeypatch.setenv("CLIENT_REDESIGN_S3_PERCENT", "0")
+    get_settings.cache_clear()
+    try:
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                off = await client.get("/webapp/client-home", headers={"X-Telegram-Init-Data": "mock"})
+        assert off.status_code == 200
+        assert "/webapp/home-v2.app.js" not in off.text
+        assert 'src="home-v2.js' in off.text
+
+        monkeypatch.setenv("CLIENT_REDESIGN_S3_TELEGRAM_IDS", str(ctg))
+        get_settings.cache_clear()
+        with patch_client_init_auth(ctg):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                on = await client.get("/webapp/client-home", headers={"X-Telegram-Init-Data": "mock"})
+                head = await client.get("/webapp/home-v2.head.js")
+                appjs = await client.get("/webapp/home-v2.app.js")
+                css = await client.get("/webapp/home-v2.bundle.css")
+        assert on.status_code == 200
+        assert 'src="/webapp/home-v2.head.js?v=' in on.text
+        assert 'defer src="/webapp/home-v2.app.js?v=' in on.text
+        assert 'href="/webapp/home-v2.bundle.css?v=' in on.text
+        assert 'src="home-v2.js' not in on.text
+        assert "telegram.org/js/telegram-web-app.js" in on.text
+        assert "__clientEarlyBootstrap" in on.text
+        assert head.status_code == 200 and "mini-app-client-shell" in head.text
+        assert appjs.status_code == 200 and "home-v2" in appjs.text
+        assert css.status_code == 200 and "hv2-hero" in css.text
+        assert "immutable" in (appjs.headers.get("cache-control") or "")
+    finally:
+        get_settings.cache_clear()

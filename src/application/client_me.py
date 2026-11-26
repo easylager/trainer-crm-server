@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+from collections.abc import Mapping
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,10 +27,13 @@ from src.application.hockey_hub import HOME_AHEAD
 from src.application.hockey_notices import get_prefs
 from src.application.hockey_screens import fan_profile
 from src.application.hockey_teams import display_name, team_card
+from src.application.pass_product_use_cases import list_client_pass_instances
 from src.infrastructure.db.models import CLIENT_PROFILE_ROLE_SELF, ICE_WATCH_KIND_SESSIONS
 from src.ingestion.hockey_sources import MINSK_TZ
 from src.shared.ice_discovery_scope import PUBLIC_ARENA_VISIBLE_SQL, public_scope_params
+from src.application.style_b import b_photo_url
 from src.shared.public_display import format_clock
+from src.shared.ru_text import plural_ru
 
 _KK_HREF = "/webapp/kto-kogo"
 _INK_LIGHT = "#FFFFFF"
@@ -55,7 +61,14 @@ _NEXT_MATCH = text("""
     """)
 
 _ARENA = text(f"""
-    SELECT a.name, COALESCE(p.timezone, 'Europe/Minsk') AS tz
+    SELECT a.name, COALESCE(p.timezone, 'Europe/Minsk') AS tz,
+           (
+               SELECT m.variants
+               FROM media m
+               WHERE m.owner_type = 'arena' AND m.owner_id = a.id AND m.status = 'published'
+               ORDER BY m.sort_order, m.id
+               LIMIT 1
+           ) AS photo_variants
     FROM arenas a
     LEFT JOIN arena_profiles p ON p.arena_id = a.id
     JOIN cities c ON c.id = a.city_id
@@ -235,6 +248,7 @@ async def _club(session: AsyncSession, club: str | None, *, now: datetime) -> di
             "starts_at": _iso(row.starts_at),
             "opponent": display_name(opponent),
             "href": _KK_HREF,
+            "label": _match_label(row.starts_at, display_name(opponent), now),
         }
     return {
         "name": card["name"],
@@ -252,6 +266,7 @@ async def home_arena_payload(
     arena_id: int | None,
     client_id: int | None,
     now: datetime | None = None,
+    include_v2: bool = False,
 ) -> dict | None:
     """Блок «мой каток» в форме GET. ``None`` — каток не выбран, арены нет или она стала скрытой (выбор в prefs не трогаем)."""
     if arena_id is None:
@@ -276,7 +291,8 @@ async def home_arena_payload(
         now=moment,
     )
     by_day = {str(day["local_date"]): list(day.get("sessions") or []) for day in days}
-    left = len(by_day.get(today.isoformat(), []))
+    today_sessions = by_day.get(today.isoformat(), [])
+    left = len(today_sessions)
     tomorrow_first = None
     if left == 0:
         upcoming = by_day.get(tomorrow.isoformat()) or []
@@ -291,7 +307,7 @@ async def home_arena_payload(
             )
         ).first()
         subscribed = hit is not None
-    return {
+    out = {
         "id": int(arena_id),
         "name": arena.name,
         "href": f"/webapp/arena?id={int(arena_id)}",
@@ -299,6 +315,20 @@ async def home_arena_payload(
         "tomorrow_first": tomorrow_first,
         "subscribed": subscribed,
     }
+    if include_v2:
+        raw = arena.get("photo_variants")
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        variants = raw if isinstance(raw, Mapping) else {}
+        out["photo"] = {
+            "thumb": b_photo_url(variants.get("thumb") or variants.get("card")),
+            "card": b_photo_url(variants.get("card") or variants.get("thumb")),
+        }
+        out["today_times"] = [
+            format_clock(str(s2.get("starts_at_local") or ""))
+            for s2 in today_sessions[:5]
+        ]
+    return out
 
 
 async def _bookings(session: AsyncSession, client_id: int) -> dict | None:
@@ -352,6 +382,104 @@ async def _my_trainer(session: AsyncSession, *, account_key: int, acting: int) -
     return {"name": name, "href": f"/webapp/catalog?trainer_id={int(tid)}"}
 
 
+_JOINED = text("SELECT created_at FROM clients WHERE id = :cid")
+
+# TASK-449: «Сохранённое» строкой «2 катка · 1 тренер» — подписки на катки + сохранённые тренеры.
+_SAVED_V2 = text("""
+    SELECT
+        (SELECT COUNT(*)::int FROM client_ice_watches WHERE client_id = :cid AND active) AS arenas,
+        (SELECT COUNT(*)::int FROM client_trainer_edges WHERE client_id = :cid AND is_saved) AS trainers
+    """)
+
+_MONTHS_SHORT_GEN = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+_WEEKDAYS_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+
+
+def _match_label(starts_at: datetime, opponent: str, now: datetime) -> str:
+    """«Сегодня 19:00 · Барыс» / «Завтра 19:00 · …» / «сб, 28 · 19:00 · …» — по Минску."""
+    local = _aware_minsk(starts_at)
+    today = _aware_minsk(now).date()
+    hhmm = f"{local.hour:02d}:{local.minute:02d}"
+    if local.date() == today:
+        day = "Сегодня"
+    elif local.date() == today + timedelta(days=1):
+        day = "Завтра"
+    else:
+        day = f"{_WEEKDAYS_SHORT[local.weekday()]}, {local.day}"
+    return f"{day} {hhmm} · {opponent}"
+
+
+def _aware_minsk(value: datetime) -> datetime:
+    dt = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return dt.astimezone(MINSK_TZ)
+
+
+def _joined_label(created_at: datetime | None, now: datetime) -> str | None:
+    """«в Glide с октября» / «с октября 2025», если аккаунт старше года."""
+    if created_at is None:
+        return None
+    local = _aware_minsk(created_at)
+    month = _MONTHS_SHORT_GEN[local.month - 1]
+    if (now - created_at).days >= 360:
+        return f"в Glide с {month} {local.year}"
+    return f"в Glide с {month}"
+
+
+def _expires_label(expires_at: datetime | None) -> str | None:
+    if expires_at is None:
+        return None
+    local = _aware_minsk(expires_at)
+    return f"до {local.day} {_MONTHS_SHORT_GEN[local.month - 1]}"
+
+
+async def _pass_detail(session: AsyncSession, client_id: int) -> dict | None:
+    """Активный абонемент для карточки «Я» v2: остаток, тренер, срок, куда записаться."""
+    items = await list_client_pass_instances(session, client_id)
+    active = None
+    for it in items:
+        if it.get("status") != "active" or it.get("is_expired"):
+            continue
+        if int(it.get("sessions_remaining") or 0) <= 0:
+            continue
+        active = it
+        break
+    if active is None:
+        return None
+    tid = int(active["trainer_id"])
+    hint = (await trainer_display_hints_by_ids(session, [tid])).get(tid) or {}
+    expires = active.get("expires_at")
+    if isinstance(expires, str):
+        try:
+            expires = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+        except ValueError:
+            expires = None
+    return {
+        "left": int(active["sessions_remaining"]),
+        "total": int(active.get("sessions_total") or 0),
+        "trainer_id": tid,
+        "trainer_name": str(active.get("trainer_name") or ""),
+        "trainer_photo_key": hint.get("photo_list_key") or hint.get("photo_key"),
+        "expires_label": _expires_label(expires),
+        "book_href": f"catalog?trainer_id={tid}",
+    }
+
+
+async def _saved_v2(session: AsyncSession, client_id: int) -> dict | None:
+    row = (await session.execute(_SAVED_V2, {"cid": client_id})).one()
+    arenas, trainers = int(row.arenas or 0), int(row.trainers or 0)
+    if not arenas and not trainers:
+        return None
+    parts = []
+    if arenas:
+        parts.append(f"{arenas} {plural_ru(arenas, 'каток', 'катка', 'катков')}")
+    if trainers:
+        parts.append(f"{trainers} {plural_ru(trainers, 'тренер', 'тренера', 'тренеров')}")
+    return {"arenas": arenas, "trainers": trainers, "line": " · ".join(parts)}
+
+
 async def client_me(
     session: AsyncSession,
     *,
@@ -359,6 +487,9 @@ async def client_me(
     profile_id: int | None,
     telegram_name: str,
     now: datetime | None = None,
+    include_v2: bool = False,
+    include_companies: bool = False,
+    include_badges: bool = False,
 ) -> dict:
     """Один экран «Я». Запросы идут по очереди: одна сессия не держит их параллельно."""
     moment = now or datetime.now(timezone.utc)
@@ -375,7 +506,7 @@ async def client_me(
     own = acting if profile_id is None else await get_client_id_by_telegram_id(session, account_key)
 
     arena_id = await get_home_arena_id(session, account_key)
-    home = await home_arena_payload(session, arena_id=arena_id, client_id=own, now=moment)
+    home = await home_arena_payload(session, arena_id=arena_id, client_id=own, now=moment, include_v2=include_v2)
 
     snap = await get_client_activity_snapshot(session, client_id=acting)
     fan = await fan_profile(session, player_key=account_key, now=moment)
@@ -398,7 +529,7 @@ async def client_me(
         trainer = await _my_trainer(session, account_key=account_key, acting=acting)
 
     profiles = await list_accessible_profiles(session, account_key)
-    return {
+    out = {
         "name": name,
         "initial": initial_of(name),
         "city": None if city is None else str(city),
@@ -420,3 +551,28 @@ async def client_me(
         },
         "profile_name": _profile_name(profiles, acting=acting, own=own),
     }
+    # «Я» v2 (TASK-449, redesign_s4): карточки абонемента/сохранённого/«в Glide с…».
+    if include_v2:
+        out["joined_label"] = None
+        joined = (await session.execute(_JOINED, {"cid": own})).scalar_one_or_none() if own else None
+        if isinstance(joined, datetime):
+            out["joined_label"] = _joined_label(joined, moment)
+        out["pass"] = await _pass_detail(session, acting) if acting else None
+        saved_v2 = await _saved_v2(session, acting) if acting else None
+        if saved_v2 and saved:
+            saved["line"] = saved_v2["line"]
+        out["saved_detail"] = saved_v2
+    # TASK-450 (5.3): «Мои компании» — открытые, где я организатор или «иду/может» (s5).
+    if include_companies:
+        from src.application.ice_company.mine import my_open_companies
+
+        out["companies"] = await my_open_companies(session, account_key, moment, limit=5)
+    # TASK-451 (5.4): значки волны 1 — те же (tg, профиль) ключи, что у отметок.
+    if include_badges:
+        from src.application import ice_badges as ib
+
+        badge_pid = acting if acting is not None and own is not None and acting != own else None
+        out["badges"] = await ib.badges_payload(
+            session, account_key, badge_pid, moment.astimezone(MINSK_TZ).date()
+        )
+    return out

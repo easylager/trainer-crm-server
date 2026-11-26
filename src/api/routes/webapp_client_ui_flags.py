@@ -10,6 +10,11 @@ from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, 
 from src.application.client_ui_flags import (
     fast_tabs_enabled,
     has_trainer_history,
+    redesign_s1_enabled,
+    redesign_s2_enabled,
+    redesign_s3_enabled,
+    redesign_s4_enabled,
+    redesign_s5_enabled,
     search_board_enabled,
     season_ui_enabled,
 )
@@ -28,10 +33,17 @@ async def get_client_ui_flags(
     account_key = client_catalog_telegram_key(principal)
     settings = get_settings()
     season_ui = season_ui_enabled(account_key, settings)
-    bookings_tab = season_ui and await has_trainer_history(session, account_key)
+    redesign_s1 = redesign_s1_enabled(account_key, settings)
+    # «Записи» в новом меню есть у всех (TASK-445): без истории — пустой экран с действием.
+    bookings_tab = redesign_s1 or (season_ui and await has_trainer_history(session, account_key))
     return {
         "season_ui": season_ui,
         "bookings_tab": bookings_tab,
         "fast_tabs": fast_tabs_enabled(account_key, settings),
         "search_board": search_board_enabled(account_key, settings),
+        "redesign_s1": redesign_s1,
+        "redesign_s5": redesign_s5_enabled(account_key, settings),
+        "redesign_s2": redesign_s2_enabled(account_key, settings),
+        "redesign_s3": redesign_s3_enabled(account_key, settings),
+        "redesign_s4": redesign_s4_enabled(account_key, settings),
     }

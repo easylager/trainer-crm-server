@@ -128,3 +128,28 @@ describe('buildEvent: защита данных', () => {
     assert.deepEqual(Object.keys(ev).sort(), ['from', 'kind', 'ms', 'nav', 'page_ms', 'platform', 'season_ui', 'to']);
   });
 });
+
+describe('buildEvent: src и data_ms (TASK-448)', () => {
+  it('src cache/net и data_ms проходят в событие, когда переданы', () => {
+    const ev = M.buildEvent(input({ firstPage: true, src: 'cache', dataMs: 240 }));
+    assert.equal(ev.src, 'cache');
+    assert.equal(ev.data_ms, 240);
+    const ev2 = M.buildEvent(input({ firstPage: true, src: 'net', dataMs: 1180 }));
+    assert.equal(ev2.src, 'net');
+    assert.equal(ev2.data_ms, 1180);
+  });
+  it('без src/data_ms полей нет; мусорный src не проходит', () => {
+    const ev = M.buildEvent(input({ firstPage: true }));
+    assert.equal('src' in ev, false);
+    assert.equal('data_ms' in ev, false);
+    const ev2 = M.buildEvent(input({ firstPage: true, src: 'wifi', dataMs: -3 }));
+    assert.equal('src' in ev2, false);
+    assert.equal('data_ms' in ev2, false);
+  });
+  it('data_ms ограничен сверху и округлён', () => {
+    const ev = M.buildEvent(input({ firstPage: true, src: 'cache', dataMs: 240.6 }));
+    assert.equal(ev.data_ms, 241);
+    const ev2 = M.buildEvent(input({ firstPage: true, src: 'net', dataMs: 9e9 }));
+    assert.equal(ev2.data_ms, 120000);
+  });
+});

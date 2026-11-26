@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru" data-force-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f5f6f8">
+  <title>Лёд</title>
+  <!-- TASK-449 (этап 4): вкладка «Лёд» v2 за флагом redesign_s4 (макет 14).
+       Диплинки/параметры старой вкладки и ?map=1 отдают ice.html (см. webapp_ice_tab_page). -->
+  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- s3:assets -->
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611231" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611231" />
+  <script src="glide-deeplink.js?v=202611231"></script>
+  <script src="write-access.js?v=202611231"></script>
+  <script src="client-mini-app-theme.js?v=202611231"></script>
+  <script src="mini-app-client-shell.js?v=202611231"></script>
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611231" />
+  <script defer src="mini-app-telegram-chrome.js?v=202611231"></script>
+  <link rel="preload" href="ice-v2.js?v=202611231" as="script" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611231" />
+  <link rel="stylesheet" href="ice-v2.css?v=202611231" />
+  <script defer src="mini-app-empty-state.js?v=202611231"></script>
+  <script defer src="mini-app-more-icons.js?v=202611231"></script>
+  <script defer src="client-profile-switcher.js?v=202611231"></script>
+  <script defer src="/static/webapp/ga-press.js?v=202611231"></script>
+  <!-- /s3:assets -->
+</head>
+<body class="iv2 ga-body" data-client-shell="tabs">
+  <div class="iv2__page">
+    <header class="iv2-top">
+      <button type="button" class="iv2-city ga-press" id="iv2City">
+        <span id="iv2CityName">Город</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="iv2-top__acts">
+        <button type="button" class="iv2-iconbtn ga-press" id="iv2Search" aria-label="Поиск катка">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </button>
+        <button type="button" class="iv2-iconbtn ga-press" id="iv2Map" aria-label="Карта катков">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <h1 class="iv2-title" id="iv2Title"></h1>
+    <p class="iv2-sub" id="iv2Sub"></p>
+
+    <div class="iv2-stick" id="iv2Stick">
+      <div class="iv2-kinds" id="iv2Kinds"></div>
+      <div class="iv2-days" id="iv2Days"></div>
+    </div>
+
+    <main class="iv2-list" id="iv2List">
+      <div class="iv2-skel" id="iv2Skel">
+        <div class="iv2-skel__row"></div><div class="iv2-skel__row"></div><div class="iv2-skel__row"></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="iv2-sheetbg" id="iv2CityBg" hidden></div>
+  <div class="iv2-sheet" id="iv2CitySheet" hidden>
+    <div class="iv2-sheet__grip"></div>
+    <div class="iv2-sheet__head"><h2>Город</h2></div>
+    <div class="iv2-sheet__list" id="iv2CityList"></div>
+  </div>
+
+  <div class="iv2-sheetbg" id="iv2SearchBg" hidden></div>
+  <div class="iv2-sheet" id="iv2SearchSheet" hidden>
+    <div class="iv2-sheet__grip"></div>
+    <div class="iv2-sheet__head"><h2>Поиск катка</h2></div>
+    <div class="iv2-sheet__search"><input id="iv2SearchInput" type="search" placeholder="Название катка" autocomplete="off"></div>
+    <div class="iv2-sheet__list" id="iv2SearchList"></div>
+  </div>
+
+  <!-- s3:assets -->
+  <script src="ice-v2.js?v=202611231"></script>
+  <script src="/static/webapp/ga-touch.js?v=202611231"></script>
+  <!-- /s3:assets -->
+  <script defer src="/static/webapp/share-sheet-lazy.js?v=202611231"></script>
+</body>
+</html>

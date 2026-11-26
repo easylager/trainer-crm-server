@@ -1570,7 +1570,9 @@
     var low = picked.seats && picked.seats.low;
     return (
       // Въезд «билета» — на смену выбора, а не на каждую дорисовку данных (TASK-332).
-      '<div class="arena-ticket' + (String(picked.sessionId) === steadySid ? ' arena-ticket--steady' : '') + '">' +
+      // data-session-id: checkin-live (s5) патчит шкалу «обычно» blended-уровнем (TASK-452).
+      '<div class="arena-ticket' + (String(picked.sessionId) === steadySid ? ' arena-ticket--steady' : '') +
+      '" data-session-id="' + esc(picked.sessionId) + '">' +
       '<div class="arena-ticket__top"><span class="arena-ticket__lead">' +
       '<span class="arena-ticket__kick">' + esc([dayLabel, g.duration ? g.duration.toUpperCase() : ''].filter(Boolean).join(' · ')) + '</span>' +
       (picked.hall ? '<span class="arena-ticket__hall">' + esc(picked.hall) + '</span>' : '') +

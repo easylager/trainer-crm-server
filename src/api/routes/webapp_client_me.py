@@ -20,6 +20,8 @@ from src.application.catalog_consumer_events import (
 from src.application.client_account import set_account_name, set_home_arena
 from src.application.client_me import client_me, home_arena_payload
 from src.application.client_use_cases import get_client_id_by_telegram_id
+from src.application.client_ui_flags import redesign_s4_enabled, redesign_s5_enabled
+from src.shared.config import get_settings
 from src.api.routes.webapp_client_hockey import _player_name
 
 router = APIRouter(tags=["webapp"])
@@ -42,6 +44,7 @@ class _NextMatch(BaseModel):
     starts_at: str
     opponent: str
     href: str
+    label: str | None = None
 
 
 class _Club(BaseModel):
@@ -54,6 +57,12 @@ class _Club(BaseModel):
     next_match: _NextMatch | None
 
 
+class _Photo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    thumb: str | None
+    card: str | None
+
+
 class _HomeArena(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: int
@@ -62,6 +71,8 @@ class _HomeArena(BaseModel):
     sessions_left_today: int
     tomorrow_first: str | None
     subscribed: bool
+    photo: _Photo | None = None
+    today_times: list[str] | None = None
 
 
 class _Stats(BaseModel):
@@ -85,6 +96,66 @@ class _Passes(BaseModel):
 class _Count(BaseModel):
     model_config = ConfigDict(extra="forbid")
     count: int
+    line: str | None = None
+
+
+class _PassV2(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    left: int
+    total: int
+    trainer_id: int
+    trainer_name: str
+    trainer_photo_key: str | None
+    expires_label: str | None
+    book_href: str
+
+
+class _SavedV2(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    arenas: int
+    trainers: int
+    line: str
+
+
+class _CompanyPhoto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    thumb: str | None
+    card: str | None
+
+
+class _CompanyV2(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str
+    name: str
+    session_id: int | None
+    arena_id: int | None
+    arena_name: str
+    starts_local: str
+    day_label: str
+    going_count: int
+    going_names: list[str]
+    crowd_line: str
+    my_status: str
+    page_url: str
+    photo: _CompanyPhoto | None = None
+
+
+class _BadgeProgress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    done: int
+    total: int
+
+
+class _BadgeV2(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str
+    name: str
+    name_gen: str | None = None
+    family: str
+    total: int
+    earned: bool
+    earned_at: str | None
+    progress: _BadgeProgress
 
 
 class _Person(BaseModel):
@@ -126,6 +197,11 @@ class ClientMeOut(BaseModel):
     stats: _Stats
     rows: _Rows
     profile_name: str | None
+    joined_label: str | None = None
+    pass_: _PassV2 | None = Field(None, alias="pass")
+    saved_detail: _SavedV2 | None = None
+    companies: list[_CompanyV2] | None = None
+    badges: list[_BadgeV2] | None = None
 
 
 class NameIn(BaseModel):
@@ -172,7 +248,7 @@ async def _event(
     )
 
 
-@router.get("/client/me", response_model=ClientMeOut)
+@router.get("/client/me", response_model=ClientMeOut, response_model_exclude_unset=True)
 async def get_client_me(
     response: Response,
     init_data: str | None = None,
@@ -188,6 +264,11 @@ async def get_client_me(
         account_key=account_key,
         profile_id=_parse_profile_id_header(x_profile_id),
         telegram_name=_player_name(None, _init_raw(init_data, x_telegram_init_data)),
+        include_v2=redesign_s4_enabled(account_key, get_settings()),
+        include_companies=redesign_s4_enabled(account_key, get_settings())
+        and redesign_s5_enabled(account_key, get_settings()),
+        # PDEC-040 батч C: полка значков есть и на старом «Я» (client-me) — там s4 нет.
+        include_badges=redesign_s5_enabled(account_key, get_settings()),
     )
     body = ClientMeOut.model_validate(payload)
     await session.commit()

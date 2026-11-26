@@ -118,7 +118,10 @@ def test_shell_second_tab_is_ice() -> None:
     """
     shell = (REPO_ROOT / "static/webapp/mini-app-client-shell.js").read_text(encoding="utf-8")
     assert "label: 'Поиск'" in shell
-    assert "label: 'Лёд'" not in shell
+    # Под redesign_s1 вкладка намеренно «Лёд» (5-вкладочный бар редизайна, TASK-445);
+    # дефолтный бар по-прежнему «Поиск» — то же три интента.
+    assert "{ id: 'catalog', label: 'Лёд', path: 'ice', icon: TAB_ICONS.ice }" in shell
+    assert "{ id: 'catalog', label: 'Поиск', path: 'ice', icon: TAB_ICONS.catalog }" in shell
     assert "path: 'ice'" in shell
     assert "label: 'Главная'" in shell
     assert "label: 'Записи'" in shell

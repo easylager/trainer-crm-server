@@ -381,6 +381,25 @@ class Settings(BaseSettings, metaclass=_SettingsMeta):
     # season_ui. CLIENT_SEARCH_BOARD_TELEGRAM_IDS=1,2; CLIENT_SEARCH_BOARD_PERCENT=0…100.
     client_search_board_telegram_ids: EnvIntList = None
     client_search_board_percent: int = Field(default=0, ge=0, le=100)
+    # TASK-445 (эпик glide-home-v1): редизайн Mini App по glide-home-system-final.html.
+    # Один флаг на этап: redesign_s1 — система, меню 5 вкладок, новая главная.
+    # CLIENT_REDESIGN_S1_TELEGRAM_IDS=1,2; CLIENT_REDESIGN_S1_PERCENT=0…100.
+    client_redesign_s1_telegram_ids: EnvIntList = None
+    client_redesign_s1_percent: int = Field(default=0, ge=0, le=100)
+    # TASK-446 (этап 5.1): «Я здесь» — отметки о льде и загрузка катков.
+    # CLIENT_REDESIGN_S5_TELEGRAM_IDS=1,2; CLIENT_REDESIGN_S5_PERCENT=0…100.
+    client_redesign_s5_telegram_ids: EnvIntList = None
+    client_redesign_s5_percent: int = Field(default=0, ge=0, le=100)
+    # TASK-447 (этап 2): остальные состояния главной и правила для городов.
+    # CLIENT_REDESIGN_S2_TELEGRAM_IDS=1,2; CLIENT_REDESIGN_S2_PERCENT=0…100.
+    client_redesign_s2_telegram_ids: EnvIntList = None
+    client_redesign_s2_percent: int = Field(default=0, ge=0, le=100)
+    client_redesign_s3_telegram_ids: EnvIntList = None
+    client_redesign_s3_percent: int = Field(default=0, ge=0, le=100)
+    # TASK-449 (этап 4): вкладка «Лёд» v2 и «Я» v2.
+    # CLIENT_REDESIGN_S4_TELEGRAM_IDS=1,2; CLIENT_REDESIGN_S4_PERCENT=0…100.
+    client_redesign_s4_telegram_ids: EnvIntList = None
+    client_redesign_s4_percent: int = Field(default=0, ge=0, le=100)
 
     # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
     # Full log: every update + inner gate/menu DB phase timings.

@@ -1,0 +1,754 @@
+/*
+ * Главная v2 (TASK-445, флаг redesign_s1). Светлая система Glide:
+ * палитра своя, переменные --tg-theme-* не используются.
+ * Golos Text везде; Dela Gothic только на крупном времени верхней карточки.
+ */
+.hv2 {
+  --ink: #0b1620;
+  --muted: #6b7a86;
+  --line: #e7ebee;
+  --teal: #0a6f73;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --green: #22b35e;
+  --chip-green-bg: #e8f7ee;
+  --chip-green-text: #15803d;
+  --chip-yellow-bg: #fff4cc;
+  --chip-yellow-text: #8a6d00;
+  --yellow: #ffd241;
+  --blue: #2c4dd0;
+  --soft: #eef1f3;
+  --r-btn: 14px;
+  --r-tile: 20px;
+  --r-card: 26px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--g-font);
+}
+
+.hv2__page { min-height: 100dvh; background: var(--bg); }
+/* Фон <body> под листом и при overscroll — тот же #f5f6f8 (перебивает --app-canvas-bg темы). */
+html body.hv2 { background-color: #f5f6f8 !important; }
+/* Полноэкранная вёрстка: старый body{padding:12px} (mini-app-components) не нужен,
+   нижний отступ под таб-бар даёт .hv2-bottompad. */
+html body.hv2 { padding: 0; margin: 0; }
+
+/* ── Фото-шапка (единственное тёмное место) ─────────────────── */
+.hv2-hero {
+  position: relative;
+  height: 300px;
+  background: linear-gradient(160deg, #0b1620 0%, #1b2b38 100%);
+  overflow: hidden;
+}
+.hv2-hero__img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity .3s var(--ease);
+}
+.hv2-hero--photo .hv2-hero__img { opacity: 1; }
+/* B2: новичку герой короче — атмосфера, сеанс уехал в белый билет. */
+.hv2-hero--short { height: 190px; }
+.hv2-hero__shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(11, 22, 32, .18) 0%, rgba(11, 22, 32, 0) 34%, rgba(11, 22, 32, .62) 100%);
+}
+.hv2-hero__top {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  left: 16px; right: 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.hv2-hero__city {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  background: rgba(255, 255, 255, .14);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  color: #fff;
+  font: 600 15px/1 var(--g-font);
+}
+.hv2-hero__right { display: flex; align-items: center; gap: 8px; }
+.hv2-profile:empty { display: none; }
+.hv2-hero__ava {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .9);
+  background: var(--teal);
+  color: #fff;
+  font: 700 17px/38px var(--g-font);
+  text-align: center;
+  padding: 0;
+  overflow: hidden;
+}
+.hv2-hero__ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hv2-hero__ava img[hidden] { display: none; }
+.hv2-hero__hello {
+  position: absolute;
+  left: 20px; right: 20px; bottom: 40px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.hv2-hero__date {
+  font: 400 13px/1.3 var(--g-font);
+  color: rgba(255, 255, 255, .8);
+}
+.hv2-hero__date:first-letter { text-transform: uppercase; }
+.hv2-hero__title {
+  margin: 0;
+  font: 700 30px/1.15 var(--g-font);
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+/* ── Контент-лист ───────────────────────────────────────────── */
+.hv2-sheet {
+  position: relative;
+  margin-top: -28px;
+  padding: 16px 20px 0;
+  background: var(--bg);
+  border-radius: 28px 28px 0 0;
+  min-height: 60dvh;
+}
+.hv2-bottompad { height: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+.hv2-card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: 0 8px 24px rgba(11, 22, 32, .08);
+}
+
+.hv2-sec { margin-top: 28px; }
+.hv2-sec__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 4px;
+  margin-bottom: 12px;
+}
+.hv2-sec__title {
+  margin: 0;
+  font: 700 22px/1.2 var(--g-font);
+  color: var(--ink);
+}
+.hv2-sec__more {
+  font: 600 15px/1 var(--g-font);
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ── Билет ──────────────────────────────────────────────────── */
+.hv2-ticket { padding: 20px; }
+.hv2-ticket__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.hv2-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font: 600 13px/1 var(--g-font);
+  background: var(--chip-green-bg); color: var(--chip-green-text);
+}
+.hv2-chip--gray { background: var(--soft); color: var(--muted); }
+.hv2-chip--yellow { background: var(--chip-yellow-bg); color: var(--chip-yellow-text); }
+.hv2-chip__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green);
+  animation: hv2-pulse 1.8s var(--ease) infinite;
+}
+@keyframes hv2-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+.hv2-ticket__thumb {
+  flex: 0 0 84px;
+  width: 84px; height: 84px;
+  border-radius: 18px;
+  object-fit: cover;
+  background: var(--soft);
+}
+.hv2-ticket__time {
+  margin-top: 12px;
+  font: 400 52px/1 var(--g-font-display);
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.hv2-ticket__name { margin-top: 6px; font: 700 17px/1.3 var(--g-font); }
+.hv2-ticket__sub { margin-top: 2px; font: 400 15px/1.35 var(--g-font); color: var(--muted); }
+.hv2-ticket__perf {
+  position: relative;
+  margin: 16px -20px;
+  border-top: 1.5px dashed var(--line);
+}
+.hv2-ticket__perf::before,
+.hv2-ticket__perf::after {
+  content: '';
+  position: absolute; top: -11px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--bg);
+}
+.hv2-ticket__perf::before { left: -11px; }
+.hv2-ticket__perf::after { right: -11px; }
+.hv2-ticket__trainer { display: flex; align-items: center; gap: 12px; }
+.hv2-ticket__face {
+  width: 44px; height: 44px; border-radius: 50%;
+  object-fit: cover; background: var(--soft);
+  color: var(--muted);
+  font: 700 17px/44px var(--g-font); text-align: center;
+  flex: 0 0 44px;
+}
+.hv2-ticket__tname { font: 700 15px/1.3 var(--g-font); }
+.hv2-ticket__trole { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-ticket__acts { margin-left: auto; display: flex; gap: 8px; }
+.hv2-rbtn {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--soft); color: var(--ink);
+  border: 0; padding: 0;
+}
+.hv2-rbtn--ink { background: var(--ink); color: #fff; }
+.hv2-ticket__passline {
+  margin-top: 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font: 400 13px/1.3 var(--g-font); color: var(--muted);
+}
+.hv2-dots { display: inline-flex; gap: 4px; }
+.hv2-dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #dfe5e8;
+}
+.hv2-dots i.on { background: var(--teal); }
+
+/* ── Абонемент / тренер ─────────────────────────────────────── */
+.hv2-pass, .hv2-coach { padding: 20px; }
+.hv2-pass__head { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: flex-start; }
+.hv2-pass__body { min-width: 0; }
+.hv2-pass__title { margin-top: 10px; font: 700 20px/1.2 var(--g-font); }
+.hv2-pass__sub { margin-top: 4px; font: 400 15px/1.35 var(--g-font); color: var(--muted); }
+.hv2-ring { position: relative; flex: 0 0 76px; width: 76px; height: 76px; }
+.hv2-ring svg { display: block; transform: rotate(-90deg); }
+.hv2-ring__num {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.hv2-ring__num b { font: 700 26px/1 var(--g-font); }
+.hv2-ring__num span { font: 400 12px/1.2 var(--g-font); color: var(--muted); }
+.hv2-slots__title { margin-top: 18px; font: 400 13px/1 var(--g-font); color: var(--muted); }
+.hv2-slots { margin-top: 10px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.hv2-slots::-webkit-scrollbar { display: none; }
+.hv2-slot {
+  flex: 0 0 auto;
+  min-width: 84px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: center;
+  display: flex; flex-direction: column; gap: 3px;
+  text-decoration: none; color: var(--ink);
+}
+.hv2-slot__day { font: 600 11px/1 var(--g-font); color: var(--muted); text-transform: uppercase; }
+.hv2-slot__time { font: 700 17px/1.1 var(--g-font); color: var(--ink); }
+.hv2-slot--all {
+  border: 0;
+  justify-content: center;
+  font: 600 15px/1 var(--g-font); color: var(--teal);
+}
+.hv2-slot--skel { min-width: 84px; height: 64px; }
+.hv2-coach__head { display: flex; align-items: center; gap: 14px; }
+.hv2-coach__face {
+  width: 56px; height: 56px; border-radius: 50%;
+  object-fit: cover; background: var(--soft);
+  color: var(--muted); font: 700 20px/56px var(--g-font); text-align: center;
+  flex: 0 0 56px;
+}
+.hv2-coach__name { font: 700 17px/1.3 var(--g-font); }
+.hv2-coach__role { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 16px;
+  border: 0; border-radius: 16px;
+  font: 700 17px/1 var(--g-font);
+  text-decoration: none;
+  cursor: pointer;
+}
+.hv2-btn--yellow { background: var(--yellow); color: var(--ink); }
+.hv2-btn--ink { background: var(--ink); color: #fff; }
+.hv2-btn--soft { background: var(--soft); color: var(--ink); }
+
+/* ── Фото-карточка (новичок) ────────────────────────────────── */
+.hv2-pcard {
+  position: relative;
+  height: 300px;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background: linear-gradient(160deg, #0b1620, #1b2b38);
+}
+.hv2-pcard__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hv2-pcard__shade {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(11, 22, 32, .1) 0%, rgba(11, 22, 32, 0) 40%, rgba(11, 22, 32, .68) 100%);
+}
+.hv2-pcard__chip {
+  position: absolute; top: 14px; left: 14px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  font: 600 13px/1 var(--g-font); color: var(--ink);
+}
+.hv2-pcard__in {
+  position: absolute; left: 18px; right: 18px; bottom: 16px;
+  display: flex; flex-direction: column; gap: 3px;
+  color: #fff;
+}
+.hv2-pcard__time, .hv2-pcard__place, .hv2-pcard__sub { display: block; }
+.hv2-pcard__time { font: 400 52px/1 var(--g-font-display); }
+.hv2-pcard__place { font: 700 17px/1.3 var(--g-font); }
+.hv2-pcard__sub { font: 400 15px/1.35 var(--g-font); color: rgba(255, 255, 255, .85); }
+.hv2-pcard__btns { display: flex; gap: 10px; margin-top: 12px; }
+.hv2-pcard__btns .hv2-btn { margin-top: 0; flex: 1; }
+
+/* B2: белый лёд-билет новичка — фото только чипом 72px. */
+.hv2-ice { padding: 20px; }
+.hv2-ice__thumb {
+  flex: 0 0 72px;
+  width: 72px; height: 72px;
+  border-radius: 16px;
+  object-fit: cover;
+  background: var(--soft);
+}
+.hv2-ice__btns { display: flex; gap: 10px; }
+.hv2-ice__btns .hv2-btn { margin-top: 0; flex: 1; }
+
+/* ── Выбор города ───────────────────────────────────────────── */
+.hv2-citypick { overflow: hidden; }
+.hv2-cprow {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 0;
+  text-align: left;
+  font-family: var(--g-font);
+}
+.hv2-cprow + .hv2-cprow { border-top: 1px solid var(--line); }
+.hv2-cprow__img {
+  width: 64px; height: 64px; border-radius: 16px;
+  object-fit: cover;
+  background: var(--teal);
+  color: #fff;
+  font: 700 24px/64px var(--g-font); text-align: center;
+  flex: 0 0 64px;
+}
+.hv2-cprow__name { font: 700 17px/1.3 var(--g-font); }
+.hv2-cprow__sub { font: 400 14px/1.35 var(--g-font); color: var(--muted); }
+.hv2-cprow__part { white-space: nowrap; }
+.hv2-cprow__chev { margin-left: auto; color: var(--muted); flex: 0 0 auto; }
+.hv2-cprow--geo { color: var(--teal); font: 600 17px/1 var(--g-font); }
+
+/* ── Дни-вкладки ────────────────────────────────────────────── */
+.hv2-tabs {
+  position: relative;
+  display: flex; gap: 18px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.hv2-tab {
+  position: relative;
+  padding: 6px 2px 10px;
+  border: 0; background: none;
+  font: 600 17px/1 var(--g-font); color: var(--muted);
+}
+.hv2-tab sup { font: 600 11px/1 var(--g-font); margin-left: 3px; }
+.hv2-tab--on { color: var(--ink); }
+.hv2-tab--empty { opacity: .45; }
+.hv2-tabs__ink {
+  position: absolute; bottom: -1px; left: 0;
+  height: 2px; background: var(--ink);
+  transition: transform .18s var(--ease), width .18s var(--ease);
+}
+
+/* ── Рейл катков ────────────────────────────────────────────── */
+.hv2-rail {
+  display: flex; gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 20px;
+  scrollbar-width: none;
+  padding-inline: 20px;
+  margin-inline: -20px;
+  padding-bottom: 4px;
+}
+.hv2-rail::-webkit-scrollbar { display: none; }
+.hv2-rcard {
+  flex: 0 0 260px;
+  scroll-snap-align: start;
+  display: block;
+  cursor: pointer;
+  text-decoration: none; color: var(--ink);
+}
+.hv2-rcard__imgwrap { position: relative; display: block; width: 260px; height: 170px; border-radius: 22px; overflow: hidden; background: var(--soft); }
+.hv2-rcard__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hv2-rcard__chip {
+  position: absolute; top: 10px; left: 10px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  font: 600 13px/1 var(--g-font); color: var(--ink);
+}
+.hv2-rcard__name {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  margin-top: 10px;
+  font: 700 17px/1.3 var(--g-font);
+}
+.hv2-rcard__chips { display: flex; gap: 6px; margin-top: 8px; }
+.hv2-rcard__tchip {
+  padding: 7px 12px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface);
+  font: 700 13px/1 var(--g-font); color: var(--ink);
+  text-decoration: none;
+}
+.hv2-rcard__sub { display: block; margin-top: 8px; font: 400 13px/1.35 var(--g-font); color: var(--muted); }
+.hv2-rail__empty {
+  padding: 6px 4px;
+  font: 400 15px/1.4 var(--g-font); color: var(--muted);
+}
+.hv2-rail__empty a { color: var(--ink); font-weight: 600; }
+.hv2-rail--fade { opacity: 0; transition: opacity .18s var(--ease); }
+.hv2-rail--in { opacity: 1; }
+
+/* ── Матчи ──────────────────────────────────────────────────── */
+.hv2-mcard {
+  flex: 0 0 240px;
+  scroll-snap-align: start;
+  border-radius: 22px;
+  background: var(--surface);
+  padding: 16px;
+  text-decoration: none; color: var(--ink);
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 8px 24px rgba(11, 22, 32, .06);
+}
+.hv2-mcard--kk { background: var(--blue); color: #fff; }
+.hv2-mcard__kick {
+  font: 700 11px/1.2 var(--g-font);
+  text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted);
+}
+.hv2-mcard--kk .hv2-mcard__kick { color: rgba(255, 255, 255, .8); }
+.hv2-mcard__team { display: flex; align-items: center; gap: 10px; }
+.hv2-mcard__logo {
+  width: 24px; height: 24px; border-radius: 50%;
+  object-fit: contain;
+  flex: 0 0 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 9px/24px var(--g-font); color: #fff;
+}
+.hv2-mcard__logo img { width: 100%; height: 100%; object-fit: contain; display: block; border-radius: 50%; }
+/* Тёмный фон (KK-карточка): белая подложка, чтобы эмблема не сливалась с --blue. */
+.hv2-mcard__logo--chip { background: #fff; padding: 3px; box-sizing: border-box; }
+.hv2-mcard__tname { font: 700 17px/1.2 var(--g-font); }
+.hv2-mcard__place { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-mcard--kk .hv2-mcard__place { color: rgba(255, 255, 255, .85); }
+.hv2-mcard__play {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 9px 18px;
+  border-radius: 12px;
+  background: #fff; color: var(--blue);
+  font: 700 15px/1 var(--g-font);
+}
+.hv2-mcard__play--yellow { background: var(--yellow); color: var(--ink); }
+
+/* ── Ещё в городе ───────────────────────────────────────────── */
+.hv2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hv2-tile {
+  background: var(--surface);
+  border-radius: var(--r-tile);
+  padding: 16px;
+  text-decoration: none; color: var(--ink);
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 108px;
+}
+.hv2-tile__icon { color: var(--teal); display: block; }
+.hv2-tile__title { font: 700 17px/1.2 var(--g-font); }
+.hv2-tile__sub { font: 400 13px/1.35 var(--g-font); color: var(--muted); }
+
+/* ── Скелетон и пустое ──────────────────────────────────────── */
+.hv2-skel__card {
+  height: 230px; border-radius: var(--r-card); background: var(--surface);
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 8px 24px rgba(11, 22, 32, .08);
+}
+.hv2-skel__b { display: block; height: 16px; border-radius: 8px; background: #e9edf0; }
+.hv2-skel__b--chip { width: 34%; height: 24px; border-radius: 999px; }
+.hv2-skel__b--time { width: 52%; height: 52px; border-radius: 12px; margin-top: 4px; }
+.hv2-skel__row { display: flex; align-items: center; gap: 12px; margin-top: auto; }
+.hv2-skel__av { width: 44px; height: 44px; border-radius: 50%; background: #e9edf0; flex: 0 0 44px; }
+.hv2-skel__row .hv2-skel__b { width: 30%; }
+.hv2-skel__title { margin-top: 28px; height: 22px; width: 160px; border-radius: 8px; background: #e9edf0; }
+.hv2-skel__rail { margin-top: 14px; display: flex; gap: 12px; overflow: hidden; }
+.hv2-skel__tile { flex: 0 0 260px; height: 170px; border-radius: 22px; background: var(--surface); }
+.hv2-skel__b, .hv2-skel__av, .hv2-skel__title, .hv2-skel__tile { animation: hv2-shimmer 1.4s ease-in-out infinite; }
+@keyframes hv2-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+.hv2-error {
+  padding: 28px 20px;
+  text-align: center;
+}
+.hv2-error__t { font: 700 17px/1.3 var(--g-font); }
+.hv2-error__s { margin-top: 4px; font: 400 15px/1.4 var(--g-font); color: var(--muted); }
+.hv2-error .hv2-btn { max-width: 220px; margin: 16px auto 0; }
+
+/* ── Появление контента ─────────────────────────────────────── */
+.hv2-up { animation: hv2-rise .28s var(--ease) both; }
+@keyframes hv2-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.hv2-fade { animation: hv2-fade .2s ease both; }
+@keyframes hv2-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* TASK-448: тихое обновление блока из сети — короткий кросс-фейд 150мс. */
+.hv2-xfade { animation: hv2-xfade .15s ease; }
+@keyframes hv2-xfade { from { opacity: .3; } to { opacity: 1; } }
+
+/* TASK-448: «Нет сети» — белая плашка под верхней строкой шапки (макет 12, светлая тема). */
+.hv2-offline {
+  position: absolute; left: 20px; right: 20px; top: 92px; z-index: 5;
+  background: #fff; border: 1px solid var(--line); border-radius: 16px;
+  padding: 13px 16px; text-align: center;
+  font: 600 15px/1.3 var(--g-font); color: var(--ink);
+  box-shadow: 0 8px 24px rgba(15, 23, 32, .10);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hv2-up, .hv2-fade, .hv2-skel__card, .hv2-skel__title, .hv2-skel__tile,
+  .hv2-chip__dot, .hv2-rail--fade { animation: hv2-fade .2s ease both; }
+  .hv2-hero__img, .hv2-tabs__ink { transition: none; }
+}
+
+/* ── Лист города ────────────────────────────────────────────── */
+.hv2-sheetbg {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(11, 22, 32, .3);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.hv2-sheetbg[hidden] { display: none; }
+.hv2-csheet {
+  width: 100%; max-width: 480px;
+  max-height: 82dvh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 28px 28px 0 0;
+  padding: 10px 0 calc(20px + env(safe-area-inset-bottom, 0px));
+  animation: hv2-sheet .24s var(--ease) both;
+}
+@keyframes hv2-sheet { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+.hv2-csheet__grip {
+  display: block; margin: 2px auto 10px;
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--line);
+}
+.hv2-csheet__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px 8px;
+}
+.hv2-csheet__head h2 { margin: 0; font: 700 22px/1.2 var(--g-font); }
+.hv2-csheet__close {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 0; background: var(--soft); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.hv2-geo {
+  display: flex; align-items: center; gap: 10px;
+  margin: 4px 16px 8px;
+  padding: 14px 16px;
+  width: calc(100% - 32px);
+  border: 0; border-radius: var(--r-btn);
+  background: var(--surface);
+  color: var(--teal);
+  font: 600 15px/1 var(--g-font);
+  text-align: left;
+}
+.hv2-csheet .hv2-cprow { padding: 12px 20px; }
+
+/* TASK-446: состояние «Ты на катке?» (s5) */
+.hv2-chip__dot--pulse { animation: hv2-pulse 1.8s var(--ease) infinite; }
+.hv2-onice__load { white-space: nowrap; }
+.hv2-onice__bars { display: inline-flex; align-items: flex-end; gap: 2px; margin-right: 4px; vertical-align: -2px; }
+.hv2-onice__bars i { width: 4px; border-radius: 2px; background: rgba(255,255,255,.4); }
+.hv2-onice__bars i:nth-child(1) { height: 5px; }
+.hv2-onice__bars i:nth-child(2) { height: 8px; }
+.hv2-onice__bars i:nth-child(3) { height: 11px; }
+.hv2-onice__bars i.on { background: var(--green); }
+.hv2-onice__stats { padding: 8px 20px; margin-top: 12px; }
+.hv2-onice__row { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.hv2-onice__row + .hv2-onice__row { border-top: 1px solid var(--line); }
+.hv2-onice__ic { flex: 0 0 20px; color: var(--teal); }
+.hv2-onice__t { font: 700 15px/1.25 var(--g-font); }
+.hv2-onice__s { margin-top: 2px; font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-weeks { display: flex; gap: 4px; margin-left: auto; }
+.hv2-weeks i { width: 18px; height: 8px; border-radius: 4px; background: var(--soft); }
+.hv2-weeks i.on { background: var(--teal); }
+@media (prefers-reduced-motion: reduce) {
+  .hv2-chip__dot--pulse { animation: none; }
+}
+
+/* ── TASK-447: этап 2 — стопка записей, матч дня, неделя, один каток, лёд закончился ── */
+.hv2-chip--orange { background: #fff1e0; color: #b45309; }
+.hv2-chip--orange .hv2-chip__dot { background: #f59e0b; }
+
+/* Верхние карточки этапа 2 — тот же паддинг, что у билета/абонемента. */
+.hv2-kk, .hv2-ret, .hv2-end, .hv2-one { padding: 20px; }
+
+/* Стопка записей (макет 2): два призрачных слоя за верхним билетом. */
+.hv2-stack { position: relative; margin-bottom: 30px; }
+.hv2-stack .hv2-ticket { position: relative; z-index: 2; margin-bottom: 0; }
+.hv2-stack__g {
+  position: absolute; left: 10px; right: 10px; top: 0; bottom: -8px;
+  background: var(--card); border-radius: 22px;
+  box-shadow: 0 6px 16px rgba(15, 23, 32, .10); z-index: 1;
+}
+.hv2-stack__g2 { left: 20px; right: 20px; bottom: -16px; opacity: .55; z-index: 0; }
+
+/* «Дальше» — ряды записей в одной карточке. */
+.hv2-brows { padding: 4px 0; }
+.hv2-brow { display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: var(--ink); text-decoration: none; }
+.hv2-brow + .hv2-brow { border-top: 1px solid var(--line); }
+.hv2-brow__tile {
+  flex: 0 0 56px; width: 56px; height: 56px; border-radius: 16px;
+  background: #f5f6f8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+}
+.hv2-brow__day { font: 700 20px/1 var(--g-font); }
+.hv2-brow__dow { font: 700 11px/1.1 var(--g-font); text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.hv2-brow__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hv2-brow__title {
+  font: 700 17px/1.3 var(--g-font);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.hv2-brow__pend {
+  display: inline-block; align-self: flex-start; margin-top: 5px;
+  font: 600 12px/1 var(--g-font); color: var(--chip-yellow-text);
+  background: var(--chip-yellow-bg); border-radius: 8px; padding: 4px 8px;
+}
+.hv2-brow__sub { margin-top: 2px; font: 400 15px/1.3 var(--g-font); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hv2-brow__chev { flex: 0 0 auto; color: var(--muted); }
+
+/* Матч «Кто кого» сегодня (макет 5): синяя карточка. */
+.hv2-kk {
+  position: relative; overflow: hidden;
+  background: #2c4dd0; color: #fff; text-align: center;
+}
+.hv2-kk::before {
+  content: ''; position: absolute; inset: -40% -20%;
+  background: radial-gradient(closest-side, rgba(255,255,255,.07), transparent 70%);
+  pointer-events: none;
+}
+.hv2-kk__kick { position: relative; font: 700 13px/1 var(--g-font); letter-spacing: .12em; opacity: .7; }
+.hv2-kk__teams {
+  position: relative; display: grid;
+  grid-template-columns: 80px 1fr 80px; align-items: start; gap: 8px; margin-top: 18px;
+}
+.hv2-kk__team { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.hv2-kk__team .hv2-mcard__logo { width: 56px; height: 56px; border-radius: 50%; }
+.hv2-kk__tname { font: 700 15px/1.25 var(--g-font); }
+.hv2-kk__mid { min-width: 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+.hv2-kk__time { display: block; font: 400 40px/1 var(--g-font-display); white-space: nowrap; }
+.hv2-kk__till { display: block; margin-top: 4px; font: 400 13px/1.3 var(--g-font); opacity: .8; white-space: nowrap; }
+.hv2-kk__play { position: relative; margin-top: 18px; width: 100%; }
+.hv2-kk__pick { position: relative; margin-top: 12px; font: 400 13px/1.3 var(--g-font); opacity: .85; }
+
+/* «С возвращением» (макет 7). */
+.hv2-ret__head { display: flex; gap: 14px; align-items: center; }
+.hv2-ret__face { flex: 0 0 64px; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: var(--soft); display: flex; align-items: center; justify-content: center; font: 700 24px/1 var(--g-font); color: var(--muted); }
+.hv2-ret__col { min-width: 0; }
+.hv2-ret__kick { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-ret__name { margin-top: 2px; font: 700 20px/1.25 var(--g-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hv2-ret__sub { margin-top: 2px; font: 400 14px/1.3 var(--g-font); color: var(--muted); }
+.hv2-ret__btns { display: flex; gap: 10px; margin-top: 14px; }
+.hv2-ret__btns .hv2-btn { margin-top: 0; flex: 1; font-size: 15px; padding: 0 8px; }
+
+/* Один каток (макет 9): белый билет. */
+.hv2-one__time { margin-top: 12px; font: 400 52px/1 var(--g-font-display); }
+.hv2-one__title { margin-top: 6px; font: 700 17px/1.3 var(--g-font); }
+.hv2-one__sub { margin-top: 2px; font: 400 15px/1.35 var(--g-font); color: var(--muted); }
+.hv2-one__prices { display: flex; gap: 18px; margin-top: 12px; }
+.hv2-one__price { display: flex; flex-direction: column; }
+.hv2-one__price b { font: 700 17px/1.25 var(--g-font); }
+.hv2-one__price span { font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-one__btns { display: flex; gap: 10px; margin-top: 14px; }
+.hv2-one__btns .hv2-btn { margin-top: 0; flex: 1; }
+
+/* «На неделе»: строки дней + чипы времени. */
+.hv2-week { padding: 4px 0; }
+.hv2-wrow { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; }
+.hv2-wrow + .hv2-wrow { border-top: 1px solid var(--line); }
+.hv2-wrow__day { flex: 0 0 84px; display: flex; flex-direction: column; }
+.hv2-wrow__day b { font: 700 17px/1.25 var(--g-font); }
+.hv2-wrow__sub { margin-top: 2px; font: 400 13px/1.3 var(--g-font); color: var(--muted); }
+.hv2-wrow__chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.hv2-wchip {
+  padding: 6px 12px; border-radius: 999px; background: var(--card);
+  border: 1px solid var(--line); font: 700 15px/1 var(--g-font); color: var(--ink); text-decoration: none;
+}
+.hv2-wchip--past { color: var(--muted); text-decoration: line-through; }
+.hv2-wrow--empty { align-items: center; }
+.hv2-wrow__note { font: 400 13px/1.35 var(--g-font); color: var(--muted); }
+
+/* «Лёд закончился» / «Межсезонье» (макет 10). */
+.hv2-end__row { display: flex; gap: 12px; align-items: flex-start; margin-top: 12px; }
+.hv2-end__col { flex: 1; min-width: 0; }
+.hv2-end__title { margin-top: 12px; font: 700 22px/1.25 var(--g-font); }
+.hv2-end__row .hv2-end__title { margin-top: 0; }
+.hv2-end__sub { margin-top: 4px; font: 400 15px/1.35 var(--g-font); color: var(--muted); }
+.hv2-end__thumb { flex: 0 0 84px; width: 84px; height: 84px; border-radius: 18px; object-fit: cover; background: var(--soft); }
+.hv2-end .hv2-btn { margin-top: 16px; }
+.hv2-watch-ok {
+  margin-top: 16px; padding: 13px 16px; border-radius: 16px;
+  background: var(--soft); color: var(--ink); font: 600 15px/1.3 var(--g-font); text-align: center;
+}
+
+/* Rail-правило: 2 катка — сетка, 1 — широкая карточка. */
+.hv2-rail--grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; overflow: visible; }
+.hv2-rail--grid2 .hv2-rcard__imgwrap { width: 100%; height: auto; aspect-ratio: 1 / 1; }
+.hv2-rail--one .hv2-rcard__imgwrap { width: 100%; height: auto; aspect-ratio: 16 / 10; }
+
+/* Переключатель профилей в шапке — стеклянный чип (макет 6). */
+.hv2-hero #clientProfileSwitcherMount .cps-chip {
+  background: rgba(255, 255, 255, .14); color: #fff;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.hv2-hero #clientProfileSwitcherMount .cps-chip__avatar { background: #fff; color: var(--ink); }
+.hv2-hero #clientProfileSwitcherMount .cps-chip__chevron { opacity: .8; }
+
+/* TASK-448: переход между вкладками — чистый кросс-фейд 150мс, без сдвига.
+   Правила срабатывают только с типом `tab` (его ставит оболочка при redesign_s3). */
+@keyframes client-vt-tab-out { to { opacity: 0; } }
+@keyframes client-vt-tab-in { from { opacity: 0; } }
+html:active-view-transition-type(tab)::view-transition-old(root) {
+  animation: client-vt-tab-out 150ms cubic-bezier(.2, .8, .2, 1);
+}
+html:active-view-transition-type(tab)::view-transition-new(root) {
+  animation: client-vt-tab-in 150ms cubic-bezier(.2, .8, .2, 1);
+}
+
+/* TASK-450 (5.3): карточка «Компания собирается» — фото сверху, тело на белом. */
+.hv2-comp { height:auto; background:var(--surface, #fff); overflow:hidden; }
+.hv2-comp__photo { position:relative; display:block; height:170px; overflow:hidden; }
+.hv2-comp__photo .hv2-pcard__shade {
+  background: linear-gradient(180deg, rgba(11,22,32,.18) 0%, rgba(11,22,32,0) 45%, rgba(11,22,32,.35) 100%);
+}
+.hv2-comp__body { display:flex; flex-direction:column; gap:4px; padding:14px 16px 16px; }
+.hv2-comp__names { font:700 15px/1.35 var(--g-font); color:var(--ink); }
+.hv2-comp__meta { font:400 13px/1.35 var(--g-font); color:var(--muted); }
+.hv2-comp__plaque { position:absolute; bottom:12px; right:12px; display:flex; align-items:center; gap:6px;
+  background:rgba(255,255,255,.94); color:#12151c; font-size:13px; font-weight:600;
+  border-radius:999px; padding:5px 12px 5px 6px; }
+.hv2-comp__ava { width:22px; height:22px; border-radius:50%; background:#0a6f73; color:#fff;
+  font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
+  margin-right:-4px; border:2px solid #fff; }
+.hv2-comp__ava:last-of-type { margin-right:0; }

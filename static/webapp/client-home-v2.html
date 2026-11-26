@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru" data-force-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f5f6f8">
+  <title>Главная</title>
+  <!-- TASK-445 (glide-home-v1, этап 1): новая главная за флагом redesign_s1.
+       Остальные получают client-home.html (см. webapp_client_home_page). -->
+  <link rel="preload" href="/static/fonts/glide-public/dela-gothic-one-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/static/fonts/glide-public/golos-text-cyr-lat.woff2?v=__FONT_V__" as="font" type="font/woff2" crossorigin />
+  <script>
+    /* Тот же ранний bootstrap, что на старой главной (TASK-314): запрос уходит из <head>,
+       пока грузятся SDK и скрипты. Профиль — та же догадка (выбранный или с прошлого раза). */
+    (function () {
+      try {
+        var init = new URLSearchParams((location.hash || '').replace(/^#/, '')).get('tgWebAppData') ||
+          new URLSearchParams(location.search).get('init_data') || '';
+        if (!init) return;
+        var pid = null;
+        try {
+          var v = localStorage.getItem('cw_active_profile_id_v1');
+          pid = v ? parseInt(v, 10) : null;
+          if (pid == null) {
+            var user = JSON.parse(new URLSearchParams(init).get('user') || 'null');
+            var d = JSON.parse(localStorage.getItem('cw_default_profile_v1') || 'null');
+            if (user && d && d.u === String(user.id) && Number(d.id) > 0) pid = Number(d.id);
+          }
+        } catch (e) { pid = null; }
+        if (pid == null || !(pid > 0)) return;
+        var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': init, 'X-Profile-Id': String(pid) };
+        var promise = fetch('/api/webapp/client/hub/bootstrap?init_data=' + encodeURIComponent(init), { headers: headers, cache: 'no-store' });
+        promise.catch(function () {});
+        window.__clientEarlyBootstrap = { init: init, pid: pid, promise: promise };
+      } catch (e) { /* обычный путь подхватит */ }
+    })();
+  </script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- s3:assets -->
+  <link rel="stylesheet" href="/static/shared/glide-public-fonts.css?v=202611231" />
+  <link rel="stylesheet" href="/static/shared/glide-tokens.css?v=202611231" />
+  <script src="glide-deeplink.js?v=202611231"></script>
+  <script src="write-access.js?v=202611231"></script>
+  <script src="client-mini-app-theme.js?v=202611231"></script>
+  <script src="mini-app-client-shell.js?v=202611231"></script>
+  <link rel="stylesheet" href="mini-app-client-theme.css?v=202611231" />
+  <script defer src="mini-app-telegram-chrome.js?v=202611231"></script>
+  <link rel="preload" href="home-v2.js?v=202611231" as="script" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202611231" />
+  <link rel="stylesheet" href="home-v2.css?v=202611231" />
+  <script defer src="mini-app-empty-state.js?v=202611231"></script>
+  <script defer src="mini-app-more-icons.js?v=202611231"></script>
+  <script defer src="client-profile-switcher.js?v=202611231"></script>
+  <script src="ru-person-name.js?v=202611231"></script>
+  <script defer src="/static/webapp/ga-press.js?v=202611231"></script>
+  <!-- /s3:assets -->
+</head>
+<body class="hv2 ga-body" data-client-shell="tabs">
+  <div class="hv2__page">
+    <header class="hv2-hero" id="hv2Hero">
+      <img class="hv2-hero__img" id="hv2HeroImg" alt="" fetchpriority="high" hidden />
+      <span class="hv2-hero__shade" aria-hidden="true"></span>
+      <div class="hv2-hero__top">
+        <button type="button" class="hv2-hero__city ga-press" id="hv2City" aria-haspopup="dialog">
+          <span id="hv2CityLabel">Город</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="hv2-hero__right">
+          <div id="clientProfileSwitcherMount" class="hv2-profile"></div>
+          <button type="button" class="hv2-hero__ava ga-press" id="hv2Ava" hidden aria-label="Профиль">
+            <img id="hv2AvaImg" alt="" hidden /><span id="hv2AvaLetter"></span>
+          </button>
+        </div>
+      </div>
+      <div class="hv2-hero__hello">
+        <span class="hv2-hero__date" id="hv2Date"></span>
+        <h1 class="hv2-hero__title" id="hv2Title">Glide</h1>
+      </div>
+    </header>
+
+    <main class="hv2-sheet" id="hv2Main">
+      <div class="hv2-skel" id="hv2Skel" role="status" aria-busy="true" aria-label="Загрузка главной">
+        <div class="hv2-skel__card">
+          <i class="hv2-skel__b hv2-skel__b--chip"></i>
+          <i class="hv2-skel__b hv2-skel__b--time"></i>
+          <i class="hv2-skel__b" style="width:64%"></i>
+          <i class="hv2-skel__b" style="width:44%"></i>
+          <div class="hv2-skel__row"><i class="hv2-skel__av"></i><i class="hv2-skel__b"></i></div>
+        </div>
+        <div class="hv2-skel__title"></div>
+        <div class="hv2-skel__rail"><div class="hv2-skel__tile"></div><div class="hv2-skel__tile"></div></div>
+      </div>
+      <div id="hv2Top"></div>
+      <section class="hv2-sec" id="hv2IceSec" hidden>
+        <div class="hv2-sec__head">
+          <h2 class="hv2-sec__title" id="hv2IceTitle">Лёд в городе</h2>
+          <a class="hv2-sec__more" id="hv2IceMore" href="ice">Все</a>
+        </div>
+        <div class="hv2-tabs" id="hv2Tabs" role="tablist"></div>
+        <div class="hv2-rail" id="hv2Rail"></div>
+      </section>
+      <section class="hv2-sec" id="hv2MatchSec" hidden>
+        <div class="hv2-sec__head">
+          <h2 class="hv2-sec__title">Матчи</h2>
+          <a class="hv2-sec__more" id="hv2MatchMore" href="client-matches">Все</a>
+        </div>
+        <div class="hv2-rail" id="hv2Matches"></div>
+      </section>
+      <section class="hv2-sec" id="hv2MoreSec" hidden>
+        <h2 class="hv2-sec__title">Ещё в городе</h2>
+        <div class="hv2-grid" id="hv2More"></div>
+      </section>
+      <div class="hv2-bottompad" aria-hidden="true"></div>
+    </main>
+  </div>
+
+  <div class="hv2-sheetbg" id="hv2Sheet" hidden>
+    <section class="hv2-csheet" role="dialog" aria-modal="true" aria-labelledby="hv2SheetTitle">
+      <span class="hv2-csheet__grip" aria-hidden="true"></span>
+      <div class="hv2-csheet__head">
+        <h2 id="hv2SheetTitle">Город</h2>
+        <button type="button" class="hv2-csheet__close" data-close aria-label="Закрыть">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <button type="button" class="hv2-geo ga-press" id="hv2Geo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/></svg>
+        <span>Определить по геолокации</span>
+      </button>
+      <div id="hv2CityList"></div>
+    </section>
+  </div>
+
+  <script>
+    /* Кэш шапки: фото и город прошлого показа до bootstrap — первый кадр без скачка. */
+    (function () {
+      try {
+        var u = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user;
+        var uid = u && u.id != null ? String(u.id) : '0';
+        window.__hv2Uid = uid;
+        var c = JSON.parse(localStorage.getItem('hv2_hero_' + uid) || 'null');
+        if (c) {
+          if (c.photo) {
+            var img = document.getElementById('hv2HeroImg');
+            img.src = c.photo; img.hidden = false;
+            document.getElementById('hv2Hero').classList.add('hv2-hero--photo');
+          }
+          if (c.city) document.getElementById('hv2CityLabel').textContent = c.city;
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <!-- s3:assets -->
+  <script src="home-v2.js?v=202611231"></script>
+  <script src="/static/webapp/ga-touch.js?v=202611231"></script>
+  <!-- /s3:assets -->
+  <script defer src="/static/webapp/share-sheet-lazy.js?v=202611231"></script>
+</body>
+</html>

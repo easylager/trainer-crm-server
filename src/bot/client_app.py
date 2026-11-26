@@ -20,6 +20,7 @@ from src.bot.handlers.service_messages import build_service_messages_router
 from src.bot.handlers.hockey_game_handlers import router as hockey_game_router
 from src.bot.handlers.ice_company_handlers import router as ice_company_router
 from src.bot.winter_bot import client_router as winter_client_router
+from src.bot.checkin_bot import client_router as checkin_client_router
 from src.bot.main_mini_app_check import warn_if_main_mini_app_missing
 from src.bot.middlewares.client_menu_sync_middleware import ClientMenuSyncMiddleware
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
@@ -65,6 +66,7 @@ async def main(*, embedded: bool = False) -> None:
     dp.include_router(build_service_messages_router())
     dp.include_router(ice_company_router)
     dp.include_router(winter_client_router)
+    dp.include_router(checkin_client_router)
     dp.include_router(hockey_game_router)
     dp.include_router(client_router)
     logger.info("Client bot polling started (notifications run in notification_service)")

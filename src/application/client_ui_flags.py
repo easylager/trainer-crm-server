@@ -50,6 +50,71 @@ def search_board_enabled(account_key: int, settings: Settings) -> bool:
     return search_board_bucket(account_key) < settings.client_search_board_percent
 
 
+def redesign_s1_bucket(account_key: int) -> int:
+    """Своя корзина: процент redesign_s1 не повторяет выборки season_ui/fast_tabs/search_board."""
+    digest = hashlib.sha256(f"redesign-s1:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def redesign_s1_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-445: этап 1 редизайна — новая главная, меню 5 вкладок, светлая тема."""
+    if int(account_key) in (settings.client_redesign_s1_telegram_ids or ()):
+        return True
+    return redesign_s1_bucket(account_key) < settings.client_redesign_s1_percent
+
+
+def redesign_s5_bucket(account_key: int) -> int:
+    """Своя корзина: процент redesign_s5 не повторяет выборки остальных флагов."""
+    digest = hashlib.sha256(f"redesign-s5:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def redesign_s5_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-446: «Я здесь» — отметки и загрузка катков. Независим от redesign_s1."""
+    if int(account_key) in (settings.client_redesign_s5_telegram_ids or ()):
+        return True
+    return redesign_s5_bucket(account_key) < settings.client_redesign_s5_percent
+
+
+def redesign_s2_bucket(account_key: int) -> int:
+    """Своя корзина: процент redesign_s2 не повторяет выборки остальных флагов."""
+    digest = hashlib.sha256(f"redesign-s2:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def redesign_s2_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-447: этап 2 редизайна — остальные состояния главной и правила городов."""
+    if int(account_key) in (settings.client_redesign_s2_telegram_ids or ()):
+        return True
+    return redesign_s2_bucket(account_key) < settings.client_redesign_s2_percent
+
+
+def redesign_s3_bucket(account_key: int) -> int:
+    """Своя корзина: процент redesign_s3 не повторяет выборки остальных флагов."""
+    digest = hashlib.sha256(f"redesign-s3:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def redesign_s3_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-448: этап 3 редизайна — скорость и переходы главной."""
+    if int(account_key) in (settings.client_redesign_s3_telegram_ids or ()):
+        return True
+    return redesign_s3_bucket(account_key) < settings.client_redesign_s3_percent
+
+
+def redesign_s4_bucket(account_key: int) -> int:
+    """Своя корзина: процент redesign_s4 не повторяет выборки остальных флагов."""
+    digest = hashlib.sha256(f"redesign-s4:{int(account_key)}".encode()).hexdigest()
+    return int(digest[:8], 16) % 100
+
+
+def redesign_s4_enabled(account_key: int, settings: Settings) -> bool:
+    """TASK-449: этап 4 редизайна — вкладки «Лёд» и «Я» v2."""
+    if int(account_key) in (settings.client_redesign_s4_telegram_ids or ()):
+        return True
+    return redesign_s4_bucket(account_key) < settings.client_redesign_s4_percent
+
+
 # Профили аккаунта — как у GET /client/passes и /client/bookings/history: своя строка,
 # семейный доступ (resolve_acting_client_id) и профили из client_profile_links.
 # Любой статус и любая давность: вкладка, появившись, не исчезает.
